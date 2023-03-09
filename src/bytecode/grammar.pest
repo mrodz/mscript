@@ -1,0 +1,17 @@
+WHITESPACE =  _{ " " | NEWLINE }
+
+alpha = _{ 'a'..'z' | 'A'..'Z' }
+digit = _{ '0'..'9' }
+underscore = _{ "_" }
+
+ident = @{ (!digit ~ (alpha | digit | underscore)+) }
+
+function_signature = { "function" }
+
+declaration = { function_signature }
+
+file = {
+    SOI ~
+    declaration* ~
+    EOI
+}

@@ -1,0 +1,12 @@
+#[argc=1,]
+function test.ms#doMath
+	eval
+		constexpr 3
+		constexpr 1
+		div
+	eval
+		arg 0
+		constexpr 2
+		mul
+	add
+	return
