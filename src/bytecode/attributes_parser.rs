@@ -3,35 +3,36 @@ use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct Attributes {
-    map: HashMap<String, String>,
+    map: HashMap<String, Option<String>>,
 }
 
 impl Attributes {
-    fn attr(&self, name: &String) -> Option<&String> {
+    fn attr(&self, name: &String) -> Option<&Option<String>> {
         self.map.get(name)
     }
 }
 
 pub fn parse_attributes(attribute_str: &String) -> Result<Attributes> {
-    static ESCAPING: u8 = 0b100;
-    static IN_QUOT: u8 = 0b010;
-    static AT_LEFT: u8 = 0b001;
+    static WHITESPACE: u8 = 0b1000;
+    static ESCAPING: u8 = 0b0100;
+    static IN_QUOT: u8 = 0b0010;
+    static AT_LEFT: u8 = 0b0001;
 
     let mut chars = attribute_str.chars();
-    let Some('#') = chars.next() else {
-		bail!("attributes must start with '#'.")
-	};
 
-    let Some('[') = chars.next() else {
-		bail!("attribute syntax: #[...]")
-	};
+    if !matches!(chars.next(), Some('#')) {
+        bail!("attributes must start with '#'.")
+    };
 
-    let mut flags = 0b001;
+    if !matches!(chars.next(), Some('[')) {
+        bail!("attribute syntax: #[key1=value, key2=\"value\", ...]")
+    };
 
-    let mut map: HashMap<String, String> = HashMap::new();
+    let mut flags = AT_LEFT;
+
+    let mut map: HashMap<String, Option<String>> = HashMap::new();
 
     let mut left = String::new();
-
     let mut buffer = String::new();
 
     #[inline]
@@ -39,21 +40,32 @@ pub fn parse_attributes(attribute_str: &String) -> Result<Attributes> {
         flags & flag == flag
     }
 
+    #[inline]
+    fn flush(flags: u8, left: &mut String, right: &mut String) -> (String, Option<String>) {
+        let result = if !is(flags, AT_LEFT) {
+            (left.clone(), Some(right.clone()))
+        } else {
+            (right.clone(), None)
+        };
+        left.clear();
+        right.clear();
+
+        result
+    }
+
     while let Some(c) = chars.next() {
         if is(flags, ESCAPING) {
             flags ^= ESCAPING;
-			match c {
-				'n' => buffer.push('\n'),
-				't' => buffer.push('\t'),
-				c => buffer.push(c)
-			}
+            buffer.push(match c {
+                'n' => '\n',
+                'r' => '\r',
+                't' => '\t',
+                c => c,
+            });
             continue;
         } else if c == ']' {
-            if !is(flags, AT_LEFT) {
-                map.insert(left.clone(), buffer.clone());
-            } else {
-                map.insert(buffer.clone(), String::new());
-            }
+            let (key, value) = flush(flags, &mut left, &mut buffer);
+            map.insert(key, value);
             break;
         }
 
@@ -72,6 +84,7 @@ pub fn parse_attributes(attribute_str: &String) -> Result<Attributes> {
         }
 
         if c.is_whitespace() {
+            flags |= WHITESPACE;
             continue;
         }
 
@@ -91,11 +104,11 @@ pub fn parse_attributes(attribute_str: &String) -> Result<Attributes> {
         }
 
         if c == ',' {
-            if !is(flags, AT_LEFT) {
-                map.insert(left.clone(), buffer.clone());
-            } else {
-                map.insert(buffer.clone(), String::new());
+            if is(flags, AT_LEFT) && buffer.len() == 0 {
+                bail!("duplicate ','")
             }
+            let (key, value) = flush(flags, &mut left, &mut buffer);
+            map.insert(key, value);
             buffer.clear();
             left.clear();
 
@@ -107,7 +120,24 @@ pub fn parse_attributes(attribute_str: &String) -> Result<Attributes> {
         buffer.push(c)
     }
 
+    if buffer.len() != 0 {
+        bail!("attribute syntax: #[key1=value, key2=\"value\", ...]")
+    }
+
     Ok(Attributes { map })
+}
+
+#[macro_export]
+macro_rules! assert_key_val {
+    ($map:ident[$key:tt] == $val:tt) => {
+        let val = $map.attr(&$key.into()).unwrap();
+        if let Some(val) = val {
+            assert_eq!(val, $val);
+        }
+    };
+    ($map:ident[$key:tt] exists) => {
+        assert!($map.attr(&$key.into()).is_some());
+    };
 }
 
 #[cfg(test)]
@@ -117,8 +147,9 @@ mod test {
     #[test]
     fn basic() -> Result<()> {
         let info = parse_attributes(&"#[hello=1, bye=2]".into()).unwrap();
-        assert_eq!(info.attr(&"hello".into()).unwrap(), "1");
-        assert_eq!(info.attr(&"bye".into()).unwrap(), "2");
+
+        assert_key_val!(info["hello"] == "1");
+        assert_key_val!(info["bye"] == "2");
 
         Ok(())
     }
@@ -126,20 +157,23 @@ mod test {
     #[test]
     fn strings() -> Result<()> {
         let info = parse_attributes(&"#[hello=\"Lorem Ipsum\", bye=2]".into()).unwrap();
-        debug_assert_eq!(info.attr(&"hello".into()).unwrap(), "Lorem Ipsum");
-        debug_assert_eq!(info.attr(&"bye".into()).unwrap(), "2");
+
+        assert_key_val!(info["hello"] == "Lorem Ipsum");
+        assert_key_val!(info["bye"] == "2");
 
         Ok(())
     }
 
     #[test]
     fn escape_sequences() -> Result<()> {
-        let info =
-            parse_attributes(&"#[hello=\"Lorem\\\"Ipsum\", bye=\"\\\n\", tab=\"\\t\"]".into())
-                .unwrap();
-        debug_assert_eq!(info.attr(&"hello".into()).unwrap(), "Lorem\"Ipsum");
-        debug_assert_eq!(info.attr(&"bye".into()).unwrap(), "\n");
-        debug_assert_eq!(info.attr(&"tab".into()).unwrap(), "\t");
+        let info = parse_attributes(
+            &"#[hello=\"Lorem\\\"Ipsum\\r\\n\", bye=\"\\\n\", tab=\"\\t\"]".into(),
+        )
+        .unwrap();
+
+        assert_key_val!(info["hello"] == "Lorem\"Ipsum\r\n");
+        assert_key_val!(info["bye"] == "\n");
+        assert_key_val!(info["tab"] == "\t");
 
         Ok(())
     }
@@ -147,12 +181,9 @@ mod test {
     #[test]
     fn strings_as_keys_and_values() -> Result<()> {
         let info = parse_attributes(&"#[\"this has a space\"=-3, \"this key has an escaped \\\" in it\"=\"str mapped to a\\tstr\"]".into()).unwrap();
-        debug_assert_eq!(info.attr(&"this has a space".into()).unwrap(), "-3");
-        debug_assert_eq!(
-            info.attr(&"this key has an escaped \" in it".into())
-                .unwrap(),
-            "str mapped to a\tstr"
-        );
+
+        assert_key_val!(info["this has a space"] == "-3");
+        assert_key_val!(info["this key has an escaped \" in it"] == "str mapped to a\tstr");
 
         Ok(())
     }
@@ -178,7 +209,7 @@ mod test {
     #[test]
     #[should_panic(expected = "duplicate '='")]
     fn too_many_equal_signs_2() {
-        parse_attributes(&"#[hi==============================\"world\"]".into()).unwrap();
+        parse_attributes(&"#[hi=========\"world\"]".into()).unwrap();
     }
 
     #[test]
@@ -189,25 +220,54 @@ mod test {
     #[test]
     fn no_equal_sign_and_attr() {
         let info = parse_attributes(&"#[huhhhh, b=5]".into()).unwrap();
-        debug_assert_eq!(info.attr(&"huhhhh".into()).unwrap(), "");
-        debug_assert_eq!(info.attr(&"b".into()).unwrap(), "5");
+
+        assert_key_val!(info["huhhhh"] exists);
+        assert_key_val!(info["b"] == "5");
     }
 
     #[test]
     fn squashed_no_equal_sign() {
         let info = parse_attributes(&"#[a=c, \"this has spaces\\nand\\nis an attr\", b=5]".into())
             .unwrap();
-        debug_assert_eq!(info.attr(&"a".into()).unwrap(), "c");
-        debug_assert_eq!(
-            info.attr(&"this has spaces\nand\nis an attr".into())
-                .unwrap(),
-            ""
-        );
-        debug_assert_eq!(info.attr(&"b".into()).unwrap(), "5");
+
+        assert_key_val!(info["a"] == "c");
+        assert_key_val!(info["this has spaces\nand\nis an attr"] exists);
+        assert_key_val!(info["b"] == "5");
     }
 
     #[test]
     fn key_and_no_value() {
         parse_attributes(&"#[a=,\"this has spaces\\nand\\nis an attr\", b=5]".into()).unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "duplicate ','")]
+    fn multiple_commas() {
+        let info = parse_attributes(&"#[a=c,, \"this has spaces\\nand\\nis an attr\", b=5]".into())
+            .unwrap();
+        dbg!(info);
+    }
+
+    #[test]
+    #[should_panic(expected = "attribute syntax")]
+    fn incomplete() {
+        let info = parse_attributes(&"#[this".into()).unwrap();
+        dbg!(info);
+    }
+
+    #[test]
+    fn leading_whitespaces() {
+        let info = parse_attributes(&"#[   this=1,    that=2]".into()).unwrap();
+        dbg!(info);
+    }
+
+    #[test]
+    fn trailing_whitespace() {
+        let info = parse_attributes(&"#[this  = hello   , that      = 2   ]".into()).unwrap();
+
+        assert_key_val!(info["this"] == "hello");
+        assert_key_val!(info["that"] == "2");
+
+        dbg!(info);
     }
 }
