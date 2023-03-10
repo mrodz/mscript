@@ -1,9 +1,65 @@
 use anyhow::{bail, Result};
-use std::collections::HashMap;
+use std::{borrow::Cow, collections::HashMap, fmt::Display, ops::Index};
 
 #[derive(Debug)]
 pub struct Attributes {
     map: HashMap<String, Option<String>>,
+}
+
+impl Index<String> for Attributes {
+    type Output = Option<String>;
+    fn index(&self, index: String) -> &Self::Output {
+        self.attr(&index).unwrap()
+    }
+}
+
+impl Display for Attributes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut str = String::new();
+        let mut iter = self.map.iter();
+
+        fn quot_if_needed(text: &String) -> Cow<String> {
+            if !text.contains(' ') {
+                return Cow::Borrowed(text);
+            }
+
+            Cow::Owned("\"".to_owned() + text + "\"")
+        }
+
+        fn format_pair(key: &String, value: &Option<String>) -> String {
+            let (value_len, quot_size) = if let Some(v) = value {
+                (v.len(), 4)
+            } else {
+                (0, 2)
+            };
+
+            let len = key.len() + value_len + quot_size;
+            let mut result = String::with_capacity(len);
+            result.push_str(&quot_if_needed(key));
+
+            if let Some(value) = value {
+                result.push('=');
+                result.push_str(&quot_if_needed(value));
+            }
+
+            result
+        }
+
+        'prepare_string: {
+            let Some((key, value)) = iter.next() else {
+                break 'prepare_string;
+            };
+
+            str.push_str(&format_pair(key, value));
+
+            for (key, val) in iter {
+                str.push_str(", ");
+                str.push_str(&format_pair(key, val));
+            }
+        }
+
+        write!(f, "#[{str}]")
+    }
 }
 
 impl Attributes {
@@ -20,13 +76,10 @@ pub fn parse_attributes(attribute_str: &String) -> Result<Attributes> {
 
     let mut chars = attribute_str.chars();
 
-    if !matches!(chars.next(), Some('#')) {
-        bail!("attributes must start with '#'.")
-    };
-
-    if !matches!(chars.next(), Some('[')) {
-        bail!("attribute syntax: #[key1=value, key2=\"value\", ...]")
-    };
+    match (chars.next(), chars.next()) {
+        (Some('#'), Some('[')) => {}
+        _ => bail!("attribute syntax: #[key1=value, key2=\"value\", ...]"),
+    }
 
     let mut flags = AT_LEFT;
 
@@ -41,7 +94,11 @@ pub fn parse_attributes(attribute_str: &String) -> Result<Attributes> {
     }
 
     #[inline]
-    fn flush(flags: u8, left: &mut String, right: &mut String) -> (String, Option<String>) {
+    fn flush(flags: u8, left: &mut String, right: &mut String) -> Result<(String, Option<String>)> {
+        if is(flags, AT_LEFT) && right.len() == 0 {
+            bail!("extra ','")
+        }
+
         let result = if !is(flags, AT_LEFT) {
             (left.clone(), Some(right.clone()))
         } else {
@@ -50,7 +107,7 @@ pub fn parse_attributes(attribute_str: &String) -> Result<Attributes> {
         left.clear();
         right.clear();
 
-        result
+        Ok(result)
     }
 
     while let Some(c) = chars.next() {
@@ -64,7 +121,11 @@ pub fn parse_attributes(attribute_str: &String) -> Result<Attributes> {
             });
             continue;
         } else if c == ']' {
-            let (key, value) = flush(flags, &mut left, &mut buffer);
+            // if is(flags, AT_LEFT) && buffer.len() == 0 {
+            //     bail!("trailing ','")
+            // }
+
+            let (key, value) = flush(flags, &mut left, &mut buffer)?;
             map.insert(key, value);
             break;
         }
@@ -104,10 +165,7 @@ pub fn parse_attributes(attribute_str: &String) -> Result<Attributes> {
         }
 
         if c == ',' {
-            if is(flags, AT_LEFT) && buffer.len() == 0 {
-                bail!("duplicate ','")
-            }
-            let (key, value) = flush(flags, &mut left, &mut buffer);
+            let (key, value) = flush(flags, &mut left, &mut buffer)?;
             map.insert(key, value);
             buffer.clear();
             left.clear();
@@ -189,7 +247,7 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "start with '#'")]
+    #[should_panic(expected = "attribute syntax")]
     fn malformed_start() {
         parse_attributes(&"[hi=\"world\"]".into()).unwrap();
     }
@@ -241,7 +299,7 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "duplicate ','")]
+    #[should_panic(expected = "extra ','")]
     fn multiple_commas() {
         let info = parse_attributes(&"#[a=c,, \"this has spaces\\nand\\nis an attr\", b=5]".into())
             .unwrap();

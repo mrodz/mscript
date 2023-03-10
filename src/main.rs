@@ -1,15 +1,21 @@
 // #![feature(let_else)] // for backwards compatibility
 
-#[macro_use]
-extern crate pest_derive;
 extern crate pest_consume;
+extern crate pest_derive;
 
 mod bytecode;
 
 use anyhow::Result;
+use bytecode::interpreter::{open_file, functions, enter_function};
 
 fn main() -> Result<()> {
-    bytecode::interpreter::interpret("src/bytecode/bin/test.mmm")?;
+    let (path, file) = open_file("src/bytecode/bin/test.mmm").unwrap();
+
+    let functions = functions(file, path).unwrap();
+
+    for function in functions {
+        enter_function(&function).unwrap();
+    }
 
     Ok(())
 }
