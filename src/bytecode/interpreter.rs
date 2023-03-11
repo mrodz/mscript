@@ -11,7 +11,6 @@ pub trait Location: AsRef<Path> + Display {}
 
 impl Location for &str {}
 impl Location for String {}
-
 pub struct Function {
     location: Arc<dyn Location>,
     location_handle: Arc<File>,
@@ -20,6 +19,8 @@ pub struct Function {
     attributes: Vec<Attributes>,
     name: String,
 }
+
+
 
 impl Debug for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

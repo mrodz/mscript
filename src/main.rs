@@ -13,9 +13,10 @@ fn main() -> Result<()> {
 
     let functions = functions(file, path).unwrap();
 
-    for function in functions {
-        enter_function(&function).unwrap();
-    }
+    enter_function(&functions[0]).unwrap();
+    // for function in functions {
+    //     enter_function(&function).unwrap();
+    // }
 
     Ok(())
 }
