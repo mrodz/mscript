@@ -1,9 +1,14 @@
 #[argc=1]
 function doMath
-	
+	constexpr "Hello, World"
+	constexpr 1
+	constexpr 3.1415
+	stack_dump
+	pop
+	stack_dump
 end
 
 #[argc=3, jj, "woo this"="has multiple spaces"]
 function functionB
-	
+	stack_dump
 end

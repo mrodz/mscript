@@ -1,53 +1,77 @@
-use std::{
-    fmt::{Debug, Display},
-    hash::Hash,
-};
+use std::fmt::{Debug, Display};
 
 use anyhow::{bail, Result};
 
 #[derive(PartialEq, PartialOrd, Debug)]
-pub enum Number {
-    F_32(f32),
-    F_64(f64),
-    I_32(i32),
-    I_64(i64),
-    I_128(i128),
-}
-
-impl Display for Number {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use self::Number::*;
-        match self {
-            F_32(x) => write!(f, "{x}"),
-            F_64(x) => write!(f, "{x}"),
-            I_32(x) => write!(f, "{x}"),
-            I_64(x) => write!(f, "{x}"),
-            I_128(x) => write!(f, "{x}"),
-        }
-    }
-}
-
-impl Eq for Number {}
-impl Hash for Number {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {}
-}
-
-pub enum Type {
-    Bool,
-    Str,
-    Num,
-    Char,
-    Byte,
-}
-
-#[derive(PartialEq, PartialOrd, Eq, Hash, Debug)]
-
 pub enum Primitive {
     Bool(bool),
     Str(String),
-    Num(Number),
+    Int(i32),
+    Float(f64),
     Char(char),
     Byte(u8),
+}
+
+impl Primitive {
+    pub fn make_str(string: &String) -> Result<Self> {
+        let bytes = string.as_bytes();
+        if let (Some(b'\"'), Some(b'\"')) = (bytes.get(0), bytes.get(string.len() - 1)) {
+            return Ok(Primitive::Str(parse_string(&string).unwrap()));
+        }
+
+        bail!("not a Str")
+    }
+
+    pub fn make_byte(string: &String) -> Result<Self> {
+        let bytes = string.as_bytes();
+
+        if string.len() >= 3 && &bytes[..2] == [b'0', b'b'] {
+            let byte =
+                u8::from_str_radix(&string[2..], 2).expect("malformed byte. format: (0b10101010)");
+
+            return Ok(Primitive::Byte(byte));
+        }
+
+        bail!("not a Byte")
+    }
+
+    pub fn make_char(string: &String) -> Result<Self> {
+        let bytes = string.as_bytes();
+
+        if string.len() == 3 && bytes[0] == b'\'' && bytes[2] == b'\'' {
+            return Ok(Primitive::Char(bytes[1].into()));
+        }
+
+        bail!("not a Char")
+    }
+
+    pub fn make_float(string: &String) -> Result<Self> {
+        use std::str::FromStr;
+
+        if let Ok(is_f64) = f64::from_str(&string) {
+            return Ok(Primitive::Float(is_f64));
+        }
+
+        bail!("not a Float")
+    }
+
+    pub fn make_int(string: &String) -> Result<Self> {
+        use std::str::FromStr;
+
+        if let Ok(is_i64) = i32::from_str(&string) {
+            return Ok(Primitive::Int(is_i64));
+        }
+
+        bail!("not an Int")
+    }
+
+    pub fn make_bool(string: &String) -> Result<Self> {
+        match string.as_str() {
+            "true" => Ok(Primitive::Bool(true)),
+            "false" => Ok(Primitive::Bool(false)),
+            _ => bail!("not a Bool"),
+        }
+    }
 }
 
 impl Display for Primitive {
@@ -57,7 +81,8 @@ impl Display for Primitive {
         match self {
             Bool(b) => write!(f, "{b}"),
             Str(s) => write!(f, "{s:?}"),
-            Num(n) => write!(f, "{n}"),
+            Int(n) => write!(f, "{n}"),
+            Float(n) => write!(f, "{n}"),
             Char(c) => write!(f, "{c}"),
             Byte(b) => write!(f, "{b:b}"),
         }
@@ -65,26 +90,38 @@ impl Display for Primitive {
 }
 
 impl From<String> for Primitive {
-    fn from(value: String) -> Self {
-		let bytes = value.as_bytes();
-		let len = bytes.len();
+	fn from(value: String) -> Self {
+		Self::from(&value)
+	}
+}
 
-        if let (Some(b'\"'), Some(b'\"')) = (bytes.get(0), bytes.get(len - 1)) {
-            return Primitive::Str(parse_string(&value).unwrap());
+impl From<&String> for Primitive {
+    fn from(value: &String) -> Self {
+        if let Ok(str) = Primitive::make_str(value) {
+            return str;
         }
 
-		if len >= 3 && &bytes[..2] == [b'0', b'b'] {
-			let byte = u8::from_str_radix(&value[2..], 2)
-				.expect("malformed byte. format: (0b10101010)");
+        if let Ok(byte) = Primitive::make_byte(value) {
+            return byte;
+        }
 
-			return Primitive::Byte(byte);
-		}
+        if let Ok(char) = Primitive::make_char(value) {
+            return char;
+        }
 
-		if len == 3 && bytes[0] == b'\'' && bytes[2] == b'\'' {
-			return Primitive::Char(bytes[1].into())
-		}
+        if let Ok(int) = Primitive::make_int(value) {
+            return int;
+        }
 
-        todo!("Primitive::Num, Primitive::Bool")
+        if let Ok(float) = Primitive::make_float(value) {
+            return float;
+        }
+
+        if let Ok(bool) = Primitive::make_bool(value) {
+            return bool;
+        }
+
+        panic!("Invalid constexpr: {value}")
     }
 }
 
@@ -95,11 +132,11 @@ pub fn parse_string(string: &String) -> Result<String> {
 
     for char in string.chars() {
         if !in_quotes {
-			if char == ' ' {
-            	continue;
-			} else if char != '"' {
-				panic!("Strings must be surrounded by \"..\", saw {char}")
-			}
+            if char == ' ' {
+                continue;
+            } else if char != '"' {
+                panic!("Strings must be surrounded by \"..\", saw {char}")
+            }
         }
 
         match char {
@@ -117,7 +154,7 @@ pub fn parse_string(string: &String) -> Result<String> {
                     continue;
                 }
 
-				in_quotes = !in_quotes;
+                in_quotes = !in_quotes;
 
                 if !in_quotes {
                     break;
@@ -199,13 +236,13 @@ mod string_util {
         parse_string(&"\"Hello".into()).unwrap();
     }
 
-	#[test]
+    #[test]
     #[should_panic(expected = "Strings must be surrounded by \"")]
     fn no_start_quot() {
         dbg!(parse_string(&"Hello\"".into()).unwrap());
     }
 
-	#[test]
+    #[test]
     fn extra_text() {
         assert_eq!(parse_string(&"\"Hello\" world".into()).unwrap(), "Hello");
     }
@@ -221,9 +258,8 @@ mod string_util {
 
 #[cfg(test)]
 mod primitives {
-    use std::f32::consts::PI;
+    use std::f64::consts::PI;
 
-    use super::Number::*;
     use super::Primitive::{self, *};
 
     #[test]
@@ -232,19 +268,19 @@ mod primitives {
         assert_eq!(var, Str("Hello\" world".into()))
     }
 
-	#[test]
+    #[test]
     fn byte_1() {
         let var = Primitive::from("0b101".to_owned());
         assert_eq!(var, Byte(0b101));
     }
 
-	#[test]
+    #[test]
     fn byte_2() {
         let var = Primitive::from("0b11111111".to_owned());
         assert_eq!(var, Byte(0b11111111));
     }
 
-	#[test]
+    #[test]
     fn char() {
         let var = Primitive::from("'@'".to_owned());
         assert_eq!(var, Char('@'));
@@ -252,8 +288,8 @@ mod primitives {
 
     #[test]
     fn display() {
-        println!("{}", Num(I_32(5)));
-        println!("{}", Num(F_32(PI)));
+        println!("{}", Int(5));
+        println!("{}", Float(PI));
         println!("{}", Str("Hello".into()));
         println!("{}", Bool(false));
         println!("{}", Char('@'));

@@ -4,7 +4,11 @@ use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::path::Path;
 use std::sync::Arc;
 
+use crate::bytecode::instruction::{self, run_instruction, Ctx};
+
 use super::attributes_parser::{parse_attributes, Attributes};
+use super::instruction::Instruction;
+
 use anyhow::{bail, Result};
 
 pub trait Location: AsRef<Path> + Display {}
@@ -19,8 +23,6 @@ pub struct Function {
     attributes: Vec<Attributes>,
     name: String,
 }
-
-
 
 impl Debug for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -43,7 +45,7 @@ impl Display for Function {
             self.location,
             self.line_number + 1,
             self.name,
-			self.seek_pos
+            self.seek_pos
         )
     }
 }
@@ -70,7 +72,7 @@ impl Function {
 
 /// Read all the lines of a function, based on its file location
 ///
-pub fn enter_function(function: &Function) -> Result<()> {
+pub fn enter_function(function: &Function) -> Result<Vec<String>> {
     let mut reader = BufReader::new(&*function.location_handle);
 
     let Ok(pos) = reader.seek(SeekFrom::Start(function.seek_pos)) else {
@@ -78,6 +80,10 @@ pub fn enter_function(function: &Function) -> Result<()> {
 	};
 
     assert_eq!(pos, function.seek_pos);
+
+    let mut lines = vec![];
+
+    let mut context = Ctx::new(&function);
 
     for line in reader.lines() {
         if line.is_err() {
@@ -90,27 +96,31 @@ pub fn enter_function(function: &Function) -> Result<()> {
             break;
         }
 
-        println!("{line}")
+        let instruction = instruction::parse_line(&line)?;
+
+        run_instruction(&mut context, &instruction);
+
+        lines.push(line);
     }
 
-    Ok(())
+    Ok(lines)
 }
 
 pub fn open_file<T>(path: T) -> Result<(Arc<T>, Arc<File>)>
 where
     T: Location + Clone + 'static,
 {
-	let path = Arc::new(path);
+    let path = Arc::new(path);
     let file = Arc::new(File::open(&*path)?);
 
-	Ok((path, file))
+    Ok((path, file))
 }
 
 pub fn functions<T>(file: Arc<File>, path: Arc<T>) -> Result<Vec<Function>>
 where
     T: Location + Clone + 'static,
 {
-	println!("Functions in {path}");
+    println!("Functions in {path}");
     let mut reader = BufReader::new(&*file);
     let mut buffer = String::new();
 
@@ -136,17 +146,17 @@ where
         } else {
             let mut parts = buffer.split_ascii_whitespace();
             if let (Some("function"), Some(name)) = (parts.next(), parts.next()) {
-				let function = Function::new(
+                let function = Function::new(
                     path.clone(),
-					file.clone(),
+                    file.clone(),
                     line_number,
                     current_attributes,
                     name.to_string(),
                     seek_pos,
                 );
 
-				println!("\t{function}");
-				
+                println!("\t{function}");
+
                 functions.push(function);
                 current_attributes = vec![];
             }
@@ -157,6 +167,5 @@ where
         line_number += 1;
     }
 
-	println!("===");
     Ok(functions)
 }
