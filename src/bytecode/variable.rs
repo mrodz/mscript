@@ -10,9 +10,37 @@ pub enum Primitive {
     Float(f64),
     Char(char),
     Byte(u8),
+    NaN,
 }
 
 impl Primitive {
+    pub fn is_numeric(&self) -> bool {
+        matches!(self, Self::Int(_) | Self::Float(_) | Self::Byte(_))
+    }
+
+    pub fn is_nan(&self) -> bool {
+        matches!(self, Self::NaN)
+    }
+
+    pub fn is_numeric_coalesce(&self) -> bool {
+        use Primitive::*;
+
+        matches!(self, Bool(_) | Int(_) | Float(_) | Char(_) | Byte(_))
+    }
+
+    pub fn raw_size(&self) -> usize {
+        use Primitive::*;
+        match self {
+            Bool(_) => std::mem::size_of::<bool>(),
+            Str(str) => str.len(),
+            Int(_) => std::mem::size_of::<i32>(),
+            Float(_) => std::mem::size_of::<f64>(),
+            Char(_) => std::mem::size_of::<char>(),
+            Byte(_) => 1,
+            NaN => 0,
+        }
+    }
+
     pub fn make_str(string: &String) -> Result<Self> {
         let bytes = string.as_bytes();
         if let (Some(b'\"'), Some(b'\"')) = (bytes.get(0), bytes.get(string.len() - 1)) {
@@ -84,15 +112,16 @@ impl Display for Primitive {
             Int(n) => write!(f, "{n}"),
             Float(n) => write!(f, "{n}"),
             Char(c) => write!(f, "{c}"),
-            Byte(b) => write!(f, "{b:b}"),
+            Byte(b) => write!(f, "0b{b:b}"),
+            NaN => write!(f, "NaN"),
         }
     }
 }
 
 impl From<String> for Primitive {
-	fn from(value: String) -> Self {
-		Self::from(&value)
-	}
+    fn from(value: String) -> Self {
+        Self::from(&value)
+    }
 }
 
 impl From<&String> for Primitive {
@@ -125,6 +154,41 @@ impl From<&String> for Primitive {
     }
 }
 
+pub type BinOp<T> = fn(T, T) -> T;
+
+pub fn bin_op_from(symbol: char) -> Result<(fn(i32, i32) -> Option<i32>, BinOp<f64>)> {
+    use std::ops::*;
+    Ok(match symbol {
+        '+' => (i32::checked_add, f64::add),
+        '-' => (i32::checked_sub, f64::sub),
+        '*' => (i32::checked_mul, f64::mul),
+        '/' => (i32::checked_div, f64::div),
+        '%' => (i32::checked_rem, f64::rem),
+        _ => bail!("unknown binary operator ({symbol})"),
+    })
+}
+
+pub fn bin_op_result(
+    left: Primitive,
+    right: Primitive,
+    i_fn: fn(i32, i32) -> Option<i32>,
+    f_fn: BinOp<f64>,
+) -> Result<Primitive> {
+    Ok(match (left, right) {
+        (Primitive::Float(x), Primitive::Float(y)) => Primitive::Float(f_fn(x, y)),
+        (Primitive::Float(x), Primitive::Int(y)) => Primitive::Float(f_fn(x, y as f64)),
+        (Primitive::Int(x), Primitive::Float(y)) => Primitive::Float(f_fn(x as f64, y)),
+        (Primitive::Int(x), Primitive::Int(y)) => {
+            if let Some(result) = i_fn(x, y) {
+                Primitive::Int(result)
+            } else {
+                bail!("could not perform checked integer operation (maybe an overflow, or / by 0)")
+            }
+        }
+        _ => Primitive::NaN,
+    })
+}
+
 pub fn parse_string(string: &String) -> Result<String> {
     let mut buf = String::new();
     let mut in_quotes = false;
@@ -132,7 +196,7 @@ pub fn parse_string(string: &String) -> Result<String> {
 
     for char in string.chars() {
         if !in_quotes {
-            if char == ' ' {
+            if char.is_ascii_whitespace() {
                 continue;
             } else if char != '"' {
                 panic!("Strings must be surrounded by \"..\", saw {char}")
@@ -288,10 +352,21 @@ mod primitives {
 
     #[test]
     fn display() {
+        println!("{}", Byte(0b101));
         println!("{}", Int(5));
         println!("{}", Float(PI));
         println!("{}", Str("Hello".into()));
         println!("{}", Bool(false));
         println!("{}", Char('@'));
+    }
+
+    #[test]
+    fn is_numeric() {
+        assert!(Byte(0b1000).is_numeric());
+        assert!(Int(5).is_numeric());
+        assert!(Float(3.0 / 2.0).is_numeric());
+        assert!(!Str("Hello".into()).is_numeric());
+        assert!(!Bool(false).is_numeric());
+        assert!(!Char('@').is_numeric());
     }
 }

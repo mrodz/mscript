@@ -1,31 +1,42 @@
 use std::collections::HashSet;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 
 use super::{interpreter::Function, variable::Primitive};
 
-pub type InstructionSignature = fn(&mut Ctx<'_>, &Vec<String>) -> ();
+pub type InstructionSignature = fn(&mut Ctx<'_>, &Vec<String>) -> Result<()>;
 
 mod implementations {
-    use crate::bytecode::variable::Primitive;
+    use std::io::{stdin, stdout, Write};
 
-    use super::Ctx;
+    use anyhow::Context;
 
-    pub(crate) fn constexpr(ctx: &mut Ctx, args: &Vec<String>) {
-        assert!(args.len() == 1);
+    use super::*;
+    use crate::bytecode::variable::{bin_op_from, bin_op_result, Primitive};
+
+    pub(crate) fn constexpr(ctx: &mut Ctx, args: &Vec<String>) -> Result<()> {
+        if args.len() != 1 {
+            bail!("unexpected 1 parameter")
+        }
 
         let var = Primitive::from(&args[0]);
 
         ctx.push(var);
+
+        Ok(())
     }
 
-    pub(crate) fn pop(ctx: &mut Ctx, args: &Vec<String>) {
-        assert!(args.len() == 0);
+    pub(crate) fn pop(ctx: &mut Ctx, args: &Vec<String>) -> Result<()> {
+        if args.len() != 0 {
+            bail!("unexpected parameter")
+        }
 
         ctx.pop();
+
+        Ok(())
     }
 
-    pub(crate) fn stack_dump(ctx: &mut Ctx, args: &Vec<String>) {
+    pub(crate) fn stack_dump(ctx: &mut Ctx, args: &Vec<String>) -> Result<()> {
         println!("====== Start Context Dump ======");
         'get_data: {
             if let Some(arg0) = args.first() {
@@ -33,7 +44,7 @@ mod implementations {
                     dbg!(ctx);
                     break 'get_data;
                 } else {
-                    panic!("unknown debug argument ({arg0})")
+                    bail!("unknown debug argument ({arg0})")
                 }
             }
 
@@ -42,7 +53,85 @@ mod implementations {
             println!("Stack: {:#?}", ctx.stack);
         }
         println!("======= End Context Dump =======");
+
+        Ok(())
     }
+
+    pub(crate) fn bin_op(ctx: &mut Ctx, args: &Vec<String>) -> Result<()> {
+        let symbols = match args.first() {
+            Some(symbols) => symbols,
+            None => bail!("Expected an operation [+,-,*,/,%]"),
+        }
+        .as_bytes();
+
+        let symbol = symbols[0] as char;
+
+        let (Some(right), Some(left)) = (ctx.pop(), ctx.pop()) else {
+            unreachable!()
+        };
+
+        let (i_fn, f_fn) = bin_op_from(symbol).context("constructing bin op")?;
+
+        let result = bin_op_result(left, right, i_fn, f_fn)?;
+
+        ctx.clear_and_set_stack(result);
+
+        Ok(())
+    }
+
+    #[inline(always)]
+    pub(crate) fn nop(_ctx: &mut Ctx, _args: &Vec<String>) -> Result<()> {
+        Ok(())
+    }
+
+    pub(crate) fn void(ctx: &mut Ctx, _args: &Vec<String>) -> Result<()> {
+        ctx.stack.clear();
+
+        Ok(())
+    }
+
+    pub(crate) fn breakpoint(ctx: &mut Ctx, args: &Vec<String>) -> Result<()> {
+        print!("[!!] BREAKPOINT\n[!!] options\n[!!] - continue\n[!!] - dump\n[!!] Enter Option: ");
+
+        let mut buf = String::new();
+        stdout().flush()?;
+        stdin().read_line(&mut buf)?;
+
+        match buf.trim_end() {
+            "continue" => Ok(()),
+            "dump" => {
+                stack_dump(ctx, args)?;
+                Ok(())
+            }
+            buf => {
+                println!("[!!]\n[!!] BREAKPOINT\n[!!] '{buf}' is not a valid option.\n[!!]");
+                breakpoint(ctx, args)
+            }
+        }
+    }
+
+    macro_rules! make_type {
+        ($name:ident) => {
+            pub(crate) fn $name(ctx: &mut Ctx, args: &Vec<String>) -> Result<()> {
+                if args.len() != 1 {
+                    bail!("expected 1 parameter")
+                }
+
+                let var = Primitive::$name(&args[0])?;
+
+                ctx.push(var);
+
+                Ok(())
+            }
+        };
+    }
+
+    make_type!(make_bool);
+    make_type!(make_str);
+    make_type!(make_int);
+    make_type!(make_float);
+    make_type!(make_char);
+    make_type!(make_byte);
 }
 
 pub fn query(name: &String) -> InstructionSignature {
@@ -50,12 +139,24 @@ pub fn query(name: &String) -> InstructionSignature {
         "constexpr" => implementations::constexpr,
         "stack_dump" => implementations::stack_dump,
         "pop" => implementations::pop,
+        "bin_op" => implementations::bin_op,
+        "nop" => implementations::nop,
+        "bool" => implementations::make_bool,
+        "string" => implementations::make_str,
+        "int" => implementations::make_int,
+        "float" => implementations::make_float,
+        "char" => implementations::make_char,
+        "byte" => implementations::make_byte,
+        "void" => implementations::void,
+        "breakpoint" => implementations::breakpoint,
         _ => unreachable!("unknown bytecode instruction ({name})"),
     }
 }
 
-pub fn run_instruction(ctx: &mut Ctx, instruction: &Instruction) {
-    query(&instruction.name)(ctx, &instruction.arguments)
+pub fn run_instruction(ctx: &mut Ctx, instruction: &Instruction) -> Result<()> {
+    query(&instruction.name)(ctx, &instruction.arguments)?;
+
+    Ok(())
 }
 
 pub fn split_string(string: &String) -> Result<Vec<String>> {
@@ -66,7 +167,7 @@ pub fn split_string(string: &String) -> Result<Vec<String>> {
 
     for char in string.chars() {
         if !in_quotes {
-            if char == ' ' || char == ',' {
+            if char.is_whitespace() || char == ',' {
                 if buf.len() != 0 {
                     result.push(buf.to_string());
                     buf.clear();
@@ -142,9 +243,11 @@ pub fn split_string(string: &String) -> Result<Vec<String>> {
 }
 
 pub fn parse_line(line: &String) -> Result<Instruction> {
-    let mut arguments = split_string(line)?;
+    if line.trim().is_empty() {
+        return Ok(Instruction::Nop());
+    }
 
-    assert!(arguments.len() >= 1);
+    let mut arguments = split_string(line).context("splitting line")?;
 
     let name = arguments.remove(0);
 
@@ -157,7 +260,7 @@ pub fn parse_line(line: &String) -> Result<Instruction> {
     }
 
     Ok(Instruction {
-        name: name.trim_start_matches('\t').into(),
+        name: name.trim_start().into(),
         arguments,
         children: vec![],
         tab_level: tabs as u8,
@@ -180,6 +283,15 @@ impl<'a> Ctx<'a> {
         }
     }
 
+    fn clear_and_set_stack(&mut self, var: Primitive) {
+        self.stack.clear();
+        self.stack.push(var);
+    }
+
+    fn stack_size(&self) -> usize {
+        self.stack.len()
+    }
+
     fn register_variable(&'a mut self, name: &'a String) {
         self.names.insert(name);
     }
@@ -188,8 +300,8 @@ impl<'a> Ctx<'a> {
         self.stack.push(var);
     }
 
-    fn pop(&mut self) {
-        self.stack.pop();
+    fn pop(&mut self) -> Option<Primitive> {
+        self.stack.pop()
     }
 }
 
@@ -198,4 +310,15 @@ pub struct Instruction {
     arguments: Vec<String>,
     children: Vec<Instruction>,
     tab_level: u8,
+}
+
+impl Instruction {
+    pub fn Nop() -> Self {
+        Self {
+            name: "nop".into(),
+            arguments: vec![],
+            children: vec![],
+            tab_level: 0,
+        }
+    }
 }

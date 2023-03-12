@@ -5,22 +5,20 @@ extern crate pest_derive;
 
 mod bytecode;
 
-use anyhow::Result;
-use bytecode::{interpreter::{enter_function, functions, open_file}, parse_line};
+use anyhow::{Context, Result};
+use bytecode::interpreter::{functions, open_file};
 
 fn main() -> Result<()> {
-    let (path, file) = open_file("src/bytecode/bin/test.mmm").unwrap();
+    let (path, file) = open_file("src/bytecode/bin/test.mmm")?;
 
-    let functions = functions(file, path).unwrap();
+    let functions = functions(file, path)?;
 
-    enter_function(&functions[0]).unwrap();
-    enter_function(&functions[1]).unwrap();
-
-    // parse_line(&"constexpr \"Hello, World\"".into());
-
-    // for function in functions {
-    //     enter_function(&function).unwrap();
-    // }
+    functions["src/bytecode/bin/test.mmm#do_math"]
+        .run()
+        .context("function exited abruptly")?;
+    functions["src/bytecode/bin/test.mmm#floating_point_math"]
+        .run()
+        .context("function exited abruptly")?;
 
     Ok(())
 }

@@ -69,10 +69,10 @@ impl Attributes {
 }
 
 pub fn parse_attributes(attribute_str: &String) -> Result<Attributes> {
-    static WHITESPACE: u8 = 0b1000;
-    static ESCAPING: u8 = 0b0100;
-    static IN_QUOT: u8 = 0b0010;
-    static AT_LEFT: u8 = 0b0001;
+    const WHITESPACE: u8 = 0b1000;
+    const ESCAPING: u8 = 0b0100;
+    const IN_QUOT: u8 = 0b0010;
+    const AT_LEFT: u8 = 0b0001;
 
     let mut chars = attribute_str.chars();
 

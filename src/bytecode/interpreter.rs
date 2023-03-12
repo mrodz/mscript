@@ -1,15 +1,16 @@
+use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
+use std::ops::Index;
 use std::path::Path;
 use std::sync::Arc;
 
 use crate::bytecode::instruction::{self, run_instruction, Ctx};
 
 use super::attributes_parser::{parse_attributes, Attributes};
-use super::instruction::Instruction;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 
 pub trait Location: AsRef<Path> + Display {}
 
@@ -68,42 +69,50 @@ impl Function {
             seek_pos,
         }
     }
-}
 
-/// Read all the lines of a function, based on its file location
-///
-pub fn enter_function(function: &Function) -> Result<Vec<String>> {
-    let mut reader = BufReader::new(&*function.location_handle);
-
-    let Ok(pos) = reader.seek(SeekFrom::Start(function.seek_pos)) else {
-		bail!("could not get current file position")
-	};
-
-    assert_eq!(pos, function.seek_pos);
-
-    let mut lines = vec![];
-
-    let mut context = Ctx::new(&function);
-
-    for line in reader.lines() {
-        if line.is_err() {
-            bail!("Could not read function:\n\t{}", function)
-        }
-
-        let line = line.unwrap();
-
-        if line == "end" {
-            break;
-        }
-
-        let instruction = instruction::parse_line(&line)?;
-
-        run_instruction(&mut context, &instruction);
-
-        lines.push(line);
+    #[inline]
+    pub fn get_qualified_name(&self) -> String {
+        format!("{}#{}", self.location, self.name)
     }
 
-    Ok(lines)
+    pub fn run(&self) -> Result<Vec<String>> {
+        let mut reader = BufReader::new(&*self.location_handle);
+
+        let Ok(pos) = reader.seek(SeekFrom::Start(self.seek_pos)) else {
+            bail!("could not get current file position")
+        };
+
+        assert_eq!(pos, self.seek_pos);
+
+        let mut lines = vec![];
+
+        let mut context = Ctx::new(&self);
+
+        let mut line_number = self.line_number + 2;
+
+        for line in reader.lines() {
+            if line.is_err() {
+                bail!("could not read function:\n\t{}", self)
+            }
+
+            let line = line.unwrap();
+
+            if line == "end" {
+                break;
+            }
+
+            let instruction = instruction::parse_line(&line).context("failed parsing line")?;
+
+            run_instruction(&mut context, &instruction)
+                .with_context(|| format!("failed to run instruction (L:{line_number})"))?;
+
+            lines.push(line);
+
+            line_number += 1;
+        }
+
+        Ok(lines)
+    }
 }
 
 pub fn open_file<T>(path: T) -> Result<(Arc<T>, Arc<File>)>
@@ -111,12 +120,33 @@ where
     T: Location + Clone + 'static,
 {
     let path = Arc::new(path);
-    let file = Arc::new(File::open(&*path)?);
+    let file = Arc::new(File::open(&*path).context("Failed opening file")?);
 
     Ok((path, file))
 }
 
-pub fn functions<T>(file: Arc<File>, path: Arc<T>) -> Result<Vec<Function>>
+pub struct Functions {
+    map: HashMap<String, Function>,
+}
+
+impl Functions {
+    pub fn get(&self, signature: &str) -> Result<&Function> {
+        let Some(result) = self.map.get(signature) else {
+            bail!("unknown function ({signature})");
+        };
+
+        Ok(result)
+    }
+}
+
+impl<'a> Index<&'a str> for Functions {
+    type Output = Function;
+    fn index(&self, index: &'a str) -> &Self::Output {
+        self.map.get(index).unwrap()
+    }
+}
+
+pub fn functions<T>(file: Arc<File>, path: Arc<T>) -> Result<Functions>
 where
     T: Location + Clone + 'static,
 {
@@ -126,7 +156,7 @@ where
 
     let mut line_number: u32 = 0;
 
-    let mut functions: Vec<Function> = vec![];
+    let mut functions: HashMap<String, Function> = HashMap::new();
 
     let mut current_attributes: Vec<Attributes> = vec![];
 
@@ -141,7 +171,7 @@ where
 		};
 
         if buffer.starts_with("#[") {
-            let attr = parse_attributes(&buffer)?;
+            let attr = parse_attributes(&buffer).context("Failed parsing attributes")?;
             current_attributes.push(attr);
         } else {
             let mut parts = buffer.split_ascii_whitespace();
@@ -157,7 +187,7 @@ where
 
                 println!("\t{function}");
 
-                functions.push(function);
+                functions.insert(function.get_qualified_name(), function);
                 current_attributes = vec![];
             }
         }
@@ -167,5 +197,5 @@ where
         line_number += 1;
     }
 
-    Ok(functions)
+    Ok(Functions { map: functions })
 }

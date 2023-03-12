@@ -1,14 +1,25 @@
-#[argc=1]
-function doMath
-	constexpr "Hello, World"
-	constexpr 1
-	constexpr 3.1415
-	stack_dump
-	pop
-	stack_dump
+function do_math
+	int 4
+	int 3
+	bin_op *
+	int 2
+	bin_op -
+	int 5
+	bin_op /
+	float 3
+	bin_op %
+	breakpoint
 end
 
-#[argc=3, jj, "woo this"="has multiple spaces"]
-function functionB
+function floating_point_math
+	float 100
+	float 3
+	bin_op /
+end
+
+function divide_by_zero
+	constexpr 10
+	constexpr 0
+	bin_op /
 	stack_dump
 end
