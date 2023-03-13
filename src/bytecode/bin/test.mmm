@@ -8,18 +8,19 @@ function do_math
 	bin_op /
 	float 3
 	bin_op %
-	breakpoint
+	stack_dump
 end
 
 function floating_point_math
-	float 100
-	float 3
+	float 5
+	constexpr 10
 	bin_op /
+	stack_dump
+	ret
 end
 
 function divide_by_zero
 	constexpr 10
 	constexpr 0
 	bin_op /
-	stack_dump
 end

@@ -11,14 +11,12 @@ use bytecode::interpreter::{functions, open_file};
 fn main() -> Result<()> {
     let (path, file) = open_file("src/bytecode/bin/test.mmm")?;
 
-    let functions = functions(file, path)?;
+    let mut functions = functions(file, path)?;
 
-    functions["src/bytecode/bin/test.mmm#do_math"]
-        .run()
-        .context("function exited abruptly")?;
-    functions["src/bytecode/bin/test.mmm#floating_point_math"]
-        .run()
-        .context("function exited abruptly")?;
+    let res = functions["src/bytecode/bin/test.mmm#floating_point_math"]
+        .run()?;
+
+    dbg!(res);
 
     Ok(())
 }

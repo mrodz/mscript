@@ -2,7 +2,7 @@ use std::fmt::{Debug, Display};
 
 use anyhow::{bail, Result};
 
-#[derive(PartialEq, PartialOrd, Debug)]
+#[derive(PartialEq, PartialOrd, Debug, Clone)]
 pub enum Primitive {
     Bool(bool),
     Str(String),

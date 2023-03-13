@@ -2,7 +2,8 @@ use std::collections::HashSet;
 
 use anyhow::{bail, Context, Result};
 
-use super::{interpreter::Function, variable::Primitive};
+use super::variable::Primitive;
+use super::function::Function;
 
 pub type InstructionSignature = fn(&mut Ctx<'_>, &Vec<String>) -> Result<()>;
 
@@ -110,6 +111,18 @@ mod implementations {
         }
     }
 
+    pub(crate) fn ret(ctx: &mut Ctx, _args: &Vec<String>) -> Result<()> {
+        if ctx.stack_size() > 1 {
+            bail!("ret can only return a single item");
+        }
+
+        let var = ctx.pop();
+
+        ctx.return_now(var);
+
+        Ok(())
+    }
+
     macro_rules! make_type {
         ($name:ident) => {
             pub(crate) fn $name(ctx: &mut Ctx, args: &Vec<String>) -> Result<()> {
@@ -149,6 +162,7 @@ pub fn query(name: &String) -> InstructionSignature {
         "byte" => implementations::make_byte,
         "void" => implementations::void,
         "breakpoint" => implementations::breakpoint,
+        "ret" => implementations::ret,
         _ => unreachable!("unknown bytecode instruction ({name})"),
     }
 }
@@ -244,7 +258,7 @@ pub fn split_string(string: &String) -> Result<Vec<String>> {
 
 pub fn parse_line(line: &String) -> Result<Instruction> {
     if line.trim().is_empty() {
-        return Ok(Instruction::Nop());
+        return Ok(Instruction::nop());
     }
 
     let mut arguments = split_string(line).context("splitting line")?;
@@ -272,6 +286,7 @@ pub struct Ctx<'a> {
     stack: Vec<Primitive>,
     names: HashSet<&'a String>,
     function: &'a Function,
+    return_value: Option<Option<Primitive>>,
 }
 
 impl<'a> Ctx<'a> {
@@ -280,7 +295,20 @@ impl<'a> Ctx<'a> {
             stack: vec![],
             names: HashSet::new(),
             function,
+            return_value: None,
         }
+    }
+
+    pub(crate) fn return_now(&mut self, var: Option<Primitive>) {
+        self.return_value = Some(var);
+    }
+
+    pub(crate) fn get_return_value(&self) -> Result<&Option<Primitive>> {
+        let Some(ref unwrapped) = self.return_value else {
+            bail!("the function hasn't been called.")
+        };
+
+        Ok(&unwrapped)
     }
 
     fn clear_and_set_stack(&mut self, var: Primitive) {
@@ -313,7 +341,7 @@ pub struct Instruction {
 }
 
 impl Instruction {
-    pub fn Nop() -> Self {
+    pub fn nop() -> Self {
         Self {
             name: "nop".into(),
             arguments: vec![],
