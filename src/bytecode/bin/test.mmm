@@ -3,7 +3,7 @@ function do_math
 	int 3
 	bin_op *
 	int 2
-	bin_op -
+	bin_op, -
 	int 5
 	bin_op /
 	float 3
@@ -15,7 +15,8 @@ function floating_point_math
 	float 5
 	constexpr 10
 	bin_op /
-	stack_dump
+	printn *
+	breakpoint
 	ret
 end
 

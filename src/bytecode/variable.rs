@@ -258,7 +258,7 @@ pub fn parse_string(string: &String) -> Result<String> {
     }
 
     if in_quotes {
-        bail!("Found EOL while parsing string")
+        bail!("found EOL while parsing string")
     } else {
         Ok(buf)
     }

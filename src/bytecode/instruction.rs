@@ -2,8 +2,9 @@ use std::collections::HashSet;
 
 use anyhow::{bail, Context, Result};
 
-use super::variable::Primitive;
 use super::function::Function;
+use super::stack::Stack;
+use super::variable::Primitive;
 
 pub type InstructionSignature = fn(&mut Ctx<'_>, &Vec<String>) -> Result<()>;
 
@@ -145,6 +146,35 @@ mod implementations {
     make_type!(make_float);
     make_type!(make_char);
     make_type!(make_byte);
+
+    pub(crate) fn printn(ctx: &mut Ctx, args: &Vec<String>) -> Result<()> {
+        let Some(arg) = args.first() else {
+            bail!("expected 1 parameter of type __rust__::usize, or * to print all");
+        };
+
+        if arg == "*" {
+            let Some(first) = ctx.stack.first() else {
+                return Ok(())
+            };
+
+            print!("{first}");
+            for var in &ctx.stack[1..] {
+                print!(", {var}");
+            }
+
+            println!();
+
+            return Ok(());
+        }
+
+        let Ok(arg) = usize::from_str_radix(arg, 10) else {
+            bail!("expected 1 parameter of type __rust__::usize");
+        };
+
+        println!("{:?}", ctx.stack.get(arg));
+
+        Ok(())
+    }
 }
 
 pub fn query(name: &String) -> InstructionSignature {
@@ -163,6 +193,7 @@ pub fn query(name: &String) -> InstructionSignature {
         "void" => implementations::void,
         "breakpoint" => implementations::breakpoint,
         "ret" => implementations::ret,
+        "printn" => implementations::printn,
         _ => unreachable!("unknown bytecode instruction ({name})"),
     }
 }
@@ -247,7 +278,7 @@ pub fn split_string(string: &String) -> Result<Vec<String>> {
     }
 
     if in_quotes {
-        bail!("Found EOL while parsing string: {string}")
+        bail!("found EOL while parsing string: `{string}`")
     } else {
         if buf.len() > 0 {
             result.push(buf.to_string());
@@ -287,15 +318,17 @@ pub struct Ctx<'a> {
     names: HashSet<&'a String>,
     function: &'a Function,
     return_value: Option<Option<Primitive>>,
+    call_stack: &'a mut Stack,
 }
 
 impl<'a> Ctx<'a> {
-    pub fn new(function: &'a Function) -> Self {
+    pub fn new(function: &'a Function, call_stack: &'a mut Stack) -> Self {
         Self {
             stack: vec![],
             names: HashSet::new(),
             function,
             return_value: None,
+            call_stack,
         }
     }
 
@@ -334,7 +367,7 @@ impl<'a> Ctx<'a> {
 }
 
 pub struct Instruction {
-    name: String,
+    pub name: String,
     arguments: Vec<String>,
     children: Vec<Instruction>,
     tab_level: u8,
