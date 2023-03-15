@@ -16,7 +16,6 @@ function floating_point_math
 	constexpr 10
 	bin_op /
 	printn *
-	breakpoint
 	ret
 end
 

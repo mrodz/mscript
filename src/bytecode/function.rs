@@ -9,8 +9,8 @@ use anyhow::{bail, Context, Result};
 use crate::bytecode::instruction;
 
 use super::attributes_parser::Attributes;
+use super::file::Location;
 use super::instruction::{run_instruction, Ctx, Instruction};
-use super::interpreter::Location;
 use super::stack::Stack;
 use super::variable::Primitive;
 
@@ -18,7 +18,7 @@ pub struct Function {
     location: Arc<dyn Location>,
     location_handle: Arc<File>,
     line_number: u32,
-    seek_pos: u64,
+    pub(crate) seek_pos: u64,
     attributes: Vec<Attributes>,
     name: String,
 }
@@ -109,7 +109,7 @@ impl Function {
     pub fn run(&mut self, current_frame: &mut Stack) -> Result<ReturnValue> {
         current_frame.extend(&self.get_qualified_name());
 
-        let handle = &*self.location_handle.clone();
+        let handle = &*self.location_handle;
         let mut reader = BufReader::new(handle);
 
         let Ok(pos) = reader.seek(SeekFrom::Start(self.seek_pos)) else {
@@ -163,6 +163,14 @@ pub struct Functions(pub HashMap<String, Function>);
 impl Functions {
     pub fn get(&self, signature: &str) -> Result<&Function> {
         let Some(result) = self.0.get(signature) else {
+            bail!("unknown function ({signature})");
+        };
+
+        Ok(result)
+    }
+
+    pub fn get_mut(&mut self, signature: &str) -> Result<&mut Function> {
+        let Some(result) = self.0.get_mut(signature) else {
             bail!("unknown function ({signature})");
         };
 

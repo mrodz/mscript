@@ -6,14 +6,10 @@ use std::path::Path;
 use std::sync::Arc;
 
 use super::attributes_parser::{parse_attributes, Attributes};
+use super::file::Location;
 use super::function::{Function, Functions};
 
 use anyhow::{bail, Context, Result};
-
-pub trait Location: AsRef<Path> + Display {}
-
-impl Location for &str {}
-impl Location for String {}
 
 pub fn open_file<T>(path: T) -> Result<(Arc<T>, Arc<File>)>
 where

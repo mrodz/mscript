@@ -118,6 +118,11 @@ impl Display for Primitive {
     }
 }
 
+pub struct Variable {
+    symbol: String,
+    data: Primitive,
+}
+
 impl From<String> for Primitive {
     fn from(value: String) -> Self {
         Self::from(&value)

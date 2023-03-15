@@ -51,8 +51,8 @@ mod implementations {
             }
 
             println!("Function: {}", ctx.function);
-            println!("Accessible Symbols: {:?}", ctx.names);
-            println!("Stack: {:#?}", ctx.stack);
+            println!("Stack Trace:\n{}", ctx.call_stack);
+            println!("Operating Stack: {:#?}", ctx.stack);
         }
         println!("======= End Context Dump =======");
 
@@ -175,6 +175,15 @@ mod implementations {
 
         Ok(())
     }
+
+    // pub(crate) fn jump(ctx: &mut Ctx, args: &Vec<String>) -> Result<()> {
+    //     let Some(first) = args.first() else {
+    //         bail!("expected one argument");
+    //     };
+
+    //     ctx.request_jump(first);
+    // }
+
 }
 
 pub fn query(name: &String) -> InstructionSignature {
@@ -296,26 +305,15 @@ pub fn parse_line(line: &String) -> Result<Instruction> {
 
     let name = arguments.remove(0);
 
-    let mut tabs = 0;
-
-    let bytes = name.as_bytes();
-
-    while bytes[tabs] == b'\t' {
-        tabs += 1;
-    }
-
     Ok(Instruction {
         name: name.trim_start().into(),
         arguments,
-        children: vec![],
-        tab_level: tabs as u8,
     })
 }
 
 #[derive(Debug)]
 pub struct Ctx<'a> {
     stack: Vec<Primitive>,
-    names: HashSet<&'a String>,
     function: &'a Function,
     return_value: Option<Option<Primitive>>,
     call_stack: &'a mut Stack,
@@ -325,7 +323,6 @@ impl<'a> Ctx<'a> {
     pub fn new(function: &'a Function, call_stack: &'a mut Stack) -> Self {
         Self {
             stack: vec![],
-            names: HashSet::new(),
             function,
             return_value: None,
             call_stack,
@@ -353,10 +350,6 @@ impl<'a> Ctx<'a> {
         self.stack.len()
     }
 
-    fn register_variable(&'a mut self, name: &'a String) {
-        self.names.insert(name);
-    }
-
     fn push(&mut self, var: Primitive) {
         self.stack.push(var);
     }
@@ -369,8 +362,6 @@ impl<'a> Ctx<'a> {
 pub struct Instruction {
     pub name: String,
     arguments: Vec<String>,
-    children: Vec<Instruction>,
-    tab_level: u8,
 }
 
 impl Instruction {
@@ -378,8 +369,6 @@ impl Instruction {
         Self {
             name: "nop".into(),
             arguments: vec![],
-            children: vec![],
-            tab_level: 0,
         }
     }
 }
