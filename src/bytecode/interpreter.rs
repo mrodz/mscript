@@ -1,76 +1,115 @@
-use std::collections::HashMap;
-use std::fmt::Display;
-use std::fs::File;
-use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::path::Path;
 use std::sync::Arc;
+use std::{cell::RefCell, collections::HashMap};
 
-use super::attributes_parser::{parse_attributes, Attributes};
-use super::file::Location;
-use super::function::{Function, Functions};
+use anyhow::{bail, Result};
 
-use anyhow::{bail, Context, Result};
+use super::instruction::JumpRequest;
+use super::{MScriptFile, Stack};
 
-pub fn open_file<T>(path: T) -> Result<(Arc<T>, Arc<File>)>
-where
-    T: Location + Clone + 'static,
-{
-    let path = Arc::new(path);
-    let file = Arc::new(File::open(&*path).context("Failed opening file")?);
-
-    Ok((path, file))
+pub struct Program {
+    entrypoint: Arc<String>,
+    files_in_use: HashMap<String, Arc<RefCell<MScriptFile>>>,
 }
 
-pub fn functions<T>(file: Arc<File>, path: Arc<T>) -> Result<Functions>
-where
-    T: Location + Clone + 'static,
-{
-    println!("Functions in {path}");
-    let mut reader = BufReader::new(&*file);
-    let mut buffer = String::new();
+impl Program {
+    pub fn new<T>(path: T) -> Result<Self>
+    where
+        T: AsRef<Path> + ToString,
+    {
+        let path = path.to_string();
+        let main_file = MScriptFile::open(&path)?;
+        let entrypoint = Arc::new(path.clone());
+        let mut files_in_use = HashMap::with_capacity(1);
+        files_in_use.insert(path, main_file);
 
-    let mut line_number: u32 = 0;
+        Ok(Self {
+            entrypoint: entrypoint,
+            files_in_use,
+        })
+    }
 
-    let mut functions: HashMap<String, Function> = HashMap::new();
+    pub fn is_file_loaded(&self, path: &String) -> Option<&Arc<RefCell<MScriptFile>>> {
+        self.files_in_use.get(path)
+    }
 
-    let mut current_attributes: Vec<Attributes> = vec![];
-
-    while let Ok(size) = reader.read_line(&mut buffer) {
-        if size == 0 {
-            println!("EOF @ L:{line_number}");
-            break;
+    pub fn add_file(&mut self, path: &String) -> Result<Option<()>> {
+        if self.files_in_use.contains_key(path) {
+            return Ok(None);
+            // bail!("file has already been loaded")
         }
 
-        let Ok(seek_pos) = reader.seek(SeekFrom::Current(0)) else {
-			bail!("could not get current file position")
-		};
+        let new_file = MScriptFile::open(path)?;
 
-        if buffer.starts_with("#[") {
-            let attr = parse_attributes(&buffer).context("Failed parsing attributes")?;
-            current_attributes.push(attr);
-        } else {
-            let mut parts = buffer.split_ascii_whitespace();
-            if let (Some("function"), Some(name)) = (parts.next(), parts.next()) {
-                let function = Function::new(
-                    path.clone(),
-                    file.clone(),
-                    line_number,
-                    current_attributes,
-                    name.to_string(),
-                    seek_pos,
-                );
+        self.files_in_use.insert(path.to_string(), new_file);
 
-                println!("\t{function}");
+        Ok(Some(()))
+    }
 
-                functions.insert(function.get_qualified_name(), function);
-                current_attributes = vec![];
+    pub fn get_file(&mut self, path: &String) -> Result<&Arc<RefCell<MScriptFile>>> {
+        let Some(file) = self.is_file_loaded(path) else {
+            bail!("file is not loaded")
+        };
+
+        Ok(file)
+    }
+
+    fn process_jump_request(&mut self, request: JumpRequest) -> Result<()> {
+        let mut last_hash = 0;
+
+        for (idx, char) in request.destination_label.chars().enumerate() {
+            if char == '#' {
+                last_hash = idx;
             }
         }
 
-        buffer.clear();
+        if last_hash == 0 || last_hash == request.destination_label.len() - 1 {
+            bail!("invalid path (syntax: /path/to/file#function_name");
+        }
 
-        line_number += 1;
+        let (path, symbol) = request.destination_label.split_at(last_hash);
+
+        let path = path.to_string();
+        let symbol = &symbol[1..];
+
+        self.add_file(&path)?;
+        let file = self.get_file(&path)?;
+
+        let mut new_stack = Stack::new();
+
+        new_stack.extend(&"temporary: new stack on fn call".to_string());
+
+        let mut c = |request| {
+            dbg!(request);
+            Ok(())
+        };
+
+        // todo: 
+        // - allow more than two functions calls.
+        // - pass stack frame to this function
+        // - find a way to do this recursively.
+
+        unsafe {
+            (*file.as_ptr()).run_function(symbol, &mut new_stack, &mut c)?;
+        }
+
+        Ok(())
     }
 
-    Ok(Functions(functions))
+    pub fn execute(mut self) -> Result<()> {
+        let entrypoint = self.get_file(&self.entrypoint.as_ref().clone())?;
+
+        let mut stack = Stack::new();
+
+        // We have to use pointers to get around a guaranteed dynamic thread panic,
+        // since `entrypoint` will not have been dropped during subsequent calls to
+        // borrow_mut().
+        unsafe {
+            (*entrypoint.as_ptr()).run_function("main", &mut stack, &mut |request| {
+                self.process_jump_request(request)
+            })?;
+        }
+
+        Ok(())
+    }
 }

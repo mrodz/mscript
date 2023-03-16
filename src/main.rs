@@ -6,18 +6,10 @@ extern crate pest_derive;
 mod bytecode;
 
 use anyhow::Result;
-use bytecode::MScriptFile;
-
-use crate::bytecode::Stack;
+use bytecode::interpreter::Program;
 
 fn main() -> Result<()> {
-
-    let mut file = MScriptFile::open("src/bytecode/bin/test.mmm")?;
-
-    let mut stack = Stack::new();
-
-    file.run_function("floating_point_math", &mut stack)?;
-    file.run_function("divide_by_zero", &mut stack)?;
+    let _ = Program::new("src/bytecode/bin/test.mmm")?.execute()?;
 
     Ok(())
 }

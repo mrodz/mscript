@@ -1,21 +1,32 @@
-use std::collections::HashSet;
+use std::io::{stdin, stdout, Write};
+use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 
 use super::function::Function;
 use super::stack::Stack;
-use super::variable::Primitive;
+use super::variable::{bin_op_from, bin_op_result, Primitive};
 
-pub type InstructionSignature = fn(&mut Ctx<'_>, &Vec<String>) -> Result<()>;
+pub type InstructionSignature = fn(&mut Ctx, &Vec<String>) -> Result<()>;
 
-mod implementations {
-    use std::io::{stdin, stdout, Write};
+macro_rules! make_type {
+    ($name:ident) => {
+        pub(crate) fn $name(ctx: &mut Ctx, args: &Vec<String>) -> Result<()> {
+            if args.len() != 1 {
+                bail!("expected 1 parameter")
+            }
 
-    use anyhow::Context;
+            let var = Primitive::$name(&args[0])?;
 
-    use super::*;
-    use crate::bytecode::variable::{bin_op_from, bin_op_result, Primitive};
+            ctx.push(var);
 
+            Ok(())
+        }
+    };
+}
+
+pub struct Implementations;
+impl<'a> Implementations {
     pub(crate) fn constexpr(ctx: &mut Ctx, args: &Vec<String>) -> Result<()> {
         if args.len() != 1 {
             bail!("unexpected 1 parameter")
@@ -102,12 +113,12 @@ mod implementations {
         match buf.trim_end() {
             "continue" => Ok(()),
             "dump" => {
-                stack_dump(ctx, args)?;
+                Self::stack_dump(ctx, args)?;
                 Ok(())
             }
             buf => {
                 println!("[!!]\n[!!] BREAKPOINT\n[!!] '{buf}' is not a valid option.\n[!!]");
-                breakpoint(ctx, args)
+                Self::breakpoint(ctx, args)
             }
         }
     }
@@ -122,22 +133,6 @@ mod implementations {
         ctx.return_now(var);
 
         Ok(())
-    }
-
-    macro_rules! make_type {
-        ($name:ident) => {
-            pub(crate) fn $name(ctx: &mut Ctx, args: &Vec<String>) -> Result<()> {
-                if args.len() != 1 {
-                    bail!("expected 1 parameter")
-                }
-
-                let var = Primitive::$name(&args[0])?;
-
-                ctx.push(var);
-
-                Ok(())
-            }
-        };
     }
 
     make_type!(make_bool);
@@ -176,39 +171,42 @@ mod implementations {
         Ok(())
     }
 
-    // pub(crate) fn jump(ctx: &mut Ctx, args: &Vec<String>) -> Result<()> {
-    //     let Some(first) = args.first() else {
-    //         bail!("expected one argument");
-    //     };
+    pub(crate) fn call(ctx: &mut Ctx, args: &Vec<String>) -> Result<()> {
+        let Some(first) = args.first() else {
+            bail!("expected one argument");
+        };
 
-    //     ctx.request_jump(first);
-    // }
+        ctx.request_jump(first.clone(), None);
 
+        Ok(())
+    }
 }
 
 pub fn query(name: &String) -> InstructionSignature {
     match name.as_str() {
-        "constexpr" => implementations::constexpr,
-        "stack_dump" => implementations::stack_dump,
-        "pop" => implementations::pop,
-        "bin_op" => implementations::bin_op,
-        "nop" => implementations::nop,
-        "bool" => implementations::make_bool,
-        "string" => implementations::make_str,
-        "int" => implementations::make_int,
-        "float" => implementations::make_float,
-        "char" => implementations::make_char,
-        "byte" => implementations::make_byte,
-        "void" => implementations::void,
-        "breakpoint" => implementations::breakpoint,
-        "ret" => implementations::ret,
-        "printn" => implementations::printn,
+        "constexpr" => Implementations::constexpr,
+        "stack_dump" => Implementations::stack_dump,
+        "pop" => Implementations::pop,
+        "bin_op" => Implementations::bin_op,
+        "nop" => Implementations::nop,
+        "bool" => Implementations::make_bool,
+        "string" => Implementations::make_str,
+        "int" => Implementations::make_int,
+        "float" => Implementations::make_float,
+        "char" => Implementations::make_char,
+        "byte" => Implementations::make_byte,
+        "void" => Implementations::void,
+        "breakpoint" => Implementations::breakpoint,
+        "ret" => Implementations::ret,
+        "printn" => Implementations::printn,
+        "call" => Implementations::call,
         _ => unreachable!("unknown bytecode instruction ({name})"),
     }
 }
 
 pub fn run_instruction(ctx: &mut Ctx, instruction: &Instruction) -> Result<()> {
-    query(&instruction.name)(ctx, &instruction.arguments)?;
+    let x = query(&instruction.name);
+    x(ctx, &instruction.arguments)?;
 
     Ok(())
 }
@@ -311,12 +309,19 @@ pub fn parse_line(line: &String) -> Result<Instruction> {
     })
 }
 
+#[derive(Debug, Clone)]
+pub struct JumpRequest {
+    pub destination_label: String,
+    pub caller: Option<fn() -> String>,
+}
+
 #[derive(Debug)]
 pub struct Ctx<'a> {
     stack: Vec<Primitive>,
     function: &'a Function,
     return_value: Option<Option<Primitive>>,
     call_stack: &'a mut Stack,
+    requested_jump: Option<JumpRequest>,
 }
 
 impl<'a> Ctx<'a> {
@@ -326,7 +331,25 @@ impl<'a> Ctx<'a> {
             function,
             return_value: None,
             call_stack,
+            requested_jump: None,
         }
+    }
+
+    pub(crate) fn request_jump(
+        &mut self,
+        destination_label: String,
+        caller: Option<fn() -> String>,
+    ) {
+        self.requested_jump = Some(JumpRequest {
+            destination_label,
+            caller,
+        })
+    }
+
+    pub(crate) fn clear_and_get_jump_request(&mut self) -> Option<JumpRequest> {
+        let res = self.requested_jump.clone();
+        self.requested_jump = None;
+        res
     }
 
     pub(crate) fn return_now(&mut self, var: Option<Primitive>) {

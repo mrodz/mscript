@@ -1,6 +1,7 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
-use std::io::{BufRead, BufReader, Seek, SeekFrom};
+use std::io::{stdout, BufRead, BufReader, Seek, SeekFrom, Write};
 use std::ops::{Index, IndexMut};
 use std::{fs::File, sync::Arc};
 
@@ -9,14 +10,15 @@ use anyhow::{bail, Context, Result};
 use crate::bytecode::instruction;
 
 use super::attributes_parser::Attributes;
-use super::file::Location;
-use super::instruction::{run_instruction, Ctx, Instruction};
+use super::instruction::{run_instruction, Ctx, Instruction, JumpRequest};
 use super::stack::Stack;
 use super::variable::Primitive;
+use super::MScriptFile;
 
 pub struct Function {
-    location: Arc<dyn Location>,
-    location_handle: Arc<File>,
+    location: Arc<RefCell<MScriptFile>>,
+    // location: Arc<String>,
+    // location_handle: Arc<File>,
     line_number: u32,
     pub(crate) seek_pos: u64,
     attributes: Vec<Attributes>,
@@ -44,7 +46,7 @@ impl Display for ReturnValue {
 
 impl Debug for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Function {{ name: {:?}, location: {}, line_number: {}, seek_pos: {}, attributes: {:?} }}", self.name, &*self.location, self.line_number, self.seek_pos, self.attributes)
+        write!(f, "Function {{ name: {:?}, location: {}, line_number: {}, seek_pos: {}, attributes: {:?} }}", self.name, self.location.borrow().path, self.line_number, self.seek_pos, self.attributes)
     }
 }
 
@@ -60,7 +62,7 @@ impl Display for Function {
             f,
             "{}@@{}:{}@@ function {} ({:#x})",
             attributes,
-            self.location,
+            self.location.borrow().path,
             self.line_number + 1,
             self.name,
             self.seek_pos
@@ -68,10 +70,15 @@ impl Display for Function {
     }
 }
 
-impl Function {
+pub enum InstructionExitState {
+    ReturnValue(ReturnValue),
+    JumpRequest(JumpRequest),
+    NoExit,
+}
+
+impl<'a> Function {
     pub fn new(
-        location: Arc<dyn Location>,
-        location_handle: Arc<File>,
+        location: Arc<RefCell<MScriptFile>>,
         line_number: u32,
         attributes: Vec<Attributes>,
         name: String,
@@ -79,7 +86,6 @@ impl Function {
     ) -> Self {
         Self {
             location,
-            location_handle,
             line_number,
             attributes,
             name,
@@ -89,28 +95,38 @@ impl Function {
 
     #[inline]
     pub fn get_qualified_name(&self) -> String {
-        format!("{}#{}", self.location, self.name)
+        format!("{}#{}", self.location.borrow().path, self.name)
     }
 
-    fn run_and_ret<'a>(
-        context: &'a mut Ctx,
+    fn run_and_ret(
+        context: &mut Ctx<'a>,
         instruction: &Instruction,
-    ) -> Result<Option<&'a Option<Primitive>>> {
-        run_instruction(context, instruction)
-            .with_context(|| format!("failed to run instruction"))?;
+    ) -> Result<InstructionExitState> {
+        run_instruction(context, instruction).with_context(|| {
+            let _ = stdout().flush();
+            format!("failed to run instruction")
+        })?;
 
         if let Ok(ret) = context.get_return_value() {
-            Ok(Some(ret))
+            return Ok(InstructionExitState::ReturnValue(ReturnValue(ret.clone())));
         } else {
-            Ok(None)
+            if let Some(jump_request) = context.clear_and_get_jump_request() {
+                return Ok(InstructionExitState::JumpRequest(jump_request));
+            }
         }
+
+        Ok(InstructionExitState::NoExit)
     }
 
-    pub fn run(&mut self, current_frame: &mut Stack) -> Result<ReturnValue> {
+    pub fn run(
+        &mut self,
+        current_frame: &mut Stack,
+        jump_callback: &mut impl FnMut(JumpRequest) -> Result<()>,
+    ) -> Result<ReturnValue> {
         current_frame.extend(&self.get_qualified_name());
 
-        let handle = &*self.location_handle;
-        let mut reader = BufReader::new(handle);
+        let location = self.location.borrow();
+        let mut reader = BufReader::new(location.handle.as_ref());
 
         let Ok(pos) = reader.seek(SeekFrom::Start(self.seek_pos)) else {
             bail!("could not get current file position")
@@ -124,7 +140,7 @@ impl Function {
 
         let lines = reader.lines();
 
-        let mut return_value = None;
+        let mut return_value: ReturnValue = ReturnValue(None);
 
         // scope is needed to drop the function context before returning.
         'function_run: {
@@ -144,9 +160,16 @@ impl Function {
                 let ret = Self::run_and_ret(&mut context, &instruction)
                     .with_context(|| format!("`{}` on line {line_number}", instruction.name))?;
 
-                if let Some(primitive) = ret {
-                    return_value = primitive.clone();
-                    break 'function_run;
+                match ret {
+                    InstructionExitState::ReturnValue(ret) => {
+                        return_value = ret;
+                        break 'function_run;
+                    }
+                    InstructionExitState::JumpRequest(jump_request) => {
+                        jump_callback(jump_request)?;
+                    }
+                    InstructionExitState::NoExit => (),
+                    _ => unimplemented!(),
                 }
 
                 line_number += 1;
@@ -154,13 +177,13 @@ impl Function {
         }
 
         current_frame.pop();
-        Ok(ReturnValue(return_value))
+        Ok(return_value)
     }
 }
 
 pub struct Functions(pub HashMap<String, Function>);
 
-impl Functions {
+impl<'a> Functions {
     pub fn get(&self, signature: &str) -> Result<&Function> {
         let Some(result) = self.0.get(signature) else {
             bail!("unknown function ({signature})");
@@ -169,7 +192,7 @@ impl Functions {
         Ok(result)
     }
 
-    pub fn get_mut(&mut self, signature: &str) -> Result<&mut Function> {
+    pub fn get_mut(&'a mut self, signature: &str) -> Result<&'a mut Function> {
         let Some(result) = self.0.get_mut(signature) else {
             bail!("unknown function ({signature})");
         };

@@ -12,6 +12,8 @@ function do_math
 end
 
 function floating_point_math
+	string "Hello from floating_point_math!"
+	printn *
 	float 5
 	constexpr 10
 	bin_op /
@@ -19,7 +21,17 @@ function floating_point_math
 	ret
 end
 
+function main
+	string "Hello from main!"
+	printn *
+	pop
+	call src/bytecode/bin/test.mmm#floating_point_math
+	printn *
+end
+
 function divide_by_zero
+	string "Hello from divide_by_zero!"
+	printn *
 	constexpr 10
 	constexpr 0
 	bin_op /
