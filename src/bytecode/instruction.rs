@@ -356,15 +356,11 @@ impl<'a> Ctx<'a> {
     }
 
     pub(crate) fn add_frame(&self, label: String) {
-        unsafe {
-            (*self.call_stack.as_ptr()).extend(label)
-        }
+        unsafe { (*self.call_stack.as_ptr()).extend(label) }
     }
 
     pub(crate) fn frames_count(&self) -> usize {
-        unsafe {
-            (*self.call_stack.as_ptr()).size()
-        }
+        unsafe { (*self.call_stack.as_ptr()).size() }
     }
 
     pub(crate) fn request_jump(

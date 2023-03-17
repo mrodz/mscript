@@ -14,14 +14,17 @@ fn main() -> Result<()> {
     // default: 4 MB
     let stack_size = 4 * 1024 * 1024;
 
-    let builder = thread::Builder::new().name("interpreter".into()).stack_size(stack_size); 
-    
-    let handler = builder.spawn(|| {
-        let program = Program::new("src/bytecode/bin/test.mmm").expect("Could not build program");
-        program.execute().expect("failure!");
+    let builder = thread::Builder::new().name("Main".into()).stack_size(stack_size);
+
+    let handler = builder.spawn(|| -> Result<()> {
+        let program = Program::new("src/bytecode/bin/test.mmm")?;
+        
+        program.execute()?;
+
+        Ok(())
     })?;
 
-    handler.join().unwrap();
-    
+    handler.join().unwrap()?;
+
     Ok(())
 }

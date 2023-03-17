@@ -60,7 +60,10 @@ impl Program {
         }
     }
 
-    fn process_jump_request(arc_of_self: Arc<Cell<Self>>, request: JumpRequest) -> Result<ReturnValue> {
+    fn process_jump_request(
+        arc_of_self: Arc<Cell<Self>>,
+        request: JumpRequest,
+    ) -> Result<ReturnValue> {
         let mut last_hash = 0;
 
         for (idx, char) in request.destination_label.chars().enumerate() {

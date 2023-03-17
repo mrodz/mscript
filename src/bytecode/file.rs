@@ -1,4 +1,4 @@
-use std::cell::{RefCell, Cell};
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Seek, SeekFrom};

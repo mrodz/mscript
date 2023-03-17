@@ -1,4 +1,4 @@
-use std::cell::{RefCell, Cell};
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::io::{stdout, BufRead, BufReader, Seek, SeekFrom, Write};
@@ -187,7 +187,7 @@ impl<'a> Function {
         unsafe {
             (*current_frame.as_ptr()).pop();
         }
-        
+
         Ok(return_value)
     }
 }
