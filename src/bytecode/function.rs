@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{RefCell, Cell};
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::io::{stdout, BufRead, BufReader, Seek, SeekFrom, Write};
@@ -120,10 +120,14 @@ impl<'a> Function {
 
     pub fn run(
         &mut self,
-        current_frame: &mut Stack,
-        jump_callback: &mut impl FnMut(JumpRequest) -> Result<()>,
+        current_frame: Arc<Cell<Stack>>,
+        jump_callback: &mut impl FnMut(JumpRequest) -> Result<ReturnValue>,
     ) -> Result<ReturnValue> {
-        current_frame.extend(&self.get_qualified_name());
+        {
+            unsafe {
+                (*current_frame.as_ptr()).extend(self.get_qualified_name());
+            }
+        }
 
         let location = self.location.borrow();
         let mut reader = BufReader::new(location.handle.as_ref());
@@ -134,7 +138,7 @@ impl<'a> Function {
 
         assert_eq!(pos, self.seek_pos);
 
-        let mut context = Ctx::new(&self, current_frame);
+        let mut context = Ctx::new(&self, current_frame.clone());
 
         let mut line_number = self.line_number + 2;
 
@@ -166,7 +170,11 @@ impl<'a> Function {
                         break 'function_run;
                     }
                     InstructionExitState::JumpRequest(jump_request) => {
-                        jump_callback(jump_request)?;
+                        let result = jump_callback(jump_request)?;
+
+                        if let Some(primitive) = result.0 {
+                            context.push(primitive)
+                        }
                     }
                     InstructionExitState::NoExit => (),
                     _ => unimplemented!(),
@@ -176,7 +184,10 @@ impl<'a> Function {
             }
         }
 
-        current_frame.pop();
+        unsafe {
+            (*current_frame.as_ptr()).pop();
+        }
+        
         Ok(return_value)
     }
 }

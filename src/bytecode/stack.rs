@@ -27,9 +27,9 @@ impl Stack {
         &self.0.last().expect("nothing in the stack").variables
     }
 
-    pub fn extend(&mut self, label: &String) {
+    pub fn extend(&mut self, label: String) {
         self.0.push(StackFrame {
-            label: label.clone(),
+            label: label,
             variables: HashMap::new(),
         });
     }
@@ -89,8 +89,8 @@ mod test {
         let one = String::from("Main");
         let two = String::from("hi");
 
-        stack.extend(&one);
-        stack.extend(&two);
+        stack.extend(one);
+        stack.extend(two);
 
         // stack.extend("hi".into()).extend("bye".into());
 

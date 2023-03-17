@@ -1,9 +1,11 @@
+use std::cell::Cell;
 use std::path::Path;
 use std::sync::Arc;
 use std::{cell::RefCell, collections::HashMap};
 
 use anyhow::{bail, Result};
 
+use super::function::ReturnValue;
 use super::instruction::JumpRequest;
 use super::{MScriptFile, Stack};
 
@@ -46,15 +48,19 @@ impl Program {
         Ok(Some(()))
     }
 
-    pub fn get_file(&mut self, path: &String) -> Result<&Arc<RefCell<MScriptFile>>> {
-        let Some(file) = self.is_file_loaded(path) else {
+    pub fn get_file(
+        self_cell: Arc<Cell<Self>>,
+        path: &String,
+    ) -> Result<&Arc<RefCell<MScriptFile>>> {
+        unsafe {
+            let Some(file) = (*self_cell.as_ptr()).is_file_loaded(path) else {
             bail!("file is not loaded")
         };
-
-        Ok(file)
+            Ok(file)
+        }
     }
 
-    fn process_jump_request(&mut self, request: JumpRequest) -> Result<()> {
+    fn process_jump_request(arc_of_self: Arc<Cell<Self>>, request: JumpRequest) -> Result<ReturnValue> {
         let mut last_hash = 0;
 
         for (idx, char) in request.destination_label.chars().enumerate() {
@@ -72,41 +78,35 @@ impl Program {
         let path = path.to_string();
         let symbol = &symbol[1..];
 
-        self.add_file(&path)?;
-        let file = self.get_file(&path)?;
-
-        let mut new_stack = Stack::new();
-
-        new_stack.extend(&"temporary: new stack on fn call".to_string());
-
-        let mut c = |request| {
-            dbg!(request);
-            Ok(())
-        };
-
-        // todo: 
-        // - allow more than two functions calls.
-        // - pass stack frame to this function
-        // - find a way to do this recursively.
-
         unsafe {
-            (*file.as_ptr()).run_function(symbol, &mut new_stack, &mut c)?;
+            (*arc_of_self.as_ptr()).add_file(&path)?;
         }
 
-        Ok(())
+        let file = Self::get_file(arc_of_self.clone(), &path)?; // arc_of_self.get_mut().get_file(&path)?;
+
+        let return_value = unsafe {
+            (*file.as_ptr()).run_function(symbol, request.stack, &mut |req| {
+                Self::process_jump_request(arc_of_self.clone(), req)
+            })?
+        };
+
+        Ok(return_value)
     }
 
-    pub fn execute(mut self) -> Result<()> {
-        let entrypoint = self.get_file(&self.entrypoint.as_ref().clone())?;
+    pub fn execute(self) -> Result<()> {
+        let arc_of_self = Arc::new(Cell::new(self));
 
-        let mut stack = Stack::new();
+        let path = unsafe { &(*arc_of_self.as_ptr()).entrypoint };
+
+        let entrypoint = Self::get_file(arc_of_self.clone(), &path)?;
+        let stack = Arc::new(Cell::new(Stack::new()));
 
         // We have to use pointers to get around a guaranteed dynamic thread panic,
         // since `entrypoint` will not have been dropped during subsequent calls to
         // borrow_mut().
         unsafe {
-            (*entrypoint.as_ptr()).run_function("main", &mut stack, &mut |request| {
-                self.process_jump_request(request)
+            (*entrypoint.as_ptr()).run_function("main", stack, &mut |req| {
+                Self::process_jump_request(arc_of_self.clone(), req)
             })?;
         }
 

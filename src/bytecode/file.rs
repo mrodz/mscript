@@ -1,9 +1,7 @@
-use std::cell::RefCell;
+use std::cell::{RefCell, Cell};
 use std::collections::HashMap;
-use std::fmt::{Debug, Display};
 use std::fs::File;
-use std::io::{BufRead, BufReader, Lines, Seek, SeekFrom};
-use std::path::Path;
+use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
@@ -35,8 +33,8 @@ impl MScriptFile {
     pub fn run_function(
         &mut self,
         name: &str,
-        stack: &mut Stack,
-        jump_callback: &mut impl FnMut(JumpRequest) -> Result<()>,
+        stack: Arc<Cell<Stack>>,
+        jump_callback: &mut impl FnMut(JumpRequest) -> Result<ReturnValue>,
     ) -> Result<ReturnValue> {
         let Some(function) = self.get_function(name) else {
 			bail!("could not find function (missing `{name}`)")

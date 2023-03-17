@@ -1,3 +1,5 @@
+use std::cell::Cell;
+use std::fmt::Debug;
 use std::io::{stdin, stdout, Write};
 use std::sync::Arc;
 
@@ -25,8 +27,9 @@ macro_rules! make_type {
     };
 }
 
-pub struct Implementations;
-impl<'a> Implementations {
+mod implementations {
+    use super::*;
+
     pub(crate) fn constexpr(ctx: &mut Ctx, args: &Vec<String>) -> Result<()> {
         if args.len() != 1 {
             bail!("unexpected 1 parameter")
@@ -62,7 +65,7 @@ impl<'a> Implementations {
             }
 
             println!("Function: {}", ctx.function);
-            println!("Stack Trace:\n{}", ctx.call_stack);
+            println!("Stack Trace:\n......." /* , ctx.call_stack*/);
             println!("Operating Stack: {:#?}", ctx.stack);
         }
         println!("======= End Context Dump =======");
@@ -97,6 +100,7 @@ impl<'a> Implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn void(ctx: &mut Ctx, _args: &Vec<String>) -> Result<()> {
         ctx.stack.clear();
 
@@ -113,12 +117,12 @@ impl<'a> Implementations {
         match buf.trim_end() {
             "continue" => Ok(()),
             "dump" => {
-                Self::stack_dump(ctx, args)?;
+                stack_dump(ctx, args)?;
                 Ok(())
             }
             buf => {
                 println!("[!!]\n[!!] BREAKPOINT\n[!!] '{buf}' is not a valid option.\n[!!]");
-                Self::breakpoint(ctx, args)
+                breakpoint(ctx, args)
             }
         }
     }
@@ -176,7 +180,16 @@ impl<'a> Implementations {
             bail!("expected one argument");
         };
 
-        ctx.request_jump(first.clone(), None);
+        ctx.add_frame(first.to_string());
+
+        ctx.request_jump(first.clone(), None, Arc::clone(&ctx.call_stack));
+
+        Ok(())
+    }
+
+    pub(crate) fn stack_size(ctx: &mut Ctx, _args: &Vec<String>) -> Result<()> {
+        let size = Primitive::Int(ctx.frames_count().try_into()?);
+        ctx.push(size);
 
         Ok(())
     }
@@ -184,22 +197,23 @@ impl<'a> Implementations {
 
 pub fn query(name: &String) -> InstructionSignature {
     match name.as_str() {
-        "constexpr" => Implementations::constexpr,
-        "stack_dump" => Implementations::stack_dump,
-        "pop" => Implementations::pop,
-        "bin_op" => Implementations::bin_op,
-        "nop" => Implementations::nop,
-        "bool" => Implementations::make_bool,
-        "string" => Implementations::make_str,
-        "int" => Implementations::make_int,
-        "float" => Implementations::make_float,
-        "char" => Implementations::make_char,
-        "byte" => Implementations::make_byte,
-        "void" => Implementations::void,
-        "breakpoint" => Implementations::breakpoint,
-        "ret" => Implementations::ret,
-        "printn" => Implementations::printn,
-        "call" => Implementations::call,
+        "constexpr" => implementations::constexpr,
+        "stack_dump" => implementations::stack_dump,
+        "pop" => implementations::pop,
+        "bin_op" => implementations::bin_op,
+        "nop" => implementations::nop,
+        "bool" => implementations::make_bool,
+        "string" => implementations::make_str,
+        "int" => implementations::make_int,
+        "float" => implementations::make_float,
+        "char" => implementations::make_char,
+        "byte" => implementations::make_byte,
+        "void" => implementations::void,
+        "breakpoint" => implementations::breakpoint,
+        "ret" => implementations::ret,
+        "printn" => implementations::printn,
+        "call" => implementations::call,
+        "stack_size" => implementations::stack_size,
         _ => unreachable!("unknown bytecode instruction ({name})"),
     }
 }
@@ -309,23 +323,29 @@ pub fn parse_line(line: &String) -> Result<Instruction> {
     })
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct JumpRequest {
     pub destination_label: String,
     pub caller: Option<fn() -> String>,
+    pub stack: Arc<Cell<Stack>>,
 }
 
-#[derive(Debug)]
 pub struct Ctx<'a> {
     stack: Vec<Primitive>,
     function: &'a Function,
     return_value: Option<Option<Primitive>>,
-    call_stack: &'a mut Stack,
+    call_stack: Arc<Cell<Stack>>,
     requested_jump: Option<JumpRequest>,
 }
 
+impl Debug for Ctx<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Ctx")
+    }
+}
+
 impl<'a> Ctx<'a> {
-    pub fn new(function: &'a Function, call_stack: &'a mut Stack) -> Self {
+    pub fn new(function: &'a Function, call_stack: Arc<Cell<Stack>>) -> Self {
         Self {
             stack: vec![],
             function,
@@ -335,14 +355,28 @@ impl<'a> Ctx<'a> {
         }
     }
 
+    pub(crate) fn add_frame(&self, label: String) {
+        unsafe {
+            (*self.call_stack.as_ptr()).extend(label)
+        }
+    }
+
+    pub(crate) fn frames_count(&self) -> usize {
+        unsafe {
+            (*self.call_stack.as_ptr()).size()
+        }
+    }
+
     pub(crate) fn request_jump(
         &mut self,
         destination_label: String,
         caller: Option<fn() -> String>,
+        stack: Arc<Cell<Stack>>,
     ) {
         self.requested_jump = Some(JumpRequest {
             destination_label,
             caller,
+            stack,
         })
     }
 
@@ -364,20 +398,20 @@ impl<'a> Ctx<'a> {
         Ok(&unwrapped)
     }
 
-    fn clear_and_set_stack(&mut self, var: Primitive) {
+    pub(crate) fn clear_and_set_stack(&mut self, var: Primitive) {
         self.stack.clear();
         self.stack.push(var);
     }
 
-    fn stack_size(&self) -> usize {
+    pub(crate) fn stack_size(&self) -> usize {
         self.stack.len()
     }
 
-    fn push(&mut self, var: Primitive) {
+    pub(crate) fn push(&mut self, var: Primitive) {
         self.stack.push(var);
     }
 
-    fn pop(&mut self) -> Option<Primitive> {
+    pub(crate) fn pop(&mut self) -> Option<Primitive> {
         self.stack.pop()
     }
 }

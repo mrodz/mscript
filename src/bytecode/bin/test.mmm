@@ -17,16 +17,14 @@ function floating_point_math
 	float 5
 	constexpr 10
 	bin_op /
-	printn *
 	ret
 end
 
+
 function main
-	string "Hello from main!"
-	printn *
-	pop
-	call src/bytecode/bin/test.mmm#floating_point_math
-	printn *
+	stack_size
+	printn 0
+	call src/bytecode/bin/test.mmm#main
 end
 
 function divide_by_zero
