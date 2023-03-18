@@ -2,24 +2,84 @@ use std::fmt::{Debug, Display};
 
 use anyhow::{bail, Result};
 
-#[derive(PartialEq, PartialOrd, Debug, Clone)]
-pub enum Primitive {
-    Bool(bool),
-    Str(String),
-    Int(i32),
-    Float(f64),
-    Char(char),
-    Byte(u8),
-    NaN,
+macro_rules! primitive {
+    ($($variant:ident = $type:ty)+) => {
+        #[derive(PartialEq, PartialOrd, Debug, Clone)]
+        pub enum Primitive {
+            $(
+                $variant($type),
+            )*
+        }
+
+        #[derive(Debug)]
+        pub enum Type {
+            $(
+                $variant,
+            )*
+        }
+
+        impl Primitive {
+            pub fn ty(&self) -> Type {
+                match self {
+                    $(
+                        Primitive::$variant(_) => Type::$variant,
+                    )*
+                }
+            }
+
+            pub fn raw_size(&self) -> usize {
+                match self {
+                    $(
+                        Primitive::$variant(_) => std::mem::size_of::<$type>(),
+                    )*
+                }
+            }
+        }
+    };
+}
+
+primitive! {
+    Bool = bool
+    Str = String
+    Int = i32
+    BigInt = i128
+    Float = f64
+    Char = char
+    Byte = u8
+}
+
+pub struct Variable {
+    pub data: Primitive,
+    pub ty: Type,
+}
+
+impl Display for Variable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}({})", self.ty, self.data)
+    }
+}
+
+impl Debug for Variable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        <Self as Display>::fmt(&self, f)
+    }
+}
+
+impl Variable {
+    pub fn new(data: Primitive) -> Self {
+        Self {
+            ty: data.ty(),
+            data,
+        }
+    }
 }
 
 impl Primitive {
     pub fn is_numeric(&self) -> bool {
-        matches!(self, Self::Int(_) | Self::Float(_) | Self::Byte(_))
-    }
-
-    pub fn is_nan(&self) -> bool {
-        matches!(self, Self::NaN)
+        matches!(
+            self,
+            Self::Int(_) | Self::Float(_) | Self::Byte(_) | Self::BigInt(_)
+        )
     }
 
     pub fn is_numeric_coalesce(&self) -> bool {
@@ -28,20 +88,7 @@ impl Primitive {
         matches!(self, Bool(_) | Int(_) | Float(_) | Char(_) | Byte(_))
     }
 
-    pub fn raw_size(&self) -> usize {
-        use Primitive::*;
-        match self {
-            Bool(_) => std::mem::size_of::<bool>(),
-            Str(str) => str.len(),
-            Int(_) => std::mem::size_of::<i32>(),
-            Float(_) => std::mem::size_of::<f64>(),
-            Char(_) => std::mem::size_of::<char>(),
-            Byte(_) => 1,
-            NaN => 0,
-        }
-    }
-
-    pub fn make_str(string: &String) -> Result<Self> {
+    pub fn make_str(string: &str) -> Result<Self> {
         let bytes = string.as_bytes();
         if let (Some(b'\"'), Some(b'\"')) = (bytes.get(0), bytes.get(string.len() - 1)) {
             return Ok(Primitive::Str(parse_string(&string).unwrap()));
@@ -50,7 +97,7 @@ impl Primitive {
         bail!("not a Str")
     }
 
-    pub fn make_byte(string: &String) -> Result<Self> {
+    pub fn make_byte(string: &str) -> Result<Self> {
         let bytes = string.as_bytes();
 
         if string.len() >= 3 && &bytes[..2] == [b'0', b'b'] {
@@ -63,7 +110,7 @@ impl Primitive {
         bail!("not a Byte")
     }
 
-    pub fn make_char(string: &String) -> Result<Self> {
+    pub fn make_char(string: &str) -> Result<Self> {
         let bytes = string.as_bytes();
 
         if string.len() == 3 && bytes[0] == b'\'' && bytes[2] == b'\'' {
@@ -73,7 +120,7 @@ impl Primitive {
         bail!("not a Char")
     }
 
-    pub fn make_float(string: &String) -> Result<Self> {
+    pub fn make_float(string: &str) -> Result<Self> {
         use std::str::FromStr;
 
         if let Ok(is_f64) = f64::from_str(&string) {
@@ -83,7 +130,7 @@ impl Primitive {
         bail!("not a Float")
     }
 
-    pub fn make_int(string: &String) -> Result<Self> {
+    pub fn make_int(string: &str) -> Result<Self> {
         use std::str::FromStr;
 
         if let Ok(is_i64) = i32::from_str(&string) {
@@ -93,8 +140,18 @@ impl Primitive {
         bail!("not an Int")
     }
 
-    pub fn make_bool(string: &String) -> Result<Self> {
-        match string.as_str() {
+    pub fn make_bigint(string: &str) -> Result<Self> {
+        use std::str::FromStr;
+
+        if let Ok(is_f64) = i128::from_str(&string) {
+            return Ok(Primitive::BigInt(is_f64));
+        }
+
+        bail!("not a BigInt")
+    }
+
+    pub fn make_bool(string: &str) -> Result<Self> {
+        match string {
             "true" => Ok(Primitive::Bool(true)),
             "false" => Ok(Primitive::Bool(false)),
             _ => bail!("not a Bool"),
@@ -110,22 +167,22 @@ impl Display for Primitive {
             Bool(b) => write!(f, "{b}"),
             Str(s) => write!(f, "{s:?}"),
             Int(n) => write!(f, "{n}"),
+            BigInt(n) => write!(f, "{n}"),
             Float(n) => write!(f, "{n}"),
             Char(c) => write!(f, "{c}"),
             Byte(b) => write!(f, "0b{b:b}"),
-            NaN => write!(f, "NaN"),
         }
     }
 }
 
 impl From<String> for Primitive {
     fn from(value: String) -> Self {
-        Self::from(&value)
+        Self::from(value.as_str())
     }
 }
 
-impl From<&String> for Primitive {
-    fn from(value: &String) -> Self {
+impl From<&str> for Primitive {
+    fn from(value: &str) -> Self {
         if let Ok(str) = Primitive::make_str(value) {
             return str;
         }
@@ -142,6 +199,10 @@ impl From<&String> for Primitive {
             return int;
         }
 
+        if let Ok(bigint) = Primitive::make_bigint(value) {
+            return bigint;
+        }
+
         if let Ok(float) = Primitive::make_float(value) {
             return float;
         }
@@ -155,15 +216,16 @@ impl From<&String> for Primitive {
 }
 
 pub type BinOp<T> = fn(T, T) -> T;
+pub type CheckedBinOp<T> = fn(T, T) -> Option<T>;
 
-pub fn bin_op_from(symbol: char) -> Result<(fn(i32, i32) -> Option<i32>, BinOp<f64>)> {
+pub fn bin_op_from(symbol: char) -> Result<(CheckedBinOp<i32>, CheckedBinOp<i128>, BinOp<f64>)> {
     use std::ops::*;
     Ok(match symbol {
-        '+' => (i32::checked_add, f64::add),
-        '-' => (i32::checked_sub, f64::sub),
-        '*' => (i32::checked_mul, f64::mul),
-        '/' => (i32::checked_div, f64::div),
-        '%' => (i32::checked_rem, f64::rem),
+        '+' => (i32::checked_add, i128::checked_add, f64::add),
+        '-' => (i32::checked_sub, i128::checked_sub, f64::sub),
+        '*' => (i32::checked_mul, i128::checked_mul, f64::mul),
+        '/' => (i32::checked_div, i128::checked_div, f64::div),
+        '%' => (i32::checked_rem, i128::checked_rem, f64::rem),
         _ => bail!("unknown binary operator ({symbol})"),
     })
 }
@@ -171,7 +233,8 @@ pub fn bin_op_from(symbol: char) -> Result<(fn(i32, i32) -> Option<i32>, BinOp<f
 pub fn bin_op_result(
     left: Primitive,
     right: Primitive,
-    i_fn: fn(i32, i32) -> Option<i32>,
+    i32_fn: CheckedBinOp<i32>,
+    i128_fn: CheckedBinOp<i128>,
     f_fn: BinOp<f64>,
 ) -> Result<Primitive> {
     Ok(match (left, right) {
@@ -179,17 +242,38 @@ pub fn bin_op_result(
         (Primitive::Float(x), Primitive::Int(y)) => Primitive::Float(f_fn(x, y as f64)),
         (Primitive::Int(x), Primitive::Float(y)) => Primitive::Float(f_fn(x as f64, y)),
         (Primitive::Int(x), Primitive::Int(y)) => {
-            if let Some(result) = i_fn(x, y) {
+            if let Some(result) = i32_fn(x, y) {
                 Primitive::Int(result)
             } else {
                 bail!("could not perform checked integer operation (maybe an overflow, or / by 0)")
             }
         }
-        _ => Primitive::NaN,
+        (Primitive::BigInt(x), Primitive::Int(y)) => {
+            if let Some(result) = i128_fn(x, y as i128) {
+                Primitive::BigInt(result)
+            } else {
+                bail!("could not perform checked integer operation (maybe an overflow, or / by 0)")
+            }
+        }
+        (Primitive::Int(x), Primitive::BigInt(y)) => {
+            if let Some(result) = i128_fn(x as i128, y) {
+                Primitive::BigInt(result)
+            } else {
+                bail!("could not perform checked integer operation (maybe an overflow, or / by 0)")
+            }
+        }
+        (Primitive::BigInt(x), Primitive::BigInt(y)) => {
+            if let Some(result) = i128_fn(x, y) {
+                Primitive::BigInt(result)
+            } else {
+                bail!("could not perform checked integer operation (maybe an overflow, or / by 0)")
+            }
+        }
+        (x, y) => bail!("cannot perform binary operation on {x}, {y}"),
     })
 }
 
-pub fn parse_string(string: &String) -> Result<String> {
+pub fn parse_string(string: &str) -> Result<String> {
     let mut buf = String::new();
     let mut in_quotes = false;
     let mut escaping = false;
@@ -270,26 +354,23 @@ mod string_util {
 
     #[test]
     fn basic() {
-        assert_eq!(parse_string(&"\"hello\"".into()).unwrap(), "hello");
+        assert_eq!(parse_string(&"\"hello\"").unwrap(), "hello");
     }
 
     #[test]
     fn pre_quot_spaces() {
-        assert_eq!(parse_string(&"      \"hello\"".into()).unwrap(), "hello");
+        assert_eq!(parse_string(&"      \"hello\"").unwrap(), "hello");
     }
 
     #[test]
     fn post_quot_spaces() {
-        assert_eq!(
-            parse_string(&"\"hello\"           ".into()).unwrap(),
-            "hello"
-        );
+        assert_eq!(parse_string(&"\"hello\"           ").unwrap(), "hello");
     }
 
     #[test]
     fn escaped_quot() {
         assert_eq!(
-            parse_string(&"\"Hello \\\"World\\\"\"".into()).unwrap(),
+            parse_string(&"\"Hello \\\"World\\\"\"").unwrap(),
             "Hello \"World\""
         );
     }
@@ -297,24 +378,24 @@ mod string_util {
     #[test]
     #[should_panic(expected = "EOL")]
     fn eol() {
-        parse_string(&"\"Hello".into()).unwrap();
+        parse_string(&"\"Hello").unwrap();
     }
 
     #[test]
     #[should_panic(expected = "Strings must be surrounded by \"")]
     fn no_start_quot() {
-        dbg!(parse_string(&"Hello\"".into()).unwrap());
+        dbg!(parse_string(&"Hello\"").unwrap());
     }
 
     #[test]
     fn extra_text() {
-        assert_eq!(parse_string(&"\"Hello\" world".into()).unwrap(), "Hello");
+        assert_eq!(parse_string(&"\"Hello\" world").unwrap(), "Hello");
     }
 
     #[test]
     fn escape_sequences() {
         assert_eq!(
-            parse_string(&"\"\\n\\r\\t\\\\\\\"\"".into()).unwrap(),
+            parse_string(&"\"\\n\\r\\t\\\\\\\"\"").unwrap(),
             "\n\r\t\\\""
         );
     }
@@ -365,8 +446,15 @@ mod primitives {
         assert!(Byte(0b1000).is_numeric());
         assert!(Int(5).is_numeric());
         assert!(Float(3.0 / 2.0).is_numeric());
+        assert!(BigInt(2147483648).is_numeric());
         assert!(!Str("Hello".into()).is_numeric());
         assert!(!Bool(false).is_numeric());
         assert!(!Char('@').is_numeric());
+    }
+
+    #[test]
+    fn int() {
+        assert_eq!(Primitive::from("2147483647"), Primitive::Int(i32::MAX));
+        assert_eq!(Primitive::from("2147483648"), Primitive::BigInt(2147483648));
     }
 }

@@ -7,22 +7,47 @@ use anyhow::{bail, Context, Result};
 
 use super::function::Function;
 use super::stack::Stack;
-use super::variable::{bin_op_from, bin_op_result, Primitive};
+use super::variable::{bin_op_from, bin_op_result, Primitive, Variable};
 
 pub type InstructionSignature = fn(&mut Ctx, &Vec<String>) -> Result<()>;
 
+macro_rules! instruction {
+    ($name:ident $body:expr) => {
+        pub(crate) fn $name(_ctx: &mut Ctx, _args: &Vec<String>) -> Result<()> {
+            $body
+        }
+    };
+    ($name:ident(ctx=$ctx:ident) $body:expr) => {
+        pub(crate) fn $name($ctx: &mut Ctx, _args: &Vec<String>) -> Result<()> {
+            $body
+        }
+    };
+    ($name:ident(args=$args:ident) $body:expr) => {
+        pub(crate) fn $name(_ctx: &mut Ctx, $args: &Vec<String>) -> Result<()> {
+            $body
+        }
+    };
+    ($name:ident($ctx:ident, $args:ident) $body:expr) => {
+        pub(crate) fn $name($ctx: &mut Ctx, $args: &Vec<String>) -> Result<()> {
+            $body
+        }
+    };
+}
+
 macro_rules! make_type {
     ($name:ident) => {
-        pub(crate) fn $name(ctx: &mut Ctx, args: &Vec<String>) -> Result<()> {
-            if args.len() != 1 {
-                bail!("expected 1 parameter")
+        instruction! {
+            $name(ctx, args) {
+                if args.len() != 1 {
+                    bail!("expected 1 parameter")
+                }
+    
+                let var = Primitive::$name(&args[0])?;
+    
+                ctx.push(var);
+    
+                Ok(())
             }
-
-            let var = Primitive::$name(&args[0])?;
-
-            ctx.push(var);
-
-            Ok(())
         }
     };
 }
@@ -30,113 +55,123 @@ macro_rules! make_type {
 mod implementations {
     use super::*;
 
-    pub(crate) fn constexpr(ctx: &mut Ctx, args: &Vec<String>) -> Result<()> {
-        if args.len() != 1 {
-            bail!("unexpected 1 parameter")
+    instruction! {
+        constexpr(ctx, args) {
+            if args.len() != 1 {
+                bail!("unexpected 1 parameter")
+            }
+
+            let var = Primitive::from(args[0].as_str());
+
+            ctx.push(var);
+
+            Ok(())
         }
-
-        let var = Primitive::from(&args[0]);
-
-        ctx.push(var);
-
-        Ok(())
     }
 
-    pub(crate) fn pop(ctx: &mut Ctx, args: &Vec<String>) -> Result<()> {
-        if args.len() != 0 {
-            bail!("unexpected parameter")
+    instruction! {
+        pop(ctx, args) {
+            if args.len() != 0 {
+                bail!("unexpected parameter")
+            }
+
+            ctx.pop();
+
+            Ok(())
         }
-
-        ctx.pop();
-
-        Ok(())
     }
 
-    pub(crate) fn stack_dump(ctx: &mut Ctx, args: &Vec<String>) -> Result<()> {
-        println!("====== Start Context Dump ======");
-        'get_data: {
-            if let Some(arg0) = args.first() {
-                if arg0 == "verbose" {
-                    dbg!(ctx);
-                    break 'get_data;
-                } else {
-                    bail!("unknown debug argument ({arg0})")
+    instruction! {
+        stack_dump(ctx, args) {
+            println!("====== Start Context Dump ======");
+            'get_data: {
+                if let Some(arg0) = args.first() {
+                    if arg0 == "verbose" {
+                        dbg!(ctx);
+                        break 'get_data;
+                    } else {
+                        bail!("unknown debug argument ({arg0})")
+                    }
+                }
+
+                println!("\nFunction: {}", ctx.function);
+                println!("\nOperating Stack: {:?}", ctx.stack);
+                println!("\nStack Trace:\n{}", unsafe { (*ctx.call_stack.as_ptr()).to_string() });
+                println!("\nThis Frame's Variables:\n\t{:?}\n", unsafe { (*ctx.call_stack.as_ptr()).get_frame_variables() });
+            }
+            println!("======= End Context Dump =======");
+
+            Ok(())
+        }
+    }
+
+    instruction! {
+        bin_op(ctx, args) {
+            let symbols = match args.first() {
+                Some(symbols) => symbols,
+                None => bail!("Expected an operation [+,-,*,/,%]"),
+            }.as_bytes();
+
+            let symbol = symbols[0] as char;
+
+            let (Some(right), Some(left)) = (ctx.pop(), ctx.pop()) else {
+                unreachable!()
+            };
+
+            let (i32_fn, i128_fn, f_fn) = bin_op_from(symbol).context("constructing bin op")?;
+
+            let result = bin_op_result(left, right, i32_fn, i128_fn, f_fn)?;
+
+            ctx.clear_and_set_stack(result);
+
+            Ok(())
+        }
+    }
+
+    instruction! {
+        nop Ok(())
+    }
+
+    instruction! {
+        void(ctx=ctx) {
+            ctx.stack.clear();
+            Ok(())
+        }
+    }
+
+    instruction! {
+        breakpoint(ctx, args) {
+            print!("[!!] BREAKPOINT\n[!!] options\n[!!] - continue\n[!!] - dump\n[!!] Enter Option: ");
+
+            let mut buf = String::new();
+            stdout().flush()?;
+            stdin().read_line(&mut buf)?;
+
+            match buf.trim_end() {
+                "continue" => Ok(()),
+                "dump" => {
+                    stack_dump(ctx, args)
+                }
+                buf => {
+                    println!("[!!]\n[!!] BREAKPOINT\n[!!] '{buf}' is not a valid option.\n[!!]");
+                    breakpoint(ctx, args)
                 }
             }
-
-            println!("Function: {}", ctx.function);
-            println!("Stack Trace:\n......." /* , ctx.call_stack*/);
-            println!("Operating Stack: {:#?}", ctx.stack);
         }
-        println!("======= End Context Dump =======");
-
-        Ok(())
     }
 
-    pub(crate) fn bin_op(ctx: &mut Ctx, args: &Vec<String>) -> Result<()> {
-        let symbols = match args.first() {
-            Some(symbols) => symbols,
-            None => bail!("Expected an operation [+,-,*,/,%]"),
-        }
-        .as_bytes();
-
-        let symbol = symbols[0] as char;
-
-        let (Some(right), Some(left)) = (ctx.pop(), ctx.pop()) else {
-            unreachable!()
-        };
-
-        let (i_fn, f_fn) = bin_op_from(symbol).context("constructing bin op")?;
-
-        let result = bin_op_result(left, right, i_fn, f_fn)?;
-
-        ctx.clear_and_set_stack(result);
-
-        Ok(())
-    }
-
-    #[inline(always)]
-    pub(crate) fn nop(_ctx: &mut Ctx, _args: &Vec<String>) -> Result<()> {
-        Ok(())
-    }
-
-    #[inline(always)]
-    pub(crate) fn void(ctx: &mut Ctx, _args: &Vec<String>) -> Result<()> {
-        ctx.stack.clear();
-
-        Ok(())
-    }
-
-    pub(crate) fn breakpoint(ctx: &mut Ctx, args: &Vec<String>) -> Result<()> {
-        print!("[!!] BREAKPOINT\n[!!] options\n[!!] - continue\n[!!] - dump\n[!!] Enter Option: ");
-
-        let mut buf = String::new();
-        stdout().flush()?;
-        stdin().read_line(&mut buf)?;
-
-        match buf.trim_end() {
-            "continue" => Ok(()),
-            "dump" => {
-                stack_dump(ctx, args)?;
-                Ok(())
+    instruction! {
+        ret(ctx=ctx) {
+            if ctx.stack_size() > 1 {
+                bail!("ret can only return a single item");
             }
-            buf => {
-                println!("[!!]\n[!!] BREAKPOINT\n[!!] '{buf}' is not a valid option.\n[!!]");
-                breakpoint(ctx, args)
-            }
+
+            let var = ctx.pop();
+
+            ctx.return_now(var);
+
+            Ok(())
         }
-    }
-
-    pub(crate) fn ret(ctx: &mut Ctx, _args: &Vec<String>) -> Result<()> {
-        if ctx.stack_size() > 1 {
-            bail!("ret can only return a single item");
-        }
-
-        let var = ctx.pop();
-
-        ctx.return_now(var);
-
-        Ok(())
     }
 
     make_type!(make_bool);
@@ -146,52 +181,108 @@ mod implementations {
     make_type!(make_char);
     make_type!(make_byte);
 
-    pub(crate) fn printn(ctx: &mut Ctx, args: &Vec<String>) -> Result<()> {
-        let Some(arg) = args.first() else {
-            bail!("expected 1 parameter of type __rust__::usize, or * to print all");
-        };
-
-        if arg == "*" {
-            let Some(first) = ctx.stack.first() else {
-                return Ok(())
+    instruction! {
+        printn(ctx, args) {
+            let Some(arg) = args.first() else {
+                bail!("expected 1 parameter of type __rust__::usize, or * to print all");
             };
 
-            print!("{first}");
-            for var in &ctx.stack[1..] {
-                print!(", {var}");
+            if arg == "*" {
+                let Some(first) = ctx.stack.first() else {
+                    return Ok(())
+                };
+
+                print!("{first}");
+                for var in &ctx.stack[1..] {
+                    print!(", {var}");
+                }
+
+                println!();
+
+                return Ok(());
             }
 
-            println!();
+            let Ok(arg) = usize::from_str_radix(arg, 10) else {
+                bail!("expected 1 parameter of type __rust__::usize");
+            };
 
-            return Ok(());
+            println!("{:?}", ctx.stack.get(arg));
+
+            Ok(())
         }
-
-        let Ok(arg) = usize::from_str_radix(arg, 10) else {
-            bail!("expected 1 parameter of type __rust__::usize");
-        };
-
-        println!("{:?}", ctx.stack.get(arg));
-
-        Ok(())
     }
 
-    pub(crate) fn call(ctx: &mut Ctx, args: &Vec<String>) -> Result<()> {
-        let Some(first) = args.first() else {
-            bail!("expected one argument");
-        };
+    instruction! {
+        call(ctx, args) {
+            let Some(first) = args.first() else {
+                bail!("expected one argument");
+            };
 
-        ctx.add_frame(first.to_string());
+            ctx.add_frame(first.to_string());
 
-        ctx.request_jump(first.clone(), None, Arc::clone(&ctx.call_stack));
+            ctx.request_jump(first.clone(), None, Arc::clone(&ctx.call_stack));
 
-        Ok(())
+            Ok(())
+        }
     }
 
-    pub(crate) fn stack_size(ctx: &mut Ctx, _args: &Vec<String>) -> Result<()> {
-        let size = Primitive::Int(ctx.frames_count().try_into()?);
-        ctx.push(size);
+    instruction! {
+        stack_size(ctx=ctx) {
+            let size = Primitive::Int(ctx.frames_count().try_into()?);
+            ctx.push(size);
 
-        Ok(())
+            Ok(())
+        }
+    }
+
+    instruction! {
+        store(ctx, args) {
+            let Some(name) = args.first() else {
+                bail!("store requires a name")
+            };
+
+            if ctx.stack_size() != 1 {
+                bail!("store can only store a single item");
+            }
+
+            let arg = ctx.pop().unwrap();
+
+            ctx.register_variable(name.clone(), arg);
+
+            Ok(())
+        }
+    }
+
+    instruction! {
+        load(ctx, args) {
+            let Some(name) = args.first() else {
+                bail!("load requires a name")
+            };
+
+            let Some(var) = ctx.load_variable(&name) else {
+                bail!("load before store ({name})")
+            };
+
+            ctx.push(var.data.clone());
+
+            Ok(())
+        }
+    }
+
+    instruction! {
+        load_local(ctx, args) {
+            let Some(name) = args.first() else {
+                bail!("load requires a name")
+            };
+
+            let Some(var) = ctx.load_local(&name) else {
+                bail!("load before local store ({name})")
+            };
+
+            ctx.push(var.data.clone());
+
+            Ok(())
+        }
     }
 }
 
@@ -214,6 +305,9 @@ pub fn query(name: &String) -> InstructionSignature {
         "printn" => implementations::printn,
         "call" => implementations::call,
         "stack_size" => implementations::stack_size,
+        "store" => implementations::store,
+        "load" => implementations::load,
+        "load_local" => implementations::load_local,
         _ => unreachable!("unknown bytecode instruction ({name})"),
     }
 }
@@ -409,6 +503,24 @@ impl<'a> Ctx<'a> {
 
     pub(crate) fn pop(&mut self) -> Option<Primitive> {
         self.stack.pop()
+    }
+
+    pub(crate) fn register_variable(&self, name: String, var: Primitive) {
+        unsafe {
+            (*self.call_stack.as_ptr()).register_variable(name, var)
+        }
+    }
+
+    pub(crate) fn load_variable(&self, name: &String) -> Option<&Variable> {
+        unsafe {
+            (*self.call_stack.as_ptr()).find_name(name)
+        }
+    }
+
+    pub(crate) fn load_local(&self, name: &String) -> Option<&Variable> {
+        unsafe {
+            (*self.call_stack.as_ptr()).get_frame_variables().get(name)
+        }
     }
 }
 
