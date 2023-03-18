@@ -18,6 +18,12 @@ impl Display for VariableMapping {
     }
 }
 
+impl VariableMapping {
+    pub fn get(&self, key: &String) -> Option<&Variable> {
+        self.0.get(key)
+    }
+}
+
 #[derive(Debug)]
 struct StackFrame {
     label: String,
@@ -56,7 +62,7 @@ impl Stack {
     }
 
     pub fn find_name(&self, name: &String) -> Option<&Variable> {
-        for i in (0..self.size() - 1).rev() {
+        for i in (0..=self.size() - 1).rev() {
             if let Some(var) = self.0[i].variables.0.get(name) {
                 return Some(var);
             }

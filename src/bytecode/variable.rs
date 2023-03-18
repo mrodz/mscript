@@ -49,8 +49,8 @@ primitive! {
 }
 
 pub struct Variable {
-    data: Primitive,
-    ty: Type,
+    pub data: Primitive,
+    pub ty: Type,
 }
 
 impl Display for Variable {

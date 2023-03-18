@@ -7,7 +7,7 @@ use anyhow::{bail, Context, Result};
 
 use super::function::Function;
 use super::stack::Stack;
-use super::variable::{bin_op_from, bin_op_result, Primitive};
+use super::variable::{bin_op_from, bin_op_result, Primitive, Variable};
 
 pub type InstructionSignature = fn(&mut Ctx, &Vec<String>) -> Result<()>;
 
@@ -53,8 +53,6 @@ macro_rules! make_type {
 }
 
 mod implementations {
-    use std::any::Any;
-
     use super::*;
 
     instruction! {
@@ -96,9 +94,10 @@ mod implementations {
                     }
                 }
 
-                println!("\nFunction: {}\n", ctx.function);
-                println!("Stack Trace:\n{}\n", unsafe { (*ctx.call_stack.as_ptr()).to_string() });
-                println!("This Frame's Variables:\n\t{:?}\n", unsafe { (*ctx.call_stack.as_ptr()).get_frame_variables() });
+                println!("\nFunction: {}", ctx.function);
+                println!("\nOperating Stack: {:?}", ctx.stack);
+                println!("\nStack Trace:\n{}", unsafe { (*ctx.call_stack.as_ptr()).to_string() });
+                println!("\nThis Frame's Variables:\n\t{:?}\n", unsafe { (*ctx.call_stack.as_ptr()).get_frame_variables() });
             }
             println!("======= End Context Dump =======");
 
@@ -253,6 +252,38 @@ mod implementations {
             Ok(())
         }
     }
+
+    instruction! {
+        load(ctx, args) {
+            let Some(name) = args.first() else {
+                bail!("load requires a name")
+            };
+
+            let Some(var) = ctx.load_variable(&name) else {
+                bail!("load before store ({name})")
+            };
+
+            ctx.push(var.data.clone());
+
+            Ok(())
+        }
+    }
+
+    instruction! {
+        load_local(ctx, args) {
+            let Some(name) = args.first() else {
+                bail!("load requires a name")
+            };
+
+            let Some(var) = ctx.load_local(&name) else {
+                bail!("load before local store ({name})")
+            };
+
+            ctx.push(var.data.clone());
+
+            Ok(())
+        }
+    }
 }
 
 pub fn query(name: &String) -> InstructionSignature {
@@ -275,6 +306,8 @@ pub fn query(name: &String) -> InstructionSignature {
         "call" => implementations::call,
         "stack_size" => implementations::stack_size,
         "store" => implementations::store,
+        "load" => implementations::load,
+        "load_local" => implementations::load_local,
         _ => unreachable!("unknown bytecode instruction ({name})"),
     }
 }
@@ -475,6 +508,18 @@ impl<'a> Ctx<'a> {
     pub(crate) fn register_variable(&self, name: String, var: Primitive) {
         unsafe {
             (*self.call_stack.as_ptr()).register_variable(name, var)
+        }
+    }
+
+    pub(crate) fn load_variable(&self, name: &String) -> Option<&Variable> {
+        unsafe {
+            (*self.call_stack.as_ptr()).find_name(name)
+        }
+    }
+
+    pub(crate) fn load_local(&self, name: &String) -> Option<&Variable> {
+        unsafe {
+            (*self.call_stack.as_ptr()).get_frame_variables().get(name)
         }
     }
 }

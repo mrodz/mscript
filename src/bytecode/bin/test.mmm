@@ -25,6 +25,11 @@ function main
 	int 5
 	store a
 	stack_dump
+
+	load a
+	stack_dump
+
+	call src/bytecode/bin/test.mmm#divide_by_zero
 end
 
 function divide_by_zero
