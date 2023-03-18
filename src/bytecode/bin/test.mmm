@@ -22,9 +22,9 @@ end
 
 
 function main
-	stack_size
-	printn 0
-	call src/bytecode/bin/test.mmm#main
+	int 5
+	store a
+	stack_dump
 end
 
 function divide_by_zero

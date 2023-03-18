@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::io::{stdout, BufRead, BufReader, Seek, SeekFrom, Write};
 use std::ops::{Index, IndexMut};
-use std::{fs::File, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 

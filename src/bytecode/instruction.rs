@@ -53,6 +53,8 @@ macro_rules! make_type {
 }
 
 mod implementations {
+    use std::any::Any;
+
     use super::*;
 
     instruction! {
@@ -61,7 +63,7 @@ mod implementations {
                 bail!("unexpected 1 parameter")
             }
 
-            let var = Primitive::from(&args[0]);
+            let var = Primitive::from(args[0].as_str());
 
             ctx.push(var);
 
@@ -94,9 +96,9 @@ mod implementations {
                     }
                 }
 
-                println!("Function: {}", ctx.function);
-                println!("Stack Trace:\n......." /* , ctx.call_stack*/);
-                println!("Operating Stack: {:#?}", ctx.stack);
+                println!("\nFunction: {}\n", ctx.function);
+                println!("Stack Trace:\n{}\n", unsafe { (*ctx.call_stack.as_ptr()).to_string() });
+                println!("This Frame's Variables:\n\t{:?}\n", unsafe { (*ctx.call_stack.as_ptr()).get_frame_variables() });
             }
             println!("======= End Context Dump =======");
 
@@ -117,9 +119,9 @@ mod implementations {
                 unreachable!()
             };
 
-            let (i_fn, f_fn) = bin_op_from(symbol).context("constructing bin op")?;
+            let (i32_fn, i128_fn, f_fn) = bin_op_from(symbol).context("constructing bin op")?;
 
-            let result = bin_op_result(left, right, i_fn, f_fn)?;
+            let result = bin_op_result(left, right, i32_fn, i128_fn, f_fn)?;
 
             ctx.clear_and_set_stack(result);
 
@@ -233,6 +235,24 @@ mod implementations {
             Ok(())
         }
     }
+
+    instruction! {
+        store(ctx, args) {
+            let Some(name) = args.first() else {
+                bail!("store requires a name")
+            };
+
+            if ctx.stack_size() != 1 {
+                bail!("store can only store a single item");
+            }
+
+            let arg = ctx.pop().unwrap();
+
+            ctx.register_variable(name.clone(), arg);
+
+            Ok(())
+        }
+    }
 }
 
 pub fn query(name: &String) -> InstructionSignature {
@@ -254,6 +274,7 @@ pub fn query(name: &String) -> InstructionSignature {
         "printn" => implementations::printn,
         "call" => implementations::call,
         "stack_size" => implementations::stack_size,
+        "store" => implementations::store,
         _ => unreachable!("unknown bytecode instruction ({name})"),
     }
 }
@@ -449,6 +470,12 @@ impl<'a> Ctx<'a> {
 
     pub(crate) fn pop(&mut self) -> Option<Primitive> {
         self.stack.pop()
+    }
+
+    pub(crate) fn register_variable(&self, name: String, var: Primitive) {
+        unsafe {
+            (*self.call_stack.as_ptr()).register_variable(name, var)
+        }
     }
 }
 

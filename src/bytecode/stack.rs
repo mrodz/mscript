@@ -1,9 +1,22 @@
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 
-use super::variable::Primitive;
+use super::variable::{Primitive, Variable};
 
-type VariableMapping = HashMap<String, Primitive>;
+#[derive(Default, Debug)]
+pub struct VariableMapping(HashMap<String, Variable>);
+
+impl Display for VariableMapping {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut result = vec![];
+
+        for (key, value) in self.0.iter() {
+            result.push(format!("{key}: {}", value));
+        }
+
+        write!(f, "{result:?}")
+    }
+}
 
 #[derive(Debug)]
 struct StackFrame {
@@ -30,7 +43,7 @@ impl Stack {
     pub fn extend(&mut self, label: String) {
         self.0.push(StackFrame {
             label: label,
-            variables: HashMap::new(),
+            variables: VariableMapping::default(),
         });
     }
 
@@ -42,9 +55,9 @@ impl Stack {
         self.0.pop();
     }
 
-    pub fn find_name(&self, name: &String) -> Option<&Primitive> {
+    pub fn find_name(&self, name: &String) -> Option<&Variable> {
         for i in (0..self.size() - 1).rev() {
-            if let Some(var) = self.0[i].variables.get(name) {
+            if let Some(var) = self.0[i].variables.0.get(name) {
                 return Some(var);
             }
         }
@@ -56,8 +69,8 @@ impl Stack {
         self.0
             .last_mut()
             .expect("nothing in the stack")
-            .variables
-            .insert(name, var);
+            .variables.0
+            .insert(name, Variable::new(var));
     }
 }
 
@@ -67,10 +80,10 @@ impl Display for Stack {
             return write!(f, "<Empty Stack>")
         };
 
-        write!(f, "\t>> {}", first.label)?; // print the cause first
+        write!(f, "\t>> {} {:?}", first.label, first.variables)?; // print the cause first
 
         for stack_frame in self.0[..self.size() - 1].iter().rev() {
-            write!(f, "\r\n\t ^ {}", stack_frame.label)?;
+            write!(f, "\r\n\t ^ {} {:?}", stack_frame.label, first.variables)?;
         }
 
         Ok(())
