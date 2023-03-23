@@ -225,3 +225,33 @@ Loads a variable from the current stack frame. If not found, the program will ex
 | 2 | The variable hasn't been stored by the current frame. |
 
 ---
+
+### `if ! (>=1)`
+Will enter an if-statement context for conditional jumping. Start by peeking at the last item on the local stack, unwrap expecting a boolean value. Sends a signal up to the interpreter sharing whether the expression evaluated truthily. Once done, will clear the local stack.
+
+| ! | Reason |
+| - | - |
+| 1 | Argument length == 0. |
+| 2 | Argument[0] != Bool. |
+| 3 | *panics!* The interpreter cannot find an `else`/`endif` for this `if`.
+
+---
+
+### `else !`
+Similar to an 'else' in any other programming language. Will start executing if the previous `if` command did not evaluate to true.
+
+| ! | Reason |
+| - | - |
+| 1 | The instruction points to a file position that is not a `Box<EndIf>`. |
+| 2 | *panics!* The interpreter determines this `else` instruction is not contained within an `if` context.
+
+---
+
+### `endif !`
+Closes an `if` instruction, then clears the local stack.
+
+| ! | Reason |
+| - | - |
+| 1 | *panics!* The interpreter determines this `endif` instruction is not contained within an `if` context.
+
+---

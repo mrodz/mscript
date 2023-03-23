@@ -1,0 +1,4 @@
+function in_another_file
+	string "Hey! I'm in another file"
+	printn *
+end

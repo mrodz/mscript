@@ -11,7 +11,7 @@ macro_rules! primitive {
             )*
         }
 
-        #[derive(Debug)]
+        #[derive(Debug, Eq, PartialEq)]
         pub enum Type {
             $(
                 $variant,
@@ -27,6 +27,7 @@ macro_rules! primitive {
                 }
             }
 
+            #[allow(unused)]
             pub fn raw_size(&self) -> usize {
                 match self {
                     $(
@@ -74,6 +75,7 @@ impl Variable {
     }
 }
 
+#[allow(unused)]
 impl Primitive {
     pub fn is_numeric(&self) -> bool {
         matches!(
@@ -90,8 +92,9 @@ impl Primitive {
 
     pub fn make_str(string: &str) -> Result<Self> {
         let bytes = string.as_bytes();
-        if let (Some(b'\"'), Some(b'\"')) = (bytes.get(0), bytes.get(string.len() - 1)) {
-            return Ok(Primitive::Str(parse_string(&string).unwrap()));
+
+        if let (Some(b'\"'), Some(b'\"')) = (bytes.first(), bytes.last()) {
+            return Ok(Primitive::Str(string[1..string.len() - 1].to_string()));
         }
 
         bail!("not a Str")
@@ -271,134 +274,6 @@ pub fn bin_op_result(
         }
         (x, y) => bail!("cannot perform binary operation on {x}, {y}"),
     })
-}
-
-pub fn parse_string(string: &str) -> Result<String> {
-    let mut buf = String::new();
-    let mut in_quotes = false;
-    let mut escaping = false;
-
-    for char in string.chars() {
-        if !in_quotes {
-            if char.is_ascii_whitespace() {
-                continue;
-            } else if char != '"' {
-                panic!("Strings must be surrounded by \"..\", saw {char}")
-            }
-        }
-
-        match char {
-            '\\' => {
-                if escaping {
-                    buf.push(char);
-                }
-                escaping = !escaping;
-                continue;
-            }
-            '"' => {
-                if escaping {
-                    buf.push(char);
-                    escaping = false;
-                    continue;
-                }
-
-                in_quotes = !in_quotes;
-
-                if !in_quotes {
-                    break;
-                }
-
-                continue;
-            }
-            'n' => {
-                if escaping {
-                    buf.push('\n');
-                    escaping = false;
-                    continue;
-                }
-            }
-            'r' => {
-                if escaping {
-                    buf.push('\r');
-                    escaping = false;
-                    continue;
-                }
-            }
-            't' => {
-                if escaping {
-                    buf.push('\t');
-                    escaping = false;
-                    continue;
-                }
-            }
-            _ => {
-                if escaping {
-                    bail!("unknown escape sequence (\\{char})");
-                }
-            }
-        }
-
-        buf.push(char);
-    }
-
-    if in_quotes {
-        bail!("found EOL while parsing string")
-    } else {
-        Ok(buf)
-    }
-}
-
-#[cfg(test)]
-mod string_util {
-    use crate::bytecode::variable::parse_string;
-
-    #[test]
-    fn basic() {
-        assert_eq!(parse_string(&"\"hello\"").unwrap(), "hello");
-    }
-
-    #[test]
-    fn pre_quot_spaces() {
-        assert_eq!(parse_string(&"      \"hello\"").unwrap(), "hello");
-    }
-
-    #[test]
-    fn post_quot_spaces() {
-        assert_eq!(parse_string(&"\"hello\"           ").unwrap(), "hello");
-    }
-
-    #[test]
-    fn escaped_quot() {
-        assert_eq!(
-            parse_string(&"\"Hello \\\"World\\\"\"").unwrap(),
-            "Hello \"World\""
-        );
-    }
-
-    #[test]
-    #[should_panic(expected = "EOL")]
-    fn eol() {
-        parse_string(&"\"Hello").unwrap();
-    }
-
-    #[test]
-    #[should_panic(expected = "Strings must be surrounded by \"")]
-    fn no_start_quot() {
-        dbg!(parse_string(&"Hello\"").unwrap());
-    }
-
-    #[test]
-    fn extra_text() {
-        assert_eq!(parse_string(&"\"Hello\" world").unwrap(), "Hello");
-    }
-
-    #[test]
-    fn escape_sequences() {
-        assert_eq!(
-            parse_string(&"\"\\n\\r\\t\\\\\\\"\"").unwrap(),
-            "\n\r\t\\\""
-        );
-    }
 }
 
 #[cfg(test)]

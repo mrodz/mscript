@@ -1,4 +1,5 @@
-// #![feature(let_else)] // for backwards compatibility
+#![feature(box_patterns)]
+#![feature(try_blocks)]
 
 extern crate pest_consume;
 extern crate pest_derive;

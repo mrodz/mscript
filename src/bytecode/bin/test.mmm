@@ -1,3 +1,42 @@
+function main
+	call src/bytecode/bin/test.mmm#if_statements
+	call src/bytecode/bin/test2.mmm#in_another_file
+end
+
+function if_statements
+    bool true
+    if
+        string "woo! \"if\" works"
+        printn *
+
+		bool true
+		if
+			string "if in if/endif"
+			printn *
+		endif
+
+		bool false
+		if
+			string "never runs"
+			printn *
+		else
+			bool true
+
+			if
+				string "else in if/else/endif"
+				printn *
+			else
+				string "Torvalds would not approve of this deep-nesting"
+				printn *
+			endif
+
+		endif
+	else
+		string "I will never run..."
+		printn *
+	endif
+end
+
 function do_math
 	int 4
 	int 3
@@ -18,18 +57,6 @@ function floating_point_math
 	constexpr 10
 	bin_op /
 	ret
-end
-
-
-function main
-	int 5
-	store a
-	stack_dump
-
-	load a
-	stack_dump
-
-	call src/bytecode/bin/test.mmm#divide_by_zero
 end
 
 function divide_by_zero
