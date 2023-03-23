@@ -38,6 +38,7 @@ impl Stack {
         Self(vec![])
     }
 
+    #[allow(unused)]
     pub fn get_frame_label(&self) -> &String {
         &self.0.last().expect("nothing in the stack").label
     }
@@ -111,8 +112,5 @@ mod test {
         stack.extend(one);
         stack.extend(two);
 
-        // stack.extend("hi".into()).extend("bye".into());
-
-        // dbg!(stack);
     }
 }

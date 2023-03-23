@@ -7,18 +7,18 @@ use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 
+use crate::bytecode::file::get_line_number_from_pos;
 use crate::bytecode::instruction;
 
 use super::attributes_parser::Attributes;
-use super::instruction::{run_instruction, Ctx, Instruction, JumpRequest};
+use super::file::IfStatement;
+use super::instruction::{run_instruction, Ctx, IfFlags, Instruction, JumpRequest};
 use super::stack::Stack;
 use super::variable::Primitive;
 use super::MScriptFile;
 
 pub struct Function {
-    location: Arc<RefCell<MScriptFile>>,
-    // location: Arc<String>,
-    // location_handle: Arc<File>,
+    pub location: Arc<RefCell<MScriptFile>>,
     line_number: u32,
     pub(crate) seek_pos: u64,
     attributes: Vec<Attributes>,
@@ -73,6 +73,9 @@ impl Display for Function {
 pub enum InstructionExitState {
     ReturnValue(ReturnValue),
     JumpRequest(JumpRequest),
+    NewIf(bool),
+    GotoElse,
+    GotoEndif,
     NoExit,
 }
 
@@ -109,13 +112,29 @@ impl<'a> Function {
 
         if let Ok(ret) = context.get_return_value() {
             return Ok(InstructionExitState::ReturnValue(ReturnValue(ret.clone())));
-        } else {
-            if let Some(jump_request) = context.clear_and_get_jump_request() {
-                return Ok(InstructionExitState::JumpRequest(jump_request));
-            }
+        } else if let Some(jump_request) = context.clear_and_get_jump_request() {
+            return Ok(InstructionExitState::JumpRequest(jump_request));
+        }
+
+        // match context.clear_and_get_goto() {
+        //     Some(GotoIfChoice::Else) => return Ok(InstructionExitState::GotoElse),
+        //     Some(GotoIfChoice::Endif) => return Ok(InstructionExitState::GotoEndif),
+        //     _ => (),
+        // }
+
+        let if_flags = context.clear_and_get_if_statement();
+        match if_flags {
+            IfFlags::If(b) => return Ok(InstructionExitState::NewIf(b)),
+            IfFlags::Else => return Ok(InstructionExitState::GotoElse),
+            IfFlags::EndIf => return Ok(InstructionExitState::GotoEndif),
+            IfFlags::None => (),
         }
 
         Ok(InstructionExitState::NoExit)
+    }
+
+    pub fn get_if_pos_from(&self, if_pos: u64) -> Option<IfStatement> {
+        unsafe { (*self.location.as_ptr()).get_if_from(if_pos) }
     }
 
     pub fn run(
@@ -142,18 +161,23 @@ impl<'a> Function {
 
         let mut line_number = self.line_number + 2;
 
-        let lines = reader.lines();
+        // let lines = reader.lines();
 
         let mut return_value: ReturnValue = ReturnValue(None);
 
+        let mut line = String::new();
+
         // scope is needed to drop the function context before returning.
         'function_run: {
-            for line in lines {
-                if line.is_err() {
-                    bail!("could not read function:\n\t{}", self)
+            // for line in lines {
+            while let Ok(_) = reader.read_line(&mut line) {
+                if let Some('\n') = line.chars().next_back() {
+                    line.pop();
                 }
 
-                let line = line.unwrap();
+                if let Some('\r') = line.chars().next_back() {
+                    line.pop();
+                }
 
                 if line == "end" {
                     break;
@@ -176,11 +200,51 @@ impl<'a> Function {
                             context.push(primitive)
                         }
                     }
+                    InstructionExitState::NewIf(used) => {
+                        let pos = reader.stream_position()?;
+                        let if_stmt = self
+                            .get_if_pos_from(pos)
+                            .expect("this if has not been mapped.");
+
+                        let IfStatement::If(..) = if_stmt else {
+                            bail!("expected if statment, found {if_stmt:?}");
+                        };
+
+                        let next = *if_stmt.next_pos();
+
+                        context.active_if_stmts.push((if_stmt, used));
+                        
+                        if !used {
+                            reader.seek(SeekFrom::Start(next))?;
+                        }
+                    }
+                    InstructionExitState::GotoElse => {
+                        let (if_stmt, used) = context
+                            .active_if_stmts
+                            .last().with_context(|| format!("no if, but found else (l{})", get_line_number_from_pos(&mut reader, pos).unwrap()))?;
+
+                        if *used {
+                            let IfStatement::If(_, box IfStatement::Else(_, box IfStatement::EndIf(next_pos))) = if_stmt else {
+                                bail!("bad ({if_stmt:?})");
+                            };
+
+                            reader.seek(SeekFrom::Start(*next_pos))?;
+                        }
+
+                        context.active_if_stmts.pop();
+                        context.clear_stack();
+                    }
+                    InstructionExitState::GotoEndif => {
+                        context.active_if_stmts.pop();
+                        context.clear_stack();
+
+                    }
                     InstructionExitState::NoExit => (),
-                    _ => unimplemented!(),
                 }
 
                 line_number += 1;
+
+                line.clear();
             }
         }
 
@@ -192,11 +256,15 @@ impl<'a> Function {
     }
 }
 
-pub struct Functions(pub HashMap<String, Function>);
+pub struct Functions {
+    pub map: HashMap<String, Function>,
+    pub if_mapper: HashMap<u64, IfStatement>,
+}
 
+#[allow(unused)]
 impl<'a> Functions {
     pub fn get(&self, signature: &str) -> Result<&Function> {
-        let Some(result) = self.0.get(signature) else {
+        let Some(result) = self.map.get(signature) else {
             bail!("unknown function ({signature})");
         };
 
@@ -204,7 +272,7 @@ impl<'a> Functions {
     }
 
     pub fn get_mut(&'a mut self, signature: &str) -> Result<&'a mut Function> {
-        let Some(result) = self.0.get_mut(signature) else {
+        let Some(result) = self.map.get_mut(signature) else {
             bail!("unknown function ({signature})");
         };
 
@@ -215,12 +283,12 @@ impl<'a> Functions {
 impl<'a> Index<&'a str> for Functions {
     type Output = Function;
     fn index(&self, index: &'a str) -> &Self::Output {
-        self.0.get(index).unwrap()
+        self.map.get(index).unwrap()
     }
 }
 
 impl<'a> IndexMut<&'a str> for Functions {
     fn index_mut(&mut self, index: &'a str) -> &mut Self::Output {
-        self.0.get_mut(index).unwrap()
+        self.map.get_mut(index).unwrap()
     }
 }

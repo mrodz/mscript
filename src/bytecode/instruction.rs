@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 
+use super::file::IfStatement;
 use super::function::Function;
 use super::stack::Stack;
 use super::variable::{bin_op_from, bin_op_result, Primitive, Variable};
@@ -41,11 +42,11 @@ macro_rules! make_type {
                 if args.len() != 1 {
                     bail!("expected 1 parameter")
                 }
-    
+
                 let var = Primitive::$name(&args[0])?;
-    
+
                 ctx.push(var);
-    
+
                 Ok(())
             }
         }
@@ -284,15 +285,67 @@ mod implementations {
             Ok(())
         }
     }
+
+    instruction! {
+        typecmp(ctx=ctx) {
+            if ctx.stack_size() != 2 {
+                bail!("typecmp requires only 2 items in the local stack")
+            }
+
+            let first = ctx.pop().unwrap();
+            let second = ctx.pop().unwrap();
+
+            let cmp = first.ty() == second.ty();
+
+            ctx.push(Primitive::Bool(cmp));
+
+            Ok(())
+        }
+    }
+
+    instruction! {
+        if_stmt(ctx=ctx) {
+            if ctx.stack_size() == 0 {
+                bail!("if statements require at least one entry in the local stack")
+            }
+
+            let item = ctx.pop().unwrap();
+            ctx.stack.clear();
+
+            let Primitive::Bool(b) = item else {
+                bail!("if statement can only test booleans")
+            };
+
+            ctx.signal_if_statement(IfFlags::If(b));
+
+            Ok(())
+        }
+    }
+
+    instruction! {
+        else_stmt(ctx=ctx) {
+            ctx.signal_if_statement(IfFlags::Else);
+
+            Ok(())
+        }
+    }
+
+    instruction! {
+        endif_stmt(ctx=ctx) {
+            ctx.signal_if_statement(IfFlags::EndIf);
+
+            Ok(())
+        }
+    }
 }
 
 pub fn query(name: &String) -> InstructionSignature {
     match name.as_str() {
+        "nop" | "#" => implementations::nop,
         "constexpr" => implementations::constexpr,
         "stack_dump" => implementations::stack_dump,
         "pop" => implementations::pop,
         "bin_op" => implementations::bin_op,
-        "nop" => implementations::nop,
         "bool" => implementations::make_bool,
         "string" => implementations::make_str,
         "int" => implementations::make_int,
@@ -308,6 +361,10 @@ pub fn query(name: &String) -> InstructionSignature {
         "store" => implementations::store,
         "load" => implementations::load,
         "load_local" => implementations::load_local,
+        "typecmp" => implementations::typecmp,
+        "if" => implementations::if_stmt,
+        "else" => implementations::else_stmt,
+        "endif" => implementations::endif_stmt,
         _ => unreachable!("unknown bytecode instruction ({name})"),
     }
 }
@@ -430,6 +487,8 @@ pub struct Ctx<'a> {
     return_value: Option<Option<Primitive>>,
     call_stack: Arc<Cell<Stack>>,
     requested_jump: Option<JumpRequest>,
+    pub active_if_stmts: Vec<(IfStatement, bool)>,
+    new_if: IfFlags,
 }
 
 impl Debug for Ctx<'_> {
@@ -438,15 +497,36 @@ impl Debug for Ctx<'_> {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum IfFlags {
+    If(bool),
+    Else,
+    EndIf,
+    None
+}
+
 impl<'a> Ctx<'a> {
     pub fn new(function: &'a Function, call_stack: Arc<Cell<Stack>>) -> Self {
         Self {
             stack: vec![],
+            active_if_stmts: vec![],
             function,
             return_value: None,
             call_stack,
             requested_jump: None,
+            new_if: IfFlags::None,
         }
+    }
+
+    pub(crate) fn signal_if_statement(&mut self, variant: IfFlags) {
+        self.new_if = variant;
+    }
+
+    pub(crate) fn clear_and_get_if_statement(&mut self) -> IfFlags {
+        let res = self.new_if;
+        self.new_if = IfFlags::None;
+        
+        res
     }
 
     pub(crate) fn add_frame(&self, label: String) {
@@ -488,6 +568,10 @@ impl<'a> Ctx<'a> {
         Ok(&unwrapped)
     }
 
+    pub(crate) fn clear_stack(&mut self) {
+        self.stack.clear();
+    }
+
     pub(crate) fn clear_and_set_stack(&mut self, var: Primitive) {
         self.stack.clear();
         self.stack.push(var);
@@ -506,24 +590,19 @@ impl<'a> Ctx<'a> {
     }
 
     pub(crate) fn register_variable(&self, name: String, var: Primitive) {
-        unsafe {
-            (*self.call_stack.as_ptr()).register_variable(name, var)
-        }
+        unsafe { (*self.call_stack.as_ptr()).register_variable(name, var) }
     }
 
     pub(crate) fn load_variable(&self, name: &String) -> Option<&Variable> {
-        unsafe {
-            (*self.call_stack.as_ptr()).find_name(name)
-        }
+        unsafe { (*self.call_stack.as_ptr()).find_name(name) }
     }
 
     pub(crate) fn load_local(&self, name: &String) -> Option<&Variable> {
-        unsafe {
-            (*self.call_stack.as_ptr()).get_frame_variables().get(name)
-        }
+        unsafe { (*self.call_stack.as_ptr()).get_frame_variables().get(name) }
     }
 }
 
+#[derive(Debug)]
 pub struct Instruction {
     pub name: String,
     arguments: Vec<String>,
