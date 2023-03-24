@@ -38,7 +38,6 @@ impl Program {
     pub fn add_file(&mut self, path: &String) -> Result<Option<()>> {
         if self.files_in_use.contains_key(path) {
             return Ok(None);
-            // bail!("file has already been loaded")
         }
 
         let new_file = MScriptFile::open(path)?;
@@ -62,7 +61,7 @@ impl Program {
 
     fn process_jump_request(
         arc_of_self: Arc<Cell<Self>>,
-        request: JumpRequest,
+        request: &JumpRequest,
     ) -> Result<ReturnValue> {
         let mut last_hash = 0;
 
@@ -85,10 +84,10 @@ impl Program {
             (*arc_of_self.as_ptr()).add_file(&path)?;
         }
 
-        let file = Self::get_file(arc_of_self.clone(), &path)?; // arc_of_self.get_mut().get_file(&path)?;
+        let file = Self::get_file(arc_of_self.clone(), &path)?;
 
         let return_value = unsafe {
-            (*file.as_ptr()).run_function(symbol, request.stack, &mut |req| {
+            (*file.as_ptr()).run_function(symbol, Arc::clone(&request.stack), &mut |req| {
                 Self::process_jump_request(arc_of_self.clone(), req)
             })?
         };
