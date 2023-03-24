@@ -76,7 +76,8 @@ impl Stack {
         self.0
             .last_mut()
             .expect("nothing in the stack")
-            .variables.0
+            .variables
+            .0
             .insert(name, Variable::new(var));
     }
 }
@@ -103,7 +104,6 @@ mod test {
 
     #[test]
     fn add_frame() {
-        // let mut stack = ::new("Top".into());
         let mut stack = Stack::new();
 
         let one = String::from("Main");
@@ -111,6 +111,5 @@ mod test {
 
         stack.extend(one);
         stack.extend(two);
-
     }
 }

@@ -121,10 +121,6 @@ pub fn parse_attributes(attribute_str: &String) -> Result<Attributes> {
             });
             continue;
         } else if c == ']' {
-            // if is(flags, AT_LEFT) && buffer.len() == 0 {
-            //     bail!("trailing ','")
-            // }
-
             let (key, value) = flush(flags, &mut left, &mut buffer)?;
             map.insert(key, value);
             break;

@@ -6,7 +6,7 @@ use std::sync::Arc;
 use anyhow::{bail, Context, Result};
 
 use super::file::IfStatement;
-use super::function::Function;
+use super::function::{Function, InstructionExitState};
 use super::stack::Stack;
 use super::variable::{bin_op_from, bin_op_result, Primitive, Variable};
 
@@ -54,6 +54,8 @@ macro_rules! make_type {
 }
 
 mod implementations {
+    use crate::bytecode::function::ReturnValue;
+
     use super::*;
 
     instruction! {
@@ -169,7 +171,7 @@ mod implementations {
 
             let var = ctx.pop();
 
-            ctx.return_now(var);
+            ctx.signal(InstructionExitState::ReturnValue(ReturnValue(var)));
 
             Ok(())
         }
@@ -221,7 +223,11 @@ mod implementations {
 
             ctx.add_frame(first.to_string());
 
-            ctx.request_jump(first.clone(), None, Arc::clone(&ctx.call_stack));
+            ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
+                destination_label: first.clone(),
+                caller: None,
+                stack: ctx.call_stack.clone()
+            }));
 
             Ok(())
         }
@@ -316,7 +322,7 @@ mod implementations {
                 bail!("if statement can only test booleans")
             };
 
-            ctx.signal_if_statement(IfFlags::If(b));
+            ctx.signal(InstructionExitState::NewIf(b));
 
             Ok(())
         }
@@ -324,7 +330,7 @@ mod implementations {
 
     instruction! {
         else_stmt(ctx=ctx) {
-            ctx.signal_if_statement(IfFlags::Else);
+            ctx.signal(InstructionExitState::GotoElse);
 
             Ok(())
         }
@@ -332,7 +338,7 @@ mod implementations {
 
     instruction! {
         endif_stmt(ctx=ctx) {
-            ctx.signal_if_statement(IfFlags::EndIf);
+            ctx.signal(InstructionExitState::GotoEndif);
 
             Ok(())
         }
@@ -481,14 +487,18 @@ pub struct JumpRequest {
     pub stack: Arc<Cell<Stack>>,
 }
 
+impl Debug for JumpRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "goto {}", self.destination_label)
+    }
+}
+
 pub struct Ctx<'a> {
     stack: Vec<Primitive>,
     function: &'a Function,
-    return_value: Option<Option<Primitive>>,
     call_stack: Arc<Cell<Stack>>,
-    requested_jump: Option<JumpRequest>,
     pub active_if_stmts: Vec<(IfStatement, bool)>,
-    new_if: IfFlags,
+    exit_state: InstructionExitState,
 }
 
 impl Debug for Ctx<'_> {
@@ -497,36 +507,27 @@ impl Debug for Ctx<'_> {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum IfFlags {
-    If(bool),
-    Else,
-    EndIf,
-    None
-}
-
 impl<'a> Ctx<'a> {
     pub fn new(function: &'a Function, call_stack: Arc<Cell<Stack>>) -> Self {
         Self {
             stack: vec![],
             active_if_stmts: vec![],
             function,
-            return_value: None,
             call_stack,
-            requested_jump: None,
-            new_if: IfFlags::None,
+            exit_state: InstructionExitState::NoExit,
         }
     }
 
-    pub(crate) fn signal_if_statement(&mut self, variant: IfFlags) {
-        self.new_if = variant;
+    pub(crate) fn signal(&mut self, exit_state: InstructionExitState) {
+        self.exit_state = exit_state;
     }
 
-    pub(crate) fn clear_and_get_if_statement(&mut self) -> IfFlags {
-        let res = self.new_if;
-        self.new_if = IfFlags::None;
-        
-        res
+    pub(crate) fn poll(&self) -> &InstructionExitState {
+        &self.exit_state
+    }
+
+    pub(crate) fn clear_signal(&mut self) {
+        self.exit_state = InstructionExitState::NoExit;
     }
 
     pub(crate) fn add_frame(&self, label: String) {
@@ -535,37 +536,6 @@ impl<'a> Ctx<'a> {
 
     pub(crate) fn frames_count(&self) -> usize {
         unsafe { (*self.call_stack.as_ptr()).size() }
-    }
-
-    pub(crate) fn request_jump(
-        &mut self,
-        destination_label: String,
-        caller: Option<fn() -> String>,
-        stack: Arc<Cell<Stack>>,
-    ) {
-        self.requested_jump = Some(JumpRequest {
-            destination_label,
-            caller,
-            stack,
-        })
-    }
-
-    pub(crate) fn clear_and_get_jump_request(&mut self) -> Option<JumpRequest> {
-        let res = self.requested_jump.clone();
-        self.requested_jump = None;
-        res
-    }
-
-    pub(crate) fn return_now(&mut self, var: Option<Primitive>) {
-        self.return_value = Some(var);
-    }
-
-    pub(crate) fn get_return_value(&self) -> Result<&Option<Primitive>> {
-        let Some(ref unwrapped) = self.return_value else {
-            bail!("the function hasn't been called.")
-        };
-
-        Ok(&unwrapped)
     }
 
     pub(crate) fn clear_stack(&mut self) {

@@ -12,7 +12,7 @@ use crate::bytecode::instruction;
 
 use super::attributes_parser::Attributes;
 use super::file::IfStatement;
-use super::instruction::{run_instruction, Ctx, IfFlags, Instruction, JumpRequest};
+use super::instruction::{run_instruction, Ctx, Instruction, JumpRequest};
 use super::stack::Stack;
 use super::variable::Primitive;
 use super::MScriptFile;
@@ -25,8 +25,8 @@ pub struct Function {
     name: String,
 }
 
-#[derive(Debug)]
-pub struct ReturnValue(Option<Primitive>);
+#[derive(Debug, Clone)]
+pub struct ReturnValue(pub Option<Primitive>);
 
 impl ReturnValue {
     pub fn get(&self) -> &Option<Primitive> {
@@ -70,6 +70,7 @@ impl Display for Function {
     }
 }
 
+#[derive(Debug)]
 pub enum InstructionExitState {
     ReturnValue(ReturnValue),
     JumpRequest(JumpRequest),
@@ -101,36 +102,22 @@ impl<'a> Function {
         format!("{}#{}", self.location.borrow().path, self.name)
     }
 
-    fn run_and_ret(
+    fn run_and_ret<'b>(
         context: &mut Ctx<'a>,
         instruction: &Instruction,
-    ) -> Result<InstructionExitState> {
+    ) -> Result<&'b InstructionExitState> {
         run_instruction(context, instruction).with_context(|| {
             let _ = stdout().flush();
             format!("failed to run instruction")
         })?;
 
-        if let Ok(ret) = context.get_return_value() {
-            return Ok(InstructionExitState::ReturnValue(ReturnValue(ret.clone())));
-        } else if let Some(jump_request) = context.clear_and_get_jump_request() {
-            return Ok(InstructionExitState::JumpRequest(jump_request));
-        }
+        let r#ref = unsafe {
+            (context.poll() as *const InstructionExitState)
+                .as_ref()
+                .unwrap()
+        };
 
-        // match context.clear_and_get_goto() {
-        //     Some(GotoIfChoice::Else) => return Ok(InstructionExitState::GotoElse),
-        //     Some(GotoIfChoice::Endif) => return Ok(InstructionExitState::GotoEndif),
-        //     _ => (),
-        // }
-
-        let if_flags = context.clear_and_get_if_statement();
-        match if_flags {
-            IfFlags::If(b) => return Ok(InstructionExitState::NewIf(b)),
-            IfFlags::Else => return Ok(InstructionExitState::GotoElse),
-            IfFlags::EndIf => return Ok(InstructionExitState::GotoEndif),
-            IfFlags::None => (),
-        }
-
-        Ok(InstructionExitState::NoExit)
+        Ok(r#ref)
     }
 
     pub fn get_if_pos_from(&self, if_pos: u64) -> Option<IfStatement> {
@@ -140,7 +127,7 @@ impl<'a> Function {
     pub fn run(
         &mut self,
         current_frame: Arc<Cell<Stack>>,
-        jump_callback: &mut impl FnMut(JumpRequest) -> Result<ReturnValue>,
+        jump_callback: &mut impl FnMut(&JumpRequest) -> Result<ReturnValue>,
     ) -> Result<ReturnValue> {
         {
             unsafe {
@@ -161,15 +148,12 @@ impl<'a> Function {
 
         let mut line_number = self.line_number + 2;
 
-        // let lines = reader.lines();
-
         let mut return_value: ReturnValue = ReturnValue(None);
 
         let mut line = String::new();
 
         // scope is needed to drop the function context before returning.
         'function_run: {
-            // for line in lines {
             while let Ok(_) = reader.read_line(&mut line) {
                 if let Some('\n') = line.chars().next_back() {
                     line.pop();
@@ -190,11 +174,11 @@ impl<'a> Function {
 
                 match ret {
                     InstructionExitState::ReturnValue(ret) => {
-                        return_value = ret;
+                        return_value = ret.clone();
                         break 'function_run;
                     }
                     InstructionExitState::JumpRequest(jump_request) => {
-                        let result = jump_callback(jump_request)?;
+                        let result = jump_callback(&jump_request)?;
 
                         if let Some(primitive) = result.0 {
                             context.push(primitive)
@@ -212,16 +196,20 @@ impl<'a> Function {
 
                         let next = *if_stmt.next_pos();
 
-                        context.active_if_stmts.push((if_stmt, used));
-                        
+                        context.active_if_stmts.push((if_stmt, *used));
+
                         if !used {
                             reader.seek(SeekFrom::Start(next))?;
                         }
                     }
                     InstructionExitState::GotoElse => {
-                        let (if_stmt, used) = context
-                            .active_if_stmts
-                            .last().with_context(|| format!("no if, but found else (l{})", get_line_number_from_pos(&mut reader, pos).unwrap()))?;
+                        let (if_stmt, used) =
+                            context.active_if_stmts.last().with_context(|| {
+                                format!(
+                                    "no if, but found else (l{})",
+                                    get_line_number_from_pos(&mut reader, pos).unwrap()
+                                )
+                            })?;
 
                         if *used {
                             let IfStatement::If(_, box IfStatement::Else(_, box IfStatement::EndIf(next_pos))) = if_stmt else {
@@ -237,10 +225,11 @@ impl<'a> Function {
                     InstructionExitState::GotoEndif => {
                         context.active_if_stmts.pop();
                         context.clear_stack();
-
                     }
                     InstructionExitState::NoExit => (),
                 }
+
+                context.clear_signal();
 
                 line_number += 1;
 

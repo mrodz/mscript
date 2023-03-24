@@ -60,7 +60,7 @@ pub fn get_line_number_from_pos(reader: &mut BufReader<&File>, pos: u64) -> Resu
             break;
         }
     }
-    
+
     // reset
     reader.seek(SeekFrom::Start(old_pos))?;
 
@@ -71,7 +71,6 @@ impl MScriptFile {
     pub fn get_function(&mut self, name: &str) -> Option<&mut Function> {
         let name = format!("{}#{name}", self.path.to_string());
         let function = self.functions.as_mut().unwrap().get_mut(&name);
-        //?.get_mut(&name);
 
         return function.map_or_else(|_| None, |ok| Some(ok));
     }
@@ -88,7 +87,7 @@ impl MScriptFile {
         &mut self,
         name: &str,
         stack: Arc<Cell<Stack>>,
-        jump_callback: &mut impl FnMut(JumpRequest) -> Result<ReturnValue>,
+        jump_callback: &mut impl FnMut(&JumpRequest) -> Result<ReturnValue>,
     ) -> Result<ReturnValue> {
         let Some(function) = self.get_function(name) else {
 			bail!("could not find function (missing `{name}`)")
@@ -122,7 +121,7 @@ impl MScriptFile {
             }
 
             let seek_pos = reader.stream_position()?;
-            
+
             if buffer.starts_with("#[") {
                 let attr = parse_attributes(&buffer).context("Failed parsing attributes")?;
                 current_attributes.push(attr);
