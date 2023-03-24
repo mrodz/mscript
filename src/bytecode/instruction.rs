@@ -13,25 +13,33 @@ use super::variable::{bin_op_from, bin_op_result, Primitive, Variable};
 pub type InstructionSignature = fn(&mut Ctx, &Vec<String>) -> Result<()>;
 
 macro_rules! instruction {
-    ($name:ident $body:expr) => {
-        pub(crate) fn $name(_ctx: &mut Ctx, _args: &Vec<String>) -> Result<()> {
-            $body
-        }
+    ($($name:ident $body:expr)*) => {
+        $(
+            pub(crate) fn $name(_ctx: &mut Ctx, _args: &Vec<String>) -> Result<()> {
+                $body
+            }
+        )*
     };
-    ($name:ident(ctx=$ctx:ident) $body:expr) => {
-        pub(crate) fn $name($ctx: &mut Ctx, _args: &Vec<String>) -> Result<()> {
-            $body
-        }
+    ($($name:ident(ctx=$ctx:ident) $body:expr)*) => {
+        $(
+            pub(crate) fn $name($ctx: &mut Ctx, _args: &Vec<String>) -> Result<()> {
+                $body
+            }
+        )*
     };
-    ($name:ident(args=$args:ident) $body:expr) => {
-        pub(crate) fn $name(_ctx: &mut Ctx, $args: &Vec<String>) -> Result<()> {
-            $body
-        }
+    ($($name:ident(args=$args:ident) $body:expr)*) => {
+        $(
+            pub(crate) fn $name(_ctx: &mut Ctx, $args: &Vec<String>) -> Result<()> {
+                $body
+            }
+        )*
     };
-    ($name:ident($ctx:ident, $args:ident) $body:expr) => {
-        pub(crate) fn $name($ctx: &mut Ctx, $args: &Vec<String>) -> Result<()> {
-            $body
-        }
+    ($($name:ident($ctx:ident, $args:ident) $body:expr)*) => {
+        $(
+            pub(crate) fn $name($ctx: &mut Ctx, $args: &Vec<String>) -> Result<()> {
+                $body
+            }
+        )*
     };
 }
 
@@ -129,6 +137,7 @@ mod implementations {
 
             Ok(())
         }
+
     }
 
     instruction! {
@@ -258,9 +267,7 @@ mod implementations {
 
             Ok(())
         }
-    }
 
-    instruction! {
         load(ctx, args) {
             let Some(name) = args.first() else {
                 bail!("load requires a name")
@@ -274,9 +281,7 @@ mod implementations {
 
             Ok(())
         }
-    }
 
-    instruction! {
         load_local(ctx, args) {
             let Some(name) = args.first() else {
                 bail!("load requires a name")
@@ -326,17 +331,13 @@ mod implementations {
 
             Ok(())
         }
-    }
 
-    instruction! {
         else_stmt(ctx=ctx) {
             ctx.signal(InstructionExitState::GotoElse);
 
             Ok(())
         }
-    }
 
-    instruction! {
         endif_stmt(ctx=ctx) {
             ctx.signal(InstructionExitState::GotoEndif);
 

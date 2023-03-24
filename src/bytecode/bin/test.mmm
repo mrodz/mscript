@@ -1,5 +1,5 @@
 function main
-	call src/bytecode/bin/t.mmm#main
-
+	stack_size
 	printn *
+	call src/bytecode/bin/test.mmm#main
 end
