@@ -8,7 +8,7 @@ use anyhow::{bail, Context, Result};
 use super::file::IfStatement;
 use super::function::{Function, InstructionExitState};
 use super::stack::Stack;
-use super::variable::{bin_op_from, bin_op_result, Primitive, Variable};
+use super::variables::{bin_op_from, bin_op_result, Primitive, Variable};
 
 pub type InstructionSignature = fn(&mut Ctx, &Vec<String>) -> Result<()>;
 
@@ -62,8 +62,7 @@ macro_rules! make_type {
 }
 
 mod implementations {
-    use crate::bytecode::function::ReturnValue;
-
+    use crate::bytecode::{function::ReturnValue, variables::buckets};
     use super::*;
 
     instruction! {
@@ -244,7 +243,7 @@ mod implementations {
 
     instruction! {
         stack_size(ctx=ctx) {
-            let size = Primitive::Int(ctx.frames_count().try_into()?);
+            let size = Primitive::Int(buckets::Int(ctx.frames_count().try_into()?));
             ctx.push(size);
 
             Ok(())
@@ -308,8 +307,27 @@ mod implementations {
 
             let cmp = first.ty() == second.ty();
 
-            ctx.push(Primitive::Bool(cmp));
+            ctx.push(Primitive::Bool(buckets::Bool(cmp)));
 
+            Ok(())
+        }
+
+        strict_equ(ctx=ctx) {
+            if ctx.stack_size() != 2 {
+                bail!("equ requires only 2 items in the local stack")
+            }
+
+            let first = ctx.pop().unwrap();
+            let second = ctx.pop().unwrap();
+
+            let result = dbg!(first) == dbg!(second);
+
+            ctx.push(Primitive::Bool(buckets::Bool(result)));
+
+            Ok(())
+        }
+
+        equ(ctx=ctx) {
             Ok(())
         }
     }
@@ -327,7 +345,7 @@ mod implementations {
                 bail!("if statement can only test booleans")
             };
 
-            ctx.signal(InstructionExitState::NewIf(b));
+            ctx.signal(InstructionExitState::NewIf(*b));
 
             Ok(())
         }
@@ -372,6 +390,8 @@ pub fn query(name: &String) -> InstructionSignature {
         "if" => implementations::if_stmt,
         "else" => implementations::else_stmt,
         "endif" => implementations::endif_stmt,
+        "strict_equ" => implementations::strict_equ,
+        "equ" => implementations::equ,
         _ => unreachable!("unknown bytecode instruction ({name})"),
     }
 }

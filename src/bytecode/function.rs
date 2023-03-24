@@ -14,7 +14,7 @@ use super::attributes_parser::Attributes;
 use super::file::IfStatement;
 use super::instruction::{run_instruction, Ctx, Instruction, JumpRequest};
 use super::stack::Stack;
-use super::variable::Primitive;
+use super::variables::Primitive;
 use super::MScriptFile;
 
 pub struct Function {

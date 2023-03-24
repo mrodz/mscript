@@ -1,5 +1,6 @@
 function main
-	stack_size
+	int 5
+	float 5
+	equ
 	printn *
-	call src/bytecode/bin/test.mmm#main
 end
