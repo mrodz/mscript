@@ -1,5 +1,6 @@
 function main
-	call src/bytecode/bin/t.mmm#main
-
+	byte 0b101
+	byte 0b101
+	equ
 	printn *
 end

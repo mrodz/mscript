@@ -7,4 +7,4 @@ mod stack;
 
 pub use file::MScriptFile;
 pub use stack::Stack;
-mod variable;
+mod variables;

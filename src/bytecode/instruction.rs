@@ -8,30 +8,38 @@ use anyhow::{bail, Context, Result};
 use super::file::IfStatement;
 use super::function::{Function, InstructionExitState};
 use super::stack::Stack;
-use super::variable::{bin_op_from, bin_op_result, Primitive, Variable};
+use super::variables::{bin_op_from, bin_op_result, Primitive, Variable};
 
 pub type InstructionSignature = fn(&mut Ctx, &Vec<String>) -> Result<()>;
 
 macro_rules! instruction {
-    ($name:ident $body:expr) => {
-        pub(crate) fn $name(_ctx: &mut Ctx, _args: &Vec<String>) -> Result<()> {
-            $body
-        }
+    ($($name:ident $body:expr)*) => {
+        $(
+            pub(crate) fn $name(_ctx: &mut Ctx, _args: &Vec<String>) -> Result<()> {
+                $body
+            }
+        )*
     };
-    ($name:ident(ctx=$ctx:ident) $body:expr) => {
-        pub(crate) fn $name($ctx: &mut Ctx, _args: &Vec<String>) -> Result<()> {
-            $body
-        }
+    ($($name:ident(ctx=$ctx:ident) $body:expr)*) => {
+        $(
+            pub(crate) fn $name($ctx: &mut Ctx, _args: &Vec<String>) -> Result<()> {
+                $body
+            }
+        )*
     };
-    ($name:ident(args=$args:ident) $body:expr) => {
-        pub(crate) fn $name(_ctx: &mut Ctx, $args: &Vec<String>) -> Result<()> {
-            $body
-        }
+    ($($name:ident(args=$args:ident) $body:expr)*) => {
+        $(
+            pub(crate) fn $name(_ctx: &mut Ctx, $args: &Vec<String>) -> Result<()> {
+                $body
+            }
+        )*
     };
-    ($name:ident($ctx:ident, $args:ident) $body:expr) => {
-        pub(crate) fn $name($ctx: &mut Ctx, $args: &Vec<String>) -> Result<()> {
-            $body
-        }
+    ($($name:ident($ctx:ident, $args:ident) $body:expr)*) => {
+        $(
+            pub(crate) fn $name($ctx: &mut Ctx, $args: &Vec<String>) -> Result<()> {
+                $body
+            }
+        )*
     };
 }
 
@@ -54,9 +62,11 @@ macro_rules! make_type {
 }
 
 mod implementations {
-    use crate::bytecode::function::ReturnValue;
-
     use super::*;
+    use crate::{
+        bool,
+        bytecode::{function::ReturnValue, variables::buckets},
+    };
 
     instruction! {
         constexpr(ctx, args) {
@@ -129,6 +139,7 @@ mod implementations {
 
             Ok(())
         }
+
     }
 
     instruction! {
@@ -183,6 +194,7 @@ mod implementations {
     make_type!(make_float);
     make_type!(make_char);
     make_type!(make_byte);
+    make_type!(make_bigint);
 
     instruction! {
         printn(ctx, args) {
@@ -235,7 +247,7 @@ mod implementations {
 
     instruction! {
         stack_size(ctx=ctx) {
-            let size = Primitive::Int(ctx.frames_count().try_into()?);
+            let size = Primitive::Int(buckets::Int(ctx.frames_count().try_into()?));
             ctx.push(size);
 
             Ok(())
@@ -258,9 +270,7 @@ mod implementations {
 
             Ok(())
         }
-    }
 
-    instruction! {
         load(ctx, args) {
             let Some(name) = args.first() else {
                 bail!("load requires a name")
@@ -274,9 +284,7 @@ mod implementations {
 
             Ok(())
         }
-    }
 
-    instruction! {
         load_local(ctx, args) {
             let Some(name) = args.first() else {
                 bail!("load requires a name")
@@ -303,7 +311,37 @@ mod implementations {
 
             let cmp = first.ty() == second.ty();
 
-            ctx.push(Primitive::Bool(cmp));
+            ctx.push(bool!(cmp));
+
+            Ok(())
+        }
+
+        strict_equ(ctx=ctx) {
+            if ctx.stack_size() != 2 {
+                bail!("equ requires only 2 items in the local stack")
+            }
+
+            let first = ctx.pop().unwrap();
+            let second = ctx.pop().unwrap();
+
+            let result = first == second;
+
+            ctx.push(bool!(result));
+
+            Ok(())
+        }
+
+        equ(ctx=ctx) {
+            if ctx.stack_size() != 2 {
+                bail!("equ requires only 2 items in the local stack")
+            }
+
+            let first = ctx.pop().unwrap();
+            let second = ctx.pop().unwrap();
+
+            let result = first.equals(&second)?;
+
+            ctx.push(bool!(result));
 
             Ok(())
         }
@@ -322,21 +360,17 @@ mod implementations {
                 bail!("if statement can only test booleans")
             };
 
-            ctx.signal(InstructionExitState::NewIf(b));
+            ctx.signal(InstructionExitState::NewIf(*b));
 
             Ok(())
         }
-    }
 
-    instruction! {
         else_stmt(ctx=ctx) {
             ctx.signal(InstructionExitState::GotoElse);
 
             Ok(())
         }
-    }
 
-    instruction! {
         endif_stmt(ctx=ctx) {
             ctx.signal(InstructionExitState::GotoEndif);
 
@@ -354,6 +388,7 @@ pub fn query(name: &String) -> InstructionSignature {
         "bin_op" => implementations::bin_op,
         "bool" => implementations::make_bool,
         "string" => implementations::make_str,
+        "bigint" => implementations::make_bigint,
         "int" => implementations::make_int,
         "float" => implementations::make_float,
         "char" => implementations::make_char,
@@ -371,6 +406,8 @@ pub fn query(name: &String) -> InstructionSignature {
         "if" => implementations::if_stmt,
         "else" => implementations::else_stmt,
         "endif" => implementations::endif_stmt,
+        "strict_equ" => implementations::strict_equ,
+        "equ" => implementations::equ,
         _ => unreachable!("unknown bytecode instruction ({name})"),
     }
 }
