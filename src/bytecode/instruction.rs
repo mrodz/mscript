@@ -62,8 +62,11 @@ macro_rules! make_type {
 }
 
 mod implementations {
-    use crate::{bytecode::{function::ReturnValue, variables::buckets}, bool};
     use super::*;
+    use crate::{
+        bool,
+        bytecode::{function::ReturnValue, variables::buckets},
+    };
 
     instruction! {
         constexpr(ctx, args) {
