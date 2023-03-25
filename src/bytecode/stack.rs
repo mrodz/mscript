@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 
-use super::variables::{Variable, Primitive};
-
+use super::variables::{Primitive, Variable};
 
 #[derive(Default, Debug)]
 pub struct VariableMapping(HashMap<String, Variable>);

@@ -1,28 +1,28 @@
-use crate::bytecode::variables::buckets::{Int, Float, BigInt, Byte};
+use crate::bytecode::variables::buckets::{BigInt, Byte, Float, Int};
 
 impl PartialEq<Float> for Int {
     fn eq(&self, rhs: &Float) -> bool {
-		let val = self.0;
-		let other = rhs.0;
+        let val = self.0;
+        let other = rhs.0;
 
-		val as f64 == other
-	}
+        val as f64 == other
+    }
 }
 
 impl PartialEq<BigInt> for Int {
     fn eq(&self, rhs: &BigInt) -> bool {
-		let val = self.0;
-		let other = rhs.0;
+        let val = self.0;
+        let other = rhs.0;
 
-		val as i128 == other
-	}
+        val as i128 == other
+    }
 }
 
 impl PartialEq<Byte> for Int {
-	fn eq(&self, rhs: &Byte) -> bool {
-		let val = self.0;
-		let other = rhs.0;
+    fn eq(&self, rhs: &Byte) -> bool {
+        let val = self.0;
+        let other = rhs.0;
 
-		val == other as i32
-	}
+        val == other as i32
+    }
 }
