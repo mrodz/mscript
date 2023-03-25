@@ -2,7 +2,7 @@ use std::fmt::{Debug, Display};
 
 use anyhow::{bail, Result};
 
-use crate::bytecode::variables::{variable, self};
+use crate::{bigint, bool, byte, char, float, int, string};
 
 macro_rules! primitive {
     ($($variant:ident = $type:ty)+) => {
@@ -14,18 +14,18 @@ macro_rules! primitive {
                 impl std::fmt::Debug for $variant {
                     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
                         write!(f, "{}", self.0)
-                    }  
+                    }
                 }
 
                 impl std::fmt::Display for $variant {
                     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
                         write!(f, "{}", self.0)
-                    }  
+                    }
                 }
 
                 impl std::ops::Deref for $variant {
                     type Target = $type;
-                    fn deref(&self) -> &Self::Target { 
+                    fn deref(&self) -> &Self::Target {
                         &self.0
                     }
                 }
@@ -81,12 +81,6 @@ pub trait LooseEq: PartialEq {
     fn eq(&self, other: &Self) -> bool;
 }
 
-// impl LooseEq for Primitive {
-//     fn eq(&self, other: &Self) -> bool {
-    
-//     }
-// }
-
 pub struct Variable {
     pub data: Primitive,
     pub ty: Type,
@@ -116,23 +110,22 @@ impl Variable {
 #[allow(unused)]
 impl Primitive {
     pub fn is_numeric(&self) -> bool {
-        matches!(
-            self,
-            Self::Int(_) | Self::Float(_) | Self::Byte(_) | Self::BigInt(_)
-        )
+        use Type::*;
+
+        matches!(self.ty(), Int | Float | Byte | BigInt)
     }
 
     pub fn is_numeric_coalesce(&self) -> bool {
-        use Primitive::*;
+        use Type::*;
 
-        matches!(self, Bool(_) | Int(_) | Float(_) | Char(_) | Byte(_))
+        matches!(self.ty(), Bool | Int | Float | Char | Byte | BigInt)
     }
 
     pub fn make_str(string: &str) -> Result<Self> {
         let bytes = string.as_bytes();
 
         if let (Some(b'\"'), Some(b'\"')) = (bytes.first(), bytes.last()) {
-            return Ok(Primitive::Str(buckets::Str(string[1..string.len() - 1].to_string())));
+            return Ok(string!(string[1..string.len() - 1].to_string()));
         }
 
         bail!("not a Str")
@@ -145,7 +138,7 @@ impl Primitive {
             let byte =
                 u8::from_str_radix(&string[2..], 2).expect("malformed byte. format: (0b10101010)");
 
-            return Ok(Primitive::Byte(buckets::Byte(byte)));
+            return Ok(byte!(byte));
         }
 
         bail!("not a Byte")
@@ -155,7 +148,7 @@ impl Primitive {
         let bytes = string.as_bytes();
 
         if string.len() == 3 && bytes[0] == b'\'' && bytes[2] == b'\'' {
-            return Ok(Primitive::Char(buckets::Char(bytes[1].into())));
+            return Ok(char!(bytes[1].into()));
         }
 
         bail!("not a Char")
@@ -165,7 +158,7 @@ impl Primitive {
         use std::str::FromStr;
 
         if let Ok(is_f64) = f64::from_str(&string) {
-            return Ok(Primitive::Float(buckets::Float(is_f64)));
+            return Ok(float!(is_f64));
         }
 
         bail!("not a Float")
@@ -175,7 +168,7 @@ impl Primitive {
         use std::str::FromStr;
 
         if let Ok(is_i64) = i32::from_str(&string) {
-            return Ok(Primitive::Int(buckets::Int(is_i64)));
+            return Ok(int!(is_i64));
         }
 
         bail!("not an Int")
@@ -185,7 +178,7 @@ impl Primitive {
         use std::str::FromStr;
 
         if let Ok(is_f64) = i128::from_str(&string) {
-            return Ok(Primitive::BigInt(buckets::BigInt(is_f64)));
+            return Ok(bigint!(is_f64));
         }
 
         bail!("not a BigInt")
@@ -193,8 +186,8 @@ impl Primitive {
 
     pub fn make_bool(string: &str) -> Result<Self> {
         match string {
-            "true" => Ok(Primitive::Bool(buckets::Bool(true))),
-            "false" => Ok(Primitive::Bool(buckets::Bool(false))),
+            "true" => Ok(bool!(true)),
+            "false" => Ok(bool!(false)),
             _ => bail!("not a Bool"),
         }
     }
@@ -279,33 +272,33 @@ pub fn bin_op_result(
     f_fn: BinOp<f64>,
 ) -> Result<Primitive> {
     Ok(match (left, right) {
-        (Primitive::Float(x), Primitive::Float(y)) => Primitive::Float(buckets::Float(f_fn(*x, *y))),
-        (Primitive::Float(x), Primitive::Int(y)) => Primitive::Float(buckets::Float(f_fn(*x, *y as f64))),
-        (Primitive::Int(x), Primitive::Float(y)) => Primitive::Float(buckets::Float(f_fn(*x as f64, *y))),
+        (Primitive::Float(x), Primitive::Float(y)) => float!(f_fn(*x, *y)),
+        (Primitive::Float(x), Primitive::Int(y)) => float!(f_fn(*x, *y as f64)),
+        (Primitive::Int(x), Primitive::Float(y)) => float!(f_fn(*x as f64, *y)),
         (Primitive::Int(x), Primitive::Int(y)) => {
             if let Some(result) = i32_fn(*x, *y) {
-                Primitive::Int(buckets::Int(result))
+                int!(result)
             } else {
                 bail!("could not perform checked integer operation (maybe an overflow, or / by 0)")
             }
         }
         (Primitive::BigInt(x), Primitive::Int(y)) => {
             if let Some(result) = i128_fn(*x, *y as i128) {
-                Primitive::BigInt(buckets::BigInt(result))
+                bigint!(result)
             } else {
                 bail!("could not perform checked integer operation (maybe an overflow, or / by 0)")
             }
         }
         (Primitive::Int(x), Primitive::BigInt(y)) => {
             if let Some(result) = i128_fn(*x as i128, *y) {
-                Primitive::BigInt(buckets::BigInt(result))
+                bigint!(result)
             } else {
                 bail!("could not perform checked integer operation (maybe an overflow, or / by 0)")
             }
         }
         (Primitive::BigInt(x), Primitive::BigInt(y)) => {
             if let Some(result) = i128_fn(*x, *y) {
-                Primitive::BigInt(buckets::BigInt(result))
+                bigint!(result)
             } else {
                 bail!("could not perform checked integer operation (maybe an overflow, or / by 0)")
             }
@@ -316,54 +309,52 @@ pub fn bin_op_result(
 
 #[cfg(test)]
 mod primitives {
+    use super::Primitive;
+    use crate::{bigint, bool, byte, bytecode::variables::buckets, char, float, int, string};
     use std::f64::consts::PI;
-
-    use crate::bytecode::variables::buckets;
-
-    use super::Primitive::{self, *};
 
     #[test]
     fn byte_1() {
         let var = Primitive::from("0b101".to_owned());
-        assert_eq!(var, Byte(buckets::Byte(0b101)));
+        assert_eq!(var, byte!(0b101));
     }
 
     #[test]
     fn byte_2() {
         let var = Primitive::from("0b11111111".to_owned());
-        assert_eq!(var, Byte(buckets::Byte(0b11111111)));
+        assert_eq!(var, byte!(0b11111111));
     }
 
     #[test]
     fn char() {
         let var = Primitive::from("'@'".to_owned());
-        assert_eq!(var, Char(buckets::Char('@')));
+        assert_eq!(var, char!('@'));
     }
 
     #[test]
     fn display() {
-        println!("{}", Byte(buckets::Byte(0b101)));
-        println!("{}", Int(buckets::Int(5)));
-        println!("{}", Float(buckets::Float(PI)));
-        println!("{}", Str(buckets::Str("Hello".into())));
-        println!("{}", Bool(buckets::Bool(false)));
-        println!("{}", Char(buckets::Char('@')));
+        println!("{}", byte!(0b101));
+        println!("{}", int!(5));
+        println!("{}", float!(PI));
+        println!("{}", string!("Hello".into()));
+        println!("{}", bool!(false));
+        println!("{}", char!('@'));
     }
 
     #[test]
     fn is_numeric() {
-        assert!(Byte(buckets::Byte(0b1000)).is_numeric());
-        assert!(Int(buckets::Int(5)).is_numeric());
-        assert!(Float(buckets::Float(3.0 / 2.0)).is_numeric());
-        assert!(BigInt(buckets::BigInt(2147483648)).is_numeric());
-        assert!(!Str(buckets::Str("Hello".into())).is_numeric());
-        assert!(!Bool(buckets::Bool(false)).is_numeric());
-        assert!(!Char(buckets::Char('@')).is_numeric());
+        assert!(byte!(0b1000).is_numeric());
+        assert!(int!(5).is_numeric());
+        assert!(float!(3.0 / 2.0).is_numeric());
+        assert!(bigint!(2147483648).is_numeric());
+        assert!(!string!("Hello".into()).is_numeric());
+        assert!(!bool!(true).is_numeric());
+        assert!(!char!('@').is_numeric());
     }
 
     #[test]
     fn int() {
-        assert_eq!(Primitive::from("2147483647"), Primitive::Int(buckets::Int(i32::MAX)));
-        assert_eq!(Primitive::from("2147483648"), Primitive::BigInt(buckets::BigInt(2147483648)));
+        assert_eq!(Primitive::from("2147483647"), int!(i32::MAX));
+        assert_eq!(Primitive::from("2147483648"), bigint!(2147483648));
     }
 }

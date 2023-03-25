@@ -62,7 +62,7 @@ macro_rules! make_type {
 }
 
 mod implementations {
-    use crate::bytecode::{function::ReturnValue, variables::buckets};
+    use crate::{bytecode::{function::ReturnValue, variables::buckets}, bool};
     use super::*;
 
     instruction! {
@@ -191,6 +191,7 @@ mod implementations {
     make_type!(make_float);
     make_type!(make_char);
     make_type!(make_byte);
+    make_type!(make_bigint);
 
     instruction! {
         printn(ctx, args) {
@@ -307,7 +308,7 @@ mod implementations {
 
             let cmp = first.ty() == second.ty();
 
-            ctx.push(Primitive::Bool(buckets::Bool(cmp)));
+            ctx.push(bool!(cmp));
 
             Ok(())
         }
@@ -320,14 +321,25 @@ mod implementations {
             let first = ctx.pop().unwrap();
             let second = ctx.pop().unwrap();
 
-            let result = dbg!(first) == dbg!(second);
+            let result = first.ty() == second.ty() && first == second;
 
-            ctx.push(Primitive::Bool(buckets::Bool(result)));
+            ctx.push(bool!(result));
 
             Ok(())
         }
 
         equ(ctx=ctx) {
+            if ctx.stack_size() != 2 {
+                bail!("equ requires only 2 items in the local stack")
+            }
+
+            let first = ctx.pop().unwrap();
+            let second = ctx.pop().unwrap();
+
+            let result = first == second;
+
+            ctx.push(bool!(result));
+
             Ok(())
         }
     }
@@ -373,6 +385,7 @@ pub fn query(name: &String) -> InstructionSignature {
         "bin_op" => implementations::bin_op,
         "bool" => implementations::make_bool,
         "string" => implementations::make_str,
+        "bigint" => implementations::make_bigint,
         "int" => implementations::make_int,
         "float" => implementations::make_float,
         "char" => implementations::make_char,
