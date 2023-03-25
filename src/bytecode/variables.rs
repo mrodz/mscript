@@ -1,4 +1,5 @@
 mod variable;
+mod equality;
 
 pub use variable::Primitive;
 pub use variable::buckets;

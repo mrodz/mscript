@@ -321,7 +321,7 @@ mod implementations {
             let first = ctx.pop().unwrap();
             let second = ctx.pop().unwrap();
 
-            let result = first.ty() == second.ty() && first == second;
+            let result = first == second;
 
             ctx.push(bool!(result));
 
@@ -336,7 +336,7 @@ mod implementations {
             let first = ctx.pop().unwrap();
             let second = ctx.pop().unwrap();
 
-            let result = first == second;
+            let result = first.equals(&second)?;
 
             ctx.push(bool!(result));
 

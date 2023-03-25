@@ -1,6 +1,6 @@
 function main
-	int 5
-	float 5
+	byte 0b101
+	byte 0b101
 	equ
 	printn *
 end

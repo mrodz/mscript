@@ -77,10 +77,6 @@ primitive! {
     Byte = u8
 }
 
-pub trait LooseEq: PartialEq {
-    fn eq(&self, other: &Self) -> bool;
-}
-
 pub struct Variable {
     pub data: Primitive,
     pub ty: Type,
@@ -109,6 +105,41 @@ impl Variable {
 
 #[allow(unused)]
 impl Primitive {
+    pub fn equals(&self, rhs: &Self) -> Result<bool> {
+        macro_rules! impl_eq {
+            ($lhs:ident with itself) => {
+                let (Primitive::$lhs(x), Primitive::$lhs(y)) = (self, rhs) else {
+                    bail!("cannot compare {:?} with {:?}", self.ty(), rhs.ty())
+                };
+
+                return Ok(x == y)
+            };
+            ($lhs:ident with $($rhs:ident),+ $(,)?) => {
+                if let Primitive::$lhs(x) = self {
+                    let result = match rhs {
+                        Primitive::$lhs(y) => Ok(x == y),
+                        $(
+                            Primitive::$rhs(y) => Ok(x == y),
+                        )*
+                        _ => bail!("cannot compare {:?} with {:?}", self.ty(), rhs.ty())
+                    };
+
+                    return result;
+                }
+            };
+        }
+
+        impl_eq!(Int with Float, BigInt, Byte);
+        impl_eq!(Float with Int, BigInt, Byte);
+        impl_eq!(BigInt with Float, Int, Byte);
+        impl_eq!(Str with itself);
+        impl_eq!(Byte with itself);
+        impl_eq!(Char with itself);
+        impl_eq!(Bool with itself);
+
+        unreachable!()
+    }
+
     pub fn is_numeric(&self) -> bool {
         use Type::*;
 
