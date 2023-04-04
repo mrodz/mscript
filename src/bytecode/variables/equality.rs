@@ -6,3 +6,4 @@
 mod bigint;
 mod float;
 mod int;
+mod byte;

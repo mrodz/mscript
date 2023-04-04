@@ -134,7 +134,8 @@ impl Primitive {
         impl_eq!(Int with Float, BigInt, Byte);
         impl_eq!(Float with Int, BigInt, Byte);
         impl_eq!(BigInt with Float, Int, Byte);
-        impl_eq!(each Str, Byte, Char, Bool with itself);
+        impl_eq!(Byte with Float, BigInt, Int);
+        impl_eq!(each Str, Char, Bool with itself);
 
         unreachable!()
     }

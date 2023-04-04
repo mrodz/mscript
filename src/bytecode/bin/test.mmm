@@ -1,5 +1,5 @@
 function main
-	byte 0b101
+	int 5
 	byte 0b101
 	equ
 	printn *
