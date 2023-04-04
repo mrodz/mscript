@@ -1,14 +1,12 @@
+use super::context::Ctx;
+use super::function::InstructionExitState;
+use super::stack::{Stack, VariableMapping};
+use super::variables::{bin_op_from, bin_op_result, Primitive};
+use anyhow::{bail, Context, Result};
 use std::cell::Cell;
 use std::fmt::Debug;
 use std::io::{stdin, stdout, Write};
 use std::sync::Arc;
-
-use anyhow::{bail, Context, Result};
-
-use super::file::IfStatement;
-use super::function::{Function, InstructionExitState};
-use super::stack::Stack;
-use super::variables::{bin_op_from, bin_op_result, Primitive, Variable};
 
 pub type InstructionSignature = fn(&mut Ctx, &Vec<String>) -> Result<()>;
 
@@ -61,11 +59,15 @@ macro_rules! make_type {
     };
 }
 
+#[deny(dead_code)]
 mod implementations {
     use super::*;
     use crate::{
         bool,
-        bytecode::{function::ReturnValue, variables::buckets},
+        bytecode::{
+            function::{PrimitiveFunction, ReturnValue},
+            variables::buckets,
+        }, int,
     };
 
     instruction! {
@@ -107,10 +109,12 @@ mod implementations {
                     }
                 }
 
-                println!("\nFunction: {}", ctx.function);
-                println!("\nOperating Stack: {:?}", ctx.stack);
-                println!("\nStack Trace:\n{}", unsafe { (*ctx.call_stack.as_ptr()).to_string() });
-                println!("\nThis Frame's Variables:\n\t{:?}\n", unsafe { (*ctx.call_stack.as_ptr()).get_frame_variables() });
+                let stack = ctx.get_call_stack();
+
+                println!("\nFunction: {}", ctx.owner());
+                println!("\nOperating Stack: {:?}", ctx.get_local_operating_stack());
+                println!("\nStack Trace:\n{}", stack);
+                println!("\nThis Frame's Variables:\n\t{}\n", stack.get_frame_variables());
             }
             println!("======= End Context Dump =======");
 
@@ -148,7 +152,7 @@ mod implementations {
 
     instruction! {
         void(ctx=ctx) {
-            ctx.stack.clear();
+            ctx.clear_stack();
             Ok(())
         }
     }
@@ -195,6 +199,7 @@ mod implementations {
     make_type!(make_char);
     make_type!(make_byte);
     make_type!(make_bigint);
+    make_type!(make_function);
 
     instruction! {
         printn(ctx, args) {
@@ -203,12 +208,12 @@ mod implementations {
             };
 
             if arg == "*" {
-                let Some(first) = ctx.stack.first() else {
+                let Some(first) = ctx.get_nth_op_item(0) else {
                     return Ok(())
                 };
 
                 print!("{first}");
-                for var in &ctx.stack[1..] {
+                for var in &ctx.get_local_operating_stack()[1..] {
                     print!(", {var}");
                 }
 
@@ -217,11 +222,9 @@ mod implementations {
                 return Ok(());
             }
 
-            let Ok(arg) = usize::from_str_radix(arg, 10) else {
-                bail!("expected 1 parameter of type __rust__::usize");
-            };
+            let arg = usize::from_str_radix(arg, 10)?;
 
-            println!("{:?}", ctx.stack.get(arg));
+            println!("{:?}", ctx.get_nth_op_item(arg));
 
             Ok(())
         }
@@ -230,16 +233,50 @@ mod implementations {
     instruction! {
         call(ctx, args) {
             let Some(first) = args.first() else {
-                bail!("expected one argument");
-            };
+                let last = ctx.pop();
 
-            ctx.add_frame(first.to_string());
+                let Some(Primitive::Function(f)) = last else {
+                    bail!("missing argument, and the last item in the local stack {last:?} is not a function.")
+                };
+
+                let f: &PrimitiveFunction = &*f;
+
+                ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
+                    destination_label: f.location.clone(),
+                    caller: None,
+                    stack: ctx.arced_call_stack().clone(),
+                    arguments: ctx.get_local_operating_stack(),
+                }));
+
+                ctx.clear_stack();
+
+                return Ok(())
+            };
 
             ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                 destination_label: first.clone(),
                 caller: None,
-                stack: ctx.call_stack.clone()
+                stack: ctx.arced_call_stack().clone(),
+                arguments: ctx.get_local_operating_stack(),
             }));
+
+            ctx.clear_stack();
+
+            Ok(())
+        }
+
+        arg(ctx, args) {
+            let Some(first) = args.first() else {
+                bail!("expected one argument")
+            };
+
+            let n = usize::from_str_radix(first, 10)?;
+
+            let Some(nth_arg) = ctx.nth_arg(n) else {
+                bail!("#{n} argument does not exist (range 0..{})", ctx.argc())
+            };
+
+            ctx.push(nth_arg.clone()); // 4/4/2023: why do we need to clone here? maybe re-work this.
 
             Ok(())
         }
@@ -247,7 +284,7 @@ mod implementations {
 
     instruction! {
         stack_size(ctx=ctx) {
-            let size = Primitive::Int(buckets::Int(ctx.frames_count().try_into()?));
+            let size = int!(ctx.frames_count().try_into()?);
             ctx.push(size);
 
             Ok(())
@@ -277,7 +314,7 @@ mod implementations {
             };
 
             let Some(var) = ctx.load_variable(&name) else {
-                bail!("load before store ({name})")
+                bail!("load before store (`{name}` not in scope)")
             };
 
             ctx.push(var.data.clone());
@@ -291,7 +328,7 @@ mod implementations {
             };
 
             let Some(var) = ctx.load_local(&name) else {
-                bail!("load before local store ({name})")
+                bail!("load before store (`{name}` not in this stack frame)")
             };
 
             ctx.push(var.data.clone());
@@ -354,7 +391,7 @@ mod implementations {
             }
 
             let item = ctx.pop().unwrap();
-            ctx.stack.clear();
+            ctx.clear_stack();
 
             let Primitive::Bool(b) = item else {
                 bail!("if statement can only test booleans")
@@ -393,6 +430,7 @@ pub fn query(name: &String) -> InstructionSignature {
         "float" => implementations::make_float,
         "char" => implementations::make_char,
         "byte" => implementations::make_byte,
+        "make_function" => implementations::make_function,
         "void" => implementations::void,
         "breakpoint" => implementations::breakpoint,
         "ret" => implementations::ret,
@@ -408,6 +446,7 @@ pub fn query(name: &String) -> InstructionSignature {
         "endif" => implementations::endif_stmt,
         "strict_equ" => implementations::strict_equ,
         "equ" => implementations::equ,
+        "arg" => implementations::arg,
         _ => unreachable!("unknown bytecode instruction ({name})"),
     }
 }
@@ -522,90 +561,12 @@ pub struct JumpRequest {
     pub destination_label: String,
     pub caller: Option<fn() -> String>,
     pub stack: Arc<Cell<Stack>>,
+    pub arguments: Vec<Primitive>,
 }
 
 impl Debug for JumpRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "goto {}", self.destination_label)
-    }
-}
-
-pub struct Ctx<'a> {
-    stack: Vec<Primitive>,
-    function: &'a Function,
-    call_stack: Arc<Cell<Stack>>,
-    pub active_if_stmts: Vec<(IfStatement, bool)>,
-    exit_state: InstructionExitState,
-}
-
-impl Debug for Ctx<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Ctx")
-    }
-}
-
-impl<'a> Ctx<'a> {
-    pub fn new(function: &'a Function, call_stack: Arc<Cell<Stack>>) -> Self {
-        Self {
-            stack: vec![],
-            active_if_stmts: vec![],
-            function,
-            call_stack,
-            exit_state: InstructionExitState::NoExit,
-        }
-    }
-
-    pub(crate) fn signal(&mut self, exit_state: InstructionExitState) {
-        self.exit_state = exit_state;
-    }
-
-    pub(crate) fn poll(&self) -> &InstructionExitState {
-        &self.exit_state
-    }
-
-    pub(crate) fn clear_signal(&mut self) {
-        self.exit_state = InstructionExitState::NoExit;
-    }
-
-    pub(crate) fn add_frame(&self, label: String) {
-        unsafe { (*self.call_stack.as_ptr()).extend(label) }
-    }
-
-    pub(crate) fn frames_count(&self) -> usize {
-        unsafe { (*self.call_stack.as_ptr()).size() }
-    }
-
-    pub(crate) fn clear_stack(&mut self) {
-        self.stack.clear();
-    }
-
-    pub(crate) fn clear_and_set_stack(&mut self, var: Primitive) {
-        self.stack.clear();
-        self.stack.push(var);
-    }
-
-    pub(crate) fn stack_size(&self) -> usize {
-        self.stack.len()
-    }
-
-    pub(crate) fn push(&mut self, var: Primitive) {
-        self.stack.push(var);
-    }
-
-    pub(crate) fn pop(&mut self) -> Option<Primitive> {
-        self.stack.pop()
-    }
-
-    pub(crate) fn register_variable(&self, name: String, var: Primitive) {
-        unsafe { (*self.call_stack.as_ptr()).register_variable(name, var) }
-    }
-
-    pub(crate) fn load_variable(&self, name: &String) -> Option<&Variable> {
-        unsafe { (*self.call_stack.as_ptr()).find_name(name) }
-    }
-
-    pub(crate) fn load_local(&self, name: &String) -> Option<&Variable> {
-        unsafe { (*self.call_stack.as_ptr()).get_frame_variables().get(name) }
     }
 }
 

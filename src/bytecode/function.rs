@@ -3,25 +3,62 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::io::{stdout, BufRead, BufReader, Seek, SeekFrom, Write};
 use std::ops::{Index, IndexMut};
+use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 
+use crate::bytecode::context::Ctx;
 use crate::bytecode::file::get_line_number_from_pos;
 use crate::bytecode::instruction;
 
 use super::attributes_parser::Attributes;
 use super::file::IfStatement;
-use super::instruction::{run_instruction, Ctx, Instruction, JumpRequest};
-use super::stack::Stack;
+use super::instruction::{run_instruction, Instruction, JumpRequest};
+use super::stack::{Stack, VariableMapping};
 use super::variables::Primitive;
 use super::MScriptFile;
+
+#[derive(Debug, Clone)]
+pub struct PrimitiveFunction {
+    pub location: String,
+    pub callback_state: Option<Arc<VariableMapping>>,
+}
+
+impl PrimitiveFunction {
+    pub(crate) fn new(path: String, callback_state: Option<Arc<VariableMapping>>) -> Result<Self> {
+        let path_no_function = path.trim_end_matches(|c| c != '#');
+        if !Path::exists(&Path::new(&path_no_function[..path_no_function.len() - 1])) {
+            bail!("path does not exist ({path_no_function})")
+        }
+        
+        Ok(Self { location: path, callback_state })
+    }
+}
+
+impl PartialOrd for PrimitiveFunction {
+    fn partial_cmp(&self, _other: &Self) -> Option<std::cmp::Ordering> {
+        unimplemented!()
+    }
+}
+
+impl PartialEq for PrimitiveFunction {
+    fn eq(&self, other: &Self) -> bool {
+        self.location == other.location
+    }
+}
+
+impl Display for PrimitiveFunction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "function {}()", self.location)
+    }
+}
 
 pub struct Function {
     pub location: Arc<RefCell<MScriptFile>>,
     line_number: u32,
     pub(crate) seek_pos: u64,
-    attributes: Vec<Attributes>,
+    pub(crate) attributes: Vec<Attributes>,
     name: String,
 }
 
@@ -70,7 +107,7 @@ impl Display for Function {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum InstructionExitState {
     ReturnValue(ReturnValue),
     JumpRequest(JumpRequest),
@@ -105,17 +142,18 @@ impl<'a> Function {
     fn run_and_ret<'b>(
         context: &mut Ctx<'a>,
         instruction: &Instruction,
-    ) -> Result<&'b InstructionExitState> {
+    ) -> Result<InstructionExitState> {
         run_instruction(context, instruction).with_context(|| {
             let _ = stdout().flush();
             format!("failed to run instruction")
         })?;
 
-        let r#ref = unsafe {
-            (context.poll() as *const InstructionExitState)
-                .as_ref()
-                .unwrap()
-        };
+        // let r#ref = unsafe {
+        //     (context.poll() as *const InstructionExitState)
+        //         .as_ref()
+        //         .unwrap()
+        // };
+        let r#ref = context.poll();
 
         Ok(r#ref)
     }
@@ -126,8 +164,9 @@ impl<'a> Function {
 
     pub fn run(
         &mut self,
+        args: Vec<Primitive>,
         current_frame: Arc<Cell<Stack>>,
-        jump_callback: &mut impl FnMut(&JumpRequest) -> Result<ReturnValue>,
+        jump_callback: &mut impl FnMut(JumpRequest) -> Result<ReturnValue>,
     ) -> Result<ReturnValue> {
         {
             unsafe {
@@ -144,7 +183,7 @@ impl<'a> Function {
 
         assert_eq!(pos, self.seek_pos);
 
-        let mut context = Ctx::new(&self, current_frame.clone());
+        let mut context = Ctx::new(&self, current_frame.clone(), args);
 
         let mut line_number = self.line_number + 2;
 
@@ -178,7 +217,7 @@ impl<'a> Function {
                         break 'function_run;
                     }
                     InstructionExitState::JumpRequest(jump_request) => {
-                        let result = jump_callback(&jump_request)?;
+                        let result = jump_callback(jump_request)?;
 
                         if let Some(primitive) = result.0 {
                             context.push(primitive)
@@ -196,7 +235,7 @@ impl<'a> Function {
 
                         let next = *if_stmt.next_pos();
 
-                        context.active_if_stmts.push((if_stmt, *used));
+                        context.active_if_stmts.push((if_stmt, used));
 
                         if !used {
                             reader.seek(SeekFrom::Start(next))?;
@@ -250,7 +289,6 @@ pub struct Functions {
     pub if_mapper: HashMap<u64, IfStatement>,
 }
 
-#[allow(unused)]
 impl<'a> Functions {
     pub fn get(&self, signature: &str) -> Result<&Function> {
         let Some(result) = self.map.get(signature) else {

@@ -11,10 +11,10 @@ impl Display for VariableMapping {
         let mut result = vec![];
 
         for (key, value) in self.0.iter() {
-            result.push(format!("{key}: {}", value));
+            result.push(format!("{key} = {}", value));
         }
 
-        write!(f, "{result:?}")
+        write!(f, "{}", result.iter().fold("".to_owned(), |x, y| x + "\r\n" + y))
     }
 }
 
@@ -38,7 +38,6 @@ impl Stack {
         Self(vec![])
     }
 
-    #[allow(unused)]
     pub fn get_frame_label(&self) -> &String {
         &self.0.last().expect("nothing in the stack").label
     }
@@ -88,10 +87,10 @@ impl Display for Stack {
             return write!(f, "<Empty Stack>")
         };
 
-        write!(f, "\t>> {} {:?}", first.label, first.variables)?; // print the cause first
+        write!(f, "\t>> {}", first.label)?; // print the cause first
 
         for stack_frame in self.0[..self.size() - 1].iter().rev() {
-            write!(f, "\r\n\t ^ {} {:?}", stack_frame.label, first.variables)?;
+            write!(f, "\r\n\t ^ {}", stack_frame.label)?;
         }
 
         Ok(())

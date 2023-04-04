@@ -1,5 +1,5 @@
 #![feature(box_patterns)]
-#![feature(try_blocks)]
+#![allow(dead_code)]
 
 extern crate pest_consume;
 extern crate pest_derive;

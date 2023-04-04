@@ -1,6 +1,13 @@
 function main
 	int 5
-	byte 0b101
-	equ
-	printn *
+	int 10
+	call src/bytecode/bin/test.mmm#add_numbers
+	stack_dump
+end
+
+function add_numbers
+	arg 0
+	arg 1
+	bin_op +
+	ret
 end

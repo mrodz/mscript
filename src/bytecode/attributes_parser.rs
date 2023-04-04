@@ -1,5 +1,8 @@
 use anyhow::{bail, Result};
-use std::{borrow::Cow, collections::HashMap, fmt::Display, ops::Index};
+use std::borrow::Cow;
+use std::collections::HashMap;
+use std::fmt::Display;
+use std::ops::Index;
 
 #[derive(Debug)]
 pub struct Attributes {

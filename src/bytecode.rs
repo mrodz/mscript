@@ -4,6 +4,7 @@ mod function;
 mod instruction;
 pub mod interpreter;
 mod stack;
+mod context;
 
 pub use file::MScriptFile;
 pub use stack::Stack;

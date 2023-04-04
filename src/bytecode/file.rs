@@ -12,6 +12,7 @@ use crate::bytecode::function::Function;
 use super::function::{Functions, ReturnValue};
 use super::instruction::JumpRequest;
 use super::Stack;
+use super::variables::Primitive;
 
 // pub trait Location: AsRef<Path> + Display + Debug {}
 
@@ -87,13 +88,14 @@ impl MScriptFile {
         &mut self,
         name: &str,
         stack: Arc<Cell<Stack>>,
-        jump_callback: &mut impl FnMut(&JumpRequest) -> Result<ReturnValue>,
+        args: Vec<Primitive>,
+        jump_callback: &mut impl FnMut(JumpRequest) -> Result<ReturnValue>,
     ) -> Result<ReturnValue> {
         let Some(function) = self.get_function(name) else {
 			bail!("could not find function (missing `{name}`)")
 		};
 
-        function.run(stack, jump_callback)
+        function.run(args, stack, jump_callback)
     }
 
     fn get_functions(arc_of_self: &Arc<RefCell<Self>>) -> Result<Functions> {
