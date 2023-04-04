@@ -1,15 +1,14 @@
-use std::fmt::{Debug, Display};
-
+use crate::bytecode::function::PrimitiveFunction;
+use crate::{bigint, bool, byte, char, float, function, int, string};
 use anyhow::{bail, Result};
-
-use crate::{bigint, bool, byte, char, float, int, string};
+use std::fmt::{Debug, Display};
 
 macro_rules! primitive {
     ($($variant:ident = $type:ty)+) => {
         pub mod buckets {
             $(
                 #[derive(PartialEq, PartialOrd, Clone)]
-                pub struct $variant(pub(in crate) $type);
+                pub struct $variant(pub(crate) $type);
 
                 impl std::fmt::Debug for $variant {
                     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
@@ -55,7 +54,6 @@ macro_rules! primitive {
                 }
             }
 
-            #[allow(unused)]
             pub fn raw_size(&self) -> usize {
                 match self {
                     $(
@@ -75,6 +73,7 @@ primitive! {
     Float = f64
     Char = char
     Byte = u8
+    Function = crate::bytecode::variables::variable::PrimitiveFunction
 }
 
 pub struct Variable {
@@ -103,7 +102,6 @@ impl Variable {
     }
 }
 
-#[allow(unused)]
 impl Primitive {
     pub fn equals(&self, rhs: &Self) -> Result<bool> {
         macro_rules! impl_eq {
@@ -135,9 +133,8 @@ impl Primitive {
         impl_eq!(Float with Int, BigInt, Byte);
         impl_eq!(BigInt with Float, Int, Byte);
         impl_eq!(Byte with Float, BigInt, Int);
-        impl_eq!(each Str, Char, Bool with itself);
 
-        unreachable!()
+        impl_eq!(each Str, Char, Bool with itself);
     }
 
     pub fn is_numeric(&self) -> bool {
@@ -222,6 +219,10 @@ impl Primitive {
             _ => bail!("not a Bool"),
         }
     }
+
+    pub fn make_function(string: &str) -> Result<Self> {
+        Ok(function!(PrimitiveFunction::new(string.into(), None)?))
+    }
 }
 
 impl Display for Primitive {
@@ -236,6 +237,7 @@ impl Display for Primitive {
             Float(n) => write!(f, "{n}"),
             Char(c) => write!(f, "{c}"),
             Byte(b) => write!(f, "0b{:b}", **b),
+            Function(fun) => write!(f, "{fun}"),
         }
     }
 }
