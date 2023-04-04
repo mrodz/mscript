@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::io::{stdout, BufRead, BufReader, Seek, SeekFrom, Write};
 use std::ops::{Index, IndexMut};
+use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
@@ -13,15 +14,50 @@ use crate::bytecode::instruction;
 use super::attributes_parser::Attributes;
 use super::file::IfStatement;
 use super::instruction::{run_instruction, Ctx, Instruction, JumpRequest};
-use super::stack::Stack;
+use super::stack::{Stack, VariableMapping};
 use super::variables::Primitive;
 use super::MScriptFile;
+
+#[derive(Debug, Clone)]
+pub struct PrimitiveFunction {
+    pub location: String,
+    pub callback_state: Option<Arc<VariableMapping>>,
+}
+
+impl PrimitiveFunction {
+    pub(crate) fn new(path: String, callback_state: Option<Arc<VariableMapping>>) -> Result<Self> {
+        let path_no_function = path.trim_end_matches(|c| c != '#');
+        if !Path::exists(&Path::new(&path_no_function[..path_no_function.len() - 1])) {
+            bail!("path does not exist ({path_no_function})")
+        }
+        
+        Ok(Self { location: path, callback_state })
+    }
+}
+
+impl PartialOrd for PrimitiveFunction {
+    fn partial_cmp(&self, _other: &Self) -> Option<std::cmp::Ordering> {
+        unimplemented!()
+    }
+}
+
+impl PartialEq for PrimitiveFunction {
+    fn eq(&self, other: &Self) -> bool {
+        self.location == other.location
+    }
+}
+
+impl Display for PrimitiveFunction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "function {}()", self.location)
+    }
+}
 
 pub struct Function {
     pub location: Arc<RefCell<MScriptFile>>,
     line_number: u32,
     pub(crate) seek_pos: u64,
-    attributes: Vec<Attributes>,
+    pub(crate) attributes: Vec<Attributes>,
     name: String,
 }
 
@@ -250,7 +286,6 @@ pub struct Functions {
     pub if_mapper: HashMap<u64, IfStatement>,
 }
 
-#[allow(unused)]
 impl<'a> Functions {
     pub fn get(&self, signature: &str) -> Result<&Function> {
         let Some(result) = self.map.get(signature) else {

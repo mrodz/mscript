@@ -1,6 +1,45 @@
-function main
-	int 5
-	byte 0b101
-	equ
+function time
+	int 500007
+	ret
+end
+
+function time2
+	int 500019
+	ret
+end
+
+#[callback=""]
+function time_it$0
+	make_function src/bytecode/bin/test.mmm#time
+	call
+	store start
+
+	load callback
 	printn *
+	void
+	# simulates calling it
+
+	make_function src/bytecode/bin/test.mmm#time2
+	call
+	store end
+
+	load_local end
+	load_local start
+
+	bin_op -
+
+	string "is how many ms it took"
+	printn *
+end
+
+function time_it
+	string "this is the callback function()"
+	store callback
+	make_function src/bytecode/bin/test.mmm#time_it$0
+	call
+end
+
+function main
+	make_function src/bytecode/bin/test.mmm#time_it 
+	call
 end

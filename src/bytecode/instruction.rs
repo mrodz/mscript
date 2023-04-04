@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 
+use super::attributes_parser::Attributes;
 use super::file::IfStatement;
 use super::function::{Function, InstructionExitState};
 use super::stack::Stack;
@@ -65,7 +66,7 @@ mod implementations {
     use super::*;
     use crate::{
         bool,
-        bytecode::{function::ReturnValue, variables::buckets},
+        bytecode::{function::{ReturnValue, PrimitiveFunction}, variables::buckets},
     };
 
     instruction! {
@@ -110,7 +111,7 @@ mod implementations {
                 println!("\nFunction: {}", ctx.function);
                 println!("\nOperating Stack: {:?}", ctx.stack);
                 println!("\nStack Trace:\n{}", unsafe { (*ctx.call_stack.as_ptr()).to_string() });
-                println!("\nThis Frame's Variables:\n\t{:?}\n", unsafe { (*ctx.call_stack.as_ptr()).get_frame_variables() });
+                println!("\nThis Frame's Variables:\n\t{}\n", unsafe { (*ctx.call_stack.as_ptr()).get_frame_variables() });
             }
             println!("======= End Context Dump =======");
 
@@ -195,6 +196,7 @@ mod implementations {
     make_type!(make_char);
     make_type!(make_byte);
     make_type!(make_bigint);
+    make_type!(make_function);
 
     instruction! {
         printn(ctx, args) {
@@ -230,10 +232,22 @@ mod implementations {
     instruction! {
         call(ctx, args) {
             let Some(first) = args.first() else {
-                bail!("expected one argument");
-            };
+                let last = ctx.pop();
 
-            ctx.add_frame(first.to_string());
+                let Some(Primitive::Function(f)) = last else {
+                    bail!("missing argument, and the last item in the local stack {last:?} is not a function.")
+                };
+
+                let f: &PrimitiveFunction = &*f;
+
+                ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
+                    destination_label: f.location.clone(),
+                    caller: None,
+                    stack: ctx.call_stack.clone()
+                }));
+
+                return Ok(())
+            };
 
             ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                 destination_label: first.clone(),
@@ -277,7 +291,7 @@ mod implementations {
             };
 
             let Some(var) = ctx.load_variable(&name) else {
-                bail!("load before store ({name})")
+                bail!("load before store (`{name}` not in scope)")
             };
 
             ctx.push(var.data.clone());
@@ -291,7 +305,7 @@ mod implementations {
             };
 
             let Some(var) = ctx.load_local(&name) else {
-                bail!("load before local store ({name})")
+                bail!("load before store (`{name}` not in this stack frame)")
             };
 
             ctx.push(var.data.clone());
@@ -393,6 +407,7 @@ pub fn query(name: &String) -> InstructionSignature {
         "float" => implementations::make_float,
         "char" => implementations::make_char,
         "byte" => implementations::make_byte,
+        "make_function" => implementations::make_function,
         "void" => implementations::void,
         "breakpoint" => implementations::breakpoint,
         "ret" => implementations::ret,
@@ -553,6 +568,10 @@ impl<'a> Ctx<'a> {
             call_stack,
             exit_state: InstructionExitState::NoExit,
         }
+    }
+
+    pub fn get_attributes(&self) -> &Vec<Attributes> {
+        &self.function.attributes
     }
 
     pub(crate) fn signal(&mut self, exit_state: InstructionExitState) {

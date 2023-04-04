@@ -150,6 +150,15 @@ See `constexpr`.
 
 ---
 
+### `make_function ! [path_to_function]`
+Make a function "pointer", from a path.
+
+| ! | Reason |
+| - | - |
+| 1 | Path minus the function name does not exist |
+
+---
+
 ### `void`
 Void all items in the local stack. In other words, it removes all items loaded in the stack.
 
@@ -178,8 +187,11 @@ Return from a function. The caller will have access to the single variable in th
 
 ---
 
-### `call ! [path]`
-Sends a request to call a function, given a path.   
+### `call ! [[path]?]`
+Sends a request to call a function, given a path.
+
+* If explicitly passed a path as an argument, the interpreter will immediately signal a jump request.
+* Otherwise, will look at the last item on the local stack. If it is a function, will send a jump request.
 
 If the file has not yet been loaded, will open the file and save a its handle. Otherwise, it will look at cached files and use that content. Files are cached on program startup.
 
@@ -187,8 +199,9 @@ If the interpreter accepts the request, and calling the function returns a value
 
 | ! | Reason |
 | - | - |
-| 1 | Argument length != 1. |
-| 2 | (_Indirect_) If the request to jump is accepted and the path is malformed. |
+| 1 | Argument length != 1 and there are no items in the local stack. |
+| 2 | Attempting to call an item on the local stack that is not a function. |
+| 3 | (_Indirect_) If the request to jump is accepted and the path is malformed. |
 
 ---
 

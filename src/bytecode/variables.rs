@@ -7,7 +7,6 @@ pub use variable::buckets;
 pub use variable::Primitive;
 pub use variable::Variable;
 
-#[allow(unused_imports)]
 pub mod primitive_shorthands {
     #[macro_export]
     macro_rules! string {
@@ -58,10 +57,10 @@ pub mod primitive_shorthands {
         };
     }
 
-    pub(in crate::bytecode) use bigint;
-    pub(in crate::bytecode) use bool;
-    pub(in crate::bytecode) use byte;
-    pub(in crate::bytecode) use char;
-    pub(in crate::bytecode) use float;
-    pub(in crate::bytecode) use int;
+    #[macro_export]
+    macro_rules! function {
+        ($data:expr) => {
+            Primitive::Function(buckets::Function($data))
+        };
+    }
 }
