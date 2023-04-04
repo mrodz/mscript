@@ -107,12 +107,14 @@ impl Variable {
 impl Primitive {
     pub fn equals(&self, rhs: &Self) -> Result<bool> {
         macro_rules! impl_eq {
-            ($lhs:ident with itself) => {
-                let (Primitive::$lhs(x), Primitive::$lhs(y)) = (self, rhs) else {
-                    bail!("cannot compare {:?} with {:?}", self.ty(), rhs.ty())
-                };
+            (each $($lhs_and_rhs:ident),+ $(,)? with itself) => {
+                match (self, rhs) {
+                    $(
+                        (Primitive::$lhs_and_rhs(x), Primitive::$lhs_and_rhs(y)) => return Ok(x == y),
+                    )*
+                    _ => bail!("cannot compare {:?} with {:?}", self.ty(), rhs.ty())
 
-                return Ok(x == y)
+                }
             };
             ($lhs:ident with $($rhs:ident),+ $(,)?) => {
                 if let Primitive::$lhs(x) = self {
@@ -132,10 +134,7 @@ impl Primitive {
         impl_eq!(Int with Float, BigInt, Byte);
         impl_eq!(Float with Int, BigInt, Byte);
         impl_eq!(BigInt with Float, Int, Byte);
-        impl_eq!(Str with itself);
-        impl_eq!(Byte with itself);
-        impl_eq!(Char with itself);
-        impl_eq!(Bool with itself);
+        impl_eq!(each Str, Byte, Char, Bool with itself);
 
         unreachable!()
     }
