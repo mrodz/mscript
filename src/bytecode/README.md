@@ -252,6 +252,27 @@ Closes an `if` instruction, then clears the local stack.
 
 | ! | Reason |
 | - | - |
-| 1 | *panics!* The interpreter determines this `endif` instruction is not contained within an `if` context.
+| 1 | *panics!* The interpreter determines this `endif` instruction is not contained within an `if` context. |
+
+---
+
+### `strict_equ ! (==2)`
+Test equality on two items on the local stack. 
+* Two items are equal if they are of the same type and share the same value.
+
+| ! | Reason |
+| - | - |
+| 1 | Local stack size is != 2. |
+
+---
+
+### `equ ! (==2)`
+Test equality on two items on the local stack. 
+* Two items are equal if they share the same value. This check transcends type bounds, ie. 0b101 == 5i32 == 5.0000 == 5i128.
+
+| ! | Reason |
+| - | - |
+| 1 | Local stack size is != 2. |
+| 2 | Invalid comparison, ie. String with Int |
 
 ---
