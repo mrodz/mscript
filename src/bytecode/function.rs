@@ -8,12 +8,13 @@ use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 
+use crate::bytecode::context::Ctx;
 use crate::bytecode::file::get_line_number_from_pos;
 use crate::bytecode::instruction;
 
 use super::attributes_parser::Attributes;
 use super::file::IfStatement;
-use super::instruction::{run_instruction, Ctx, Instruction, JumpRequest};
+use super::instruction::{run_instruction, Instruction, JumpRequest};
 use super::stack::{Stack, VariableMapping};
 use super::variables::Primitive;
 use super::MScriptFile;
@@ -106,7 +107,7 @@ impl Display for Function {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum InstructionExitState {
     ReturnValue(ReturnValue),
     JumpRequest(JumpRequest),
@@ -141,17 +142,18 @@ impl<'a> Function {
     fn run_and_ret<'b>(
         context: &mut Ctx<'a>,
         instruction: &Instruction,
-    ) -> Result<&'b InstructionExitState> {
+    ) -> Result<InstructionExitState> {
         run_instruction(context, instruction).with_context(|| {
             let _ = stdout().flush();
             format!("failed to run instruction")
         })?;
 
-        let r#ref = unsafe {
-            (context.poll() as *const InstructionExitState)
-                .as_ref()
-                .unwrap()
-        };
+        // let r#ref = unsafe {
+        //     (context.poll() as *const InstructionExitState)
+        //         .as_ref()
+        //         .unwrap()
+        // };
+        let r#ref = context.poll();
 
         Ok(r#ref)
     }
@@ -162,8 +164,9 @@ impl<'a> Function {
 
     pub fn run(
         &mut self,
+        args: Vec<Primitive>,
         current_frame: Arc<Cell<Stack>>,
-        jump_callback: &mut impl FnMut(&JumpRequest) -> Result<ReturnValue>,
+        jump_callback: &mut impl FnMut(JumpRequest) -> Result<ReturnValue>,
     ) -> Result<ReturnValue> {
         {
             unsafe {
@@ -180,7 +183,7 @@ impl<'a> Function {
 
         assert_eq!(pos, self.seek_pos);
 
-        let mut context = Ctx::new(&self, current_frame.clone());
+        let mut context = Ctx::new(&self, current_frame.clone(), args);
 
         let mut line_number = self.line_number + 2;
 
@@ -214,7 +217,7 @@ impl<'a> Function {
                         break 'function_run;
                     }
                     InstructionExitState::JumpRequest(jump_request) => {
-                        let result = jump_callback(&jump_request)?;
+                        let result = jump_callback(jump_request)?;
 
                         if let Some(primitive) = result.0 {
                             context.push(primitive)
@@ -232,7 +235,7 @@ impl<'a> Function {
 
                         let next = *if_stmt.next_pos();
 
-                        context.active_if_stmts.push((if_stmt, *used));
+                        context.active_if_stmts.push((if_stmt, used));
 
                         if !used {
                             reader.seek(SeekFrom::Start(next))?;

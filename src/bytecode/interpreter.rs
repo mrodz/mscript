@@ -61,7 +61,7 @@ impl Program {
 
     fn process_jump_request(
         arc_of_self: Arc<Cell<Self>>,
-        request: &JumpRequest,
+        request: JumpRequest,
     ) -> Result<ReturnValue> {
         let mut last_hash = 0;
 
@@ -87,7 +87,7 @@ impl Program {
         let file = Self::get_file(arc_of_self.clone(), &path)?;
 
         let return_value = unsafe {
-            (*file.as_ptr()).run_function(symbol, Arc::clone(&request.stack), &mut |req| {
+            (*file.as_ptr()).run_function(symbol, Arc::clone(&request.stack), request.arguments, &mut |req| {
                 Self::process_jump_request(arc_of_self.clone(), req)
             })?
         };
@@ -107,7 +107,7 @@ impl Program {
         // since `entrypoint` will not have been dropped during subsequent calls to
         // borrow_mut().
         unsafe {
-            (*entrypoint.as_ptr()).run_function("main", stack, &mut |req| {
+            (*entrypoint.as_ptr()).run_function("main", stack, vec![], &mut |req| {
                 Self::process_jump_request(arc_of_self.clone(), req)
             })?;
         }
