@@ -1,4 +1,4 @@
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
@@ -9,12 +9,7 @@ use anyhow::{bail, Context, Result};
 use crate::bytecode::attributes_parser::{parse_attributes, Attributes};
 use crate::bytecode::function::Function;
 
-use super::function::{Functions, ReturnValue};
-use super::instruction::JumpRequest;
-use super::Stack;
-use super::variables::Primitive;
-
-// pub trait Location: AsRef<Path> + Display + Debug {}
+use super::function::Functions;
 
 pub struct MScriptFile {
     pub(crate) path: Arc<String>,
@@ -82,20 +77,6 @@ impl MScriptFile {
         };
 
         functions.if_mapper.get(&if_pos).map(|x| x.clone())
-    }
-
-    pub fn run_function(
-        &mut self,
-        name: &str,
-        stack: Arc<Cell<Stack>>,
-        args: Vec<Primitive>,
-        jump_callback: &mut impl FnMut(JumpRequest) -> Result<ReturnValue>,
-    ) -> Result<ReturnValue> {
-        let Some(function) = self.get_function(name) else {
-			bail!("could not find function (missing `{name}`)")
-		};
-
-        function.run(args, stack, jump_callback)
     }
 
     fn get_functions(arc_of_self: &Arc<RefCell<Self>>) -> Result<Functions> {
@@ -206,10 +187,7 @@ impl MScriptFile {
 
         let functions = Self::get_functions(&new_uninit)?;
 
-        {
-            // scoped to ensure the mutable reference is dropped before returning.
-            new_uninit.borrow_mut().functions = Some(functions);
-        }
+        new_uninit.borrow_mut().functions = Some(functions);
 
         Ok(new_uninit)
     }

@@ -1,13 +1,35 @@
-function main
-	int 5
-	int 10
-	call src/bytecode/bin/test.mmm#add_numbers
-	stack_dump
+function add_n$0
+	arg 0
+	store x
+
+	load_callback number
+	load_local x
+
+	bin_op +
+
+	ret
 end
 
-function add_numbers
+function add_n
 	arg 0
-	arg 1
-	bin_op +
+	store number
+
+	make_function src/bytecode/bin/test.mmm#add_n$0 number
+
+	ret
+end
+
+function main
+	int 50
+	call src/bytecode/bin/test.mmm#add_n
+	store add_fifty
+
+	int 75
+	load add_fifty
+	call
+
+	printn *
+
+	void
 	ret
 end

@@ -4,7 +4,7 @@ use std::fmt::{Debug, Display};
 use super::variables::{Primitive, Variable};
 
 #[derive(Default, Debug)]
-pub struct VariableMapping(HashMap<String, Variable>);
+pub struct VariableMapping(pub HashMap<String, Variable>);
 
 impl Display for VariableMapping {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -14,7 +14,11 @@ impl Display for VariableMapping {
             result.push(format!("{key} = {}", value));
         }
 
-        write!(f, "{}", result.iter().fold("".to_owned(), |x, y| x + "\r\n" + y))
+        write!(
+            f,
+            "{}",
+            result.iter().fold("".to_owned(), |x, y| x + "\r\n" + y)
+        )
     }
 }
 

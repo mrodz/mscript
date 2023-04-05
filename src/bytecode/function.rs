@@ -26,13 +26,26 @@ pub struct PrimitiveFunction {
 }
 
 impl PrimitiveFunction {
-    pub(crate) fn new(path: String, callback_state: Option<Arc<VariableMapping>>) -> Result<Self> {
+    pub(crate) fn new(path: String, callback_state: Option<Arc<VariableMapping>>) -> Self {
+        Self {
+            location: path,
+            callback_state,
+        }
+    }
+
+    pub(crate) fn try_new(
+        path: String,
+        callback_state: Option<Arc<VariableMapping>>,
+    ) -> Result<Self> {
         let path_no_function = path.trim_end_matches(|c| c != '#');
         if !Path::exists(&Path::new(&path_no_function[..path_no_function.len() - 1])) {
             bail!("path does not exist ({path_no_function})")
         }
-        
-        Ok(Self { location: path, callback_state })
+
+        Ok(Self {
+            location: path,
+            callback_state,
+        })
     }
 }
 
@@ -148,11 +161,6 @@ impl<'a> Function {
             format!("failed to run instruction")
         })?;
 
-        // let r#ref = unsafe {
-        //     (context.poll() as *const InstructionExitState)
-        //         .as_ref()
-        //         .unwrap()
-        // };
         let r#ref = context.poll();
 
         Ok(r#ref)
@@ -166,121 +174,118 @@ impl<'a> Function {
         &mut self,
         args: Vec<Primitive>,
         current_frame: Arc<Cell<Stack>>,
+        callback_state: Option<Arc<VariableMapping>>,
         jump_callback: &mut impl FnMut(JumpRequest) -> Result<ReturnValue>,
     ) -> Result<ReturnValue> {
-        {
-            unsafe {
-                (*current_frame.as_ptr()).extend(self.get_qualified_name());
-            }
+        unsafe {
+            (*current_frame.as_ptr()).extend(self.get_qualified_name());
         }
 
         let location = self.location.borrow();
         let mut reader = BufReader::new(location.handle.as_ref());
 
+        // this takes us to where the function is located in the file.
         let Ok(pos) = reader.seek(SeekFrom::Start(self.seek_pos)) else {
             bail!("could not get current file position")
         };
 
-        assert_eq!(pos, self.seek_pos);
-
-        let mut context = Ctx::new(&self, current_frame.clone(), args);
+        let mut context = Ctx::new(&self, current_frame.clone(), args, callback_state);
 
         let mut line_number = self.line_number + 2;
-
-        let mut return_value: ReturnValue = ReturnValue(None);
 
         let mut line = String::new();
 
         // scope is needed to drop the function context before returning.
-        'function_run: {
-            while let Ok(_) = reader.read_line(&mut line) {
-                if let Some('\n') = line.chars().next_back() {
-                    line.pop();
-                }
+        while let Ok(_) = reader.read_line(&mut line) {
+            if let Some('\n') = line.chars().next_back() {
+                line.pop();
+            }
 
-                if let Some('\r') = line.chars().next_back() {
-                    line.pop();
-                }
+            if let Some('\r') = line.chars().next_back() {
+                line.pop();
+            }
 
-                if line == "end" {
-                    break;
-                }
+            if line == "end" {
+                break;
+            }
 
-                let instruction = instruction::parse_line(&line).context("failed parsing line")?;
+            let instruction = instruction::parse_line(&line).context("failed parsing line")?;
 
-                let ret = Self::run_and_ret(&mut context, &instruction)
-                    .with_context(|| format!("`{}` on line {line_number}", instruction.name))?;
+            let ret = Self::run_and_ret(&mut context, &instruction)
+                .with_context(|| format!("`{}` on line {line_number}", instruction.name))?;
 
-                match ret {
-                    InstructionExitState::ReturnValue(ret) => {
-                        return_value = ret.clone();
-                        break 'function_run;
+            match ret {
+                InstructionExitState::ReturnValue(ret) => {
+                    unsafe {
+                        (*current_frame.as_ptr()).pop();
                     }
-                    InstructionExitState::JumpRequest(jump_request) => {
-                        let result = jump_callback(jump_request)?;
+                    return Ok(ret.clone());
+                }
+                InstructionExitState::JumpRequest(jump_request) => {
+                    let result = jump_callback(jump_request)?;
 
-                        if let Some(primitive) = result.0 {
-                            context.push(primitive)
-                        }
+                    if let Some(primitive) = result.0 {
+                        context.push(primitive)
                     }
-                    InstructionExitState::NewIf(used) => {
-                        let pos = reader.stream_position()?;
-                        let if_stmt = self
-                            .get_if_pos_from(pos)
-                            .expect("this if has not been mapped.");
+                }
+                InstructionExitState::NewIf(used) => {
+                    let pos = reader.stream_position()?;
+                    let if_stmt = self
+                        .get_if_pos_from(pos)
+                        .expect("this if has not been mapped.");
 
-                        let IfStatement::If(..) = if_stmt else {
+                    let IfStatement::If(..) = if_stmt else {
                             bail!("expected if statment, found {if_stmt:?}");
                         };
 
-                        let next = *if_stmt.next_pos();
+                    let next = *if_stmt.next_pos();
 
-                        context.active_if_stmts.push((if_stmt, used));
+                    context.active_if_stmts.push((if_stmt, used));
 
-                        if !used {
-                            reader.seek(SeekFrom::Start(next))?;
-                        }
+                    if !used {
+                        reader.seek(SeekFrom::Start(next))?;
                     }
-                    InstructionExitState::GotoElse => {
-                        let (if_stmt, used) =
-                            context.active_if_stmts.last().with_context(|| {
-                                format!(
-                                    "no if, but found else (l{})",
-                                    get_line_number_from_pos(&mut reader, pos).unwrap()
-                                )
-                            })?;
-
-                        if *used {
-                            let IfStatement::If(_, box IfStatement::Else(_, box IfStatement::EndIf(next_pos))) = if_stmt else {
-                                bail!("bad ({if_stmt:?})");
-                            };
-
-                            reader.seek(SeekFrom::Start(*next_pos))?;
-                        }
-
-                        context.active_if_stmts.pop();
-                        context.clear_stack();
-                    }
-                    InstructionExitState::GotoEndif => {
-                        context.active_if_stmts.pop();
-                        context.clear_stack();
-                    }
-                    InstructionExitState::NoExit => (),
                 }
+                InstructionExitState::GotoElse => {
+                    let (if_stmt, used) = context.active_if_stmts.last().with_context(|| {
+                        let line_number = get_line_number_from_pos(&mut reader, pos).unwrap();
 
-                context.clear_signal();
+                        format!("no if, but found else (l{line_number})")
+                    })?;
 
-                line_number += 1;
+                    if *used {
+                        let IfStatement::If(_, box IfStatement::Else(_, box IfStatement::EndIf(next_pos))) = if_stmt else {
+                            bail!("bad ({if_stmt:?})");
+                        };
 
-                line.clear();
+                        reader.seek(SeekFrom::Start(*next_pos))?;
+                    }
+
+                    context.active_if_stmts.pop();
+                    context.clear_stack();
+                }
+                InstructionExitState::GotoEndif => {
+                    context.active_if_stmts.pop();
+                    context.clear_stack();
+                }
+                InstructionExitState::NoExit => (),
             }
+
+            context.clear_signal();
+
+            line_number += 1;
+
+            line.clear();
         }
+
+        // Handle when a function does not explicitly return.
+        eprintln!("Warning: function concludes without `ret` instruction");
 
         unsafe {
             (*current_frame.as_ptr()).pop();
         }
 
-        Ok(return_value)
+        Ok(ReturnValue(None))
     }
 }
 

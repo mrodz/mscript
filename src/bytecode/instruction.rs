@@ -62,13 +62,10 @@ macro_rules! make_type {
 #[deny(dead_code)]
 mod implementations {
     use super::*;
-    use crate::{
-        bool,
-        bytecode::{
-            function::{PrimitiveFunction, ReturnValue},
-            variables::buckets,
-        }, int,
-    };
+    use crate::bytecode::function::{PrimitiveFunction, ReturnValue};
+    use crate::bytecode::variables::{buckets, Variable};
+    use crate::{bool, function, int};
+    use std::collections::HashMap;
 
     instruction! {
         constexpr(ctx, args) {
@@ -199,7 +196,35 @@ mod implementations {
     make_type!(make_char);
     make_type!(make_byte);
     make_type!(make_bigint);
-    make_type!(make_function);
+    // make_type!(make_function);
+
+    instruction! {
+        make_function(ctx, args) {
+            let Some(location) = args.first() else {
+                bail!("making a function pointer requires a path to find it")
+            };
+
+            let len = args.len();
+            let callback_state = if len != 1 {
+                let mut arguments: HashMap<String, Variable> = HashMap::with_capacity(len - 1); // maybe len
+                for var_name in &args[1..] {
+                    let Some(var) = ctx.load_variable(var_name) else {
+                        bail!("{var_name} is not in scope")
+                    };
+
+                    arguments.insert(var_name.clone(), var.clone());
+                }
+
+                Some(Arc::new(VariableMapping(arguments)))
+            } else {
+                None
+            };
+
+            ctx.push(function!(PrimitiveFunction::new(location.into(), callback_state)));
+
+            Ok(())
+        }
+    }
 
     instruction! {
         printn(ctx, args) {
@@ -243,7 +268,7 @@ mod implementations {
 
                 ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                     destination_label: f.location.clone(),
-                    caller: None,
+                    callback_state: f.callback_state.clone(),
                     stack: ctx.arced_call_stack().clone(),
                     arguments: ctx.get_local_operating_stack(),
                 }));
@@ -255,7 +280,7 @@ mod implementations {
 
             ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                 destination_label: first.clone(),
-                caller: None,
+                callback_state: None,
                 stack: ctx.arced_call_stack().clone(),
                 arguments: ctx.get_local_operating_stack(),
             }));
@@ -329,6 +354,20 @@ mod implementations {
 
             let Some(var) = ctx.load_local(&name) else {
                 bail!("load before store (`{name}` not in this stack frame)")
+            };
+
+            ctx.push(var.data.clone());
+
+            Ok(())
+        }
+
+        load_callback(ctx, args) {
+            let Some(name) = args.first() else {
+                bail!("loading a callback variable requires one parameter: (name)")
+            };
+
+            let Some(var) = ctx.load_callback_variable(name)? else {
+                bail!("this callback does not have `{name}`")
             };
 
             ctx.push(var.data.clone());
@@ -447,6 +486,7 @@ pub fn query(name: &String) -> InstructionSignature {
         "strict_equ" => implementations::strict_equ,
         "equ" => implementations::equ,
         "arg" => implementations::arg,
+        "load_callback" => implementations::load_callback,
         _ => unreachable!("unknown bytecode instruction ({name})"),
     }
 }
@@ -559,7 +599,7 @@ pub fn parse_line(line: &String) -> Result<Instruction> {
 #[derive(Clone)]
 pub struct JumpRequest {
     pub destination_label: String,
-    pub caller: Option<fn() -> String>,
+    pub callback_state: Option<Arc<VariableMapping>>,
     pub stack: Arc<Cell<Stack>>,
     pub arguments: Vec<Primitive>,
 }

@@ -87,9 +87,16 @@ impl Program {
         let file = Self::get_file(arc_of_self.clone(), &path)?;
 
         let return_value = unsafe {
-            (*file.as_ptr()).run_function(symbol, Arc::clone(&request.stack), request.arguments, &mut |req| {
-                Self::process_jump_request(arc_of_self.clone(), req)
-            })?
+            let Some(function) = (*file.as_ptr()).get_function(symbol) else {
+                bail!("could not find function (missing `{symbol}`)")
+            };
+
+            function.run(
+                request.arguments,
+                Arc::clone(&request.stack),
+                request.callback_state,
+                &mut |req| Self::process_jump_request(arc_of_self.clone(), req),
+            )?
         };
 
         Ok(return_value)
@@ -107,7 +114,11 @@ impl Program {
         // since `entrypoint` will not have been dropped during subsequent calls to
         // borrow_mut().
         unsafe {
-            (*entrypoint.as_ptr()).run_function("main", stack, vec![], &mut |req| {
+            let Some(function) = (*entrypoint.as_ptr()).get_function("main") else {
+                bail!("could not find entrypoint (hint: try adding `function main`)")
+            };
+
+            function.run(vec![], stack, None, &mut |req| {
                 Self::process_jump_request(arc_of_self.clone(), req)
             })?;
         }
