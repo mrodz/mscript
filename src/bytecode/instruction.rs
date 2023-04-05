@@ -121,15 +121,12 @@ mod implementations {
 
     instruction! {
         bin_op(ctx, args) {
-            let symbols = match args.first() {
-                Some(symbols) => symbols,
-                None => bail!("Expected an operation [+,-,*,/,%]"),
-            }.as_bytes();
+            let symbols = args.first().context("Expected an operation [+,-,*,/,%]")?.as_bytes();
 
             let symbol = symbols[0] as char;
 
             let (Some(right), Some(left)) = (ctx.pop(), ctx.pop()) else {
-                unreachable!()
+                bail!("bin_op requires two items on the local operating stack.")
             };
 
             let (i32_fn, i128_fn, f_fn) = bin_op_from(symbol).context("constructing bin op")?;
@@ -141,6 +138,44 @@ mod implementations {
             Ok(())
         }
 
+        vec_op(ctx, args) {
+            let mut arg_iter = args.iter();
+            let op_name = arg_iter.next().context("Expected a vector operation")?;
+            let bytes = op_name.as_bytes();
+
+            if let (Some(b'['), Some(b']')) = (bytes.first(), bytes.last()) {
+                let Some(Primitive::Vector(vector)) = ctx.pop() else {
+                    bail!("Cannot perform a vector operation on a non-vector")
+                };
+
+                let content = &bytes[1..bytes.len() - 1];
+
+                // this manual byte slice to usize conversion is more performant
+                let mut idx: usize = 0;
+                let mut max = 10_usize.pow(content.len() as u32 - 1);
+
+                for byte in content {
+                    idx += (byte - 48) as usize * max;
+                    max /= 10;
+                }
+
+                let item = vector.get(idx as usize)
+                    .with_context(|| format!("index {idx} out of bounds (len {})", vector.len()))?;
+
+                ctx.push(item.clone());
+            } else {
+                let Some(Primitive::Vector(buckets::Vector(vector))) = ctx.get_last_op_item_mut() else {
+                    bail!("Cannot perform a vector operation on a non-vector")
+                };
+
+                match op_name.as_str() {
+                    "reverse" => vector.reverse(),
+                    not_found => bail!("operation not found: `{not_found}`")
+                }
+            }
+
+            Ok(())
+        }
     }
 
     instruction! {
@@ -485,6 +520,7 @@ pub fn query(name: &String) -> InstructionSignature {
         "stack_dump" => implementations::stack_dump,
         "pop" => implementations::pop,
         "bin_op" => implementations::bin_op,
+        "vec_op" => implementations::vec_op,
         "bool" => implementations::make_bool,
         "string" => implementations::make_str,
         "bigint" => implementations::make_bigint,

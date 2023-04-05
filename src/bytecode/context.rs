@@ -77,6 +77,15 @@ impl<'a> Ctx<'a> {
         self.stack.get_mut(n)
     }
 
+    pub fn get_last_op_item(&mut self) -> Option<&Primitive> {
+        self.stack.get(self.stack_size() - 1)
+    }
+
+    pub fn get_last_op_item_mut(&mut self) -> Option<&mut Primitive> {
+        let last_idx = self.stack_size() - 1;
+        self.stack.get_mut(last_idx)
+    }
+
     pub fn get_call_stack(&self) -> &mut Stack {
         use std::borrow::BorrowMut;
         unsafe { (*self.call_stack.as_ptr()).borrow_mut() }

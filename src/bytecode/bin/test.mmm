@@ -20,6 +20,8 @@ function add_n
 end
 
 function main
+bool false
+if
 	int 50
 	call src/bytecode/bin/test.mmm#add_n
 	store add_fifty
@@ -31,6 +33,7 @@ function main
 	printn *
 
 	void
+endif
 
 	call src/bytecode/bin/test.mmm#test_vecs
 
@@ -47,6 +50,13 @@ function test_vecs
 	make_vector
 
 	printn *
+
+	vec_op reverse
+
+	printn *
+
+	# vec_op [4]
+	# printn *
 
 	void
 	ret

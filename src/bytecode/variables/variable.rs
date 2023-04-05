@@ -1,6 +1,8 @@
-use crate::{bigint, bool, byte, char, float, int, string};
+use crate::{bigint, bool, byte, char, float, int, string, vector};
 use anyhow::{bail, Result};
 use std::fmt::{Debug, Display};
+// use crate::bytecode::variables::vector::Vector;
+// pub struct Vector(Vec<crate::bytecode::variables::Primitive>);
 
 macro_rules! primitive {
     ($($variant:ident($type:ty)),+ $(,)?) => {
@@ -73,7 +75,7 @@ primitive! {
     Char(char),
     Byte(u8),
     Function(crate::bytecode::function::PrimitiveFunction),
-    Vector(Vec<crate::bytecode::variables::Primitive>), // 4/4/2023: odd circular import structure
+    Vector(Vec<crate::bytecode::variables::Primitive>),
 }
 
 #[derive(Clone)]
@@ -334,6 +336,28 @@ pub fn bin_op_result(
             } else {
                 bail!("could not perform checked integer operation (maybe an overflow, or / by 0)")
             }
+        }
+        (Primitive::Str(x), y) => {
+            let mut x = (*x).clone();
+
+            if let Primitive::Str(y) = y {
+                x.push_str(&*y); // slight performance benefit
+            } else {
+                x.push_str(&y.to_string());
+            }
+
+            string!(x)
+        }
+        (Primitive::Vector(x), Primitive::Vector(y)) => {
+            // if `adding` vectors, the user probably wants a new copy to operate on.
+            // to extend a vector, use a `vec_op` instruction.
+
+            let mut x_cloned = (*x).clone();
+            let mut y_cloned = (*y).clone();
+
+            x_cloned.append(&mut y_cloned);
+
+            vector!(raw x_cloned)
         }
         (x, y) => bail!("cannot perform binary operation on {x}, {y}"),
     })
