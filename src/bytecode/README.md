@@ -151,11 +151,67 @@ See `constexpr`.
 ---
 
 ### `make_function ! [path_to_function, [callback_variable, ...]?]`
-Make a function "pointer", from a path.
+Make a function "pointer", from a path. The path is not checked until a user calls this pointer.
+
+The primary usage of this instruction is to create callbacks, otherwise known as closures.
+
+The following bytecode accomplishes the same as the python snippet below.
+
+```
+function add_n$0
+	arg 0
+	store x
+
+	load_callback number
+	load_local x
+
+	bin_op +
+
+	ret
+end
+
+function add_n
+	arg 0
+	store number
+
+	make_function path/to/file.mmm#add_n$0 number
+
+	ret
+end
+
+function main
+	int 50
+	call path/to/file.mmm#add_n
+	store add_fifty
+
+	int 75
+	load add_fifty
+	call
+
+	printn *
+
+	void
+	ret
+end
+```
+
+```py
+def add_n(number):
+
+	def result(x):
+		return x + number
+
+	return result
+
+add_fifty = add_n(50)
+print(add_fifty(75)) # Output: 125
+```
+
+By passing the names of registered variables, this callback will freeze their values and add them to a pool associated with the function pointer. These copies can later be "looked-up" using the `load_callback` instruction.   
 
 | ! | Reason |
 | - | - |
-| 1 | 
+| 1 | Attempting to freeze a variable that does not exist. |
 
 ---
 
@@ -236,6 +292,16 @@ Loads a variable from the current stack frame. If not found, the program will ex
 | - | - |
 | 1 | Argument length != 1. |
 | 2 | The variable hasn't been stored by the current frame. |
+
+---
+
+
+### `load_callback ! [name]`
+Loads a variable from the frozen callback pool. If not found, the program will exit. 
+
+| ! | Reason |
+| - | - |
+| 2 | The variable hasn't been stored in the callback pool. |
 
 ---
 

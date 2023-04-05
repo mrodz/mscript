@@ -161,11 +161,6 @@ impl<'a> Function {
             format!("failed to run instruction")
         })?;
 
-        // let r#ref = unsafe {
-        //     (context.poll() as *const InstructionExitState)
-        //         .as_ref()
-        //         .unwrap()
-        // };
         let r#ref = context.poll();
 
         Ok(r#ref)
@@ -283,7 +278,14 @@ impl<'a> Function {
             line.clear();
         }
 
-        unreachable!()
+        // Handle when a function does not explicitly return.
+        eprintln!("Warning: function concludes without `ret` instruction");
+
+        unsafe {
+            (*current_frame.as_ptr()).pop();
+        }
+
+        Ok(ReturnValue(None))
     }
 }
 

@@ -187,10 +187,7 @@ impl MScriptFile {
 
         let functions = Self::get_functions(&new_uninit)?;
 
-        {
-            // scoped to ensure the mutable reference is dropped before returning.
-            new_uninit.borrow_mut().functions = Some(functions);
-        }
+        new_uninit.borrow_mut().functions = Some(functions);
 
         Ok(new_uninit)
     }

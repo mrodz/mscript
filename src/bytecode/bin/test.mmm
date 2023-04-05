@@ -1,44 +1,35 @@
 function add_n$0
 	arg 0
 	store x
+
 	load_callback number
-	load x
+	load_local x
+
 	bin_op +
+
 	ret
 end
 
 function add_n
 	arg 0
 	store number
+
 	make_function src/bytecode/bin/test.mmm#add_n$0 number
+
 	ret
 end
 
 function main
-	stack_size
-	printn *
-	call src/bytecode/bin/test.mmm#main
-end
-
-function callbacks
-	int 5
-	call src/bytecode/bin/test.mmm#add_n
-	store add_five_fn
-
-	int 6
-	load_local add_five_fn
-	call
-
-	printn *
-	void
-
 	int 50
 	call src/bytecode/bin/test.mmm#add_n
 	store add_fifty
 
-	bigint 50
-	load_local add_fifty
+	int 75
+	load add_fifty
 	call
 
 	printn *
+
+	void
+	ret
 end
