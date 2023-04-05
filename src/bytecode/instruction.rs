@@ -64,7 +64,7 @@ mod implementations {
     use super::*;
     use crate::bytecode::function::{PrimitiveFunction, ReturnValue};
     use crate::bytecode::variables::{buckets, Variable};
-    use crate::{bool, function, int};
+    use crate::{bool, function, int, vector};
     use std::collections::HashMap;
 
     instruction! {
@@ -196,7 +196,6 @@ mod implementations {
     make_type!(make_char);
     make_type!(make_byte);
     make_type!(make_bigint);
-    // make_type!(make_function);
 
     instruction! {
         make_function(ctx, args) {
@@ -224,12 +223,36 @@ mod implementations {
 
             Ok(())
         }
+
+        make_vector(ctx, args) {
+            if args.len() > 1 {
+                bail!("`make_vector` instruction requires 1 argument (capacity) or none (initializes with contents of local operating stack)")
+            }
+
+            let Some(arg) = args.first() else {
+                let vec = ctx.get_local_operating_stack().clone();
+                // ^^ new capacity = old length
+
+                ctx.clear_stack();
+                ctx.push(vector!(raw vec));
+
+                return Ok(())
+            };
+
+            let capacity = usize::from_str_radix(arg, 10).context("argument must be of type usize")?;
+
+            let vec = vector!(raw Vec::with_capacity(capacity));
+
+            ctx.push(vec);
+
+            Ok(())
+        }
     }
 
     instruction! {
         printn(ctx, args) {
             let Some(arg) = args.first() else {
-                bail!("expected 1 parameter of type __rust__::usize, or * to print all");
+                bail!("expected 1 parameter (index into local operating stack), or * to print all");
             };
 
             if arg == "*" {
@@ -247,7 +270,7 @@ mod implementations {
                 return Ok(());
             }
 
-            let arg = usize::from_str_radix(arg, 10)?;
+            let arg = usize::from_str_radix(arg, 10).context("argument must be of type usize")?;
 
             println!("{:?}", ctx.get_nth_op_item(arg));
 
@@ -295,7 +318,7 @@ mod implementations {
                 bail!("expected one argument")
             };
 
-            let n = usize::from_str_radix(first, 10)?;
+            let n = usize::from_str_radix(first, 10).context("argument must be of type usize")?;
 
             let Some(nth_arg) = ctx.nth_arg(n) else {
                 bail!("#{n} argument does not exist (range 0..{})", ctx.argc())
@@ -470,6 +493,7 @@ pub fn query(name: &String) -> InstructionSignature {
         "char" => implementations::make_char,
         "byte" => implementations::make_byte,
         "make_function" => implementations::make_function,
+        "make_vector" => implementations::make_vector,
         "void" => implementations::void,
         "breakpoint" => implementations::breakpoint,
         "ret" => implementations::ret,
@@ -491,10 +515,10 @@ pub fn query(name: &String) -> InstructionSignature {
     }
 }
 
+#[inline(always)]
 pub fn run_instruction(ctx: &mut Ctx, instruction: &Instruction) -> Result<()> {
-    let x = query(&instruction.name);
-    x(ctx, &instruction.arguments)?;
-
+    let instruction_fn = query(&instruction.name);
+    instruction_fn(ctx, &instruction.arguments)?;
     Ok(())
 }
 

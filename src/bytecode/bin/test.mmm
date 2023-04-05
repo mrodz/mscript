@@ -31,5 +31,23 @@ function main
 	printn *
 
 	void
+
+	call src/bytecode/bin/test.mmm#test_vecs
+
+	void
+	ret
+end
+
+function test_vecs
+	int 5
+	int 0
+	string "Hello, World!"
+	float 3.14159
+	constexpr 0b101
+	make_vector
+
+	printn *
+
+	void
 	ret
 end

@@ -1,10 +1,9 @@
-use crate::bytecode::function::PrimitiveFunction;
 use crate::{bigint, bool, byte, char, float, int, string};
 use anyhow::{bail, Result};
 use std::fmt::{Debug, Display};
 
 macro_rules! primitive {
-    ($($variant:ident = $type:ty)+) => {
+    ($($variant:ident($type:ty)),+ $(,)?) => {
         pub mod buckets {
             $(
                 #[derive(PartialEq, PartialOrd, Clone)]
@@ -12,13 +11,13 @@ macro_rules! primitive {
 
                 impl std::fmt::Debug for $variant {
                     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
-                        write!(f, "{}", self.0)
+                        write!(f, "{:?}", self.0)
                     }
                 }
 
                 impl std::fmt::Display for $variant {
                     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
-                        write!(f, "{}", self.0)
+                        write!(f, "{:?}", self.0)
                     }
                 }
 
@@ -66,14 +65,15 @@ macro_rules! primitive {
 }
 
 primitive! {
-    Bool = bool
-    Str = String
-    Int = i32
-    BigInt = i128
-    Float = f64
-    Char = char
-    Byte = u8
-    Function = crate::bytecode::variables::variable::PrimitiveFunction
+    Bool(bool),
+    Str(String),
+    Int(i32),
+    BigInt(i128),
+    Float(f64),
+    Char(char),
+    Byte(u8),
+    Function(crate::bytecode::function::PrimitiveFunction),
+    Vector(Vec<crate::bytecode::variables::Primitive>), // 4/4/2023: odd circular import structure
 }
 
 #[derive(Clone)]
@@ -154,7 +154,8 @@ impl Primitive {
         let bytes = string.as_bytes();
 
         if let (Some(b'\"'), Some(b'\"')) = (bytes.first(), bytes.last()) {
-            return Ok(string!(string[1..string.len() - 1].to_string()));
+            let sliced = &string[1..string.len() - 1];
+            return Ok(string!(raw sliced));
         }
 
         bail!("not a Str")
@@ -235,6 +236,7 @@ impl Display for Primitive {
             Char(c) => write!(f, "{c}"),
             Byte(b) => write!(f, "0b{:b}", **b),
             Function(fun) => write!(f, "{fun}"),
+            Vector(l) => write!(f, "{l}"),
         }
     }
 }
@@ -366,7 +368,7 @@ mod primitives {
         println!("{}", byte!(0b101));
         println!("{}", int!(5));
         println!("{}", float!(PI));
-        println!("{}", string!("Hello".into()));
+        println!("{}", string!(raw "Hello"));
         println!("{}", bool!(false));
         println!("{}", char!('@'));
     }
@@ -377,7 +379,7 @@ mod primitives {
         assert!(int!(5).is_numeric());
         assert!(float!(3.0 / 2.0).is_numeric());
         assert!(bigint!(2147483648).is_numeric());
-        assert!(!string!("Hello".into()).is_numeric());
+        assert!(!string!(raw "Hello").is_numeric());
         assert!(!bool!(true).is_numeric());
         assert!(!char!('@').is_numeric());
     }
