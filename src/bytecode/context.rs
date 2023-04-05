@@ -1,6 +1,15 @@
-use std::{sync::Arc, cell::Cell, fmt::Debug};
+use std::{cell::Cell, fmt::Debug, sync::Arc};
 
-use super::{variables::{Primitive, Variable}, function::{Function, InstructionExitState}, Stack, file::IfStatement, attributes_parser::Attributes};
+use anyhow::{bail, Result};
+
+use super::{
+    attributes_parser::Attributes,
+    file::IfStatement,
+    function::{Function, InstructionExitState},
+    stack::VariableMapping,
+    variables::{Primitive, Variable},
+    Stack,
+};
 
 pub struct Ctx<'a> {
     stack: Vec<Primitive>,
@@ -8,7 +17,8 @@ pub struct Ctx<'a> {
     call_stack: Arc<Cell<Stack>>,
     pub active_if_stmts: Vec<(IfStatement, bool)>,
     exit_state: InstructionExitState,
-	args: Vec<Primitive>,
+    args: Vec<Primitive>,
+    callback_state: Option<Arc<VariableMapping>>,
 }
 
 impl Debug for Ctx<'_> {
@@ -18,51 +28,63 @@ impl Debug for Ctx<'_> {
 }
 
 impl<'a> Ctx<'a> {
-    pub fn new(function: &'a Function, call_stack: Arc<Cell<Stack>>, args: Vec<Primitive>) -> Self {
+    pub fn new(
+        function: &'a Function,
+        call_stack: Arc<Cell<Stack>>,
+        args: Vec<Primitive>,
+        callback_state: Option<Arc<VariableMapping>>,
+    ) -> Self {
         Self {
             stack: vec![],
             active_if_stmts: vec![],
             function,
             call_stack,
             exit_state: InstructionExitState::NoExit,
-			args,
+            args,
+            callback_state,
         }
     }
 
-	pub fn owner(&self) -> &Function {
-		self.function
-	}
+    pub fn load_callback_variable(&self, name: &String) -> Result<Option<&Variable>> {
+        let Some(ref mapping) = self.callback_state else {
+            bail!("this function is not a callback")
+        };
 
-	pub fn arced_call_stack(&self) -> Arc<Cell<Stack>> {
-		Arc::clone(&self.call_stack)
-	}
+        Ok(mapping.get(name))
+    }
 
-	pub fn argc(&self) -> usize {
-		self.args.len()
-	}
+    pub fn owner(&self) -> &Function {
+        self.function
+    }
 
-	pub fn nth_arg(&self, n: usize) -> Option<&Primitive> {
-		self.args.get(n)
-	}
- 
-	pub fn get_nth_op_item(&self, n: usize) -> Option<&Primitive> {
-		self.stack.get(n)
-	}
+    pub fn arced_call_stack(&self) -> Arc<Cell<Stack>> {
+        Arc::clone(&self.call_stack)
+    }
 
-	pub fn get_nth_op_item_mut(&mut self, n: usize) -> Option<&mut Primitive> {
-		self.stack.get_mut(n)
-	}
+    pub fn argc(&self) -> usize {
+        self.args.len()
+    }
 
-	pub fn get_call_stack(&self) -> &mut Stack {
-		use std::borrow::BorrowMut;
-		unsafe {
-			(*self.call_stack.as_ptr()).borrow_mut()
-		}
-	}
+    pub fn nth_arg(&self, n: usize) -> Option<&Primitive> {
+        self.args.get(n)
+    }
 
-	pub fn get_local_operating_stack(&self) -> Vec<Primitive> {
-		self.stack.clone()
-	}
+    pub fn get_nth_op_item(&self, n: usize) -> Option<&Primitive> {
+        self.stack.get(n)
+    }
+
+    pub fn get_nth_op_item_mut(&mut self, n: usize) -> Option<&mut Primitive> {
+        self.stack.get_mut(n)
+    }
+
+    pub fn get_call_stack(&self) -> &mut Stack {
+        use std::borrow::BorrowMut;
+        unsafe { (*self.call_stack.as_ptr()).borrow_mut() }
+    }
+
+    pub fn get_local_operating_stack(&self) -> Vec<Primitive> {
+        self.stack.clone()
+    }
 
     pub fn get_attributes(&self) -> &Vec<Attributes> {
         &self.function.attributes
@@ -73,7 +95,7 @@ impl<'a> Ctx<'a> {
     }
 
     pub(crate) fn poll(&mut self) -> InstructionExitState {
-		self.exit_state.clone()
+        self.exit_state.clone()
     }
 
     pub(crate) fn clear_signal(&mut self) {

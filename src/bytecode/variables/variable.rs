@@ -1,5 +1,5 @@
 use crate::bytecode::function::PrimitiveFunction;
-use crate::{bigint, bool, byte, char, float, function, int, string};
+use crate::{bigint, bool, byte, char, float, int, string};
 use anyhow::{bail, Result};
 use std::fmt::{Debug, Display};
 
@@ -38,7 +38,7 @@ macro_rules! primitive {
             )*
         }
 
-        #[derive(Debug, Eq, PartialEq)]
+        #[derive(Debug, Eq, PartialEq, Clone)]
         pub enum Type {
             $(
                 $variant,
@@ -76,6 +76,7 @@ primitive! {
     Function = crate::bytecode::variables::variable::PrimitiveFunction
 }
 
+#[derive(Clone)]
 pub struct Variable {
     pub data: Primitive,
     pub ty: Type,
@@ -218,10 +219,6 @@ impl Primitive {
             "false" => Ok(bool!(false)),
             _ => bail!("not a Bool"),
         }
-    }
-
-    pub fn make_function(string: &str) -> Result<Self> {
-        Ok(function!(PrimitiveFunction::new(string.into(), None)?))
     }
 }
 

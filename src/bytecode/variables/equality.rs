@@ -4,6 +4,6 @@
 //! - implement custom equality logic for differing primitive types.
 
 mod bigint;
+mod byte;
 mod float;
 mod int;
-mod byte;

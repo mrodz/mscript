@@ -1,4 +1,4 @@
-use crate::bytecode::variables::buckets::{Byte, BigInt, Float, Int};
+use crate::bytecode::variables::buckets::{BigInt, Byte, Float, Int};
 
 impl PartialEq<Float> for Byte {
     fn eq(&self, rhs: &Float) -> bool {

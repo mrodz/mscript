@@ -150,12 +150,12 @@ See `constexpr`.
 
 ---
 
-### `make_function ! [path_to_function]`
+### `make_function ! [path_to_function, [callback_variable, ...]?]`
 Make a function "pointer", from a path.
 
 | ! | Reason |
 | - | - |
-| 1 | Path minus the function name does not exist |
+| 1 | 
 
 ---
 
