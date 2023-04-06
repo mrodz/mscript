@@ -20,6 +20,8 @@ function add_n
 end
 
 function main
+bool false
+if
 	int 50
 	call src/bytecode/bin/test.mmm#add_n
 	store add_fifty
@@ -29,6 +31,32 @@ function main
 	call
 
 	printn *
+
+	void
+endif
+
+	call src/bytecode/bin/test.mmm#test_vecs
+
+	void
+	ret
+end
+
+function test_vecs
+	int 5
+	int 0
+	string "Hello, World!"
+	float 3.14159
+	constexpr 0b101
+	make_vector
+
+	printn *
+
+	int 10
+	vec_op mut 0
+
+	printn *
+
+	stack_dump
 
 	void
 	ret

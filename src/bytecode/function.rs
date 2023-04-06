@@ -235,8 +235,8 @@ impl<'a> Function {
                         .expect("this if has not been mapped.");
 
                     let IfStatement::If(..) = if_stmt else {
-                            bail!("expected if statment, found {if_stmt:?}");
-                        };
+                        bail!("expected if statment, found {if_stmt:?}");
+                    };
 
                     let next = *if_stmt.next_pos();
 
@@ -296,18 +296,18 @@ pub struct Functions {
 
 impl<'a> Functions {
     pub fn get(&self, signature: &str) -> Result<&Function> {
-        let Some(result) = self.map.get(signature) else {
-            bail!("unknown function ({signature})");
-        };
-
+        let result = self
+            .map
+            .get(signature)
+            .with_context(|| format!("unknown function ({signature})"))?;
         Ok(result)
     }
 
     pub fn get_mut(&'a mut self, signature: &str) -> Result<&'a mut Function> {
-        let Some(result) = self.map.get_mut(signature) else {
-            bail!("unknown function ({signature})");
-        };
-
+        let result = self
+            .map
+            .get_mut(signature)
+            .with_context(|| format!("unknown function ({signature})"))?;
         Ok(result)
     }
 }

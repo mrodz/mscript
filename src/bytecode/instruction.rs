@@ -64,7 +64,7 @@ mod implementations {
     use super::*;
     use crate::bytecode::function::{PrimitiveFunction, ReturnValue};
     use crate::bytecode::variables::{buckets, Variable};
-    use crate::{bool, function, int};
+    use crate::{bool, function, int, vector};
     use std::collections::HashMap;
 
     instruction! {
@@ -121,15 +121,12 @@ mod implementations {
 
     instruction! {
         bin_op(ctx, args) {
-            let symbols = match args.first() {
-                Some(symbols) => symbols,
-                None => bail!("Expected an operation [+,-,*,/,%]"),
-            }.as_bytes();
+            let symbols = args.first().context("Expected an operation [+,-,*,/,%]")?.as_bytes();
 
             let symbol = symbols[0] as char;
 
             let (Some(right), Some(left)) = (ctx.pop(), ctx.pop()) else {
-                unreachable!()
+                bail!("bin_op requires two items on the local operating stack.")
             };
 
             let (i32_fn, i128_fn, f_fn) = bin_op_from(symbol).context("constructing bin op")?;
@@ -141,6 +138,67 @@ mod implementations {
             Ok(())
         }
 
+        vec_op(ctx, args) {
+            let mut arg_iter = args.iter();
+            let op_name = arg_iter.next().context("Expected a vector operation")?;
+            let bytes = op_name.as_bytes();
+
+            if let (Some(b'['), Some(b']')) = (bytes.first(), bytes.last()) {
+                let Some(Primitive::Vector(vector)) = ctx.pop() else {
+                    bail!("Cannot perform a vector operation on a non-vector")
+                };
+
+                let content = &bytes[1..bytes.len() - 1];
+
+                // this manual byte slice to usize conversion is more performant
+                let mut idx: usize = 0;
+                let mut max = 10_usize.pow(content.len() as u32 - 1);
+
+                for byte in content {
+                    if !matches!(byte, b'0'..=b'9') {
+                        bail!("'{}' is not numeric", char::from(*byte))
+                    }
+                    idx += (byte - b'0') as usize * max;
+                    max /= 10;
+                }
+
+                let item = vector.get(idx)
+                    .with_context(|| format!("index {idx} out of bounds (len {})", vector.len()))?;
+
+                ctx.push(item.clone());
+            } else {
+                match op_name.as_str() {
+                    "reverse" => {
+                        let Some(Primitive::Vector(buckets::Vector(vector))) = ctx.get_last_op_item_mut() else {
+                            bail!("Cannot perform a vector operation on a non-vector")
+                        };
+
+                        vector.reverse()
+                    },
+                    "mut" => {
+                        let idx = arg_iter.next().context("mutating an array requires an argument")?;
+                        let idx = usize::from_str_radix(idx, 10)?;
+
+                        // let len = ctx.stack_size();
+                        if ctx.stack_size() != 2 {
+                            bail!("mutating an array requires two items in the local operating stack")
+                        }
+
+                        let new_item = ctx.pop().context("could not pop first item")?;
+
+                        let Some(Primitive::Vector(buckets::Vector(vector))) = ctx.get_last_op_item_mut() else {
+                            bail!("Cannot perform a vector operation on a non-vector")
+                        };
+
+                        vector[idx] = new_item;
+
+                    }
+                    not_found => bail!("operation not found: `{not_found}`")
+                }
+            }
+
+            Ok(())
+        }
     }
 
     instruction! {
@@ -196,7 +254,6 @@ mod implementations {
     make_type!(make_char);
     make_type!(make_byte);
     make_type!(make_bigint);
-    // make_type!(make_function);
 
     instruction! {
         make_function(ctx, args) {
@@ -224,12 +281,36 @@ mod implementations {
 
             Ok(())
         }
+
+        make_vector(ctx, args) {
+            if args.len() > 1 {
+                bail!("`make_vector` instruction requires 1 argument (capacity) or none (initializes with contents of local operating stack)")
+            }
+
+            let Some(arg) = args.first() else {
+                let vec = ctx.get_local_operating_stack().clone().into();
+                // ^^ new capacity = old length
+
+                ctx.clear_stack();
+                ctx.push(vector!(raw vec));
+
+                return Ok(())
+            };
+
+            let capacity = usize::from_str_radix(arg, 10).context("argument must be of type usize")?;
+
+            let vec = vector!(raw Vec::with_capacity(capacity));
+
+            ctx.push(vec);
+
+            Ok(())
+        }
     }
 
     instruction! {
         printn(ctx, args) {
             let Some(arg) = args.first() else {
-                bail!("expected 1 parameter of type __rust__::usize, or * to print all");
+                bail!("expected 1 parameter (index into local operating stack), or * to print all");
             };
 
             if arg == "*" {
@@ -238,8 +319,10 @@ mod implementations {
                 };
 
                 print!("{first}");
-                for var in &ctx.get_local_operating_stack()[1..] {
-                    print!(", {var}");
+                let operating_stack = ctx.get_local_operating_stack();
+
+                for var in operating_stack.iter().skip(1) {
+                    print!(", {var}")
                 }
 
                 println!();
@@ -247,9 +330,9 @@ mod implementations {
                 return Ok(());
             }
 
-            let arg = usize::from_str_radix(arg, 10)?;
+            let arg = usize::from_str_radix(arg, 10).context("argument must be of type usize")?;
 
-            println!("{:?}", ctx.get_nth_op_item(arg));
+            println!("{}", ctx.get_nth_op_item(arg).context("nothing at index")?);
 
             Ok(())
         }
@@ -257,6 +340,11 @@ mod implementations {
 
     instruction! {
         call(ctx, args) {
+            // This never needs to re-allocate, but does need to do O(n) data movement 
+            // if the circular buffer doesn’t happen to be at the beginning of the 
+            // allocation (https://doc.rust-lang.org/std/collections/vec_deque/struct.VecDeque.html)
+            let arguments = ctx.get_local_operating_stack().into();
+
             let Some(first) = args.first() else {
                 let last = ctx.pop();
 
@@ -270,7 +358,7 @@ mod implementations {
                     destination_label: f.location.clone(),
                     callback_state: f.callback_state.clone(),
                     stack: ctx.arced_call_stack().clone(),
-                    arguments: ctx.get_local_operating_stack(),
+                    arguments, 
                 }));
 
                 ctx.clear_stack();
@@ -282,7 +370,7 @@ mod implementations {
                 destination_label: first.clone(),
                 callback_state: None,
                 stack: ctx.arced_call_stack().clone(),
-                arguments: ctx.get_local_operating_stack(),
+                arguments,
             }));
 
             ctx.clear_stack();
@@ -295,7 +383,7 @@ mod implementations {
                 bail!("expected one argument")
             };
 
-            let n = usize::from_str_radix(first, 10)?;
+            let n = usize::from_str_radix(first, 10).context("argument must be of type usize")?;
 
             let Some(nth_arg) = ctx.nth_arg(n) else {
                 bail!("#{n} argument does not exist (range 0..{})", ctx.argc())
@@ -462,6 +550,7 @@ pub fn query(name: &String) -> InstructionSignature {
         "stack_dump" => implementations::stack_dump,
         "pop" => implementations::pop,
         "bin_op" => implementations::bin_op,
+        "vec_op" => implementations::vec_op,
         "bool" => implementations::make_bool,
         "string" => implementations::make_str,
         "bigint" => implementations::make_bigint,
@@ -470,6 +559,7 @@ pub fn query(name: &String) -> InstructionSignature {
         "char" => implementations::make_char,
         "byte" => implementations::make_byte,
         "make_function" => implementations::make_function,
+        "make_vector" => implementations::make_vector,
         "void" => implementations::void,
         "breakpoint" => implementations::breakpoint,
         "ret" => implementations::ret,
@@ -491,10 +581,10 @@ pub fn query(name: &String) -> InstructionSignature {
     }
 }
 
+#[inline(always)]
 pub fn run_instruction(ctx: &mut Ctx, instruction: &Instruction) -> Result<()> {
-    let x = query(&instruction.name);
-    x(ctx, &instruction.arguments)?;
-
+    let instruction_fn = query(&instruction.name);
+    instruction_fn(ctx, &instruction.arguments)?;
     Ok(())
 }
 

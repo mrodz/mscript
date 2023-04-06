@@ -91,6 +91,40 @@ Perform fast arithmetic on two loaded items.
 
 ---
 
+### `vec_op ! [vector_function, [arguments, ...]?]`
+Perform native manipulation on a Vector primitive. Requires a function name, and optionally, arguments.
+
+Available interfaces:
+* `vec_op [idx]`  
+Will retrieve an element at `idx`.
+  ```
+  int 1
+  int 2
+  int 3
+  make_vec
+  vec_op [1]
+  printn *     > Outputs 2
+  ``` 
+* `vec_op reverse`  
+Reverses the vector
+* `vec_op mut idx`  
+Mutate the vector by replacing the `Primitive` at `idx` with the item on top of the local operating stack.
+  ```
+  int 5
+  int 10
+  make_vec
+
+  int 20
+  vec_op mut 0
+  printn *     > Outputs [20, 10]
+  ```
+
+| ! | Reason |
+| - | - |
+| 1 | Each vector function can fail uniquely. |
+
+---
+
 ### `nop`
 No operation.
 

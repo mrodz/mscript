@@ -1,4 +1,4 @@
-use std::{cell::Cell, fmt::Debug, sync::Arc};
+use std::{cell::Cell, fmt::Debug, sync::Arc, collections::VecDeque};
 
 use anyhow::{bail, Result};
 
@@ -12,7 +12,7 @@ use super::{
 };
 
 pub struct Ctx<'a> {
-    stack: Vec<Primitive>,
+    stack: VecDeque<Primitive>,
     function: &'a Function,
     call_stack: Arc<Cell<Stack>>,
     pub active_if_stmts: Vec<(IfStatement, bool)>,
@@ -35,7 +35,7 @@ impl<'a> Ctx<'a> {
         callback_state: Option<Arc<VariableMapping>>,
     ) -> Self {
         Self {
-            stack: vec![],
+            stack: VecDeque::new(),
             active_if_stmts: vec![],
             function,
             call_stack,
@@ -77,12 +77,21 @@ impl<'a> Ctx<'a> {
         self.stack.get_mut(n)
     }
 
+    pub fn get_last_op_item(&mut self) -> Option<&Primitive> {
+        self.stack.get(self.stack_size() - 1)
+    }
+
+    pub fn get_last_op_item_mut(&mut self) -> Option<&mut Primitive> {
+        let last_idx = self.stack_size() - 1;
+        self.stack.get_mut(last_idx)
+    }
+
     pub fn get_call_stack(&self) -> &mut Stack {
         use std::borrow::BorrowMut;
         unsafe { (*self.call_stack.as_ptr()).borrow_mut() }
     }
 
-    pub fn get_local_operating_stack(&self) -> Vec<Primitive> {
+    pub fn get_local_operating_stack(&self) -> VecDeque<Primitive> {
         self.stack.clone()
     }
 
@@ -116,7 +125,7 @@ impl<'a> Ctx<'a> {
 
     pub(crate) fn clear_and_set_stack(&mut self, var: Primitive) {
         self.stack.clear();
-        self.stack.push(var);
+        self.stack.push_back(var);
     }
 
     pub(crate) fn stack_size(&self) -> usize {
@@ -124,11 +133,15 @@ impl<'a> Ctx<'a> {
     }
 
     pub(crate) fn push(&mut self, var: Primitive) {
-        self.stack.push(var);
+        self.stack.push_back(var);
+    }
+
+    pub(crate) fn pop_front(&mut self) -> Option<Primitive> {
+        self.stack.pop_front()
     }
 
     pub(crate) fn pop(&mut self) -> Option<Primitive> {
-        self.stack.pop()
+        self.stack.pop_back()
     }
 
     pub(crate) fn register_variable(&self, name: String, var: Primitive) {
