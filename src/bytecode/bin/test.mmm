@@ -51,12 +51,12 @@ function test_vecs
 
 	printn *
 
-	vec_op reverse
+	int 10
+	vec_op mut 0
 
 	printn *
 
-	# vec_op [4]
-	# printn *
+	stack_dump
 
 	void
 	ret

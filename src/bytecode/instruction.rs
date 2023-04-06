@@ -155,21 +155,44 @@ mod implementations {
                 let mut max = 10_usize.pow(content.len() as u32 - 1);
 
                 for byte in content {
-                    idx += (byte - 48) as usize * max;
+                    if !matches!(byte, b'0'..=b'9') {
+                        bail!("'{}' is not numeric", char::from(*byte))
+                    }
+                    idx += (byte - b'0') as usize * max;
                     max /= 10;
                 }
 
-                let item = vector.get(idx as usize)
+                let item = vector.get(idx)
                     .with_context(|| format!("index {idx} out of bounds (len {})", vector.len()))?;
 
                 ctx.push(item.clone());
             } else {
-                let Some(Primitive::Vector(buckets::Vector(vector))) = ctx.get_last_op_item_mut() else {
-                    bail!("Cannot perform a vector operation on a non-vector")
-                };
-
                 match op_name.as_str() {
-                    "reverse" => vector.reverse(),
+                    "reverse" => {
+                        let Some(Primitive::Vector(buckets::Vector(vector))) = ctx.get_last_op_item_mut() else {
+                            bail!("Cannot perform a vector operation on a non-vector")
+                        };
+
+                        vector.reverse()
+                    },
+                    "mut" => {
+                        let idx = arg_iter.next().context("mutating an array requires an argument")?;
+                        let idx = usize::from_str_radix(idx, 10)?;
+
+                        // let len = ctx.stack_size();
+                        if ctx.stack_size() != 2 {
+                            bail!("mutating an array requires two items in the local operating stack")
+                        }
+
+                        let new_item = ctx.pop().context("could not pop first item")?;
+
+                        let Some(Primitive::Vector(buckets::Vector(vector))) = ctx.get_last_op_item_mut() else {
+                            bail!("Cannot perform a vector operation on a non-vector")
+                        };
+
+                        vector[idx] = new_item;
+
+                    }
                     not_found => bail!("operation not found: `{not_found}`")
                 }
             }
@@ -265,7 +288,7 @@ mod implementations {
             }
 
             let Some(arg) = args.first() else {
-                let vec = ctx.get_local_operating_stack().clone();
+                let vec = ctx.get_local_operating_stack().clone().into();
                 // ^^ new capacity = old length
 
                 ctx.clear_stack();
@@ -296,8 +319,10 @@ mod implementations {
                 };
 
                 print!("{first}");
-                for var in &ctx.get_local_operating_stack()[1..] {
-                    print!(", {var}");
+                let operating_stack = ctx.get_local_operating_stack();
+
+                for var in operating_stack.iter().skip(1) {
+                    print!(", {var}")
                 }
 
                 println!();
@@ -307,7 +332,7 @@ mod implementations {
 
             let arg = usize::from_str_radix(arg, 10).context("argument must be of type usize")?;
 
-            println!("{:?}", ctx.get_nth_op_item(arg));
+            println!("{}", ctx.get_nth_op_item(arg).context("nothing at index")?);
 
             Ok(())
         }
@@ -315,6 +340,11 @@ mod implementations {
 
     instruction! {
         call(ctx, args) {
+            // This never needs to re-allocate, but does need to do O(n) data movement 
+            // if the circular buffer doesn’t happen to be at the beginning of the 
+            // allocation (https://doc.rust-lang.org/std/collections/vec_deque/struct.VecDeque.html)
+            let arguments = ctx.get_local_operating_stack().into();
+
             let Some(first) = args.first() else {
                 let last = ctx.pop();
 
@@ -328,7 +358,7 @@ mod implementations {
                     destination_label: f.location.clone(),
                     callback_state: f.callback_state.clone(),
                     stack: ctx.arced_call_stack().clone(),
-                    arguments: ctx.get_local_operating_stack(),
+                    arguments, 
                 }));
 
                 ctx.clear_stack();
@@ -340,7 +370,7 @@ mod implementations {
                 destination_label: first.clone(),
                 callback_state: None,
                 stack: ctx.arced_call_stack().clone(),
-                arguments: ctx.get_local_operating_stack(),
+                arguments,
             }));
 
             ctx.clear_stack();

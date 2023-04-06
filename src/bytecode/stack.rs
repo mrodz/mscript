@@ -14,11 +14,13 @@ impl Display for VariableMapping {
             result.push(format!("{key} = {}", value));
         }
 
-        write!(
-            f,
-            "{}",
+        let string = if result.len() == 0 {
+            "None".into()
+        } else {
             result.iter().fold("".to_owned(), |x, y| x + "\r\n" + y)
-        )
+        };
+
+        write!(f, "{string}")
     }
 }
 
