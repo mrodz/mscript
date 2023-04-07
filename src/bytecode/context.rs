@@ -1,15 +1,14 @@
-use std::{cell::Cell, fmt::Debug, sync::Arc, collections::VecDeque};
-
+use super::attributes_parser::Attributes;
+use super::file::IfStatement;
+use super::function::{Function, InstructionExitState};
+use super::stack::VariableMapping;
+use super::variables::{Primitive, Variable};
+use super::Stack;
 use anyhow::{bail, Result};
-
-use super::{
-    attributes_parser::Attributes,
-    file::IfStatement,
-    function::{Function, InstructionExitState},
-    stack::VariableMapping,
-    variables::{Primitive, Variable},
-    Stack,
-};
+use std::cell::Cell;
+use std::collections::VecDeque;
+use std::fmt::Debug;
+use std::sync::Arc;
 
 pub struct Ctx<'a> {
     stack: VecDeque<Primitive>,
@@ -43,6 +42,20 @@ impl<'a> Ctx<'a> {
             args,
             callback_state,
         }
+    }
+
+    pub fn update_callback_variable(&mut self, name: String, value: Variable) -> Result<()> {
+        let Some(ref mapping) = self.callback_state else {
+            bail!("this function is not a callback")
+        };
+
+        let mapping = Arc::as_ptr(mapping) as *mut VariableMapping;
+
+        unsafe {
+            (*mapping).update(name, value)?;
+        }
+
+        Ok(())
     }
 
     pub fn load_callback_variable(&self, name: &String) -> Result<Option<&Variable>> {

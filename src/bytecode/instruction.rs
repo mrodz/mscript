@@ -1,12 +1,16 @@
 use super::context::Ctx;
 use super::function::InstructionExitState;
 use super::stack::{Stack, VariableMapping};
-use super::variables::{bin_op_from, bin_op_result, Primitive};
+use super::variables::{bin_op_from, bin_op_result, ObjectBuilder, Primitive};
 use anyhow::{bail, Context, Result};
+use once_cell::sync::Lazy;
 use std::cell::Cell;
+use std::collections::HashSet;
 use std::fmt::Debug;
 use std::io::{stdin, stdout, Write};
 use std::sync::Arc;
+
+static mut OBJECT_BUILDER: Lazy<ObjectBuilder> = Lazy::new(|| ObjectBuilder::new());
 
 pub type InstructionSignature = fn(&mut Ctx, &Vec<String>) -> Result<()>;
 
@@ -64,8 +68,9 @@ mod implementations {
     use super::*;
     use crate::bytecode::function::{PrimitiveFunction, ReturnValue};
     use crate::bytecode::variables::{buckets, Variable};
-    use crate::{bool, function, int, vector};
+    use crate::{bool, function, int, object, vector};
     use std::collections::HashMap;
+    use std::rc::Rc;
 
     instruction! {
         constexpr(ctx, args) {
@@ -282,6 +287,45 @@ mod implementations {
             Ok(())
         }
 
+        make_object(ctx, args) {
+            let len = args.len();
+
+            let mut arguments: HashMap<String, Variable> = HashMap::with_capacity(len - 1); // maybe len
+
+            for var_name in args {
+                let Some(var) = ctx.load_local(var_name) else {
+                    bail!("{var_name} is not in scope")
+                };
+
+                arguments.insert(var_name.clone(), var.clone());
+            }
+
+            let object_variables = Arc::new(VariableMapping(arguments));
+
+            let function = ctx.owner();
+            let name = Rc::new(function.name.clone());
+
+            let obj = unsafe {
+                if !OBJECT_BUILDER.has_class_been_registered(&name) {
+                    let object_functions = (*function.location.as_ptr()).get_object_functions(&name)?;
+
+                    let mut mapping: HashSet<String> = HashSet::new();
+
+                    for func in object_functions {
+                        mapping.insert(func.name.clone());
+                    }
+
+                    OBJECT_BUILDER.register_class(Rc::clone(&name), mapping);
+                }
+
+                OBJECT_BUILDER.name(Rc::clone(&name)).object_variables(object_variables).build()
+            };
+
+            ctx.push(object!(obj));
+
+            Ok(())
+        }
+
         make_vector(ctx, args) {
             if args.len() > 1 {
                 bail!("`make_vector` instruction requires 1 argument (capacity) or none (initializes with contents of local operating stack)")
@@ -340,8 +384,8 @@ mod implementations {
 
     instruction! {
         call(ctx, args) {
-            // This never needs to re-allocate, but does need to do O(n) data movement 
-            // if the circular buffer doesn’t happen to be at the beginning of the 
+            // This never needs to re-allocate, but does need to do O(n) data movement
+            // if the circular buffer doesn’t happen to be at the beginning of the
             // allocation (https://doc.rust-lang.org/std/collections/vec_deque/struct.VecDeque.html)
             let arguments = ctx.get_local_operating_stack().into();
 
@@ -358,7 +402,7 @@ mod implementations {
                     destination_label: f.location.clone(),
                     callback_state: f.callback_state.clone(),
                     stack: ctx.arced_call_stack().clone(),
-                    arguments, 
+                    arguments,
                 }));
 
                 ctx.clear_stack();
@@ -417,6 +461,22 @@ mod implementations {
             let arg = ctx.pop().unwrap();
 
             ctx.register_variable(name.clone(), arg);
+
+            Ok(())
+        }
+
+        store_object(ctx, args) {
+            let Some(name) = args.first() else {
+                bail!("store_object requires a name")
+            };
+
+            if ctx.stack_size() != 1 {
+                bail!("store can only store a single item");
+            }
+
+            let arg = ctx.pop().unwrap();
+
+            ctx.update_callback_variable(name.to_string(), arg.into())?;
 
             Ok(())
         }
@@ -559,6 +619,7 @@ pub fn query(name: &String) -> InstructionSignature {
         "char" => implementations::make_char,
         "byte" => implementations::make_byte,
         "make_function" => implementations::make_function,
+        "make_object" => implementations::make_object,
         "make_vector" => implementations::make_vector,
         "void" => implementations::void,
         "breakpoint" => implementations::breakpoint,
@@ -567,6 +628,7 @@ pub fn query(name: &String) -> InstructionSignature {
         "call" => implementations::call,
         "stack_size" => implementations::stack_size,
         "store" => implementations::store,
+        "store_object" => implementations::store_object,
         "load" => implementations::load,
         "load_local" => implementations::load_local,
         "typecmp" => implementations::typecmp,

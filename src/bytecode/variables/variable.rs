@@ -76,12 +76,22 @@ primitive! {
     Byte(u8),
     Function(crate::bytecode::function::PrimitiveFunction),
     Vector(Vec<crate::bytecode::variables::Primitive>),
+    Object(crate::bytecode::variables::Object),
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Variable {
     pub data: Primitive,
     pub ty: Type,
+}
+
+impl From<Primitive> for Variable {
+    fn from(value: Primitive) -> Self {
+        Self {
+            ty: value.ty(),
+            data: value,
+        }
+    }
 }
 
 impl Display for Variable {
@@ -239,6 +249,7 @@ impl Display for Primitive {
             Byte(b) => write!(f, "0b{:b}", **b),
             Function(fun) => write!(f, "{fun}"),
             Vector(l) => write!(f, "{l}"),
+            Object(o) => write!(f, "{o}"),
         }
     }
 }

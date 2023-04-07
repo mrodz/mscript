@@ -72,7 +72,7 @@ pub struct Function {
     line_number: u32,
     pub(crate) seek_pos: u64,
     pub(crate) attributes: Vec<Attributes>,
-    name: String,
+    pub name: String,
 }
 
 #[derive(Debug, Clone)]
@@ -295,6 +295,18 @@ pub struct Functions {
 }
 
 impl<'a> Functions {
+    pub fn get_object_functions<'b: 'a>(
+        &'a self,
+        name: &'b String,
+    ) -> impl Iterator<Item = &Function> + 'a {
+        self.map.iter().filter_map(move |(key, val)| {
+            if key.starts_with(name) {
+                Some(val.clone())
+            } else {
+                None
+            }
+        })
+    }
     pub fn get(&self, signature: &str) -> Result<&Function> {
         let result = self
             .map
