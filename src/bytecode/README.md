@@ -184,6 +184,75 @@ See `constexpr`.
 
 ---
 
+### `make_object`
+Create an object by grouping all of the variables local to a scope; they are stored under the name of a function.
+
+Objects can:
+* be passed to functions
+* be mutated (type safety checked at runtime)
+* have methods associated to them
+
+For example, the following code:
+
+```
+person = obj(name, age)
+	.grow_up()
+		age += 1
+
+me = person("Mateo", 16)
+me.grow_up()
+```
+
+Will compile into:
+
+```
+function person$grow_up
+	load_object age
+	int 1
+	bin_op +
+	store_object age
+
+	void
+	ret
+end
+
+function person
+	arg 0
+	store name
+	arg 1
+	store age
+
+	make_object
+
+	ret
+end
+
+function main
+	string "Mateo"
+	int 16
+	call path/to/file.mmm#person
+	store me
+
+	load_local me
+	call_object path/to/file.mmm#person$grow_up
+
+	void
+	ret
+end
+```
+
+---
+
+### `make_vector ! [[capacity]?]`
+If capacity is present, will initialize a blank vector with a specified capacity.
+Otherwise, will consume the local operating stack and copy its contents to a new vector.
+
+| ! | Reason |
+| - | - |
+| 1 | [capacity] is not a usize. |
+
+---
+
 ### `make_function ! [path_to_function, [callback_variable, ...]?]`
 Make a function "pointer", from a path. The path is not checked until a user calls this pointer.
 
@@ -295,17 +364,53 @@ If the interpreter accepts the request, and calling the function returns a value
 
 ---
 
+### `call_object ! [path] (>=1)`
+Sends a request to call a method on an object, given a path.
+
+Acts just like `call`, except that the first item on the local operating stack must be an Object. This parameter is not passed as an argument, but the calling function will have access to its fields and other methods. 
+
+| ! | Reason |
+| - | - |
+| 1 | Argument length == 0. |
+| 2 | First item on the local is not an Object. |
+| 3 | [path] does not match one of object's methods. | 
+| 4 | (_Indirect_) If the request to jump is accepted and the path is malformed. |
+
+---
+
 ### `stack_size`
 Will return the depth of the call stack, ie. how many function calls can be traced to the current executing instruction. The result of this operation gets pushed on to the end of the local stack.
 
 ---
 
-### `store ! [name]`
+### `store ! [name] (==1)`
 Stores a variable to the current stack frame. Child frames will have access to its value.
 
 | ! | Reason |
 | - | - |
 | 1 | Argument length != 1. |
+
+---
+
+### `store_object ! [name] (==1)`
+Stores a variable to an object. The variable must have already been mapped, and the type of the item in the stack must equal the type of the previous object field. This is the way to mutate an object from within a function. For external modification, use the `mutate` instruction.
+
+| ! | Reason |
+| - | - |
+| 1 | Argument length != 1. |
+| 2 | Field does not exist on object |
+| 3 | Type mismatch |
+
+---
+
+### `mutate ! [name] (==2)`
+Update an object's fields. The first item in the stack must be the object, and the second the updated value.
+
+| ! | Reason |
+| - | - |
+| 1 | Argument length != 2. |
+| 2 | Field [name] does not exist on the object |
+| 3 | Type mismatch |w
 
 ---
 
@@ -335,7 +440,17 @@ Loads a variable from the frozen callback pool. If not found, the program will e
 
 | ! | Reason |
 | - | - |
-| 2 | The variable hasn't been stored in the callback pool. |
+| 1 | The variable hasn't been stored in the data pool. |
+
+---
+
+### `load_object ! [name]`
+
+Equivalent to `load_callback`. This was introduced to make it clearer when you're dealing with objects.
+
+| ! | Reason |
+| - | - |
+| 1 | The variable hasn't been stored in the data pool. |
 
 ---
 

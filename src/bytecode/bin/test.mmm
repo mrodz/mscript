@@ -1,62 +1,35 @@
-function add_n$0
-	arg 0
-	store x
-
-	load_callback number
-	load_local x
-
+function person$grow_up
+	load_object age
+	int 1
 	bin_op +
+	store_object age
 
+	void
 	ret
 end
 
-function add_n
+function person
 	arg 0
-	store number
+	store name
+	arg 1
+	store age
 
-	make_function src/bytecode/bin/test.mmm#add_n$0 number
+	make_object
 
 	ret
 end
 
 function main
-bool false
-if
-	int 50
-	call src/bytecode/bin/test.mmm#add_n
-	store add_fifty
+	string "Mateo"
+	int 16
+	call src/bytecode/bin/test.mmm#person
 
-	int 75
-	load add_fifty
-	call
+	store me
 
+	load_local me
 	printn *
-
-	void
-endif
-
-	call src/bytecode/bin/test.mmm#test_vecs
-
-	void
-	ret
-end
-
-function test_vecs
-	int 5
-	int 0
-	string "Hello, World!"
-	float 3.14159
-	constexpr 0b101
-	make_vector
-
+	call_object src/bytecode/bin/test.mmm#person$grow_up
 	printn *
-
-	int 10
-	vec_op mut 0
-
-	printn *
-
-	stack_dump
 
 	void
 	ret

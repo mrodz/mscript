@@ -79,6 +79,13 @@ macro_rules! vector {
 	};
 }
 
+#[macro_export]
+macro_rules! object {
+    ($data:expr) => {
+        Primitive::Object(buckets::Object($data))
+    };
+}
+
 #[cfg(test)]
 mod test {
     use crate::bytecode::variables::{buckets, Primitive};

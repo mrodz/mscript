@@ -1,12 +1,16 @@
 use super::context::Ctx;
 use super::function::InstructionExitState;
 use super::stack::{Stack, VariableMapping};
-use super::variables::{bin_op_from, bin_op_result, Primitive};
+use super::variables::{bin_op_from, bin_op_result, ObjectBuilder, Primitive};
 use anyhow::{bail, Context, Result};
+use once_cell::sync::Lazy;
 use std::cell::Cell;
+use std::collections::HashSet;
 use std::fmt::Debug;
 use std::io::{stdin, stdout, Write};
 use std::sync::Arc;
+
+static mut OBJECT_BUILDER: Lazy<ObjectBuilder> = Lazy::new(|| ObjectBuilder::new());
 
 pub type InstructionSignature = fn(&mut Ctx, &Vec<String>) -> Result<()>;
 
@@ -63,9 +67,10 @@ macro_rules! make_type {
 mod implementations {
     use super::*;
     use crate::bytecode::function::{PrimitiveFunction, ReturnValue};
-    use crate::bytecode::variables::{buckets, Variable};
-    use crate::{bool, function, int, vector};
+    use crate::bytecode::variables::{buckets, Variable, Object};
+    use crate::{bool, function, int, object, vector};
     use std::collections::HashMap;
+    use std::rc::Rc;
 
     instruction! {
         constexpr(ctx, args) {
@@ -282,6 +287,40 @@ mod implementations {
             Ok(())
         }
 
+        make_object(ctx, args) {
+            if args.len() != 0 {
+                bail!("`make_object` does not require arguments")
+            }
+            
+            let object_variables = Arc::new(ctx.get_frame_variables().clone());
+
+            let function = ctx.owner();
+            let name = Rc::new(function.name.clone());
+
+            let obj = unsafe {
+                if !OBJECT_BUILDER.has_class_been_registered(&name) {
+                    let location = function.location.borrow();
+                    let object_path = format!("{}#{name}$", location.path);
+
+                    let object_functions = (*function.location.as_ptr()).get_object_functions(&object_path)?;
+
+                    let mut mapping: HashSet<String> = HashSet::new();
+
+                    for func in object_functions {
+                        mapping.insert(func.get_qualified_name());
+                    }
+
+                    OBJECT_BUILDER.register_class(Rc::clone(&name), mapping);
+                }
+
+                OBJECT_BUILDER.name(Rc::clone(&name)).object_variables(object_variables).build()
+            };
+
+            ctx.push(object!(Arc::new(obj)));
+
+            Ok(())
+        }
+
         make_vector(ctx, args) {
             if args.len() > 1 {
                 bail!("`make_vector` instruction requires 1 argument (capacity) or none (initializes with contents of local operating stack)")
@@ -315,6 +354,7 @@ mod implementations {
 
             if arg == "*" {
                 let Some(first) = ctx.get_nth_op_item(0) else {
+                    println!();
                     return Ok(())
                 };
 
@@ -339,9 +379,58 @@ mod implementations {
     }
 
     instruction! {
+        call_object(ctx, args) {
+            let path = args.last().context("missing method name argument")?;
+
+            let stack = ctx.get_local_operating_stack();
+            let first = stack.get(0);
+
+            let Some(Primitive::Object(o)) = first else {
+                bail!("last item in the local stack {first:?} is not an object.")
+            };
+
+            let arguments = ctx.get_local_operating_stack().into();
+
+            ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
+                destination_label: path.clone(),
+                callback_state: Some(Arc::clone(&o.object_variables)),
+                stack: ctx.arced_call_stack().clone(),
+                arguments,
+            }));
+
+            Ok(())
+        }
+
+        mutate(ctx, args) {
+            let var_name = args.first().context("object mutation requires a name argument")?;
+
+            if ctx.stack_size() != 2 {
+                bail!("mutating an object requires two items in the local operating stack (obj, data)")
+            }
+
+            let new_item: Variable = ctx.pop().context("could not pop first item")?.into();
+
+            let Some(Primitive::Object(buckets::Object(o))) = ctx.get_last_op_item_mut() else {
+                bail!("Cannot perform an object mutation on a non-object")
+            };
+
+            unsafe {
+                // this bypass of Arc protections is messy and should be refactored.
+                let var = (*(Arc::as_ptr(&o) as *mut Object)).has_variable_mut(var_name).context("variable does not exist on object")?;
+                
+                if var.ty != new_item.ty {
+                    bail!("mismatched types in assignment ({:?} & {:?})", var.ty, new_item.ty)
+                }
+
+                *var = new_item.into();
+            }
+
+            Ok(())
+        }
+
         call(ctx, args) {
-            // This never needs to re-allocate, but does need to do O(n) data movement 
-            // if the circular buffer doesn’t happen to be at the beginning of the 
+            // This never needs to re-allocate, but does need to do O(n) data movement
+            // if the circular buffer doesn’t happen to be at the beginning of the
             // allocation (https://doc.rust-lang.org/std/collections/vec_deque/struct.VecDeque.html)
             let arguments = ctx.get_local_operating_stack().into();
 
@@ -358,7 +447,7 @@ mod implementations {
                     destination_label: f.location.clone(),
                     callback_state: f.callback_state.clone(),
                     stack: ctx.arced_call_stack().clone(),
-                    arguments, 
+                    arguments,
                 }));
 
                 ctx.clear_stack();
@@ -417,6 +506,22 @@ mod implementations {
             let arg = ctx.pop().unwrap();
 
             ctx.register_variable(name.clone(), arg);
+
+            Ok(())
+        }
+
+        store_object(ctx, args) {
+            let Some(name) = args.first() else {
+                bail!("store_object requires a name")
+            };
+
+            if ctx.stack_size() != 1 {
+                bail!("store can only store a single item");
+            }
+
+            let arg = ctx.pop().unwrap();
+
+            ctx.update_callback_variable(name.to_string(), arg.into())?;
 
             Ok(())
         }
@@ -559,14 +664,17 @@ pub fn query(name: &String) -> InstructionSignature {
         "char" => implementations::make_char,
         "byte" => implementations::make_byte,
         "make_function" => implementations::make_function,
+        "make_object" => implementations::make_object,
         "make_vector" => implementations::make_vector,
         "void" => implementations::void,
         "breakpoint" => implementations::breakpoint,
         "ret" => implementations::ret,
         "printn" => implementations::printn,
         "call" => implementations::call,
+        "call_object" => implementations::call_object,
         "stack_size" => implementations::stack_size,
         "store" => implementations::store,
+        "store_object" => implementations::store_object,
         "load" => implementations::load,
         "load_local" => implementations::load_local,
         "typecmp" => implementations::typecmp,
@@ -576,7 +684,8 @@ pub fn query(name: &String) -> InstructionSignature {
         "strict_equ" => implementations::strict_equ,
         "equ" => implementations::equ,
         "arg" => implementations::arg,
-        "load_callback" => implementations::load_callback,
+        "mutate" => implementations::mutate,
+        "load_callback" | "load_object" => implementations::load_callback,
         _ => unreachable!("unknown bytecode instruction ({name})"),
     }
 }

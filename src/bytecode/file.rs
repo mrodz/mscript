@@ -79,6 +79,14 @@ impl MScriptFile {
         functions.if_mapper.get(&if_pos).map(|x| x.clone())
     }
 
+    pub fn get_object_functions<'a, 'b: 'a>(&'a mut self, name: &'b String) -> Result<impl Iterator<Item = &Function> + 'a> {
+        let Some(ref mut functions) = self.functions else {
+            bail!("no functions")
+        };
+
+        Ok(functions.get_object_functions(name))
+    }
+
     fn get_functions(arc_of_self: &Arc<RefCell<Self>>) -> Result<Functions> {
         println!("Functions in {}", arc_of_self.borrow().path);
 

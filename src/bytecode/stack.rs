@@ -1,9 +1,10 @@
+use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 
 use super::variables::{Primitive, Variable};
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, PartialEq, Clone)]
 pub struct VariableMapping(pub HashMap<String, Variable>);
 
 impl Display for VariableMapping {
@@ -27,6 +28,20 @@ impl Display for VariableMapping {
 impl VariableMapping {
     pub fn get(&self, key: &String) -> Option<&Variable> {
         self.0.get(key)
+    }
+
+    pub fn get_mut(&mut self, key: &String) -> Option<&mut Variable> {
+        self.0.get_mut(key)
+    }
+
+    pub fn update(&mut self, key: String, value: Variable) -> Result<()> {
+        // if insert returns None, that means there was no value there,
+        // and this `update` is invalid.
+        let _ = self
+            .0
+            .insert(key, value)
+            .context("variable has not been mapped")?;
+        Ok(())
     }
 }
 
