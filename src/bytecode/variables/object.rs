@@ -1,4 +1,4 @@
-use super::Primitive;
+use super::{Primitive, Variable};
 use crate::bytecode::context::Ctx;
 use crate::bytecode::function::InstructionExitState;
 use crate::bytecode::instruction::JumpRequest;
@@ -88,6 +88,14 @@ impl Object {
             object_variables,
         }
     }
+
+	pub fn has_variable_mut(&mut self, variable_name: &String) -> Option<&mut Variable> {
+		let object_variables = Arc::as_ptr(&self.object_variables) as *mut VariableMapping;
+
+		unsafe {
+			(*object_variables).0.get_mut(variable_name)
+		}
+	}
 
     pub fn has_function(&self, function_name: &String) -> bool {
 		self.functions.contains(function_name)

@@ -1,6 +1,6 @@
 use crate::{bigint, bool, byte, char, float, int, string, vector};
 use anyhow::{bail, Result};
-use std::{fmt::{Debug, Display}, sync::Arc};
+use std::{fmt::{Debug, Display}};
 // use crate::bytecode::variables::vector::Vector;
 // pub struct Vector(Vec<crate::bytecode::variables::Primitive>);
 

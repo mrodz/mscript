@@ -67,7 +67,7 @@ macro_rules! make_type {
 mod implementations {
     use super::*;
     use crate::bytecode::function::{PrimitiveFunction, ReturnValue};
-    use crate::bytecode::variables::{buckets, Variable};
+    use crate::bytecode::variables::{buckets, Variable, Object};
     use crate::{bool, function, int, object, vector};
     use std::collections::HashMap;
     use std::rc::Rc;
@@ -307,7 +307,6 @@ mod implementations {
 
             let obj = unsafe {
                 if !OBJECT_BUILDER.has_class_been_registered(&name) {
-                    println!("first time this object has been initialized.");
                     let location = function.location.borrow();
                     let object_path = format!("{}#{name}$", location.path);
 
@@ -406,6 +405,32 @@ mod implementations {
                 stack: ctx.arced_call_stack().clone(),
                 arguments,
             }));
+
+            Ok(())
+        }
+
+        mutate(ctx, args) {
+            let var_name = args.first().context("object mutation requires a name argument")?;
+
+            if ctx.stack_size() != 2 {
+                bail!("mutating an object requires two items in the local operating stack (obj, data)")
+            }
+
+            let new_item: Variable = ctx.pop().context("could not pop first item")?.into();
+
+            let Some(Primitive::Object(buckets::Object(o))) = ctx.get_last_op_item_mut() else {
+                bail!("Cannot perform an object mutation on a non-object")
+            };
+
+            unsafe {
+                let var = (*(Arc::as_ptr(&o) as *mut Object)).has_variable_mut(var_name).context("variable does not exist on object")?;
+                
+                if var.ty != new_item.ty {
+                    bail!("mismatched types in assignment ({:?} & {:?})", var.ty, new_item.ty)
+                }
+
+                *var = new_item.into();
+            }
 
             Ok(())
         }
@@ -666,6 +691,7 @@ pub fn query(name: &String) -> InstructionSignature {
         "strict_equ" => implementations::strict_equ,
         "equ" => implementations::equ,
         "arg" => implementations::arg,
+        "mutate" => implementations::mutate,
         "load_callback" => implementations::load_callback,
         _ => unreachable!("unknown bytecode instruction ({name})"),
     }

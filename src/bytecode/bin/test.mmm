@@ -28,26 +28,24 @@ function main
 
 	load_local me
 
+	call src/bytecode/bin/test.mmm#get_older
+
+	load_local me
+
+	string "mark"
+	mutate name
+
 	printn *
 
-	call_object src/bytecode/bin/test.mmm#person$grow_up
-	printn *
+	ret
+end
 
-	call_object src/bytecode/bin/test.mmm#person$grow_up
+function get_older
+	arg 0
 	printn *
-	
-	call_object src/bytecode/bin/test.mmm#person$grow_up
-	printn *
-
 	call_object src/bytecode/bin/test.mmm#person$grow_up
 	printn *
 
 	void
-
-	printn *
-
-	load_local me
-	printn *
-
 	ret
 end
