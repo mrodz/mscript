@@ -307,12 +307,16 @@ mod implementations {
 
             let obj = unsafe {
                 if !OBJECT_BUILDER.has_class_been_registered(&name) {
-                    let object_functions = (*function.location.as_ptr()).get_object_functions(&name)?;
+                    println!("first time this object has been initialized.");
+                    let location = function.location.borrow();
+                    let object_path = format!("{}#{name}$", location.path);
+
+                    let object_functions = (*function.location.as_ptr()).get_object_functions(&object_path)?;
 
                     let mut mapping: HashSet<String> = HashSet::new();
 
                     for func in object_functions {
-                        mapping.insert(func.name.clone());
+                        mapping.insert(func.get_qualified_name());
                     }
 
                     OBJECT_BUILDER.register_class(Rc::clone(&name), mapping);
@@ -321,7 +325,7 @@ mod implementations {
                 OBJECT_BUILDER.name(Rc::clone(&name)).object_variables(object_variables).build()
             };
 
-            ctx.push(object!(obj));
+            ctx.push(object!(Arc::new(obj)));
 
             Ok(())
         }
@@ -359,6 +363,7 @@ mod implementations {
 
             if arg == "*" {
                 let Some(first) = ctx.get_nth_op_item(0) else {
+                    println!();
                     return Ok(())
                 };
 
@@ -383,6 +388,28 @@ mod implementations {
     }
 
     instruction! {
+        call_object(ctx, args) {
+            let path = args.last().context("missing method name argument")?;
+
+            let stack = ctx.get_local_operating_stack();
+            let first = stack.get(0);
+
+            let Some(Primitive::Object(o)) = first else {
+                bail!("last item in the local stack {first:?} is not an object.")
+            };
+
+            let arguments = ctx.get_local_operating_stack().into();
+
+            ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
+                destination_label: path.clone(),
+                callback_state: Some(Arc::clone(&o.object_variables)),
+                stack: ctx.arced_call_stack().clone(),
+                arguments,
+            }));
+
+            Ok(())
+        }
+
         call(ctx, args) {
             // This never needs to re-allocate, but does need to do O(n) data movement
             // if the circular buffer doesn’t happen to be at the beginning of the
@@ -626,6 +653,7 @@ pub fn query(name: &String) -> InstructionSignature {
         "ret" => implementations::ret,
         "printn" => implementations::printn,
         "call" => implementations::call,
+        "call_object" => implementations::call_object,
         "stack_size" => implementations::stack_size,
         "store" => implementations::store,
         "store_object" => implementations::store_object,

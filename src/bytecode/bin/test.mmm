@@ -30,5 +30,24 @@ function main
 
 	printn *
 
+	call_object src/bytecode/bin/test.mmm#person$grow_up
+	printn *
+
+	call_object src/bytecode/bin/test.mmm#person$grow_up
+	printn *
+	
+	call_object src/bytecode/bin/test.mmm#person$grow_up
+	printn *
+
+	call_object src/bytecode/bin/test.mmm#person$grow_up
+	printn *
+
+	void
+
+	printn *
+
+	load_local me
+	printn *
+
 	ret
 end

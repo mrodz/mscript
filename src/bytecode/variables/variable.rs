@@ -1,6 +1,6 @@
 use crate::{bigint, bool, byte, char, float, int, string, vector};
 use anyhow::{bail, Result};
-use std::fmt::{Debug, Display};
+use std::{fmt::{Debug, Display}, sync::Arc};
 // use crate::bytecode::variables::vector::Vector;
 // pub struct Vector(Vec<crate::bytecode::variables::Primitive>);
 
@@ -76,7 +76,7 @@ primitive! {
     Byte(u8),
     Function(crate::bytecode::function::PrimitiveFunction),
     Vector(Vec<crate::bytecode::variables::Primitive>),
-    Object(crate::bytecode::variables::Object),
+    Object(std::sync::Arc<crate::bytecode::variables::Object>),
 }
 
 #[derive(Clone, PartialEq)]

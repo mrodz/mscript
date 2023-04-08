@@ -3,9 +3,9 @@ use crate::bytecode::context::Ctx;
 use crate::bytecode::function::InstructionExitState;
 use crate::bytecode::instruction::JumpRequest;
 use crate::bytecode::stack::VariableMapping;
-use anyhow::{Context, Result};
+use anyhow::{Result, Context};
 use std::collections::{HashMap, HashSet};
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -42,10 +42,10 @@ impl ObjectBuilder {
         self.functions.insert(class_name, functions);
     }
 
-    pub fn build(&mut self) -> Object {
+    pub fn build(&'static mut self) -> Object {
         let name = self.name.clone().unwrap();
-        let functions: *mut HashSet<String> =
-            self.functions.get_mut(&name).expect("no functions");
+        let functions =
+            self.functions.get(&name).expect("no functions");
 
         let result = Object {
             name,
@@ -53,22 +53,20 @@ impl ObjectBuilder {
             functions,
         };
 
-		*self = ObjectBuilder::new();
-
         result
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug)]
 pub struct Object {
     pub name: Rc<String>,
     pub object_variables: Arc<VariableMapping>,
-    pub functions: *mut HashSet<String>,
+    pub functions: &'static HashSet<String>,
 }
 
 impl PartialOrd for Object {
     fn partial_cmp(&self, _other: &Self) -> Option<std::cmp::Ordering> {
-        unimplemented!()
+        unimplemented!("this must be done with a function call, not natively.")
     }
 }
 
@@ -81,7 +79,7 @@ impl PartialEq for Object {
 impl Object {
     pub fn new(
         name: Rc<String>,
-        functions: *mut HashSet<String>,
+        functions: &'static HashSet<String>,
         object_variables: Arc<VariableMapping>,
     ) -> Self {
         Self {
@@ -90,17 +88,16 @@ impl Object {
             object_variables,
         }
     }
+
     pub fn has_function(&self, function_name: &String) -> bool {
-        unsafe { (*self.functions).contains(function_name) }
+		self.functions.contains(function_name)
     }
 
     pub fn get_assoc_function_name(&self, name: &String) -> Result<&String> {
-        unsafe {
-            let x = (*self.functions)
-                .get(name)
-                .with_context(|| format!("Object {} does not have method {name}", self.name))?;
-            Ok(x)
-        }
+        let x = self.functions
+            .get(name)
+            .with_context(|| format!("Object {} does not have method {name}", self.name))?;
+        Ok(x)
     }
 
     pub fn call_fn(
@@ -122,7 +119,7 @@ impl Object {
     }
 }
 
-impl Debug for Object {
+impl Display for Object {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "[object {}]", self.name)
     }
