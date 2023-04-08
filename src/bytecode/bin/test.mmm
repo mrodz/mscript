@@ -1,9 +1,10 @@
 function person$grow_up
-	load_callback age
+	load_object age
 	int 1
 	bin_op +
 	store_object age
 
+	void
 	ret
 end
 
@@ -13,35 +14,19 @@ function person
 	arg 1
 	store age
 
-	make_object name age
+	make_object
 
 	ret
 end
 
 function main
-	string "mateo"
+	string "Mateo"
 	int 16
-
 	call src/bytecode/bin/test.mmm#person
-	
+
 	store me
 
 	load_local me
-
-	call src/bytecode/bin/test.mmm#get_older
-
-	load_local me
-
-	string "mark"
-	mutate name
-
-	printn *
-
-	ret
-end
-
-function get_older
-	arg 0
 	printn *
 	call_object src/bytecode/bin/test.mmm#person$grow_up
 	printn *

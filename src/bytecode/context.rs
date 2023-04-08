@@ -165,6 +165,10 @@ impl<'a> Ctx<'a> {
         unsafe { (*self.call_stack.as_ptr()).find_name(name) }
     }
 
+    pub(crate) fn get_frame_variables(&self) -> &VariableMapping {
+        unsafe { (*self.call_stack.as_ptr()).get_frame_variables() }
+    }
+
     pub(crate) fn load_local(&self, name: &String) -> Option<&Variable> {
         unsafe { (*self.call_stack.as_ptr()).get_frame_variables().get(name) }
     }

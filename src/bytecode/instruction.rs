@@ -288,19 +288,11 @@ mod implementations {
         }
 
         make_object(ctx, args) {
-            let len = args.len();
-
-            let mut arguments: HashMap<String, Variable> = HashMap::with_capacity(len - 1); // maybe len
-
-            for var_name in args {
-                let Some(var) = ctx.load_local(var_name) else {
-                    bail!("{var_name} is not in scope")
-                };
-
-                arguments.insert(var_name.clone(), var.clone());
+            if args.len() != 0 {
+                bail!("`make_object` does not require arguments")
             }
-
-            let object_variables = Arc::new(VariableMapping(arguments));
+            
+            let object_variables = Arc::new(ctx.get_frame_variables().clone());
 
             let function = ctx.owner();
             let name = Rc::new(function.name.clone());
@@ -423,6 +415,7 @@ mod implementations {
             };
 
             unsafe {
+                // this bypass of Arc protections is messy and should be refactored.
                 let var = (*(Arc::as_ptr(&o) as *mut Object)).has_variable_mut(var_name).context("variable does not exist on object")?;
                 
                 if var.ty != new_item.ty {
@@ -692,7 +685,7 @@ pub fn query(name: &String) -> InstructionSignature {
         "equ" => implementations::equ,
         "arg" => implementations::arg,
         "mutate" => implementations::mutate,
-        "load_callback" => implementations::load_callback,
+        "load_callback" | "load_object" => implementations::load_callback,
         _ => unreachable!("unknown bytecode instruction ({name})"),
     }
 }

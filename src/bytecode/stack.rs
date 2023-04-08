@@ -4,7 +4,7 @@ use std::fmt::{Debug, Display};
 
 use super::variables::{Primitive, Variable};
 
-#[derive(Default, Debug, PartialEq)]
+#[derive(Default, Debug, PartialEq, Clone)]
 pub struct VariableMapping(pub HashMap<String, Variable>);
 
 impl Display for VariableMapping {
