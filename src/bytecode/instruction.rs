@@ -365,7 +365,7 @@ mod implementations {
                     print!(", {var}")
                 }
 
-                println!();
+                println!("\r\n");
 
                 return Ok(());
             }
@@ -382,14 +382,14 @@ mod implementations {
         call_object(ctx, args) {
             let path = args.last().context("missing method name argument")?;
 
-            let stack = ctx.get_local_operating_stack();
-            let first = stack.get(0);
+            let first = ctx.pop_front().context("there is no item in the local stack")?;
 
-            let Some(Primitive::Object(o)) = first else {
+            let Primitive::Object(o) = first else {
                 bail!("last item in the local stack {first:?} is not an object.")
             };
 
             let arguments = ctx.get_local_operating_stack().into();
+            ctx.clear_stack();
 
             ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                 destination_label: path.clone(),
