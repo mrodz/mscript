@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use crate::{
     apply_bool_bin_op_if_applicable,
-    bytecode::variables::Primitive::{self},
+    variables::Primitive::{self},
 };
 
 impl std::cmp::PartialOrd for Primitive {

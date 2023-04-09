@@ -8,16 +8,15 @@ use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 
-use crate::bytecode::context::Ctx;
-use crate::bytecode::file::get_line_number_from_pos;
-use crate::bytecode::{arc_to_ref, instruction};
+use crate::context::Ctx;
+use crate::file::{get_line_number_from_pos, MScriptFile};
+use crate::{arc_to_ref, instruction};
 
 use super::attributes_parser::Attributes;
 use super::file::IfStatement;
 use super::instruction::{run_instruction, JumpRequest};
 use super::stack::{Stack, VariableMapping};
 use super::variables::Primitive;
-use super::MScriptFile;
 
 #[derive(Debug, Clone)]
 pub struct PrimitiveFunction {

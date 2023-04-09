@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 
-use crate::bytecode::attributes_parser::{parse_attributes, Attributes};
-use crate::bytecode::function::Function;
+use crate::attributes_parser::{parse_attributes, Attributes};
+use crate::function::Function;
 
 use super::arc_to_ref;
 use super::function::Functions;

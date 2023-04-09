@@ -2,7 +2,7 @@ use anyhow::{bail, Result};
 
 use crate::{
     apply_math_bin_op_if_applicable, bigint,
-    bytecode::variables::Primitive::{self, *},
+    variables::Primitive::{self, *},
     float, int, string, vector,
 };
 

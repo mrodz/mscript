@@ -1,14 +1,9 @@
 #![feature(box_patterns)]
-#![allow(dead_code)]
 
-extern crate pest_consume;
-extern crate pest_derive;
-
-mod bytecode;
 mod cli;
 
 use anyhow::Result;
-use bytecode::interpreter::Program;
+use bytecode::Program;
 use clap::Parser;
 use cli::Args;
 use std::thread;

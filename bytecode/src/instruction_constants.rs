@@ -49,6 +49,7 @@ pub static BIN_TO_REPR: &[&[u8]] = &[
     /* 0x22 [34] */ b"mutate",
     /* 0x23 [35] */ b"load_callback", // {
     /* 0x24 [36] */ b"load_object", // }
+    /* 0x25 [37] */ b"call_lib",
 ];
 
 pub static FUNCTION_POINTER_LOOKUP: &[InstructionSignature] = &[
@@ -89,4 +90,5 @@ pub static FUNCTION_POINTER_LOOKUP: &[InstructionSignature] = &[
     implementations::mutate,
     implementations::load_callback, // {
     implementations::load_callback, // }
+    implementations::call_lib,
 ];

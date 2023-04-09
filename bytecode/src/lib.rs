@@ -1,19 +1,21 @@
+#![feature(box_patterns)]
+#![allow(dead_code)]
+
 mod attributes_parser;
 mod context;
-pub mod file;
+mod file;
 mod function;
 mod instruction;
 mod instruction_constants;
-pub mod interpreter;
+mod interpreter;
 mod stack;
 
 use std::sync::Arc;
 
-pub use file::MScriptFile;
-pub use stack::Stack;
+pub use interpreter::Program;
 mod variables;
 
 #[inline(always)]
-pub fn arc_to_ref<T>(arc: &Arc<T>) -> &'static mut T {
+pub(crate) fn arc_to_ref<T>(arc: &Arc<T>) -> &'static mut T {
     unsafe { &mut (*(Arc::as_ptr(arc) as *mut T)) }
 }

@@ -1,12 +1,12 @@
 #[macro_export]
 macro_rules! string {
     ($data:expr) => {{
-        use crate::bytecode::variables::Primitive;
+        use crate::variables::Primitive;
 
         Primitive::Str($data)
     }};
     (raw $data:expr) => {{
-        use crate::bytecode::variables::Primitive;
+        use crate::variables::Primitive;
 
         Primitive::Str(Into::<String>::into($data))
     }};
@@ -15,7 +15,7 @@ macro_rules! string {
 #[macro_export]
 macro_rules! bigint {
     ($data:expr) => {{
-        use crate::bytecode::variables::Primitive;
+        use crate::variables::Primitive;
 
         Primitive::BigInt($data)
     }};
@@ -24,7 +24,7 @@ macro_rules! bigint {
 #[macro_export]
 macro_rules! int {
     ($data:expr) => {{
-        use crate::bytecode::variables::Primitive;
+        use crate::variables::Primitive;
 
         Primitive::Int($data)
     }};
@@ -33,7 +33,7 @@ macro_rules! int {
 #[macro_export]
 macro_rules! float {
     ($data:expr) => {{
-        use crate::bytecode::variables::Primitive;
+        use crate::variables::Primitive;
 
         Primitive::Float($data)
     }};
@@ -42,7 +42,7 @@ macro_rules! float {
 #[macro_export]
 macro_rules! bool {
     ($data:expr) => {{
-        use crate::bytecode::variables::Primitive;
+        use crate::variables::Primitive;
 
         Primitive::Bool($data)
     }};
@@ -51,7 +51,7 @@ macro_rules! bool {
 #[macro_export]
 macro_rules! byte {
     ($data:expr) => {{
-        use crate::bytecode::variables::Primitive;
+        use crate::variables::Primitive;
 
         Primitive::Byte($data)
     }};
@@ -60,7 +60,7 @@ macro_rules! byte {
 #[macro_export]
 macro_rules! function {
     ($data:expr) => {{
-        use crate::bytecode::variables::Primitive;
+        use crate::variables::Primitive;
 
         Primitive::Function($data)
     }};
@@ -69,17 +69,17 @@ macro_rules! function {
 #[macro_export]
 macro_rules! vector {
     () => {{
-        use crate::bytecode::variables::Primitive;
+        use crate::variables::Primitive;
 
         Primitive::Vector(vec![])
     }};
     ($elem:expr; $n:expr) => {{
-        use crate::bytecode::variables::Primitive;
+        use crate::variables::Primitive;
 
         Primitive::Vector(vec![$elem; $n])
     }};
     ($($x:expr),+ $(,)?) => {{
-        use crate::bytecode::variables::Primitive;
+        use crate::variables::Primitive;
 
         let mut vector = vec![];
         $(
@@ -88,7 +88,7 @@ macro_rules! vector {
         Primitive::Vector(vector)
     }};
 	(raw $data:expr) => {{
-        use crate::bytecode::variables::Primitive;
+        use crate::variables::Primitive;
 
 		Primitive::Vector($data)
 	}};
@@ -103,7 +103,7 @@ macro_rules! object {
 
 #[cfg(test)]
 mod test {
-    use crate::{bytecode::variables::Primitive, *};
+    use crate::{variables::Primitive, *};
 
     #[test]
     pub fn ints() {

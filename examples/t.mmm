@@ -1,6 +1,6 @@
 f main
-	call src/bytecode/bin/t.mmm#if_statements
-	call src/bytecode/bin/test2.mmm#in_another_file
+	call examples/t.mmm#if_statements
+	call examples/test2.mmm#in_another_file
 e
 
 f if_statements

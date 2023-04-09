@@ -1,9 +1,11 @@
+use crate::stack::Stack;
+
 use super::attributes_parser::Attributes;
 use super::file::IfStatement;
 use super::function::{Function, InstructionExitState};
 use super::stack::VariableMapping;
 use super::variables::{Primitive, Variable};
-use super::{arc_to_ref, Stack};
+use super::{arc_to_ref};
 use anyhow::{bail, Result};
 use std::collections::VecDeque;
 use std::fmt::Debug;

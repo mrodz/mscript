@@ -2,7 +2,7 @@ use anyhow::{bail, Result};
 
 use crate::{
     apply_math_bin_op_if_applicable,
-    bytecode::variables::Primitive::{self, *},
+    variables::Primitive::{self, *},
 };
 
 impl std::ops::Rem for Primitive {

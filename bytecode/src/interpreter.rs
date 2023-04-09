@@ -4,9 +4,12 @@ use std::sync::Arc;
 
 use anyhow::{bail, Result};
 
+use crate::file::MScriptFile;
+use crate::stack::Stack;
+
 use super::function::ReturnValue;
 use super::instruction::JumpRequest;
-use super::{arc_to_ref, MScriptFile, Stack};
+use super::{arc_to_ref};
 
 pub struct Program {
     entrypoint: Arc<String>,

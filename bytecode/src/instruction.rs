@@ -66,9 +66,9 @@ macro_rules! make_type {
 #[deny(dead_code)]
 pub mod implementations {
     use super::*;
-    use crate::bytecode::arc_to_ref;
-    use crate::bytecode::function::{PrimitiveFunction, ReturnValue};
-    use crate::bytecode::variables::{Object, Variable};
+    use crate::arc_to_ref;
+    use crate::function::{PrimitiveFunction, ReturnValue};
+    use crate::variables::{Object, Variable};
     use crate::{bool, function, int, object, vector};
     use std::collections::HashMap;
     use std::sync::Arc;
@@ -652,6 +652,12 @@ pub mod implementations {
             ctx.signal(InstructionExitState::GotoEndif);
 
             Ok(())
+        }
+    }
+
+    instruction! {
+        call_lib(_ctx, _args) {
+            todo!()
         }
     }
 }
