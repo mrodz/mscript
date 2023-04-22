@@ -2,3 +2,12 @@ function in_another_file
 	string "Hey! I'm in another file"
 	printn *
 end
+
+function main
+	stack_size
+	printn *
+
+	call src/bytecode/bin/test2.mmm#main
+
+	ret
+end

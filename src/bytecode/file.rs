@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
@@ -9,6 +8,7 @@ use anyhow::{bail, Context, Result};
 use crate::bytecode::attributes_parser::{parse_attributes, Attributes};
 use crate::bytecode::function::Function;
 
+use super::arc_to_ref;
 use super::function::Functions;
 
 pub struct MScriptFile {
@@ -87,10 +87,10 @@ impl MScriptFile {
         Ok(functions.get_object_functions(name))
     }
 
-    fn get_functions(arc_of_self: &Arc<RefCell<Self>>) -> Result<Functions> {
-        println!("Functions in {}", arc_of_self.borrow().path);
+    fn get_functions(arc_of_self: &Arc<Self>) -> Result<Functions> {
+        println!("Functions in {}", arc_of_self.path);
 
-        let handle_ref = arc_of_self.borrow();
+        let handle_ref = arc_of_self;
         let mut reader = BufReader::new(handle_ref.handle.as_ref());
         let mut buffer = String::new();
 
@@ -186,16 +186,16 @@ impl MScriptFile {
 }
 
 impl MScriptFile {
-    pub fn open(path: &String) -> Result<Arc<RefCell<Self>>> {
-        let new_uninit = Arc::new(RefCell::new(Self {
+    pub fn open(path: &String) -> Result<Arc<Self>> {
+        let new_uninit = Arc::new(Self {
             handle: Arc::new(File::open(path).context("failed opening file")?),
             path: Arc::new(path.clone()),
             functions: None,
-        }));
+        });
 
         let functions = Self::get_functions(&new_uninit)?;
 
-        new_uninit.borrow_mut().functions = Some(functions);
+        arc_to_ref(&new_uninit).functions = Some(functions);
 
         Ok(new_uninit)
     }

@@ -1,7 +1,7 @@
-use std::cell::{Cell, RefCell};
+// use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
-use std::io::{stdout, BufRead, BufReader, Seek, SeekFrom, Write};
+use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::ops::{Index, IndexMut};
 use std::path::Path;
 use std::sync::Arc;
@@ -10,11 +10,11 @@ use anyhow::{bail, Context, Result};
 
 use crate::bytecode::context::Ctx;
 use crate::bytecode::file::get_line_number_from_pos;
-use crate::bytecode::instruction;
+use crate::bytecode::{instruction, arc_to_ref};
 
 use super::attributes_parser::Attributes;
 use super::file::IfStatement;
-use super::instruction::{run_instruction, Instruction, JumpRequest};
+use super::instruction::{run_instruction, JumpRequest};
 use super::stack::{Stack, VariableMapping};
 use super::variables::Primitive;
 use super::MScriptFile;
@@ -68,7 +68,7 @@ impl Display for PrimitiveFunction {
 }
 
 pub struct Function {
-    pub location: Arc<RefCell<MScriptFile>>,
+    pub location: Arc<MScriptFile>,
     line_number: u32,
     pub(crate) seek_pos: u64,
     pub(crate) attributes: Vec<Attributes>,
@@ -96,7 +96,7 @@ impl Display for ReturnValue {
 
 impl Debug for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Function {{ name: {:?}, location: {}, line_number: {}, seek_pos: {}, attributes: {:?} }}", self.name, self.location.borrow().path, self.line_number, self.seek_pos, self.attributes)
+        write!(f, "Function {{ name: {:?}, location: {}, line_number: {}, seek_pos: {}, attributes: {:?} }}", self.name, self.location.path, self.line_number, self.seek_pos, self.attributes)
     }
 }
 
@@ -112,7 +112,7 @@ impl Display for Function {
             f,
             "{}@@{}:{}@@ function {} ({:#x})",
             attributes,
-            self.location.borrow().path,
+            self.location.path,
             self.line_number + 1,
             self.name,
             self.seek_pos
@@ -132,7 +132,7 @@ pub enum InstructionExitState {
 
 impl<'a> Function {
     pub fn new(
-        location: Arc<RefCell<MScriptFile>>,
+        location: Arc<MScriptFile>,
         line_number: u32,
         attributes: Vec<Attributes>,
         name: String,
@@ -149,40 +149,40 @@ impl<'a> Function {
 
     #[inline]
     pub fn get_qualified_name(&self) -> String {
-        format!("{}#{}", self.location.borrow().path, self.name)
+        format!("{}#{}", self.location.path, self.name)
     }
 
-    fn run_and_ret<'b>(
-        context: &mut Ctx<'a>,
-        instruction: &Instruction,
-    ) -> Result<InstructionExitState> {
-        run_instruction(context, instruction).with_context(|| {
-            let _ = stdout().flush();
-            format!("failed to run instruction")
-        })?;
+    // fn run_and_ret<'b>(
+    //     context: &mut Ctx<'a>,
+    //     instruction: &Instruction,
+    // ) -> Result<InstructionExitState> {
+    //     run_instruction(context, instruction).with_context(|| {
+    //         let _ = stdout().flush();
+    //         format!("failed to run instruction")
+    //     })?;
 
-        let r#ref = context.poll();
+    //     let r#ref = context.poll();
 
-        Ok(r#ref)
-    }
+    //     Ok(r#ref)
+    // }
 
     pub fn get_if_pos_from(&self, if_pos: u64) -> Option<IfStatement> {
-        unsafe { (*self.location.as_ptr()).get_if_from(if_pos) }
+        unsafe { (*Arc::as_ptr(&self.location)).get_if_from(if_pos) }
     }
 
     pub fn run(
         &mut self,
         args: Vec<Primitive>,
-        current_frame: Arc<Cell<Stack>>,
+        current_frame: Arc<Stack>,
         callback_state: Option<Arc<VariableMapping>>,
         jump_callback: &mut impl FnMut(JumpRequest) -> Result<ReturnValue>,
     ) -> Result<ReturnValue> {
         unsafe {
-            (*current_frame.as_ptr()).extend(self.get_qualified_name());
+            (*(Arc::as_ptr(&current_frame) as *mut Stack)).extend(self.get_qualified_name());
         }
 
-        let location = self.location.borrow();
-        let mut reader = BufReader::new(location.handle.as_ref());
+        // let location = self.location;
+        let mut reader = BufReader::new(&*self.location.handle);
 
         // this takes us to where the function is located in the file.
         let Ok(pos) = reader.seek(SeekFrom::Start(self.seek_pos)) else {
@@ -211,14 +211,15 @@ impl<'a> Function {
 
             let instruction = instruction::parse_line(&line).context("failed parsing line")?;
 
-            let ret = Self::run_and_ret(&mut context, &instruction)
-                .with_context(|| format!("`{}` on line {line_number}", instruction.name))?;
-
+            run_instruction(&mut context, &instruction).context("failed to run instruction").with_context( || 
+                format!("`{}` on line {line_number}", instruction.name)
+            )?;
+    
+            let ret = context.poll();
+    
             match ret {
                 InstructionExitState::ReturnValue(ret) => {
-                    unsafe {
-                        (*current_frame.as_ptr()).pop();
-                    }
+                    arc_to_ref(&current_frame).pop();
                     return Ok(ret.clone());
                 }
                 InstructionExitState::JumpRequest(jump_request) => {
@@ -281,9 +282,7 @@ impl<'a> Function {
         // Handle when a function does not explicitly return.
         eprintln!("Warning: function concludes without `ret` instruction");
 
-        unsafe {
-            (*current_frame.as_ptr()).pop();
-        }
+        arc_to_ref(&current_frame).pop();
 
         Ok(ReturnValue(None))
     }

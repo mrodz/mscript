@@ -6,13 +6,12 @@ use crate::bytecode::stack::VariableMapping;
 use anyhow::{Result, Context};
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
-use std::rc::Rc;
 use std::sync::Arc;
 
 pub struct ObjectBuilder {
-    name: Option<Rc<String>>,
+    name: Option<Arc<String>>,
     object_variables: Option<Arc<VariableMapping>>,
-    functions: HashMap<Rc<String>, HashSet<String>>,
+    functions: HashMap<Arc<String>, HashSet<String>>,
 }
 
 impl ObjectBuilder {
@@ -24,7 +23,7 @@ impl ObjectBuilder {
         }
     }
 
-    pub fn name(&mut self, name: Rc<String>) -> &mut Self {
+    pub fn name(&mut self, name: Arc<String>) -> &mut Self {
         self.name = Some(name);
         self
     }
@@ -38,7 +37,7 @@ impl ObjectBuilder {
         self.functions.contains_key(name)
     }
 
-    pub fn register_class(&mut self, class_name: Rc<String>, functions: HashSet<String>) {
+    pub fn register_class(&mut self, class_name: Arc<String>, functions: HashSet<String>) {
         self.functions.insert(class_name, functions);
     }
 
@@ -59,7 +58,7 @@ impl ObjectBuilder {
 
 #[derive(Debug)]
 pub struct Object {
-    pub name: Rc<String>,
+    pub name: Arc<String>,
     pub object_variables: Arc<VariableMapping>,
     pub functions: &'static HashSet<String>,
 }
@@ -78,7 +77,7 @@ impl PartialEq for Object {
 
 impl Object {
     pub fn new(
-        name: Rc<String>,
+        name: Arc<String>,
         functions: &'static HashSet<String>,
         object_variables: Arc<VariableMapping>,
     ) -> Self {

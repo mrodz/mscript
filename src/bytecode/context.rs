@@ -3,9 +3,8 @@ use super::file::IfStatement;
 use super::function::{Function, InstructionExitState};
 use super::stack::VariableMapping;
 use super::variables::{Primitive, Variable};
-use super::Stack;
+use super::{Stack, arc_to_ref};
 use anyhow::{bail, Result};
-use std::cell::Cell;
 use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -13,7 +12,7 @@ use std::sync::Arc;
 pub struct Ctx<'a> {
     stack: VecDeque<Primitive>,
     function: &'a Function,
-    call_stack: Arc<Cell<Stack>>,
+    call_stack: Arc<Stack>,
     pub active_if_stmts: Vec<(IfStatement, bool)>,
     exit_state: InstructionExitState,
     args: Vec<Primitive>,
@@ -29,7 +28,7 @@ impl Debug for Ctx<'_> {
 impl<'a> Ctx<'a> {
     pub fn new(
         function: &'a Function,
-        call_stack: Arc<Cell<Stack>>,
+        call_stack: Arc<Stack>,
         args: Vec<Primitive>,
         callback_state: Option<Arc<VariableMapping>>,
     ) -> Self {
@@ -70,7 +69,7 @@ impl<'a> Ctx<'a> {
         self.function
     }
 
-    pub fn arced_call_stack(&self) -> Arc<Cell<Stack>> {
+    pub fn arced_call_stack(&self) -> Arc<Stack> {
         Arc::clone(&self.call_stack)
     }
 
@@ -99,9 +98,8 @@ impl<'a> Ctx<'a> {
         self.stack.get_mut(last_idx)
     }
 
-    pub fn get_call_stack(&self) -> &mut Stack {
-        use std::borrow::BorrowMut;
-        unsafe { (*self.call_stack.as_ptr()).borrow_mut() }
+    pub fn get_call_stack_string(&self) -> String {
+        self.call_stack.to_string()
     }
 
     pub fn get_local_operating_stack(&self) -> VecDeque<Primitive> {
@@ -125,11 +123,11 @@ impl<'a> Ctx<'a> {
     }
 
     pub(crate) fn add_frame(&self, label: String) {
-        unsafe { (*self.call_stack.as_ptr()).extend(label) }
+        arc_to_ref(&self.call_stack).extend(label)
     }
 
     pub(crate) fn frames_count(&self) -> usize {
-        unsafe { (*self.call_stack.as_ptr()).size() }
+        unsafe { (*Arc::as_ptr(&self.call_stack)).size() }
     }
 
     pub(crate) fn clear_stack(&mut self) {
@@ -158,18 +156,18 @@ impl<'a> Ctx<'a> {
     }
 
     pub(crate) fn register_variable(&self, name: String, var: Primitive) {
-        unsafe { (*self.call_stack.as_ptr()).register_variable(name, var) }
+        arc_to_ref(&self.call_stack).register_variable(name, var)
     }
 
     pub(crate) fn load_variable(&self, name: &String) -> Option<&Variable> {
-        unsafe { (*self.call_stack.as_ptr()).find_name(name) }
+        self.call_stack.find_name(name)
     }
 
     pub(crate) fn get_frame_variables(&self) -> &VariableMapping {
-        unsafe { (*self.call_stack.as_ptr()).get_frame_variables() }
+        self.call_stack.get_frame_variables()
     }
 
     pub(crate) fn load_local(&self, name: &String) -> Option<&Variable> {
-        unsafe { (*self.call_stack.as_ptr()).get_frame_variables().get(name) }
+        self.call_stack.get_frame_variables().get(name)
     }
 }
