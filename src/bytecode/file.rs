@@ -117,16 +117,29 @@ impl MScriptFile {
                 let attr = parse_attributes(&buffer).context("Failed parsing attributes")?;
                 current_attributes.push(attr);
             } else {
-                let mut parts = buffer.split_ascii_whitespace();
-                let (first, second) = (parts.next(), parts.next());
+                let bytes = buffer.as_bytes();
+                let first = bytes[0];
+                // let mut parts = buffer.split_ascii_whitespace();
+                // let (first, second) = (parts.next(), parts.next());
 
-                match (first, second) {
-                    (Some("function"), Some(name)) => {
+                match first {
+                    b'f' => {
+                        // let mut idx = 2;
+                        // let last_idx = loop {
+                        //     if let Some(b) = bytes.get(idx) {
+                        //         if b == &b'~' {
+                        //             break idx
+                        //         }
+                        //     } else {
+                        //         bail!("could not read byte")
+                        //     }
+                        //     idx += 1;
+                        // };
                         let function = Function::new(
                             arc_of_self.clone(),
                             line_number,
                             current_attributes,
-                            name.to_string(),
+                            String::from_utf8_lossy(&bytes[2..bytes.len() - 2]).to_string(),
                             seek_pos,
                         );
 
@@ -135,14 +148,14 @@ impl MScriptFile {
                         functions.insert(function.get_qualified_name(), function);
                         current_attributes = vec![];
                     }
-                    (Some("if"), None) => {
+                    28 /* if */ => {
                         if_positions.push(seek_pos);
                     }
-                    (Some("else"), None) => {
+                    29 /* else */ => {
                         else_to_if_mapper
                             .insert(*if_positions.last().expect("else without if"), seek_pos);
                     }
-                    (Some("endif"), None) => {
+                    30 /* endif */ => {
                         use IfStatement::*;
 
                         let if_pos = if_positions.pop().expect("endif without if");
@@ -188,7 +201,7 @@ impl MScriptFile {
 impl MScriptFile {
     pub fn open(path: &String) -> Result<Arc<Self>> {
         let new_uninit = Arc::new(Self {
-            handle: Arc::new(File::open(path).context("failed opening file")?),
+            handle: Arc::new(File::open(path).with_context(|| format!("failed opening file `{path}`"))?),
             path: Arc::new(path.clone()),
             functions: None,
         });

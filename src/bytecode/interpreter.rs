@@ -72,7 +72,7 @@ impl Program {
         let path = path.to_string();
         let symbol = &symbol[1..];
 
-        arc_to_ref(&arc_of_self).add_file(&path);
+        arc_to_ref(&arc_of_self).add_file(&path)?;
 
         let file = Self::get_file(arc_of_self.clone(), &path)?;
 

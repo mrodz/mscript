@@ -1,5 +1,7 @@
 mod attributes_parser;
 mod context;
+pub mod binary_representation;
+mod instruction_constants;
 pub mod file;
 mod function;
 mod instruction;

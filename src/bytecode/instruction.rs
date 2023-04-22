@@ -1,5 +1,6 @@
 use super::context::Ctx;
 use super::function::InstructionExitState;
+use super::instruction_constants;
 use super::stack::{Stack, VariableMapping};
 use super::variables::{bin_op_from, bin_op_result, ObjectBuilder, Primitive};
 use anyhow::{bail, Context, Result};
@@ -63,7 +64,7 @@ macro_rules! make_type {
 }
 
 #[deny(dead_code)]
-mod implementations {
+pub mod implementations {
     use super::*;
     use crate::bytecode::arc_to_ref;
     use crate::bytecode::function::{PrimitiveFunction, ReturnValue};
@@ -648,51 +649,58 @@ mod implementations {
     }
 }
 
-pub fn query(name: &String) -> InstructionSignature {
-    match name.as_str() {
-        "nop" | "#" => implementations::nop,
-        "constexpr" => implementations::constexpr,
-        "stack_dump" => implementations::stack_dump,
-        "pop" => implementations::pop,
-        "bin_op" => implementations::bin_op,
-        "vec_op" => implementations::vec_op,
-        "bool" => implementations::make_bool,
-        "string" => implementations::make_str,
-        "bigint" => implementations::make_bigint,
-        "int" => implementations::make_int,
-        "float" => implementations::make_float,
-        "char" => implementations::make_char,
-        "byte" => implementations::make_byte,
-        "make_function" => implementations::make_function,
-        "make_object" => implementations::make_object,
-        "make_vector" => implementations::make_vector,
-        "void" => implementations::void,
-        "breakpoint" => implementations::breakpoint,
-        "ret" => implementations::ret,
-        "printn" => implementations::printn,
-        "call" => implementations::call,
-        "call_object" => implementations::call_object,
-        "stack_size" => implementations::stack_size,
-        "store" => implementations::store,
-        "store_object" => implementations::store_object,
-        "load" => implementations::load,
-        "load_local" => implementations::load_local,
-        "typecmp" => implementations::typecmp,
-        "if" => implementations::if_stmt,
-        "else" => implementations::else_stmt,
-        "endif" => implementations::endif_stmt,
-        "strict_equ" => implementations::strict_equ,
-        "equ" => implementations::equ,
-        "arg" => implementations::arg,
-        "mutate" => implementations::mutate,
-        "load_callback" | "load_object" => implementations::load_callback,
-        _ => unreachable!("unknown bytecode instruction ({name})"),
-    }
+pub fn query(byte: u8) -> InstructionSignature {
+    instruction_constants::FUNCTION_POINTER_LOOKUP[byte as usize]
+}
+
+pub fn query_str(name: &String) -> InstructionSignature {
+    let bin = instruction_constants::REPR_TO_BIN.get(name.as_bytes()).expect("unknown bytecode instruction");
+    instruction_constants::FUNCTION_POINTER_LOOKUP[*bin as usize]
+
+    // match name.as_str() {
+    //     "nop" => implementations::nop,
+    //     "constexpr" => implementations::constexpr,
+    //     "stack_dump" => implementations::stack_dump,
+    //     "pop" => implementations::pop,
+    //     "bin_op" => implementations::bin_op,
+    //     "vec_op" => implementations::vec_op,
+    //     "bool" => implementations::make_bool,
+    //     "string" => implementations::make_str,
+    //     "bigint" => implementations::make_bigint,
+    //     "int" => implementations::make_int,
+    //     "float" => implementations::make_float,
+    //     "char" => implementations::make_char,
+    //     "byte" => implementations::make_byte,
+    //     "make_function" => implementations::make_function,
+    //     "make_object" => implementations::make_object,
+    //     "make_vector" => implementations::make_vector,
+    //     "void" => implementations::void,
+    //     "breakpoint" => implementations::breakpoint,
+    //     "ret" => implementations::ret,
+    //     "printn" => implementations::printn,
+    //     "call" => implementations::call,
+    //     "call_object" => implementations::call_object,
+    //     "stack_size" => implementations::stack_size,
+    //     "store" => implementations::store,
+    //     "store_object" => implementations::store_object,
+    //     "load" => implementations::load,
+    //     "load_local" => implementations::load_local,
+    //     "typecmp" => implementations::typecmp,
+    //     "if" => implementations::if_stmt,
+    //     "else" => implementations::else_stmt,
+    //     "endif" => implementations::endif_stmt,
+    //     "strict_equ" => implementations::strict_equ,
+    //     "equ" => implementations::equ,
+    //     "arg" => implementations::arg,
+    //     "mutate" => implementations::mutate,
+    //     "load_callback" | "load_object" => implementations::load_callback,
+    //     _ => unreachable!("unknown bytecode instruction ({name})"),
+    // }
 }
 
 #[inline(always)]
 pub fn run_instruction(ctx: &mut Ctx, instruction: &Instruction) -> Result<()> {
-    let instruction_fn = query(&instruction.name);
+    let instruction_fn = query(instruction.name);
     instruction_fn(ctx, &instruction.arguments)?;
     Ok(())
 }
@@ -782,7 +790,7 @@ pub fn split_string(string: &String) -> Result<Vec<String>> {
 
 pub fn parse_line(line: &String) -> Result<Instruction> {
     if line.trim().is_empty() {
-        return Ok(Instruction::nop());
+        return Ok(Instruction { name: 0x00, arguments: vec![] });
     }
 
     let mut arguments = split_string(line).context("splitting line")?;
@@ -790,7 +798,7 @@ pub fn parse_line(line: &String) -> Result<Instruction> {
     let name = arguments.remove(0);
 
     Ok(Instruction {
-        name: name.trim_start().into(),
+        name: name.as_bytes()[0],
         arguments,
     })
 }
@@ -811,15 +819,6 @@ impl Debug for JumpRequest {
 
 #[derive(Debug)]
 pub struct Instruction {
-    pub name: String,
+    pub name: u8,
     arguments: Vec<String>,
-}
-
-impl Instruction {
-    pub fn nop() -> Self {
-        Self {
-            name: "nop".into(),
-            arguments: vec![],
-        }
-    }
 }
