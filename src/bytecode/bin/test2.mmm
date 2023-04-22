@@ -1,4 +1,6 @@
-function in_another_file
-	string "Hey! I'm in another file"
-	printn *
-end
+f main
+
+ *
+ src/bytecode/bin/test2.mmm#main
+
+e

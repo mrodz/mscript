@@ -1,17 +1,16 @@
-use std::cell::Cell;
 use std::path::Path;
 use std::sync::Arc;
-use std::{cell::RefCell, collections::HashMap};
+use std::collections::HashMap;
 
 use anyhow::{bail, Result};
 
 use super::function::ReturnValue;
 use super::instruction::JumpRequest;
-use super::{MScriptFile, Stack};
+use super::{arc_to_ref, MScriptFile, Stack};
 
 pub struct Program {
     entrypoint: Arc<String>,
-    files_in_use: HashMap<String, Arc<RefCell<MScriptFile>>>,
+    files_in_use: HashMap<String, Arc<MScriptFile>>,
 }
 
 impl Program {
@@ -31,8 +30,8 @@ impl Program {
         })
     }
 
-    pub fn is_file_loaded(&self, path: &String) -> Option<&Arc<RefCell<MScriptFile>>> {
-        self.files_in_use.get(path)
+    pub fn is_file_loaded(&self, path: &String) -> Option<Arc<MScriptFile>> {
+        self.files_in_use.get(path).map(|arc| arc.clone())
     }
 
     pub fn add_file(&mut self, path: &String) -> Result<Option<()>> {
@@ -47,22 +46,15 @@ impl Program {
         Ok(Some(()))
     }
 
-    pub fn get_file(
-        self_cell: Arc<Cell<Self>>,
-        path: &String,
-    ) -> Result<&Arc<RefCell<MScriptFile>>> {
-        unsafe {
-            let Some(file) = (*self_cell.as_ptr()).is_file_loaded(path) else {
-            bail!("file is not loaded")
-        };
-            Ok(file)
-        }
+    pub fn get_file(self_cell: Arc<Self>, path: &String) -> Result<Arc<MScriptFile>> {
+        let Some(file) = self_cell.is_file_loaded(path) else {
+                bail!("file is not loaded")
+            };
+
+        Ok(file)
     }
 
-    fn process_jump_request(
-        arc_of_self: Arc<Cell<Self>>,
-        request: JumpRequest,
-    ) -> Result<ReturnValue> {
+    fn process_jump_request(arc_of_self: Arc<Self>, request: JumpRequest) -> Result<ReturnValue> {
         let mut last_hash = 0;
 
         for (idx, char) in request.destination_label.chars().enumerate() {
@@ -80,48 +72,42 @@ impl Program {
         let path = path.to_string();
         let symbol = &symbol[1..];
 
-        unsafe {
-            (*arc_of_self.as_ptr()).add_file(&path)?;
-        }
+        arc_to_ref(&arc_of_self).add_file(&path)?;
 
         let file = Self::get_file(arc_of_self.clone(), &path)?;
 
-        let return_value = unsafe {
-            let Some(function) = (*file.as_ptr()).get_function(symbol) else {
-                bail!("could not find function (missing `{symbol}`)")
-            };
-
-            function.run(
-                request.arguments,
-                Arc::clone(&request.stack),
-                request.callback_state,
-                &mut |req| Self::process_jump_request(arc_of_self.clone(), req),
-            )?
+        let Some(function) = arc_to_ref(&file).get_function(symbol) else {
+            bail!("could not find function (missing `{symbol}`)")
         };
+
+        let return_value = function.run(
+            request.arguments,
+            Arc::clone(&request.stack),
+            request.callback_state,
+            &mut |req| Self::process_jump_request(arc_of_self.clone(), req),
+        )?;
 
         Ok(return_value)
     }
 
     pub fn execute(self) -> Result<()> {
-        let arc_of_self = Arc::new(Cell::new(self));
+        let arc_of_self = Arc::new(self);
 
-        let path = unsafe { &(*arc_of_self.as_ptr()).entrypoint };
+        let path = &*arc_of_self.entrypoint;
 
-        let entrypoint = Self::get_file(arc_of_self.clone(), &path)?;
-        let stack = Arc::new(Cell::new(Stack::new()));
+        let entrypoint = Self::get_file(arc_of_self.clone(), path)?;
+        let stack = Arc::new(Stack::new());
 
         // We have to use pointers to get around a guaranteed dynamic thread panic,
         // since `entrypoint` will not have been dropped during subsequent calls to
         // borrow_mut().
-        unsafe {
-            let Some(function) = (*entrypoint.as_ptr()).get_function("main") else {
-                bail!("could not find entrypoint (hint: try adding `function main`)")
-            };
+        let Some(function) = arc_to_ref(&entrypoint).get_function("main") else {
+            bail!("could not find entrypoint (hint: try adding `function main`)")
+        };
 
-            function.run(vec![], stack, None, &mut |req| {
-                Self::process_jump_request(arc_of_self.clone(), req)
-            })?;
-        }
+        function.run(vec![], stack, None, &mut |req| {
+            Self::process_jump_request(arc_of_self.clone(), req)
+        })?;
 
         Ok(())
     }
