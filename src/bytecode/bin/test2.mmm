@@ -1,8 +1,10 @@
 f main
-	int 2
-	int 1 
+	int 5
+	int 5
+	bin_op =
+	bool true
+	bin_op xor
 	printn *
-	
 e
 
 f in_another_file

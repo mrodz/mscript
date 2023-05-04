@@ -1,4 +1,4 @@
-use crate::{bigint, bool, byte, float, int, string, vector};
+use crate::{bigint, bool, byte, float, int, string};
 use anyhow::{bail, Result};
 use std::{fmt::{Debug, Display}};
 
@@ -219,93 +219,6 @@ pub enum BinOp {
     Gt,
     Gte,
 
-}
-
-macro_rules! ez_op {
-    ($op_fn:ident) => {
-        (i32::$op_fn, i128::$op_fn, f64::$op_fn)
-    };
-    (int = $op_fn_check:ident, float = $op_fn_float:ident) => {
-        (i32::$op_fn_check, i128::$op_fn_check, f64::$op_fn_float)
-    };
-}
-
-pub fn math_op_from(symbol: char) -> Result<(CheckedBinOpFn<i32>, CheckedBinOpFn<i128>, BinOpFn<f64>)> {
-    use std::ops::*;
-
-    Ok(match symbol {
-        '+' => ez_op!(int = checked_add, float = add),
-        '-' => ez_op!(int = checked_sub, float = sub),
-        '*' => ez_op!(int = checked_mul, float = mul),
-        '/' => ez_op!(int = checked_div, float = div),
-        '%' => ez_op!(int = checked_rem, float = rem),
-        _ => bail!("unknown binary operator ({symbol})"),
-    })
-}
-
-pub fn bin_op_result(
-    left: Primitive,
-    right: Primitive,
-    i32_fn: CheckedBinOpFn<i32>,
-    i128_fn: CheckedBinOpFn<i128>,
-    f_fn: BinOpFn<f64>,
-) -> Result<Primitive> {
-    Ok(match (left, right) {
-        (Primitive::Float(x), Primitive::Float(y)) => float!(f_fn(x, y)),
-        (Primitive::Float(x), Primitive::Int(y)) => float!(f_fn(x, y as f64)),
-        (Primitive::Int(x), Primitive::Float(y)) => float!(f_fn(x as f64, y)),
-        (Primitive::Int(x), Primitive::Int(y)) => {
-            if let Some(result) = i32_fn(x, y) {
-                int!(result)
-            } else {
-                bail!("could not perform checked integer operation (maybe an overflow, or / by 0)")
-            }
-        }
-        (Primitive::BigInt(x), Primitive::Int(y)) => {
-            if let Some(result) = i128_fn(x, y as i128) {
-                bigint!(result)
-            } else {
-                bail!("could not perform checked integer operation (maybe an overflow, or / by 0)")
-            }
-        }
-        (Primitive::Int(x), Primitive::BigInt(y)) => {
-            if let Some(result) = i128_fn(x as i128, y) {
-                bigint!(result)
-            } else {
-                bail!("could not perform checked integer operation (maybe an overflow, or / by 0)")
-            }
-        }
-        (Primitive::BigInt(x), Primitive::BigInt(y)) => {
-            if let Some(result) = i128_fn(x, y) {
-                bigint!(result)
-            } else {
-                bail!("could not perform checked integer operation (maybe an overflow, or / by 0)")
-            }
-        }
-        (Primitive::Str(x), y) => {
-            let mut x = x.clone();
-
-            if let Primitive::Str(y) = y {
-                x.push_str(&*y); // slight performance benefit
-            } else {
-                x.push_str(&y.to_string());
-            }
-
-            string!(x)
-        }
-        (Primitive::Vector(x), Primitive::Vector(y)) => {
-            // if `adding` vectors, the user probably wants a new copy to operate on.
-            // to extend a vector, use a `vec_op` instruction.
-
-            let mut x_cloned = x.clone();
-            let mut y_cloned = y.clone();
-
-            x_cloned.append(&mut y_cloned);
-
-            vector!(raw x_cloned)
-        }
-        (x, y) => bail!("cannot perform binary operation on {x}, {y}"),
-    })
 }
 
 #[cfg(test)]

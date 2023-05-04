@@ -127,6 +127,7 @@ pub mod implementations {
 
     instruction! {
         bin_op(ctx, args) {
+            use Primitive::*;
             let symbols = args.first().context("Expected an operation [+,-,*,/,%,>,>=,<,<=]")?;
 
             // let symbol = symbols[0] as char;
@@ -135,22 +136,18 @@ pub mod implementations {
                 bail!("bin_op requires two items on the local operating stack.")
             };
 
-            let result = match symbols.as_str() {
-                "+" => std::ops::Add::add(left, right),
-                "-" => std::ops::Sub::sub(left, right),
+            let result = match (symbols.as_str(), &left, &right) {
+                ("+", ..) => left + right,
+                ("-", ..) => left - right,
+                ("*", ..) => left * right,
+                ("/", ..) => left / right,
+                ("%", ..) => left % right,
+                ("=", ..) => Ok(bool!(left.equals(&right)?)),
+                ("and", Bool(x), Bool(y)) => Ok(bool!(*x && *y)),
+                ("or", Bool(x), Bool(y)) => Ok(bool!(*x || *y)),
+                ("xor", Bool(x), Bool(y)) => Ok(bool!(*x ^ *y)),
                 _ => bail!("unknown operation: {symbols}")
             }.context("invalid binary operation")?;
-
-            // fn numeric_math(symbol: char, lhs: Primitive, rhs: Primitive) -> Result<Primitive> {
-            //     let (i32_fn, i128_fn, f_fn) = math_op_from(symbol).context("constructing bin op")?;
-            //     bin_op_result(lhs, rhs, i32_fn, i128_fn, f_fn)
-            // }
-
-            // // fn comparison(symbol: char, lhs: Primitive, rhs: Primitive) -> Result<Primitive> {
-            // //     let ()
-            // // }
-
-            // let result = ;
 
             ctx.clear_and_set_stack(result);
 

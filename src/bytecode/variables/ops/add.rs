@@ -6,7 +6,8 @@ impl std::ops::Add for Primitive {
 	type Output = Result<Primitive>;
 	
 	fn add(self, rhs: Self) -> Self::Output {
-		let math = apply_math_bin_op_if_applicable!(self + rhs);
+		let (t1, t2) = (&self, &rhs);
+		let math = apply_math_bin_op_if_applicable!(t1 + t2);
 
 		if let Some(result) = math {
 			return Ok(result)

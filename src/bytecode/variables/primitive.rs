@@ -26,7 +26,7 @@ macro_rules! primitive {
         //     )*
         // }
 
-        #[derive(PartialEq, PartialOrd, Debug, Clone)]
+        #[derive(PartialEq, Debug, Clone)]
         pub enum Primitive {
             $(
                 $variant($type),

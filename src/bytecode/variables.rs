@@ -7,7 +7,5 @@ mod primitive;
 
 pub use object::Object;
 pub use object::ObjectBuilder;
-pub use variable::math_op_from;
-pub use variable::bin_op_result;
 pub use primitive::Primitive;
 pub use variable::Variable;
