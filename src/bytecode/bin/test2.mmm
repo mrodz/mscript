@@ -1,5 +1,6 @@
 f main
-	string "hello world"
+	int 2
+	int 1 
 	printn *
 	
 e

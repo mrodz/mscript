@@ -21,7 +21,7 @@ impl std::ops::Add for Primitive {
 				x.extend_from_slice(&y);
 				vector!(raw x)
 			},
-			_ => bail!("number + number, str + any, any + str, vec + vec")
+			_ => bail!("valid ops: number + number, str + any, any + str, vec + vec")
 		})
 	}
 }

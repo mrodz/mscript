@@ -137,8 +137,9 @@ pub mod implementations {
 
             let result = match symbols.as_str() {
                 "+" => std::ops::Add::add(left, right),
-                _ => bail!("invalid op: {symbols}")
-            }?;
+                "-" => std::ops::Sub::sub(left, right),
+                _ => bail!("unknown operation: {symbols}")
+            }.context("invalid binary operation")?;
 
             // fn numeric_math(symbol: char, lhs: Primitive, rhs: Primitive) -> Result<Primitive> {
             //     let (i32_fn, i128_fn, f_fn) = math_op_from(symbol).context("constructing bin op")?;

@@ -1,5 +1,6 @@
 mod add;
 mod equ;
+mod sub;
 
 #[macro_export]
 macro_rules! apply_math_bin_op_if_applicable {

@@ -199,7 +199,7 @@ impl<'a> Function {
             let name = instruction.name.clone();
 
             run_instruction(&mut context, instruction).context("failed to run instruction").with_context( || 
-                format!("`{:?}` on line {line_number}", name)
+                format!("`{}` on line {line_number}", name)
             )?;
     
             let ret = context.poll();
