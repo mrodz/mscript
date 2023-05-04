@@ -79,7 +79,10 @@ impl MScriptFile {
         functions.if_mapper.get(&if_pos).map(|x| x.clone())
     }
 
-    pub fn get_object_functions<'a, 'b: 'a>(&'a mut self, name: &'b String) -> Result<impl Iterator<Item = &Function> + 'a> {
+    pub fn get_object_functions<'a, 'b: 'a>(
+        &'a mut self,
+        name: &'b String,
+    ) -> Result<impl Iterator<Item = &Function> + 'a> {
         let Some(ref mut functions) = self.functions else {
             bail!("no functions")
         };
@@ -133,12 +136,21 @@ impl MScriptFile {
                     if_positions.push(seek_pos);
                 }
 
-                fn else_fn(else_to_if_mapper: &mut HashMap<u64, u64>, if_positions: &Vec<u64>, seek_pos: u64) {
+                fn else_fn(
+                    else_to_if_mapper: &mut HashMap<u64, u64>,
+                    if_positions: &Vec<u64>,
+                    seek_pos: u64,
+                ) {
                     else_to_if_mapper
-                            .insert(*if_positions.last().expect("else without if"), seek_pos);
+                        .insert(*if_positions.last().expect("else without if"), seek_pos);
                 }
 
-                fn endif_fn(else_to_if_mapper: &HashMap<u64, u64>, if_positions: &mut Vec<u64>, seek_pos: u64, if_mapper: &mut HashMap<u64, IfStatement>) {
+                fn endif_fn(
+                    else_to_if_mapper: &HashMap<u64, u64>,
+                    if_positions: &mut Vec<u64>,
+                    seek_pos: u64,
+                    if_mapper: &mut HashMap<u64, IfStatement>,
+                ) {
                     use IfStatement::*;
 
                     let if_pos = if_positions.pop().expect("endif without if");
@@ -225,7 +237,9 @@ impl MScriptFile {
 impl MScriptFile {
     pub fn open(path: &String) -> Result<Arc<Self>> {
         let new_uninit = Arc::new(Self {
-            handle: Arc::new(File::open(path).with_context(|| format!("failed opening file `{path}`"))?),
+            handle: Arc::new(
+                File::open(path).with_context(|| format!("failed opening file `{path}`"))?,
+            ),
             path: Arc::new(path.clone()),
             functions: None,
         });

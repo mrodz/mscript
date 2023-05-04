@@ -1,8 +1,8 @@
 use crate::{bigint, bool, byte, float, int, string};
 use anyhow::{bail, Result};
-use std::{fmt::{Debug, Display}};
+use std::fmt::{Debug, Display};
 
-use super::{Primitive, primitive::Type};
+use super::{primitive::Type, Primitive};
 
 #[derive(Clone, PartialEq)]
 pub struct Variable {
@@ -218,7 +218,6 @@ pub enum BinOp {
     Lte,
     Gt,
     Gte,
-
 }
 
 #[cfg(test)]

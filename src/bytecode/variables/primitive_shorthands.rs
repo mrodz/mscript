@@ -103,7 +103,7 @@ macro_rules! object {
 
 #[cfg(test)]
 mod test {
-    use crate::{*, bytecode::variables::Primitive};
+    use crate::{bytecode::variables::Primitive, *};
 
     #[test]
     pub fn ints() {

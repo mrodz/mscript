@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use once_cell::sync::Lazy;
 
-use super::instruction::InstructionSignature;
 use super::instruction::implementations;
+use super::instruction::InstructionSignature;
 
 pub static REPR_TO_BIN: Lazy<HashMap<&[u8], u8>> = Lazy::new(|| {
     (0..BIN_TO_REPR.len())
@@ -48,19 +48,19 @@ pub static BIN_TO_REPR: &[&[u8]] = &[
     /* 0x21 [33] */ b"arg",
     /* 0x22 [34] */ b"mutate",
     /* 0x23 [35] */ b"load_callback", // {
-    /* 0x24 [36] */ b"load_object",   // }
+    /* 0x24 [36] */ b"load_object", // }
 ];
 
 pub static FUNCTION_POINTER_LOOKUP: &[InstructionSignature] = &[
-	implementations::nop,
-	implementations::constexpr,
+    implementations::nop,
+    implementations::constexpr,
     implementations::stack_dump,
     implementations::pop,
     implementations::bin_op,
     implementations::vec_op,
-	implementations::make_bool,
+    implementations::make_bool,
     implementations::make_str,
-	implementations::make_bigint,
+    implementations::make_bigint,
     implementations::make_int,
     implementations::make_float,
     implementations::nop, // @DEPRECATED

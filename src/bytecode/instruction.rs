@@ -658,7 +658,9 @@ pub mod implementations {
 
 #[cfg(feature = "string_instructions")]
 pub fn query(name: String) -> InstructionSignature {
-    let bin = instruction_constants::REPR_TO_BIN.get(name.as_bytes()).expect("unknown bytecode instruction");
+    let bin = instruction_constants::REPR_TO_BIN
+        .get(name.as_bytes())
+        .expect("unknown bytecode instruction");
     instruction_constants::FUNCTION_POINTER_LOOKUP[*bin as usize]
 }
 
@@ -768,7 +770,7 @@ pub fn parse_line(line: &String) -> Result<Instruction> {
 
     let instruction = Instruction::new(name, arguments);
 
-    Ok(instruction)    
+    Ok(instruction)
 }
 
 #[derive(Clone)]
@@ -806,9 +808,6 @@ impl Instruction {
 
     #[cfg(feature = "string_instructions")]
     pub fn new(name: String, arguments: Vec<String>) -> Self {
-        Instruction {
-            name,
-            arguments,
-        }
+        Instruction { name, arguments }
     }
 }

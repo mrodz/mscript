@@ -1,9 +1,9 @@
 mod add;
-mod sub;
-mod mul;
 mod div;
-mod rem;
+mod mul;
 mod ord;
+mod rem;
+mod sub;
 
 #[macro_export]
 macro_rules! apply_math_bin_op_if_applicable {
@@ -55,7 +55,3 @@ macro_rules! apply_bool_bin_op_if_applicable {
 		}
 	}}
 }
-
-// pub(in crate::bytecode::variables::ops) fn apply_math_if_applicable(lhs: Primitive, rhs: Primitive) -> Option<Primitive> {
-
-// }

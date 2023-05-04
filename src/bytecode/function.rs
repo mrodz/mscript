@@ -10,7 +10,7 @@ use anyhow::{bail, Context, Result};
 
 use crate::bytecode::context::Ctx;
 use crate::bytecode::file::get_line_number_from_pos;
-use crate::bytecode::{instruction, arc_to_ref};
+use crate::bytecode::{arc_to_ref, instruction};
 
 use super::attributes_parser::Attributes;
 use super::file::IfStatement;
@@ -198,12 +198,12 @@ impl<'a> Function {
             let instruction = instruction::parse_line(&line).context("failed parsing line")?;
             let name = instruction.name.clone();
 
-            run_instruction(&mut context, instruction).context("failed to run instruction").with_context( || 
-                format!("`{}` on line {line_number}", name)
-            )?;
-    
+            run_instruction(&mut context, instruction)
+                .context("failed to run instruction")
+                .with_context(|| format!("`{}` on line {line_number}", name))?;
+
             let ret = context.poll();
-    
+
             match ret {
                 InstructionExitState::ReturnValue(ret) => {
                     arc_to_ref(&current_frame).pop();
@@ -219,11 +219,8 @@ impl<'a> Function {
                 InstructionExitState::NewIf(used) => {
                     let pos = reader.stream_position()?;
                     let Some(if_stmt) = self.get_if_pos_from(pos) else {
-                        
                         bail!("this if statement has not been mapped (at pos {pos}, existing positions are: x)")
                     };
-                        
-                        // .expect("this if has not been mapped.");
 
                     let IfStatement::If(..) = if_stmt else {
                         bail!("expected if statment, found {if_stmt:?}");
