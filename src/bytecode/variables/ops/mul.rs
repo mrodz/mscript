@@ -40,3 +40,26 @@ impl std::ops::Mul for Primitive {
         })
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::*;
+
+    #[test]
+    fn five_times_five() {
+        let result = int!(5) * float!(5.0);
+        assert_eq!(result.unwrap(), float!(25.0))
+    }
+
+    #[test]
+    fn two_times_two_hundred() {
+        let result = bigint!(2) * int!(200);
+        assert_eq!(result.unwrap(), bigint!(400))
+    }
+
+    #[test]
+    fn five_times_negative_one_thousand() {
+        let result = bigint!(5) * float!(-1_000.0);
+        assert_eq!(result.unwrap(), float!(-5_000.0))
+    }
+}
