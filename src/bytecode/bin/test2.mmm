@@ -1,6 +1,13 @@
 f main
-
- *
- src/bytecode/bin/test2.mmm#main
-
+	int 5
+	int 5
+	bin_op =
+	bool true
+	bin_op xor
+	printn *
+e
+
+f in_another_file
+	string "in another file!!!! wutt????"
+	printn *
 e

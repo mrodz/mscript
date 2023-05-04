@@ -80,7 +80,7 @@ Pop the most recent item on the local stack.
 
 ---
 
-### `bin_op ! ['+' | '-' | '*' | '/' | '%'] (==2)`
+### `bin_op ! ['+' | '-' | '*' | '/' | '%' | '>' | '>=' | '<' | '<=' | '=' | 'and' | 'or' | 'xor'] (==2)`
 Perform fast arithmetic on two loaded items.
 
 | ! | Reason |
@@ -88,6 +88,8 @@ Perform fast arithmetic on two loaded items.
 | 1 | Local stack size is != 2. |
 | 2 | Checked integer operation (i32, i128) results in / by zero. |
 | 3 | Checked integer operation (i32, i128) results in an overflow. |
+| 4 | Boolean operation on non-booleans. |
+| 5 | Unimplemented operation. |
 
 ---
 
@@ -163,15 +165,6 @@ See `constexpr`.
 | ! | Reason |
 | - | - |
 | 1 | [should_be_float] is not a float. |
-
----
-
-### `char ! [should_be_char]`
-See `constexpr`.
-
-| ! | Reason |
-| - | - |
-| 1 | [should_be_char] is not a char. |
 
 ---
 

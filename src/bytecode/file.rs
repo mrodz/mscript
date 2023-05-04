@@ -79,7 +79,10 @@ impl MScriptFile {
         functions.if_mapper.get(&if_pos).map(|x| x.clone())
     }
 
-    pub fn get_object_functions<'a, 'b: 'a>(&'a mut self, name: &'b String) -> Result<impl Iterator<Item = &Function> + 'a> {
+    pub fn get_object_functions<'a, 'b: 'a>(
+        &'a mut self,
+        name: &'b String,
+    ) -> Result<impl Iterator<Item = &Function> + 'a> {
         let Some(ref mut functions) = self.functions else {
             bail!("no functions")
         };
@@ -88,6 +91,7 @@ impl MScriptFile {
     }
 
     fn get_functions(arc_of_self: &Arc<Self>) -> Result<Functions> {
+        #[cfg(feature = "developer")]
         println!("Functions in {}", arc_of_self.path);
 
         let handle_ref = arc_of_self;
@@ -107,7 +111,9 @@ impl MScriptFile {
 
         while let Ok(size) = reader.read_line(&mut buffer) {
             if size == 0 {
+                #[cfg(feature = "developer")]
                 println!("EOF @ L:{line_number}");
+
                 break;
             }
 
@@ -118,23 +124,55 @@ impl MScriptFile {
                 current_attributes.push(attr);
             } else {
                 let bytes = buffer.as_bytes();
+
                 let first = bytes[0];
-                // let mut parts = buffer.split_ascii_whitespace();
-                // let (first, second) = (parts.next(), parts.next());
+
+                #[cfg(feature = "string_instructions")]
+                let string_instruction = std::str::from_utf8(bytes)
+                    .context("could not turn bytes to UTF for string instruction interpretation")?
+                    .trim();
+
+                fn if_fn(if_positions: &mut Vec<u64>, seek_pos: u64) {
+                    if_positions.push(seek_pos);
+                }
+
+                fn else_fn(
+                    else_to_if_mapper: &mut HashMap<u64, u64>,
+                    if_positions: &Vec<u64>,
+                    seek_pos: u64,
+                ) {
+                    else_to_if_mapper
+                        .insert(*if_positions.last().expect("else without if"), seek_pos);
+                }
+
+                fn endif_fn(
+                    else_to_if_mapper: &HashMap<u64, u64>,
+                    if_positions: &mut Vec<u64>,
+                    seek_pos: u64,
+                    if_mapper: &mut HashMap<u64, IfStatement>,
+                ) {
+                    use IfStatement::*;
+
+                    let if_pos = if_positions.pop().expect("endif without if");
+
+                    let else_pos = else_to_if_mapper.get(&if_pos);
+
+                    let endif_part = Box::new(EndIf(seek_pos));
+
+                    let if_part = If(
+                        if_pos,
+                        if let Some(else_pos) = else_pos {
+                            Box::new(Else(*else_pos, endif_part))
+                        } else {
+                            endif_part
+                        },
+                    );
+
+                    if_mapper.insert(if_pos, if_part);
+                }
 
                 match first {
                     b'f' => {
-                        // let mut idx = 2;
-                        // let last_idx = loop {
-                        //     if let Some(b) = bytes.get(idx) {
-                        //         if b == &b'~' {
-                        //             break idx
-                        //         }
-                        //     } else {
-                        //         bail!("could not read byte")
-                        //     }
-                        //     idx += 1;
-                        // };
                         let function = Function::new(
                             arc_of_self.clone(),
                             line_number,
@@ -143,37 +181,35 @@ impl MScriptFile {
                             seek_pos,
                         );
 
+                        #[cfg(feature = "developer")]
                         println!("\t{function}");
 
                         functions.insert(function.get_qualified_name(), function);
                         current_attributes = vec![];
                     }
+                    #[cfg(not(feature = "string_instructions"))]
                     28 /* if */ => {
-                        if_positions.push(seek_pos);
+                        if_fn(&mut if_positions, seek_pos)
                     }
+                    #[cfg(feature = "string_instructions")]
+                    _ if string_instruction == "if" => {
+                        if_fn(&mut if_positions, seek_pos)
+                    }
+                    #[cfg(not(feature = "string_instructions"))]
                     29 /* else */ => {
-                        else_to_if_mapper
-                            .insert(*if_positions.last().expect("else without if"), seek_pos);
+                        else_fn(&mut else_to_if_mapper, &if_positions, seek_pos)
                     }
+                    #[cfg(feature = "string_instructions")]
+                    _ if string_instruction == "else" => {
+                        else_fn(&mut else_to_if_mapper, &if_positions, seek_pos)
+                    }
+                    #[cfg(not(feature = "string_instructions"))]
                     30 /* endif */ => {
-                        use IfStatement::*;
-
-                        let if_pos = if_positions.pop().expect("endif without if");
-
-                        let else_pos = else_to_if_mapper.get(&if_pos);
-
-                        let endif_part = Box::new(EndIf(seek_pos));
-
-                        let if_part = If(
-                            if_pos,
-                            if let Some(else_pos) = else_pos {
-                                Box::new(Else(*else_pos, endif_part))
-                            } else {
-                                endif_part
-                            },
-                        );
-
-                        if_mapper.insert(if_pos, if_part);
+                       endif_fn(&else_to_if_mapper, &mut if_positions, seek_pos, &mut if_mapper)
+                    }
+                    #[cfg(feature = "string_instructions")]
+                    _ if string_instruction == "endif" => {
+                        endif_fn(&else_to_if_mapper, &mut if_positions, seek_pos, &mut if_mapper)
                     }
                     _ => (),
                 }
@@ -201,7 +237,9 @@ impl MScriptFile {
 impl MScriptFile {
     pub fn open(path: &String) -> Result<Arc<Self>> {
         let new_uninit = Arc::new(Self {
-            handle: Arc::new(File::open(path).with_context(|| format!("failed opening file `{path}`"))?),
+            handle: Arc::new(
+                File::open(path).with_context(|| format!("failed opening file `{path}`"))?,
+            ),
             path: Arc::new(path.clone()),
             functions: None,
         });

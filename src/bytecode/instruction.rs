@@ -2,7 +2,7 @@ use super::context::Ctx;
 use super::function::InstructionExitState;
 use super::instruction_constants;
 use super::stack::{Stack, VariableMapping};
-use super::variables::{bin_op_from, bin_op_result, ObjectBuilder, Primitive};
+use super::variables::{ObjectBuilder, Primitive};
 use anyhow::{bail, Context, Result};
 use once_cell::sync::Lazy;
 use std::collections::HashSet;
@@ -68,7 +68,7 @@ pub mod implementations {
     use super::*;
     use crate::bytecode::arc_to_ref;
     use crate::bytecode::function::{PrimitiveFunction, ReturnValue};
-    use crate::bytecode::variables::{buckets, Object, Variable};
+    use crate::bytecode::variables::{Object, Variable};
     use crate::{bool, function, int, object, vector};
     use std::collections::HashMap;
     use std::sync::Arc;
@@ -127,17 +127,27 @@ pub mod implementations {
 
     instruction! {
         bin_op(ctx, args) {
-            let symbols = args.first().context("Expected an operation [+,-,*,/,%]")?.as_bytes();
+            use Primitive::*;
+            let symbols = args.first().context("Expected an operation [+,-,*,/,%,>,>=,<,<=]")?;
 
-            let symbol = symbols[0] as char;
+            // let symbol = symbols[0] as char;
 
             let (Some(right), Some(left)) = (ctx.pop(), ctx.pop()) else {
                 bail!("bin_op requires two items on the local operating stack.")
             };
 
-            let (i32_fn, i128_fn, f_fn) = bin_op_from(symbol).context("constructing bin op")?;
-
-            let result = bin_op_result(left, right, i32_fn, i128_fn, f_fn)?;
+            let result = match (symbols.as_str(), &left, &right) {
+                ("+", ..) => left + right,
+                ("-", ..) => left - right,
+                ("*", ..) => left * right,
+                ("/", ..) => left / right,
+                ("%", ..) => left % right,
+                ("=", ..) => Ok(bool!(left.equals(&right)?)),
+                ("and", Bool(x), Bool(y)) => Ok(bool!(*x && *y)),
+                ("or", Bool(x), Bool(y)) => Ok(bool!(*x || *y)),
+                ("xor", Bool(x), Bool(y)) => Ok(bool!(*x ^ *y)),
+                _ => bail!("unknown operation: {symbols}")
+            }.context("invalid binary operation")?;
 
             ctx.clear_and_set_stack(result);
 
@@ -175,7 +185,7 @@ pub mod implementations {
             } else {
                 match op_name.as_str() {
                     "reverse" => {
-                        let Some(Primitive::Vector(buckets::Vector(vector))) = ctx.get_last_op_item_mut() else {
+                        let Some(Primitive::Vector(vector)) = ctx.get_last_op_item_mut() else {
                             bail!("Cannot perform a vector operation on a non-vector")
                         };
 
@@ -192,7 +202,7 @@ pub mod implementations {
 
                         let new_item = ctx.pop().context("could not pop first item")?;
 
-                        let Some(Primitive::Vector(buckets::Vector(vector))) = ctx.get_last_op_item_mut() else {
+                        let Some(Primitive::Vector(vector)) = ctx.get_last_op_item_mut() else {
                             bail!("Cannot perform a vector operation on a non-vector")
                         };
 
@@ -257,7 +267,6 @@ pub mod implementations {
     make_type!(make_str);
     make_type!(make_int);
     make_type!(make_float);
-    make_type!(make_char);
     make_type!(make_byte);
     make_type!(make_bigint);
 
@@ -411,7 +420,7 @@ pub mod implementations {
 
             let new_item: Variable = ctx.pop().context("could not pop first item")?.into();
 
-            let Some(Primitive::Object(buckets::Object(o))) = ctx.get_last_op_item_mut() else {
+            let Some(Primitive::Object(o)) = ctx.get_last_op_item_mut() else {
                 bail!("Cannot perform an object mutation on a non-object")
             };
 
@@ -441,8 +450,6 @@ pub mod implementations {
                 let Some(Primitive::Function(f)) = last else {
                     bail!("missing argument, and the last item in the local stack {last:?} is not a function.")
                 };
-
-                let f: &PrimitiveFunction = &*f;
 
                 ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                     destination_label: f.location.clone(),
@@ -630,7 +637,7 @@ pub mod implementations {
                 bail!("if statement can only test booleans")
             };
 
-            ctx.signal(InstructionExitState::NewIf(*b));
+            ctx.signal(InstructionExitState::NewIf(b));
 
             Ok(())
         }
@@ -649,57 +656,21 @@ pub mod implementations {
     }
 }
 
+#[cfg(feature = "string_instructions")]
+pub fn query(name: String) -> InstructionSignature {
+    let bin = instruction_constants::REPR_TO_BIN
+        .get(name.as_bytes())
+        .expect("unknown bytecode instruction");
+    instruction_constants::FUNCTION_POINTER_LOOKUP[*bin as usize]
+}
+
+#[cfg(not(feature = "string_instructions"))]
 pub fn query(byte: u8) -> InstructionSignature {
     instruction_constants::FUNCTION_POINTER_LOOKUP[byte as usize]
 }
 
-pub fn query_str(name: &String) -> InstructionSignature {
-    let bin = instruction_constants::REPR_TO_BIN.get(name.as_bytes()).expect("unknown bytecode instruction");
-    instruction_constants::FUNCTION_POINTER_LOOKUP[*bin as usize]
-
-    // match name.as_str() {
-    //     "nop" => implementations::nop,
-    //     "constexpr" => implementations::constexpr,
-    //     "stack_dump" => implementations::stack_dump,
-    //     "pop" => implementations::pop,
-    //     "bin_op" => implementations::bin_op,
-    //     "vec_op" => implementations::vec_op,
-    //     "bool" => implementations::make_bool,
-    //     "string" => implementations::make_str,
-    //     "bigint" => implementations::make_bigint,
-    //     "int" => implementations::make_int,
-    //     "float" => implementations::make_float,
-    //     "char" => implementations::make_char,
-    //     "byte" => implementations::make_byte,
-    //     "make_function" => implementations::make_function,
-    //     "make_object" => implementations::make_object,
-    //     "make_vector" => implementations::make_vector,
-    //     "void" => implementations::void,
-    //     "breakpoint" => implementations::breakpoint,
-    //     "ret" => implementations::ret,
-    //     "printn" => implementations::printn,
-    //     "call" => implementations::call,
-    //     "call_object" => implementations::call_object,
-    //     "stack_size" => implementations::stack_size,
-    //     "store" => implementations::store,
-    //     "store_object" => implementations::store_object,
-    //     "load" => implementations::load,
-    //     "load_local" => implementations::load_local,
-    //     "typecmp" => implementations::typecmp,
-    //     "if" => implementations::if_stmt,
-    //     "else" => implementations::else_stmt,
-    //     "endif" => implementations::endif_stmt,
-    //     "strict_equ" => implementations::strict_equ,
-    //     "equ" => implementations::equ,
-    //     "arg" => implementations::arg,
-    //     "mutate" => implementations::mutate,
-    //     "load_callback" | "load_object" => implementations::load_callback,
-    //     _ => unreachable!("unknown bytecode instruction ({name})"),
-    // }
-}
-
 #[inline(always)]
-pub fn run_instruction(ctx: &mut Ctx, instruction: &Instruction) -> Result<()> {
+pub fn run_instruction(ctx: &mut Ctx, instruction: Instruction) -> Result<()> {
     let instruction_fn = query(instruction.name);
     instruction_fn(ctx, &instruction.arguments)?;
     Ok(())
@@ -790,17 +761,16 @@ pub fn split_string(string: &String) -> Result<Vec<String>> {
 
 pub fn parse_line(line: &String) -> Result<Instruction> {
     if line.trim().is_empty() {
-        return Ok(Instruction { name: 0x00, arguments: vec![] });
+        return Ok(Instruction::new("nop".into(), vec![]));
     }
 
     let mut arguments = split_string(line).context("splitting line")?;
 
     let name = arguments.remove(0);
 
-    Ok(Instruction {
-        name: name.as_bytes()[0],
-        arguments,
-    })
+    let instruction = Instruction::new(name, arguments);
+
+    Ok(instruction)
 }
 
 #[derive(Clone)]
@@ -819,6 +789,25 @@ impl Debug for JumpRequest {
 
 #[derive(Debug)]
 pub struct Instruction {
+    #[cfg(not(feature = "string_instructions"))]
     pub name: u8,
+    #[cfg(feature = "string_instructions")]
+    pub name: String,
+
     arguments: Vec<String>,
+}
+
+impl Instruction {
+    #[cfg(not(feature = "string_instructions"))]
+    pub fn new(name: String, arguments: Vec<String>) -> Self {
+        Instruction {
+            name: name.as_bytes()[0],
+            arguments,
+        }
+    }
+
+    #[cfg(feature = "string_instructions")]
+    pub fn new(name: String, arguments: Vec<String>) -> Self {
+        Instruction { name, arguments }
+    }
 }

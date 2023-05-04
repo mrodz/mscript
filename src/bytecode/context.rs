@@ -3,7 +3,7 @@ use super::file::IfStatement;
 use super::function::{Function, InstructionExitState};
 use super::stack::VariableMapping;
 use super::variables::{Primitive, Variable};
-use super::{Stack, arc_to_ref};
+use super::{arc_to_ref, Stack};
 use anyhow::{bail, Result};
 use std::collections::VecDeque;
 use std::fmt::Debug;

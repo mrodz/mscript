@@ -1,9 +1,9 @@
-function main
+f main
 	call src/bytecode/bin/t.mmm#if_statements
 	call src/bytecode/bin/test2.mmm#in_another_file
-end
+e
 
-function if_statements
+f if_statements
     bool true
     if
         string "woo! \"if\" works"
@@ -35,9 +35,9 @@ function if_statements
 		string "I will never run..."
 		printn *
 	endif
-end
+e
 
-function do_math
+f do_math
 	int 4
 	int 3
 	bin_op *
@@ -48,21 +48,21 @@ function do_math
 	float 3
 	bin_op %
 	stack_dump
-end
+e
 
-function floating_point_math
+f floating_point_math
 	string "Hello from floating_point_math!"
 	printn *
 	float 5
 	constexpr 10
 	bin_op /
 	ret
-end
+e
 
-function divide_by_zero
+f divide_by_zero
 	string "Hello from divide_by_zero!"
 	printn *
 	constexpr 10
 	constexpr 0
 	bin_op /
-end
+e

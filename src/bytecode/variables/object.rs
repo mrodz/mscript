@@ -3,10 +3,16 @@ use crate::bytecode::context::Ctx;
 use crate::bytecode::function::InstructionExitState;
 use crate::bytecode::instruction::JumpRequest;
 use crate::bytecode::stack::VariableMapping;
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::sync::Arc;
+
+pub struct MappedObject<'a> {
+    name: &'a str,
+    fields: Box<VariableMapping>,
+    // functions:
+}
 
 pub struct ObjectBuilder {
     name: Option<Arc<String>>,
@@ -43,8 +49,7 @@ impl ObjectBuilder {
 
     pub fn build(&'static mut self) -> Object {
         let name = self.name.clone().unwrap();
-        let functions =
-            self.functions.get(&name).expect("no functions");
+        let functions = self.functions.get(&name).expect("no functions");
 
         let result = Object {
             name,
@@ -88,20 +93,19 @@ impl Object {
         }
     }
 
-	pub fn has_variable_mut(&mut self, variable_name: &String) -> Option<&mut Variable> {
-		let object_variables = Arc::as_ptr(&self.object_variables) as *mut VariableMapping;
+    pub fn has_variable_mut(&mut self, variable_name: &String) -> Option<&mut Variable> {
+        let object_variables = Arc::as_ptr(&self.object_variables) as *mut VariableMapping;
 
-		unsafe {
-			(*object_variables).0.get_mut(variable_name)
-		}
-	}
+        unsafe { (*object_variables).0.get_mut(variable_name) }
+    }
 
     pub fn has_function(&self, function_name: &String) -> bool {
-		self.functions.contains(function_name)
+        self.functions.contains(function_name)
     }
 
     pub fn get_assoc_function_name(&self, name: &String) -> Result<&String> {
-        let x = self.functions
+        let x = self
+            .functions
             .get(name)
             .with_context(|| format!("Object {} does not have method {name}", self.name))?;
         Ok(x)

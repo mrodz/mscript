@@ -10,7 +10,7 @@ use anyhow::{bail, Context, Result};
 
 use crate::bytecode::context::Ctx;
 use crate::bytecode::file::get_line_number_from_pos;
-use crate::bytecode::{instruction, arc_to_ref};
+use crate::bytecode::{arc_to_ref, instruction};
 
 use super::attributes_parser::Attributes;
 use super::file::IfStatement;
@@ -152,20 +152,6 @@ impl<'a> Function {
         format!("{}#{}", self.location.path, self.name)
     }
 
-    // fn run_and_ret<'b>(
-    //     context: &mut Ctx<'a>,
-    //     instruction: &Instruction,
-    // ) -> Result<InstructionExitState> {
-    //     run_instruction(context, instruction).with_context(|| {
-    //         let _ = stdout().flush();
-    //         format!("failed to run instruction")
-    //     })?;
-
-    //     let r#ref = context.poll();
-
-    //     Ok(r#ref)
-    // }
-
     pub fn get_if_pos_from(&self, if_pos: u64) -> Option<IfStatement> {
         unsafe { (*Arc::as_ptr(&self.location)).get_if_from(if_pos) }
     }
@@ -205,18 +191,19 @@ impl<'a> Function {
                 line.pop();
             }
 
-            if line == "end" {
+            if line == "e" {
                 break;
             }
 
             let instruction = instruction::parse_line(&line).context("failed parsing line")?;
+            let name = instruction.name.clone();
 
-            run_instruction(&mut context, &instruction).context("failed to run instruction").with_context( || 
-                format!("`{}` on line {line_number}", instruction.name)
-            )?;
-    
+            run_instruction(&mut context, instruction)
+                .context("failed to run instruction")
+                .with_context(|| format!("`{}` on line {line_number}", name))?;
+
             let ret = context.poll();
-    
+
             match ret {
                 InstructionExitState::ReturnValue(ret) => {
                     arc_to_ref(&current_frame).pop();
@@ -231,9 +218,9 @@ impl<'a> Function {
                 }
                 InstructionExitState::NewIf(used) => {
                     let pos = reader.stream_position()?;
-                    let if_stmt = self
-                        .get_if_pos_from(pos)
-                        .expect("this if has not been mapped.");
+                    let Some(if_stmt) = self.get_if_pos_from(pos) else {
+                        bail!("this if statement has not been mapped (at pos {pos}, existing positions are: x)")
+                    };
 
                     let IfStatement::If(..) = if_stmt else {
                         bail!("expected if statment, found {if_stmt:?}");
@@ -280,6 +267,7 @@ impl<'a> Function {
         }
 
         // Handle when a function does not explicitly return.
+        #[cfg(feature = "developer")]
         eprintln!("Warning: function concludes without `ret` instruction");
 
         arc_to_ref(&current_frame).pop();
@@ -300,7 +288,7 @@ impl<'a> Functions {
     ) -> impl Iterator<Item = &Function> + 'a {
         self.map.iter().filter_map(move |(key, val)| {
             if key.starts_with(name) {
-                Some(val.clone())
+                Some(val)
             } else {
                 None
             }
