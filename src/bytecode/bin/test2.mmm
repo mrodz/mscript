@@ -1,6 +1,10 @@
 f main
-
- *
- src/bytecode/bin/test2.mmm#main
-
+	string "hello world"
+	printn *
+	
+e
+
+f in_another_file
+	string "in another file!!!! wutt????"
+	printn *
 e

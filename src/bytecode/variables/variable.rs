@@ -1,83 +1,8 @@
-use crate::{bigint, bool, byte, char, float, int, string, vector};
+use crate::{bigint, bool, byte, float, int, string, vector};
 use anyhow::{bail, Result};
 use std::{fmt::{Debug, Display}};
-// use crate::bytecode::variables::vector::Vector;
-// pub struct Vector(Vec<crate::bytecode::variables::Primitive>);
 
-macro_rules! primitive {
-    ($($variant:ident($type:ty)),+ $(,)?) => {
-        pub mod buckets {
-            $(
-                #[derive(PartialEq, PartialOrd, Clone)]
-                pub struct $variant(pub(crate) $type);
-
-                impl std::fmt::Debug for $variant {
-                    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
-                        write!(f, "{:?}", self.0)
-                    }
-                }
-
-                impl std::fmt::Display for $variant {
-                    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
-                        write!(f, "{:?}", self.0)
-                    }
-                }
-
-                impl std::ops::Deref for $variant {
-                    type Target = $type;
-                    fn deref(&self) -> &Self::Target {
-                        &self.0
-                    }
-                }
-            )*
-        }
-
-        #[derive(PartialEq, PartialOrd, Debug, Clone)]
-        pub enum Primitive {
-            $(
-                $variant(buckets::$variant),
-            )*
-        }
-
-        #[derive(Debug, Eq, PartialEq, Clone)]
-        pub enum Type {
-            $(
-                $variant,
-            )*
-        }
-
-        impl Primitive {
-            pub fn ty(&self) -> Type {
-                match self {
-                    $(
-                        Primitive::$variant(_) => Type::$variant,
-                    )*
-                }
-            }
-
-            pub fn raw_size(&self) -> usize {
-                match self {
-                    $(
-                        Primitive::$variant(_) => std::mem::size_of::<$type>(),
-                    )*
-                }
-            }
-        }
-    };
-}
-
-primitive! {
-    Bool(bool),
-    Str(String),
-    Int(i32),
-    BigInt(i128),
-    Float(f64),
-    Char(char),
-    Byte(u8),
-    Function(crate::bytecode::function::PrimitiveFunction),
-    Vector(Vec<crate::bytecode::variables::Primitive>),
-    Object(std::sync::Arc<crate::bytecode::variables::Object>),
-}
+use super::{Primitive, primitive::Type};
 
 #[derive(Clone, PartialEq)]
 pub struct Variable {
@@ -127,12 +52,12 @@ impl Primitive {
 
                 }
             };
-            ($lhs:ident with $($rhs:ident),+ $(,)?) => {
+            ($lhs:ident with $($rhs:ident(r=$type:ty)),+ $(,)?) => {
                 if let Primitive::$lhs(x) = self {
                     let result = match rhs {
                         Primitive::$lhs(y) => Ok(x == y),
                         $(
-                            Primitive::$rhs(y) => Ok(x == y),
+                            Primitive::$rhs(y) => Ok(*x as $type == *y as $type),
                         )*
                         _ => bail!("cannot compare {:?} with {:?}", self.ty(), rhs.ty())
                     };
@@ -142,12 +67,12 @@ impl Primitive {
             };
         }
 
-        impl_eq!(Int with Float, BigInt, Byte);
-        impl_eq!(Float with Int, BigInt, Byte);
-        impl_eq!(BigInt with Float, Int, Byte);
-        impl_eq!(Byte with Float, BigInt, Int);
+        impl_eq!(Int with Float(r=f64), BigInt(r=i128), Byte(r=i32));
+        impl_eq!(Float with Int(r=f64), BigInt(r=f64), Byte(r=f64));
+        impl_eq!(BigInt with Float(r=f64), Int(r=i128), Byte(r=i128));
+        impl_eq!(Byte with Float(r=f64), BigInt(r=i128), Int(r=i32));
 
-        impl_eq!(each Str, Char, Bool with itself);
+        impl_eq!(each Str, Bool with itself);
     }
 
     pub fn is_numeric(&self) -> bool {
@@ -159,7 +84,7 @@ impl Primitive {
     pub fn is_numeric_coalesce(&self) -> bool {
         use Type::*;
 
-        matches!(self.ty(), Bool | Int | Float | Char | Byte | BigInt)
+        matches!(self.ty(), Bool | Int | Float | Byte | BigInt)
     }
 
     pub fn make_str(string: &str) -> Result<Self> {
@@ -184,16 +109,6 @@ impl Primitive {
         }
 
         bail!("not a Byte")
-    }
-
-    pub fn make_char(string: &str) -> Result<Self> {
-        let bytes = string.as_bytes();
-
-        if string.len() == 3 && bytes[0] == b'\'' && bytes[2] == b'\'' {
-            return Ok(char!(bytes[1].into()));
-        }
-
-        bail!("not a Char")
     }
 
     pub fn make_float(string: &str) -> Result<Self> {
@@ -245,10 +160,10 @@ impl Display for Primitive {
             Int(n) => write!(f, "{n}"),
             BigInt(n) => write!(f, "{n}"),
             Float(n) => write!(f, "{n}"),
-            Char(c) => write!(f, "{c}"),
-            Byte(b) => write!(f, "0b{:b}", **b),
+            // Char(c) => write!(f, "{c}"),
+            Byte(b) => write!(f, "0b{:b}", *b),
             Function(fun) => write!(f, "{fun}"),
-            Vector(l) => write!(f, "{l}"),
+            Vector(l) => write!(f, "{l:?}"),
             Object(o) => write!(f, "{o}"),
         }
     }
@@ -268,10 +183,6 @@ impl From<&str> for Primitive {
 
         if let Ok(byte) = Primitive::make_byte(value) {
             return byte;
-        }
-
-        if let Ok(char) = Primitive::make_char(value) {
-            return char;
         }
 
         if let Ok(int) = Primitive::make_int(value) {
@@ -294,17 +205,40 @@ impl From<&str> for Primitive {
     }
 }
 
-pub type BinOp<T> = fn(T, T) -> T;
-pub type CheckedBinOp<T> = fn(T, T) -> Option<T>;
+pub type BinOpFn<T> = fn(T, T) -> T;
+pub type CheckedBinOpFn<T> = fn(T, T) -> Option<T>;
 
-pub fn bin_op_from(symbol: char) -> Result<(CheckedBinOp<i32>, CheckedBinOp<i128>, BinOp<f64>)> {
+pub enum BinOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Lt,
+    Lte,
+    Gt,
+    Gte,
+
+}
+
+macro_rules! ez_op {
+    ($op_fn:ident) => {
+        (i32::$op_fn, i128::$op_fn, f64::$op_fn)
+    };
+    (int = $op_fn_check:ident, float = $op_fn_float:ident) => {
+        (i32::$op_fn_check, i128::$op_fn_check, f64::$op_fn_float)
+    };
+}
+
+pub fn math_op_from(symbol: char) -> Result<(CheckedBinOpFn<i32>, CheckedBinOpFn<i128>, BinOpFn<f64>)> {
     use std::ops::*;
+
     Ok(match symbol {
-        '+' => (i32::checked_add, i128::checked_add, f64::add),
-        '-' => (i32::checked_sub, i128::checked_sub, f64::sub),
-        '*' => (i32::checked_mul, i128::checked_mul, f64::mul),
-        '/' => (i32::checked_div, i128::checked_div, f64::div),
-        '%' => (i32::checked_rem, i128::checked_rem, f64::rem),
+        '+' => ez_op!(int = checked_add, float = add),
+        '-' => ez_op!(int = checked_sub, float = sub),
+        '*' => ez_op!(int = checked_mul, float = mul),
+        '/' => ez_op!(int = checked_div, float = div),
+        '%' => ez_op!(int = checked_rem, float = rem),
         _ => bail!("unknown binary operator ({symbol})"),
     })
 }
@@ -312,44 +246,44 @@ pub fn bin_op_from(symbol: char) -> Result<(CheckedBinOp<i32>, CheckedBinOp<i128
 pub fn bin_op_result(
     left: Primitive,
     right: Primitive,
-    i32_fn: CheckedBinOp<i32>,
-    i128_fn: CheckedBinOp<i128>,
-    f_fn: BinOp<f64>,
+    i32_fn: CheckedBinOpFn<i32>,
+    i128_fn: CheckedBinOpFn<i128>,
+    f_fn: BinOpFn<f64>,
 ) -> Result<Primitive> {
     Ok(match (left, right) {
-        (Primitive::Float(x), Primitive::Float(y)) => float!(f_fn(*x, *y)),
-        (Primitive::Float(x), Primitive::Int(y)) => float!(f_fn(*x, *y as f64)),
-        (Primitive::Int(x), Primitive::Float(y)) => float!(f_fn(*x as f64, *y)),
+        (Primitive::Float(x), Primitive::Float(y)) => float!(f_fn(x, y)),
+        (Primitive::Float(x), Primitive::Int(y)) => float!(f_fn(x, y as f64)),
+        (Primitive::Int(x), Primitive::Float(y)) => float!(f_fn(x as f64, y)),
         (Primitive::Int(x), Primitive::Int(y)) => {
-            if let Some(result) = i32_fn(*x, *y) {
+            if let Some(result) = i32_fn(x, y) {
                 int!(result)
             } else {
                 bail!("could not perform checked integer operation (maybe an overflow, or / by 0)")
             }
         }
         (Primitive::BigInt(x), Primitive::Int(y)) => {
-            if let Some(result) = i128_fn(*x, *y as i128) {
+            if let Some(result) = i128_fn(x, y as i128) {
                 bigint!(result)
             } else {
                 bail!("could not perform checked integer operation (maybe an overflow, or / by 0)")
             }
         }
         (Primitive::Int(x), Primitive::BigInt(y)) => {
-            if let Some(result) = i128_fn(*x as i128, *y) {
+            if let Some(result) = i128_fn(x as i128, y) {
                 bigint!(result)
             } else {
                 bail!("could not perform checked integer operation (maybe an overflow, or / by 0)")
             }
         }
         (Primitive::BigInt(x), Primitive::BigInt(y)) => {
-            if let Some(result) = i128_fn(*x, *y) {
+            if let Some(result) = i128_fn(x, y) {
                 bigint!(result)
             } else {
                 bail!("could not perform checked integer operation (maybe an overflow, or / by 0)")
             }
         }
         (Primitive::Str(x), y) => {
-            let mut x = (*x).clone();
+            let mut x = x.clone();
 
             if let Primitive::Str(y) = y {
                 x.push_str(&*y); // slight performance benefit
@@ -363,8 +297,8 @@ pub fn bin_op_result(
             // if `adding` vectors, the user probably wants a new copy to operate on.
             // to extend a vector, use a `vec_op` instruction.
 
-            let mut x_cloned = (*x).clone();
-            let mut y_cloned = (*y).clone();
+            let mut x_cloned = x.clone();
+            let mut y_cloned = y.clone();
 
             x_cloned.append(&mut y_cloned);
 
@@ -377,7 +311,7 @@ pub fn bin_op_result(
 #[cfg(test)]
 mod primitives {
     use super::Primitive;
-    use crate::{bigint, bool, byte, bytecode::variables::buckets, char, float, int, string};
+    use crate::{bigint, bool, byte, float, int, string};
     use std::f64::consts::PI;
 
     #[test]
@@ -393,19 +327,12 @@ mod primitives {
     }
 
     #[test]
-    fn char() {
-        let var = Primitive::from("'@'".to_owned());
-        assert_eq!(var, char!('@'));
-    }
-
-    #[test]
     fn display() {
         println!("{}", byte!(0b101));
         println!("{}", int!(5));
         println!("{}", float!(PI));
         println!("{}", string!(raw "Hello"));
         println!("{}", bool!(false));
-        println!("{}", char!('@'));
     }
 
     #[test]
@@ -416,7 +343,6 @@ mod primitives {
         assert!(bigint!(2147483648).is_numeric());
         assert!(!string!(raw "Hello").is_numeric());
         assert!(!bool!(true).is_numeric());
-        assert!(!char!('@').is_numeric());
     }
 
     #[test]

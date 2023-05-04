@@ -23,7 +23,7 @@ pub static BIN_TO_REPR: &[&[u8]] = &[
     /* 0x08 [8]  */ b"bigint",
     /* 0x09 [9]  */ b"int",
     /* 0x0A [10] */ b"float",
-    /* 0x0B [11] */ b"char",
+    /* 0x0B [11] */ b"char", // @DEPRECATED
     /* 0x0C [12] */ b"byte",
     /* 0x0D [13] */ b"make_function",
     /* 0x0E [14] */ b"make_object",
@@ -63,7 +63,7 @@ pub static FUNCTION_POINTER_LOOKUP: &[InstructionSignature] = &[
 	implementations::make_bigint,
     implementations::make_int,
     implementations::make_float,
-    implementations::make_char,
+    implementations::nop, // @DEPRECATED
     implementations::make_byte,
     implementations::make_function,
     implementations::make_object,

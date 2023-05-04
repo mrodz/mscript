@@ -8,6 +8,12 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::sync::Arc;
 
+pub struct MappedObject<'a> {
+    name: &'a str,
+    fields: Box<VariableMapping>,
+    // functions: 
+}
+
 pub struct ObjectBuilder {
     name: Option<Arc<String>>,
     object_variables: Option<Arc<VariableMapping>>,

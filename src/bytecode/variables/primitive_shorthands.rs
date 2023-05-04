@@ -1,110 +1,122 @@
 #[macro_export]
 macro_rules! string {
-    ($data:expr) => {
-        Primitive::Str(buckets::Str($data))
-    };
+    ($data:expr) => {{
+        use crate::bytecode::variables::Primitive;
+
+        Primitive::Str($data)
+    }};
     (raw $data:expr) => {{
-        Primitive::Str(buckets::Str(Into::<String>::into($data)))
+        use crate::bytecode::variables::Primitive;
+
+        Primitive::Str(Into::<String>::into($data))
     }};
 }
 
 #[macro_export]
 macro_rules! bigint {
-    ($data:expr) => {
-        Primitive::BigInt(buckets::BigInt($data))
-    };
+    ($data:expr) => {{
+        use crate::bytecode::variables::Primitive;
+
+        Primitive::BigInt($data)
+    }};
 }
 
 #[macro_export]
 macro_rules! int {
-    ($data:expr) => {
-        Primitive::Int(buckets::Int($data))
-    };
+    ($data:expr) => {{
+        use crate::bytecode::variables::Primitive;
+
+        Primitive::Int($data)
+    }};
 }
 
 #[macro_export]
 macro_rules! float {
-    ($data:expr) => {
-        Primitive::Float(buckets::Float($data))
-    };
+    ($data:expr) => {{
+        use crate::bytecode::variables::Primitive;
+
+        Primitive::Float($data)
+    }};
 }
 
 #[macro_export]
 macro_rules! bool {
-    ($data:expr) => {
-        Primitive::Bool(buckets::Bool($data))
-    };
-}
+    ($data:expr) => {{
+        use crate::bytecode::variables::Primitive;
 
-#[macro_export]
-macro_rules! char {
-    ($data:expr) => {
-        Primitive::Char(buckets::Char($data))
-    };
+        Primitive::Bool($data)
+    }};
 }
 
 #[macro_export]
 macro_rules! byte {
-    ($data:expr) => {
-        Primitive::Byte(buckets::Byte($data))
-    };
+    ($data:expr) => {{
+        use crate::bytecode::variables::Primitive;
+
+        Primitive::Byte($data)
+    }};
 }
 
 #[macro_export]
 macro_rules! function {
-    ($data:expr) => {
-        Primitive::Function(buckets::Function($data))
-    };
+    ($data:expr) => {{
+        use crate::bytecode::variables::Primitive;
+
+        Primitive::Function($data)
+    }};
 }
 
 #[macro_export]
 macro_rules! vector {
-    () => {
-        Primitive::Vector(buckets::Vector(vec![]))
-    };
-    ($elem:expr; $n:expr) => {
-        Primitive::Vector(buckets::Vector(vec![$elem; $n]))
-    };
-    ($($x:expr),+ $(,)?) => {
-        {
-            let mut vector = vec![];
-            $(
-                vector.push($x);
-            )*
-            Primitive::Vector(buckets::Vector(vector))
-        }
-    };
-	(raw $data:expr) => {
-		Primitive::Vector(buckets::Vector($data))
-	};
+    () => {{
+        use crate::bytecode::variables::Primitive;
+
+        Primitive::Vector(vec![])
+    }};
+    ($elem:expr; $n:expr) => {{
+        use crate::bytecode::variables::Primitive;
+
+        Primitive::Vector(vec![$elem; $n])
+    }};
+    ($($x:expr),+ $(,)?) => {{
+        use crate::bytecode::variables::Primitive;
+
+        let mut vector = vec![];
+        $(
+            vector.push($x);
+        )*
+        Primitive::Vector(vector)
+    }};
+	(raw $data:expr) => {{
+        use crate::bytecode::variables::Primitive;
+
+		Primitive::Vector($data)
+	}};
 }
 
 #[macro_export]
 macro_rules! object {
     ($data:expr) => {
-        Primitive::Object(buckets::Object($data))
+        Primitive::Object($data)
     };
 }
 
 #[cfg(test)]
 mod test {
-    use crate::bytecode::variables::{buckets, Primitive};
-    use crate::*;
+    use crate::{*, bytecode::variables::Primitive};
 
     #[test]
     pub fn ints() {
-        assert_eq!(int!(5), Primitive::Int(buckets::Int(5)))
+        assert_eq!(int!(5), Primitive::Int(5))
     }
 
     #[test]
     pub fn vectors() {
-        let vector = Primitive::Vector(buckets::Vector(vec![
-            Primitive::Int(buckets::Int(5)),
-            Primitive::Str(buckets::Str("Hello".into())),
-            Primitive::Vector(buckets::Vector(vec![Primitive::Float(buckets::Float(
-                3.14159,
-            ))])),
-        ]));
+        let vector = Primitive::Vector(vec![
+            Primitive::Int(5),
+            Primitive::Str("Hello".into()),
+            Primitive::Vector(vec![Primitive::Float(3.14159)]),
+        ]);
 
         assert_eq!(
             vector![int!(5), string!(raw "Hello"), vector![float!(3.14159)]],

@@ -166,15 +166,6 @@ See `constexpr`.
 
 ---
 
-### `char ! [should_be_char]`
-See `constexpr`.
-
-| ! | Reason |
-| - | - |
-| 1 | [should_be_char] is not a char. |
-
----
-
 ### `byte ! [should_be_byte]`
 See `constexpr`.
 
