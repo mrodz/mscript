@@ -257,7 +257,13 @@ pub mod implementations {
 
             let var = ctx.pop();
 
-            ctx.signal(InstructionExitState::ReturnValue(ReturnValue(var)));
+            let ret = if let Some(primitive) = var {
+                ReturnValue::Value(primitive)
+            } else {
+                ReturnValue::NoValue
+            };
+
+            ctx.signal(InstructionExitState::ReturnValue(ret));
 
             Ok(())
         }
@@ -673,6 +679,8 @@ pub mod implementations {
                 stack: ctx.arced_call_stack().clone(),
                 arguments,
             }));
+            
+            ctx.clear_stack();
             Ok(())
         }
     }

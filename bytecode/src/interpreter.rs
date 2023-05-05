@@ -3,9 +3,10 @@ use super::function::ReturnValue;
 use super::instruction::{JumpRequest, JumpRequestDestination};
 use crate::file::MScriptFile;
 use crate::stack::Stack;
-use anyhow::{bail, Result};
-use libloading::Library;
+use crate::BytecodePrimitive;
+use anyhow::{bail, Result, Context};
 use std::collections::HashMap;
+use std::panic;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -35,12 +36,12 @@ impl Program {
         self.files_in_use.get(path).map(|arc| arc.clone())
     }
 
-    pub fn add_library(&mut self, path: &String) -> Result<Library> {
-        unsafe {
-            let lib = Library::new(path)?;
-            Ok(lib)
-        }
-    }
+    // pub fn add_library(&mut self, path: &String) -> Result<Library> {
+    //     unsafe {
+    //         let lib = Library::new(path)?;
+    //         Ok(lib)
+    //     }
+    // }
 
     pub fn add_file(&mut self, path: &String) -> Result<Option<()>> {
         if self.files_in_use.contains_key(path) {
@@ -105,9 +106,28 @@ impl Program {
         Ok(return_value)
     }
 
-    fn process_library_jump_request(lib_name: &String, func_name: &String) -> Result<ReturnValue> {
-        dbg!(lib_name, func_name);
-        Ok(ReturnValue(None))
+    fn process_library_jump_request(
+        lib_name: &String,
+        func_name: &String,
+        args: &[BytecodePrimitive],
+    ) -> Result<ReturnValue> {
+        use libloading::{Library, Symbol};
+
+        unsafe {
+            let lib = Library::new(lib_name).with_context(|| format!("Could not open FFI Library ({lib_name})"))?;
+            let lib_fn: Symbol<fn(&[BytecodePrimitive]) -> ReturnValue> =
+                lib.get(func_name.as_bytes()).with_context(|| format!("Could not find symbol ({func_name})"))?;
+
+            let ffi_result = panic::catch_unwind(|| {
+                lib_fn(args)
+            });
+
+            let Ok(ffi_result) = ffi_result else {
+                bail!("Symbol {func_name} in dynamic library {lib_name} panicked at runtime.\nPlease contact the library owners to remove unwraps, panics, and asserts.\nExceptions and other errors should be sent via a `ReturnValue::FFIError`")
+            };
+
+            Ok(ffi_result)
+        }
     }
 
     fn process_jump_request(arc_of_self: Arc<Self>, request: JumpRequest) -> Result<ReturnValue> {
@@ -118,7 +138,10 @@ impl Program {
             JumpRequestDestination::Library {
                 lib_name,
                 func_name,
-            } => Self::process_library_jump_request(&lib_name, &func_name)
+            } => {
+                Self::process_library_jump_request(&lib_name, &func_name, &request.arguments)
+                    .context("External error in foreign function interface")
+            }
         }
     }
 

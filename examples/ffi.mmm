@@ -1,3 +1,6 @@
 f main
-	call_lib "ffi is cool.dll" test
+	int 5
+	int 10
+	call_lib "./ffi/target/release/ffi.dll" adder
+	printn *
 e

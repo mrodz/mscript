@@ -1,4 +1,3 @@
-// use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
@@ -75,20 +74,34 @@ pub struct Function {
 }
 
 #[derive(Debug, Clone)]
-pub struct ReturnValue(pub Option<Primitive>);
+pub enum ReturnValue {
+    FFIError(String),
+    NoValue,
+    Value(Primitive),
+}
 
 impl ReturnValue {
-    pub fn get(&self) -> &Option<Primitive> {
-        &self.0
+    pub fn get(self) -> Option<Primitive> {
+        if let ReturnValue::Value(primitive) = self {
+            Some(primitive)
+        } else {
+            None
+        }
     }
 }
 
 impl Display for ReturnValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(var) = self.get() {
-            write!(f, "{var}")
-        } else {
-            write!(f, "None")
+        match self {
+            Self::FFIError(message) => write!(f, "{message}"),
+            // Self::FFIError { message, length } => unsafe {
+            //     let message: &[u8] = slice::from_raw_parts(*message, *length);
+            //     let message: Cow<str> = String::from_utf8_lossy(message);
+
+            //     write!(f, "{message}")
+            // }
+            Self::Value(primitive) => write!(f, "{primitive}"),
+            Self::NoValue => write!(f, "None")
         }
     }
 }
@@ -162,9 +175,10 @@ impl<'a> Function {
         callback_state: Option<Arc<VariableMapping>>,
         jump_callback: &mut impl FnMut(JumpRequest) -> Result<ReturnValue>,
     ) -> Result<ReturnValue> {
-        unsafe {
-            (*(Arc::as_ptr(&current_frame) as *mut Stack)).extend(self.get_qualified_name());
-        }
+        arc_to_ref(&current_frame).extend(self.get_qualified_name());
+        // unsafe {
+        //     (*(Arc::as_ptr(&current_frame) as *mut Stack)).extend(self.get_qualified_name());
+        // }
 
         // let location = self.location;
         let mut reader = BufReader::new(&*self.location.handle);
@@ -209,9 +223,13 @@ impl<'a> Function {
                     return Ok(ret.clone());
                 }
                 InstructionExitState::JumpRequest(jump_request) => {
-                    let result = jump_callback(jump_request)?;
+                    let result = jump_callback(jump_request).context("Failed to jump")?;
 
-                    if let Some(primitive) = result.0 {
+                    if let ReturnValue::FFIError(message) = result {        
+                        bail!("FFI: {message}")
+                    }
+
+                    if let Some(primitive) = result.get() {
                         context.push(primitive)
                     }
                 }
@@ -271,7 +289,7 @@ impl<'a> Function {
 
         arc_to_ref(&current_frame).pop();
 
-        Ok(ReturnValue(None))
+        Ok(ReturnValue::NoValue)
     }
 }
 
