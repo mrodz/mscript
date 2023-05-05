@@ -16,3 +16,4 @@ developer = ["bytecode/developer"]
 
 [workspace]
 members = ["bytecode"]
+exclude = ["ffi"]

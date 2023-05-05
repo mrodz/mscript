@@ -402,7 +402,7 @@ pub mod implementations {
             ctx.clear_stack();
 
             ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
-                destination_label: path.clone(),
+                destination: JumpRequestDestination::Standard(path.clone()),
                 callback_state: Some(Arc::clone(&o.object_variables)),
                 stack: ctx.arced_call_stack().clone(),
                 arguments,
@@ -452,7 +452,7 @@ pub mod implementations {
                 };
 
                 ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
-                    destination_label: f.location.clone(),
+                    destination: JumpRequestDestination::Standard(f.location.clone()),
                     callback_state: f.callback_state.clone(),
                     stack: ctx.arced_call_stack().clone(),
                     arguments,
@@ -464,7 +464,7 @@ pub mod implementations {
             };
 
             ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
-                destination_label: first.clone(),
+                destination: JumpRequestDestination::Standard(first.clone()),
                 callback_state: None,
                 stack: ctx.arced_call_stack().clone(),
                 arguments,
@@ -656,8 +656,24 @@ pub mod implementations {
     }
 
     instruction! {
-        call_lib(_ctx, _args) {
-            todo!()
+        call_lib(ctx, args) {
+            let (Some(lib_name), Some(func_name)) = (args.get(0), args.get(1)) else {
+                bail!("expected syntax: call_lib path/to/lib.dll function_name")
+            };
+
+            let arguments = ctx.get_local_operating_stack().into();
+
+            ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
+                destination: JumpRequestDestination::Library {
+                    lib_name: lib_name.clone(),
+                    func_name: func_name.clone(),
+                },
+                // destination_label: JumpRequestDestination::Standard(first.clone()),
+                callback_state: None,
+                stack: ctx.arced_call_stack().clone(),
+                arguments,
+            }));
+            Ok(())
         }
     }
 }
@@ -715,9 +731,9 @@ pub fn split_string(string: &String) -> Result<Vec<String>> {
                 continue;
             }
             '"' => {
-                buf.push(char);
-
                 if escaping {
+                    buf.push(char);
+
                     escaping = false;
                     continue;
                 }
@@ -779,18 +795,21 @@ pub fn parse_line(line: &String) -> Result<Instruction> {
     Ok(instruction)
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
+pub enum JumpRequestDestination {
+    Standard(String),
+    Library {
+        lib_name: String,
+        func_name: String
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct JumpRequest {
-    pub destination_label: String,
+    pub destination: JumpRequestDestination,
     pub callback_state: Option<Arc<VariableMapping>>,
     pub stack: Arc<Stack>,
     pub arguments: Vec<Primitive>,
-}
-
-impl Debug for JumpRequest {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "goto {}", self.destination_label)
-    }
 }
 
 #[derive(Debug)]

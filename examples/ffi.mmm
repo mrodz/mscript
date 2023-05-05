@@ -1,0 +1,3 @@
+f main
+	call_lib "ffi is cool.dll" test
+e

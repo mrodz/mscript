@@ -1,15 +1,13 @@
+use super::arc_to_ref;
+use super::function::ReturnValue;
+use super::instruction::{JumpRequest, JumpRequestDestination};
+use crate::file::MScriptFile;
+use crate::stack::Stack;
+use anyhow::{bail, Result};
+use libloading::Library;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
-
-use anyhow::{bail, Result};
-
-use crate::file::MScriptFile;
-use crate::stack::Stack;
-
-use super::function::ReturnValue;
-use super::instruction::JumpRequest;
-use super::{arc_to_ref};
 
 pub struct Program {
     entrypoint: Arc<String>,
@@ -37,6 +35,13 @@ impl Program {
         self.files_in_use.get(path).map(|arc| arc.clone())
     }
 
+    pub fn add_library(&mut self, path: &String) -> Result<Library> {
+        unsafe {
+            let lib = Library::new(path)?;
+            Ok(lib)
+        }
+    }
+
     pub fn add_file(&mut self, path: &String) -> Result<Option<()>> {
         if self.files_in_use.contains_key(path) {
             return Ok(None);
@@ -57,20 +62,27 @@ impl Program {
         Ok(file)
     }
 
-    fn process_jump_request(arc_of_self: Arc<Self>, request: JumpRequest) -> Result<ReturnValue> {
+    fn process_standard_jump_request(
+        arc_of_self: Arc<Self>,
+        request: JumpRequest,
+    ) -> Result<ReturnValue> {
+        let JumpRequestDestination::Standard(destination_label) = request.destination else {
+            unreachable!()
+        };
+
         let mut last_hash = 0;
 
-        for (idx, char) in request.destination_label.chars().enumerate() {
+        for (idx, char) in destination_label.chars().enumerate() {
             if char == '#' {
                 last_hash = idx;
             }
         }
 
-        if last_hash == 0 || last_hash == request.destination_label.len() - 1 {
+        if last_hash == 0 || last_hash == destination_label.len() - 1 {
             bail!("invalid path (syntax: /path/to/file#function_name");
         }
 
-        let (path, symbol) = request.destination_label.split_at(last_hash);
+        let (path, symbol) = destination_label.split_at(last_hash);
 
         let path = path.to_string();
         let symbol = &symbol[1..];
@@ -91,6 +103,23 @@ impl Program {
         )?;
 
         Ok(return_value)
+    }
+
+    fn process_library_jump_request(lib_name: &String, func_name: &String) -> Result<ReturnValue> {
+        dbg!(lib_name, func_name);
+        Ok(ReturnValue(None))
+    }
+
+    fn process_jump_request(arc_of_self: Arc<Self>, request: JumpRequest) -> Result<ReturnValue> {
+        match request.destination {
+            JumpRequestDestination::Standard(_) => {
+                Self::process_standard_jump_request(arc_of_self, request)
+            }
+            JumpRequestDestination::Library {
+                lib_name,
+                func_name,
+            } => Self::process_library_jump_request(&lib_name, &func_name)
+        }
     }
 
     pub fn execute(self) -> Result<()> {

@@ -117,10 +117,10 @@ impl Object {
         arguments: Vec<Primitive>,
         ctx: &mut Ctx,
     ) -> Result<()> {
-        let destination_label = self.get_assoc_function_name(function_name)?.clone();
+        let destination = self.get_assoc_function_name(function_name)?.clone();
 
         ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
-            destination_label,
+            destination: crate::instruction::JumpRequestDestination::Standard(destination),
             callback_state: Some(Arc::clone(&self.object_variables)),
             stack: ctx.arced_call_stack().clone(),
             arguments,

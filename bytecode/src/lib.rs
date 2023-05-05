@@ -13,6 +13,9 @@ mod stack;
 use std::sync::Arc;
 
 pub use interpreter::Program;
+pub use variables::Primitive as BytecodePrimitive;
+pub use function::ReturnValue as FFIReturnValue;
+
 mod variables;
 
 #[inline(always)]
