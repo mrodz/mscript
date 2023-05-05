@@ -1,6 +1,6 @@
 use anyhow::{bail, Result};
 
-use crate::{apply_math_bin_op_if_applicable, bytecode::variables::Primitive};
+use crate::{apply_math_bin_op_if_applicable, variables::Primitive};
 
 impl std::ops::Sub for Primitive {
     type Output = Result<Primitive>;

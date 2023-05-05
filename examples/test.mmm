@@ -1,4 +1,4 @@
-function person$grow_up
+f person$grow_up
 	load_object age
 	int 1
 	bin_op +
@@ -6,9 +6,9 @@ function person$grow_up
 
 	void
 	ret
-end
+e
 
-function person
+f person
 	arg 0
 	store name
 	arg 1
@@ -17,20 +17,23 @@ function person
 	make_object
 
 	ret
-end
+e
 
-function main
+f main
 	string "Mateo"
 	int 16
-	call src/bytecode/bin/test.mmm#person
+	call examples/test.mmm#person
 
 	store me
 
 	load_local me
 	printn *
-	call_object src/bytecode/bin/test.mmm#person$grow_up
+
+	call_object examples/test.mmm#person$grow_up
+
+	load_local me
 	printn *
 
 	void
 	ret
-end
+e

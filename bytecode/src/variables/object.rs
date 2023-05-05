@@ -1,8 +1,8 @@
 use super::{Primitive, Variable};
-use crate::bytecode::context::Ctx;
-use crate::bytecode::function::InstructionExitState;
-use crate::bytecode::instruction::JumpRequest;
-use crate::bytecode::stack::VariableMapping;
+use crate::context::Ctx;
+use crate::function::InstructionExitState;
+use crate::instruction::JumpRequest;
+use crate::stack::VariableMapping;
 use anyhow::{Context, Result};
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
@@ -117,10 +117,10 @@ impl Object {
         arguments: Vec<Primitive>,
         ctx: &mut Ctx,
     ) -> Result<()> {
-        let destination_label = self.get_assoc_function_name(function_name)?.clone();
+        let destination = self.get_assoc_function_name(function_name)?.clone();
 
         ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
-            destination_label,
+            destination: crate::instruction::JumpRequestDestination::Standard(destination),
             callback_state: Some(Arc::clone(&self.object_variables)),
             stack: ctx.arced_call_stack().clone(),
             arguments,
@@ -132,6 +132,6 @@ impl Object {
 
 impl Display for Object {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[object {}]", self.name)
+        write!(f, "[object {} @ {:#x}]", self.name, self as *const Self as usize)
     }
 }

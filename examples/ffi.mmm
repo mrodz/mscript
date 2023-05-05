@@ -1,0 +1,6 @@
+f main
+	int 5
+	int 10
+	call_lib "./ffi/target/release/ffi.dll" adder
+	printn *
+e

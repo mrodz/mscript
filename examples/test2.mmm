@@ -2,7 +2,7 @@ f main
 	int 5
 	int 5
 	bin_op =
-	bool true
+	bool false
 	bin_op xor
 	printn *
 e

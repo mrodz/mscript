@@ -371,6 +371,52 @@ Acts just like `call`, except that the first item on the local operating stack m
 
 ---
 
+### `call_lib ! [lib_path] [func_name] (==?)`
+Sends a request to call a method from a dynamically linked, given a path and its symbol name.
+
+Acts just like `call`, except that the function is accessed via FFI.
+
+One can create a function like this in a crate with the interpreter added as a dependency. Compile it as a [dylib](https://doc.rust-lang.org/reference/linkage.html) and save it in `test.dll`:
+
+```rs
+use bytecode::BytecodePrimitive;
+use bytecode::{int, raise_error};
+use bytecode::FFIReturnValue;
+
+#[no_mangle]
+pub fn adder(args: &[BytecodePrimitive]) -> FFIReturnValue {
+    let (Some(BytecodePrimitive::Int(x)), Some(BytecodePrimitive::Int(y))) = (args.get(0), args.get(1)) else {
+        raise_error!("cannot add two non-ints!")
+    };
+
+    let result = x + y;
+
+    println!("hello from rust!!! the answer is {result}");
+
+    FFIReturnValue::Value(int!(result))
+}
+```
+
+To call the function, use the following bytecode:
+```
+function main
+	int 5
+	int 10
+	call_lib "path/to/test.dll" adder
+	printn * # will output 15!
+end
+```
+
+
+| ! | Reason |
+| - | - |
+| 1 | The external function panics. |
+| 2 | The external function raises an exception. |
+| 3 | [lib_path] does not exist or cannot be opened as a library. | 
+| 4 | [func_name] is not a symbol in [lib_path]. |
+
+---
+
 ### `stack_size`
 Will return the depth of the call stack, ie. how many function calls can be traced to the current executing instruction. The result of this operation gets pushed on to the end of the local stack.
 

@@ -9,7 +9,7 @@ mod sub;
 macro_rules! apply_math_bin_op_if_applicable {
 	($lhs:ident $symbol:tt $rhs:ident) => {{
 		#[allow(unused_imports)]
-		use crate::bytecode::variables::Primitive::{self, *};
+		use crate::variables::Primitive::{self, *};
 		use crate::*;
 
 		match ($lhs, $rhs) {
@@ -35,7 +35,7 @@ macro_rules! apply_math_bin_op_if_applicable {
 macro_rules! apply_bool_bin_op_if_applicable {
 	($lhs:ident $symbol:tt $rhs:ident) => {{
 		#[allow(unused_imports)]
-		use crate::bytecode::variables::Primitive::{self, *};
+		use crate::variables::Primitive::{self, *};
 
 		match ($lhs, $rhs) {
 			(Int(x), Int(y)) => x $symbol y,
