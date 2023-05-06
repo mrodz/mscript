@@ -41,8 +41,8 @@ pub static BIN_TO_REPR: &[&[u8]] = &[
     /* 0x1A [26] */ b"load_local",
     /* 0x1B [27] */ b"typecmp",
     /* 0x1C [28] */ b"if",
-    /* 0x1D [29] */ b"else",
-    /* 0x1E [30] */ b"endif",
+    /* 0x1D [29] */ b"jmp",
+    /* 0x1E [30] */ b"endif", // deprecated
     /* 0x1F [31] */ b"strict_equ",
     /* 0x20 [32] */ b"equ",
     /* 0x21 [33] */ b"arg",
@@ -82,8 +82,8 @@ pub static FUNCTION_POINTER_LOOKUP: &[InstructionSignature] = &[
     implementations::load_local,
     implementations::typecmp,
     implementations::if_stmt,
-    implementations::else_stmt,
-    implementations::endif_stmt,
+    implementations::jmp,
+    implementations::nop, // @DEPRECATED
     implementations::strict_equ,
     implementations::equ,
     implementations::arg,
