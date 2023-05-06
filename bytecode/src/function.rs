@@ -1,19 +1,16 @@
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
-use std::io::{BufRead, BufReader, Seek, SeekFrom};
-use std::ops::{Index, IndexMut};
 use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 
 use crate::context::Ctx;
-use crate::file::{get_line_number_from_pos, MScriptFile};
-use crate::{arc_to_ref, instruction};
+use crate::file::MScriptFile;
+use crate::instruction::{Instruction, run_instruction};
+use crate::arc_to_ref;
 
-use super::attributes_parser::Attributes;
-use super::file::IfStatement;
-use super::instruction::{run_instruction, JumpRequest};
+use super::instruction::JumpRequest;
 use super::stack::{Stack, VariableMapping};
 use super::variables::Primitive;
 
@@ -67,10 +64,15 @@ impl Display for PrimitiveFunction {
 
 pub struct Function {
     pub location: Arc<MScriptFile>,
-    line_number: u32,
-    pub(crate) seek_pos: u64,
-    pub(crate) attributes: Vec<Attributes>,
+    pub(crate) instructions: Box<[Instruction]>,
     pub name: String,
+}
+
+impl Debug for Function {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = self.get_qualified_name();
+        write!(f, "{name} - {} instructions total", self.instructions.len())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -101,33 +103,33 @@ impl Display for ReturnValue {
             //     write!(f, "{message}")
             // }
             Self::Value(primitive) => write!(f, "{primitive}"),
-            Self::NoValue => write!(f, "None")
+            Self::NoValue => write!(f, "None"),
         }
     }
 }
 
-impl Debug for Function {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Function {{ name: {:?}, location: {}, line_number: {}, seek_pos: {}, attributes: {:?} }}", self.name, self.location.path, self.line_number, self.seek_pos, self.attributes)
-    }
-}
+// impl Debug for Function {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        
+//         // write!(f, "Function {{ name: {:?}, location: {}, line_number: {}, seek_pos: {}, attributes: {:?} }}", self.name, self.location.path, self.line_number, self.seek_pos, self.attributes)
+//     }
+// }
 
 impl Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut attributes = String::new();
+        // let mut attributes = String::new();
 
-        for attribute in &self.attributes {
-            attributes.push_str(&(attribute.to_string() + " "))
-        }
+        // for attribute in &self.attributes {
+        //     attributes.push_str(&(attribute.to_string() + " "))
+        // }
+
+        // let name = self.name.upgrade().expect("the name has been dropped");
 
         write!(
             f,
-            "{}@@{}:{}@@ function {} ({:#x})",
-            attributes,
+            "{} function {}",
             self.location.path,
-            self.line_number + 1,
             self.name,
-            self.seek_pos
         )
     }
 }
@@ -136,36 +138,32 @@ impl Display for Function {
 pub enum InstructionExitState {
     ReturnValue(ReturnValue),
     JumpRequest(JumpRequest),
-    NewIf(bool),
-    GotoElse,
-    GotoEndif,
+    Goto(usize),
     NoExit,
 }
 
 impl<'a> Function {
     pub fn new(
         location: Arc<MScriptFile>,
-        line_number: u32,
-        attributes: Vec<Attributes>,
+        // line_number: u32,
+        // attributes: Vec<Attributes>,
         name: String,
-        seek_pos: u64,
+        // seek_pos: u64,
+        instructions: Box<[Instruction]>,
     ) -> Self {
         Self {
             location,
-            line_number,
-            attributes,
+            // line_number,
+            // attributes,
             name,
-            seek_pos,
+            // seek_pos,
+            instructions,
         }
     }
 
     #[inline]
     pub fn get_qualified_name(&self) -> String {
         format!("{}#{}", self.location.path, self.name)
-    }
-
-    pub fn get_if_pos_from(&self, if_pos: u64) -> Option<IfStatement> {
-        unsafe { (*Arc::as_ptr(&self.location)).get_if_from(if_pos) }
     }
 
     pub fn run(
@@ -181,39 +179,28 @@ impl<'a> Function {
         // }
 
         // let location = self.location;
-        let mut reader = BufReader::new(&*self.location.handle);
+        // let mut reader = BufReader::new(&*self.location.handle);
 
         // this takes us to where the function is located in the file.
-        let Ok(pos) = reader.seek(SeekFrom::Start(self.seek_pos)) else {
-            bail!("could not get current file position")
-        };
+        // let Ok(pos) = reader.seek(SeekFrom::Start(self.seek_pos)) else {
+        // bail!("could not get current file position")
+        // };
 
         let mut context = Ctx::new(&self, current_frame.clone(), args, callback_state);
 
-        let mut line_number = self.line_number + 2;
+        // let mut line_number = self.line_number + 2;
 
-        let mut line = String::new();
+        // let mut line = String::new();
 
         // scope is needed to drop the function context before returning.
-        while let Ok(_) = reader.read_line(&mut line) {
-            if let Some('\n') = line.chars().next_back() {
-                line.pop();
-            }
+        let mut instruction_ptr = 0;
 
-            if let Some('\r') = line.chars().next_back() {
-                line.pop();
-            }
-
-            if line == "e" {
-                break;
-            }
-
-            let instruction = instruction::parse_line(&line).context("failed parsing line")?;
-            let name = instruction.name.clone();
-
-            run_instruction(&mut context, instruction)
+        while instruction_ptr < self.instructions.len() {
+            let instruction = &self.instructions[instruction_ptr];
+            
+            run_instruction(&mut context, &instruction)
                 .context("failed to run instruction")
-                .with_context(|| format!("`{}` on line {line_number}", name))?;
+                .with_context(|| format!("{:?}", instruction.name))?;
 
             let ret = context.poll();
 
@@ -225,7 +212,7 @@ impl<'a> Function {
                 InstructionExitState::JumpRequest(jump_request) => {
                     let result = jump_callback(jump_request).context("Failed to jump")?;
 
-                    if let ReturnValue::FFIError(message) = result {        
+                    if let ReturnValue::FFIError(message) = result {
                         bail!("FFI: {message}")
                     }
 
@@ -233,54 +220,15 @@ impl<'a> Function {
                         context.push(primitive)
                     }
                 }
-                InstructionExitState::NewIf(used) => {
-                    let pos = reader.stream_position()?;
-                    let Some(if_stmt) = self.get_if_pos_from(pos) else {
-                        bail!("this if statement has not been mapped (at pos {pos}, existing positions are: x)")
-                    };
-
-                    let IfStatement::If(..) = if_stmt else {
-                        bail!("expected if statment, found {if_stmt:?}");
-                    };
-
-                    let next = *if_stmt.next_pos();
-
-                    context.active_if_stmts.push((if_stmt, used));
-
-                    if !used {
-                        reader.seek(SeekFrom::Start(next))?;
-                    }
-                }
-                InstructionExitState::GotoElse => {
-                    let (if_stmt, used) = context.active_if_stmts.last().with_context(|| {
-                        let line_number = get_line_number_from_pos(&mut reader, pos).unwrap();
-
-                        format!("no if, but found else (l{line_number})")
-                    })?;
-
-                    if *used {
-                        let IfStatement::If(_, box IfStatement::Else(_, box IfStatement::EndIf(next_pos))) = if_stmt else {
-                            bail!("bad ({if_stmt:?})");
-                        };
-
-                        reader.seek(SeekFrom::Start(*next_pos))?;
-                    }
-
-                    context.active_if_stmts.pop();
-                    context.clear_stack();
-                }
-                InstructionExitState::GotoEndif => {
-                    context.active_if_stmts.pop();
-                    context.clear_stack();
+                InstructionExitState::Goto(offset) => {
+                    instruction_ptr = offset;
                 }
                 InstructionExitState::NoExit => (),
             }
 
             context.clear_signal();
 
-            line_number += 1;
-
-            line.clear();
+            instruction_ptr += 1;
         }
 
         // Handle when a function does not explicitly return.
@@ -293,9 +241,9 @@ impl<'a> Function {
     }
 }
 
+#[derive(Debug)]
 pub struct Functions {
-    pub map: HashMap<String, Function>,
-    pub if_mapper: HashMap<u64, IfStatement>,
+    pub map: HashMap<Arc<String>, Function>,
 }
 
 impl<'a> Functions {
@@ -311,7 +259,8 @@ impl<'a> Functions {
             }
         })
     }
-    pub fn get(&self, signature: &str) -> Result<&Function> {
+
+    pub fn get(&self, signature: &String) -> Result<&Function> {
         let result = self
             .map
             .get(signature)
@@ -319,24 +268,10 @@ impl<'a> Functions {
         Ok(result)
     }
 
-    pub fn get_mut(&'a mut self, signature: &str) -> Result<&'a mut Function> {
-        let result = self
-            .map
+    pub fn get_mut(&'a mut self, signature: &String) -> Result<&'a mut Function> {
+        let result = self.map
             .get_mut(signature)
             .with_context(|| format!("unknown function ({signature})"))?;
         Ok(result)
-    }
-}
-
-impl<'a> Index<&'a str> for Functions {
-    type Output = Function;
-    fn index(&self, index: &'a str) -> &Self::Output {
-        self.map.get(index).unwrap()
-    }
-}
-
-impl<'a> IndexMut<&'a str> for Functions {
-    fn index_mut(&mut self, index: &'a str) -> &mut Self::Output {
-        self.map.get_mut(index).unwrap()
     }
 }

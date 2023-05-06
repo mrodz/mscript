@@ -1,6 +1,5 @@
 use crate::stack::Stack;
 
-use super::attributes_parser::Attributes;
 use super::file::IfStatement;
 use super::function::{Function, InstructionExitState};
 use super::stack::VariableMapping;
@@ -108,9 +107,9 @@ impl<'a> Ctx<'a> {
         self.stack.clone()
     }
 
-    pub fn get_attributes(&self) -> &Vec<Attributes> {
-        &self.function.attributes
-    }
+    // pub fn get_attributes(&self) -> &Vec<Attributes> {
+    //     &self.function.attributes
+    // }
 
     pub(crate) fn signal(&mut self, exit_state: InstructionExitState) {
         self.exit_state = exit_state;

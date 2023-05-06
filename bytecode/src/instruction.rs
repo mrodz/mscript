@@ -1,3 +1,5 @@
+use crate::instruction_constants::BIN_TO_REPR;
+
 use super::context::Ctx;
 use super::function::InstructionExitState;
 use super::instruction_constants;
@@ -5,6 +7,7 @@ use super::stack::{Stack, VariableMapping};
 use super::variables::{ObjectBuilder, Primitive};
 use anyhow::{bail, Context, Result};
 use once_cell::sync::Lazy;
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::io::{stdin, stdout, Write};
@@ -12,33 +15,33 @@ use std::sync::Arc;
 
 static mut OBJECT_BUILDER: Lazy<ObjectBuilder> = Lazy::new(|| ObjectBuilder::new());
 
-pub type InstructionSignature = fn(&mut Ctx, &Vec<String>) -> Result<()>;
+pub type InstructionSignature = fn(&mut Ctx, &[String]) -> Result<()>;
 
 macro_rules! instruction {
     ($($name:ident $body:expr)*) => {
         $(
-            pub(crate) fn $name(_ctx: &mut Ctx, _args: &Vec<String>) -> Result<()> {
+            pub(crate) fn $name(_ctx: &mut Ctx, _args: &[String]) -> Result<()> {
                 $body
             }
         )*
     };
     ($($name:ident(ctx=$ctx:ident) $body:expr)*) => {
         $(
-            pub(crate) fn $name($ctx: &mut Ctx, _args: &Vec<String>) -> Result<()> {
+            pub(crate) fn $name($ctx: &mut Ctx, _args: &[String]) -> Result<()> {
                 $body
             }
         )*
     };
     ($($name:ident(args=$args:ident) $body:expr)*) => {
         $(
-            pub(crate) fn $name(_ctx: &mut Ctx, $args: &Vec<String>) -> Result<()> {
+            pub(crate) fn $name(_ctx: &mut Ctx, $args: &[String]) -> Result<()> {
                 $body
             }
         )*
     };
     ($($name:ident($ctx:ident, $args:ident) $body:expr)*) => {
         $(
-            pub(crate) fn $name($ctx: &mut Ctx, $args: &Vec<String>) -> Result<()> {
+            pub(crate) fn $name($ctx: &mut Ctx, $args: &[String]) -> Result<()> {
                 $body
             }
         )*
@@ -631,7 +634,7 @@ pub mod implementations {
     }
 
     instruction! {
-        if_stmt(ctx=ctx) {
+        if_stmt(ctx, args) {
             if ctx.stack_size() == 0 {
                 bail!("if statements require at least one entry in the local stack")
             }
@@ -643,22 +646,40 @@ pub mod implementations {
                 bail!("if statement can only test booleans")
             };
 
-            ctx.signal(InstructionExitState::NewIf(b));
+            let Some(offset) = args.first() else {
+                bail!("if statements require an argument to instruct where to jump if falsey")
+            };
+
+            if !b {
+                ctx.signal(InstructionExitState::Goto(usize::from_str_radix(offset, 10)?));
+            }
+
 
             Ok(())
         }
 
-        else_stmt(ctx=ctx) {
-            ctx.signal(InstructionExitState::GotoElse);
+        jmp(ctx, args) {
+            let Some(offset) = args.first() else {
+                bail!("jmp statements require an argument to instruct where to jump")
+            };
+
+            ctx.signal(InstructionExitState::Goto(usize::from_str_radix(offset, 10)?));
 
             Ok(())
         }
 
-        endif_stmt(ctx=ctx) {
-            ctx.signal(InstructionExitState::GotoEndif);
 
-            Ok(())
-        }
+        // else_stmt(ctx=ctx) {
+        //     ctx.signal(InstructionExitState::GotoElse);
+
+        //     Ok(())
+        // }
+
+        // endif_stmt(ctx=ctx) {
+        //     ctx.signal(InstructionExitState::GotoEndif);
+
+        //     Ok(())
+        // }
     }
 
     instruction! {
@@ -679,7 +700,7 @@ pub mod implementations {
                 stack: ctx.arced_call_stack().clone(),
                 arguments,
             }));
-            
+
             ctx.clear_stack();
             Ok(())
         }
@@ -687,26 +708,26 @@ pub mod implementations {
 }
 
 #[cfg(feature = "string_instructions")]
-pub fn query(name: String) -> InstructionSignature {
+pub fn query(name: &InstructionId) -> InstructionSignature {
     let bin = instruction_constants::REPR_TO_BIN
-        .get(name.as_bytes())
+        .get(name.0.as_bytes())
         .expect("unknown bytecode instruction");
     instruction_constants::FUNCTION_POINTER_LOOKUP[*bin as usize]
 }
 
 #[cfg(not(feature = "string_instructions"))]
-pub fn query(byte: u8) -> InstructionSignature {
-    instruction_constants::FUNCTION_POINTER_LOOKUP[byte as usize]
+pub fn query(byte: &InstructionId) -> InstructionSignature {
+    instruction_constants::FUNCTION_POINTER_LOOKUP[byte.0 as usize]
 }
 
 #[inline(always)]
-pub fn run_instruction(ctx: &mut Ctx, instruction: Instruction) -> Result<()> {
-    let instruction_fn = query(instruction.name);
+pub fn run_instruction(ctx: &mut Ctx, instruction: &Instruction) -> Result<()> {
+    let instruction_fn = query(&instruction.name);
     instruction_fn(ctx, &instruction.arguments)?;
     Ok(())
 }
 
-pub fn split_string(string: &String) -> Result<Vec<String>> {
+pub fn split_string(string: Cow<str>) -> Result<Box<[String]>> {
     let mut result = Vec::<String>::new();
     let mut buf = String::new();
     let mut in_quotes = false;
@@ -785,31 +806,28 @@ pub fn split_string(string: &String) -> Result<Vec<String>> {
         if buf.len() > 0 {
             result.push(buf.to_string());
         }
-        Ok(result)
+        Ok(result.into_boxed_slice())
     }
 }
 
-pub fn parse_line(line: &String) -> Result<Instruction> {
-    if line.trim().is_empty() {
-        return Ok(Instruction::new("nop".into(), vec![]));
-    }
+// pub fn parse_line(line: &String) -> Result<Instruction> {
+//     if line.trim().is_empty() {
+//         return Ok(Instruction::new("nop".into(), Box::new([])));
+//     }
 
-    let mut arguments = split_string(line).context("splitting line")?;
+//     let mut arguments = split_string(Cow::Borrowed(line.as_str())).context("splitting line")?;
 
-    let name = arguments.remove(0);
+//     let name = arguments.remove(0);
 
-    let instruction = Instruction::new(name, arguments);
+//     let instruction = Instruction::new(name, arguments.into_boxed_slice());
 
-    Ok(instruction)
-}
+//     Ok(instruction)
+// }
 
 #[derive(Clone, Debug)]
 pub enum JumpRequestDestination {
     Standard(String),
-    Library {
-        lib_name: String,
-        func_name: String
-    }
+    Library { lib_name: String, func_name: String },
 }
 
 #[derive(Clone, Debug)]
@@ -820,27 +838,45 @@ pub struct JumpRequest {
     pub arguments: Vec<Primitive>,
 }
 
+#[cfg(not(feature = "string_instructions"))]
+pub struct InstructionId(u8);
+#[cfg(feature = "string_instructions")]
+pub struct InstructionId(String);
+
+impl Debug for InstructionId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        #[cfg(not(feature = "string_instructions"))]
+        return write!(
+            f,
+            "{}",
+            String::from_utf8_lossy(BIN_TO_REPR[self.0 as usize])
+        );
+
+        #[cfg(feature = "string_instructions")]
+        write!(f, "{}", self.0)
+    }
+}
+
 #[derive(Debug)]
 pub struct Instruction {
-    #[cfg(not(feature = "string_instructions"))]
-    pub name: u8,
-    #[cfg(feature = "string_instructions")]
-    pub name: String,
-
-    arguments: Vec<String>,
+    pub name: InstructionId,
+    arguments: Box<[String]>,
 }
 
 impl Instruction {
     #[cfg(not(feature = "string_instructions"))]
-    pub fn new(name: String, arguments: Vec<String>) -> Self {
+    pub fn new(name: u8, arguments: Box<[String]>) -> Self {
         Instruction {
-            name: name.as_bytes()[0],
+            name: InstructionId(name),
             arguments,
         }
     }
 
     #[cfg(feature = "string_instructions")]
-    pub fn new(name: String, arguments: Vec<String>) -> Self {
-        Instruction { name, arguments }
+    pub fn new(name: String, arguments: Box<[String]>) -> Self {
+        Instruction {
+            name: InstructionId(name),
+            arguments,
+        }
     }
 }

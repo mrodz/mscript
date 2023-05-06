@@ -80,7 +80,7 @@ impl Program {
         }
 
         if last_hash == 0 || last_hash == destination_label.len() - 1 {
-            bail!("invalid path (syntax: /path/to/file#function_name");
+            bail!("invalid path (syntax: /path/to/file#function_name)");
         }
 
         let (path, symbol) = destination_label.split_at(last_hash);

@@ -5,12 +5,13 @@ use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 
-use crate::attributes_parser::{parse_attributes, Attributes};
 use crate::function::Function;
+use crate::instruction::{split_string, Instruction};
 
 use super::arc_to_ref;
 use super::function::Functions;
 
+#[derive(Debug)]
 pub struct MScriptFile {
     pub(crate) path: Arc<String>,
     pub(crate) handle: Arc<File>,
@@ -66,18 +67,19 @@ pub fn get_line_number_from_pos(reader: &mut BufReader<&File>, pos: u64) -> Resu
 impl MScriptFile {
     pub fn get_function(&mut self, name: &str) -> Option<&mut Function> {
         let name = format!("{}#{name}", self.path.to_string());
+
         let function = self.functions.as_mut().unwrap().get_mut(&name);
 
         return function.map_or_else(|_| None, |ok| Some(ok));
     }
 
-    pub fn get_if_from(&self, if_pos: u64) -> Option<IfStatement> {
-        let Some(ref functions) = self.functions else {
-            panic!("file does not have functions");
-        };
+    // pub fn get_if_from(&self, if_pos: u64) -> Option<IfStatement> {
+    //     let Some(ref functions) = self.functions else {
+    //         panic!("file does not have functions");
+    //     };
 
-        functions.if_mapper.get(&if_pos).map(|x| x.clone())
-    }
+    //     functions.if_mapper.get(&if_pos).map(|x| x.clone())
+    // }
 
     pub fn get_object_functions<'a, 'b: 'a>(
         &'a mut self,
@@ -90,6 +92,74 @@ impl MScriptFile {
         Ok(functions.get_object_functions(name))
     }
 
+    #[cfg(feature = "string_instructions")]
+    fn get_functions(arc_of_self: &Arc<Self>) -> Result<Functions> {
+        compile_error!("this function won't work with --features string_instructions")
+    }
+
+    #[cfg(not(feature = "string_instructions"))]
+    fn get_functions(arc_of_self: &Arc<Self>) -> Result<Functions> {
+        let mut reader = BufReader::new(arc_of_self.handle.as_ref());
+        let mut buffer = Vec::new();
+
+        let mut in_function = false;
+
+        let mut functions: HashMap<Arc<String>, Function> = HashMap::new();
+
+        let mut instruction_buffer: Vec<Instruction> = Vec::new();
+        let mut current_function_name: Option<String> = None;
+
+        while let Ok(size) = reader.read_until(0x00, &mut buffer) {
+            if size == 0 {
+                #[cfg(feature = "developer")]
+                println!("EOF @ L:{line_number}");
+
+                break;
+            }
+
+            match &buffer[..] {
+                [b'f', b' ', name @ .., 0x00] if !in_function => {
+                    current_function_name = Some(String::from_utf8(name.to_vec())?);
+                    in_function = true;
+                }
+                [b'e', 0x00] | [b'e', .., 0x00] if in_function => {
+                    in_function = false;
+                    if current_function_name.is_none() {
+                        bail!("found `end` outside of a function")
+                    }
+
+                    let current_function_name = current_function_name.take().unwrap();
+
+                    let function = Function::new(arc_of_self.clone(), current_function_name,  instruction_buffer.into_boxed_slice());
+                    functions.insert(Arc::new(function.get_qualified_name()), function);
+                    instruction_buffer = Vec::new();
+                }
+                [instruction, b' ', args @ .., 0x00] if in_function => {
+                    let args = split_string(String::from_utf8_lossy(args))?;
+                    
+                    let instruction = Instruction::new(*instruction, args);
+
+                    instruction_buffer.push(instruction);
+                }
+                [instruction, 0x00] if in_function => {
+                    let instruction = Instruction::new(*instruction, Box::new([]));
+
+                    instruction_buffer.push(instruction);
+                }
+                bytes => {
+                    let pos = reader.stream_position()?;
+                    panic!("{} {bytes:?} @ {pos}", bytes.iter().map(|x| *x as char).collect::<String>())
+                }
+            }
+
+            buffer.clear();
+        }
+
+        Ok(Functions { map: functions } )
+
+    }
+
+    #[cfg(not)]
     fn get_functions(arc_of_self: &Arc<Self>) -> Result<Functions> {
         #[cfg(feature = "developer")]
         println!("Functions in {}", arc_of_self.path);
