@@ -52,9 +52,6 @@ pub fn transpile_file(path: String) -> Result<()> {
         .create(true)
         .truncate(true)
         .open(new_path)?;
-    // new_file.write_all(result.as_bytes())?;
-
-    // let mut functions: HashMap<Arc<String>, Function> = HashMap::new();
 
     let mut instruction_buffer: Vec<Instruction> = Vec::new();
     let mut current_function_name: Option<String> = None;
@@ -101,12 +98,9 @@ pub fn transpile_file(path: String) -> Result<()> {
             for instruction in &function.instructions[..] {
                 body.push_str(&instruction.repr());
             }
-            // result.push_str(&format!("f {}\0{body}e\0", function.name))
-            write!(new_file, "f {}\0{body}e\0", function.name)?;
-            // new_file.write_fmt(fmt) .write_all(buf)?;
-            // functions.insert(current_function_name, function);
 
-            // functions.insert(Arc::new(function.get_qualified_name()), function);
+            write!(new_file, "f {}\0{body}e\0", function.name)?;
+
             instruction_buffer = Vec::new();
         } else {
             let whitespace_parts = buffer.split_once(' ');
@@ -115,8 +109,8 @@ pub fn transpile_file(path: String) -> Result<()> {
                 let arguments = split_string(Cow::Borrowed(args))?;
 
                 let Some(instruction_in_byte_fmt) = string_instruction_representation_to_byte(name.trim_start()) else {
-					bail!("{name} is not a valid instruction")
-				};
+                    bail!("{name} is not a valid instruction")
+                };
 
                 let instruction = Instruction {
                     arguments,
@@ -128,8 +122,8 @@ pub fn transpile_file(path: String) -> Result<()> {
                 let instruction = trimmed_end;
 
                 let Some(instruction_in_byte_fmt) = string_instruction_representation_to_byte(&instruction) else {
-					bail!("{instruction} is not a valid instruction")
-				};
+                    bail!("{instruction} is not a valid instruction")
+                };
 
                 instruction_buffer.push(Instruction {
                     name: *instruction_in_byte_fmt,
@@ -140,17 +134,6 @@ pub fn transpile_file(path: String) -> Result<()> {
 
         buffer.clear();
     }
-
-    // let mut result = String::new();
-    // for function in functions.values() {
-    // 	let mut body = String::new();
-    // 	for instruction in &function.instructions[..] {
-    // 		body.push_str(&instruction.repr(path, &new_path));
-    // 	}
-    // 	result.push_str(&format!("f {}\0{body}e\0", function.name))
-    // }
-
-    // println!("{}", result);
 
     Ok(())
 }

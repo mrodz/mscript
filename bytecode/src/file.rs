@@ -73,14 +73,6 @@ impl MScriptFile {
         return function.map_or_else(|_| None, |ok| Some(ok));
     }
 
-    // pub fn get_if_from(&self, if_pos: u64) -> Option<IfStatement> {
-    //     let Some(ref functions) = self.functions else {
-    //         panic!("file does not have functions");
-    //     };
-
-    //     functions.if_mapper.get(&if_pos).map(|x| x.clone())
-    // }
-
     pub fn get_object_functions<'a, 'b: 'a>(
         &'a mut self,
         name: &'b String,
@@ -123,13 +115,17 @@ impl MScriptFile {
 
                     let current_function_name = current_function_name.take().unwrap();
 
-                    let function = Function::new(arc_of_self.clone(), current_function_name,  instruction_buffer.into_boxed_slice());
+                    let function = Function::new(
+                        arc_of_self.clone(),
+                        current_function_name,
+                        instruction_buffer.into_boxed_slice(),
+                    );
                     functions.insert(Arc::new(function.get_qualified_name()), function);
                     instruction_buffer = Vec::new();
                 }
                 [instruction, b' ', args @ .., 0x00] if in_function => {
                     let args = split_string(String::from_utf8_lossy(args))?;
-                    
+
                     let instruction = Instruction::new(*instruction, args);
 
                     instruction_buffer.push(instruction);
@@ -141,15 +137,17 @@ impl MScriptFile {
                 }
                 bytes => {
                     let pos = reader.stream_position()?;
-                    panic!("{} {bytes:?} @ {pos}", bytes.iter().map(|x| *x as char).collect::<String>())
+                    panic!(
+                        "{} {bytes:?} @ {pos}",
+                        bytes.iter().map(|x| *x as char).collect::<String>()
+                    )
                 }
             }
 
             buffer.clear();
         }
 
-        Ok(Functions { map: functions } )
-
+        Ok(Functions { map: functions })
     }
 }
 

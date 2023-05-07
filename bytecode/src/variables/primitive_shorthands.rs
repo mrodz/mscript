@@ -87,11 +87,11 @@ macro_rules! vector {
         )*
         BytecodePrimitive::Vector(std::sync::Arc::new(vector))
     }};
-	(raw $data:expr) => {{
+    (raw $data:expr) => {{
         use crate::BytecodePrimitive;
 
-		BytecodePrimitive::Vector(std::sync::Arc::new($data))
-	}};
+        BytecodePrimitive::Vector(std::sync::Arc::new($data))
+    }};
 }
 
 #[macro_export]

@@ -11,7 +11,6 @@ use std::sync::Arc;
 pub struct MappedObject<'a> {
     name: &'a str,
     fields: Box<VariableMapping>,
-    // functions:
 }
 
 pub struct ObjectBuilder {
@@ -132,6 +131,10 @@ impl Object {
 
 impl Display for Object {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[object {} @ {:#x}] {{ {} }}", self.name, self as *const Self as usize, self.object_variables)
+        write!(
+            f,
+            "[object {} @ {:#x}] {{ {} }}",
+            self.name, self as *const Self as usize, self.object_variables
+        )
     }
 }

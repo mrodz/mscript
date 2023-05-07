@@ -199,7 +199,6 @@ pub mod implementations {
                         let idx = arg_iter.next().context("mutating an array requires an argument")?;
                         let idx = usize::from_str_radix(idx, 10)?;
 
-                        // let len = ctx.stack_size();
                         if ctx.stack_size() != 2 {
                             bail!("mutating an array requires two items in the local operating stack")
                         }
@@ -371,8 +370,6 @@ pub mod implementations {
             let Some(arg) = args.first() else {
                 bail!("expected 1 parameter (index into local operating stack), or * to print all");
             };
-
-            // dbg!(&ctx, &args);
 
             if arg == "*" {
                 let Some(first) = ctx.get_nth_op_item(0) else {
@@ -672,19 +669,6 @@ pub mod implementations {
 
             Ok(())
         }
-
-
-        // else_stmt(ctx=ctx) {
-        //     ctx.signal(InstructionExitState::GotoElse);
-
-        //     Ok(())
-        // }
-
-        // endif_stmt(ctx=ctx) {
-        //     ctx.signal(InstructionExitState::GotoEndif);
-
-        //     Ok(())
-        // }
     }
 
     instruction! {
@@ -828,9 +812,6 @@ pub struct Instruction {
 
 impl Instruction {
     pub fn new(id: u8, arguments: Box<[String]>) -> Self {
-        Instruction {
-            id,
-            arguments,
-        }
+        Instruction { id, arguments }
     }
 }

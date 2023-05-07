@@ -1,9 +1,9 @@
 use crate::stack::Stack;
 
+use super::arc_to_ref;
 use super::function::{Function, InstructionExitState};
 use super::stack::VariableMapping;
-use super::variables::{Primitive};
-use super::{arc_to_ref};
+use super::variables::Primitive;
 use anyhow::{bail, Result};
 use std::collections::VecDeque;
 use std::fmt::Debug;
@@ -98,10 +98,6 @@ impl<'a> Ctx<'a> {
     pub fn get_local_operating_stack(&self) -> VecDeque<Primitive> {
         self.stack.clone()
     }
-
-    // pub fn get_attributes(&self) -> &Vec<Attributes> {
-    //     &self.function.attributes
-    // }
 
     pub(crate) fn signal(&mut self, exit_state: InstructionExitState) {
         self.exit_state = exit_state;

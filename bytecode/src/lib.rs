@@ -10,15 +10,15 @@ mod instruction_constants;
 mod interpreter;
 mod stack;
 
+pub use function::ReturnValue as FFIReturnValue;
 pub use interpreter::Program;
 pub use variables::Primitive as BytecodePrimitive;
-pub use function::ReturnValue as FFIReturnValue;
 
 pub mod compilation_lookups {
     use std::borrow::Cow;
 
-    use crate::instruction_constants::{REPR_TO_BIN, BIN_TO_REPR};
     pub use crate::instruction::split_string;
+    use crate::instruction_constants::{BIN_TO_REPR, REPR_TO_BIN};
 
     pub fn string_instruction_representation_to_byte(string: &str) -> Option<&u8> {
         REPR_TO_BIN.get(string.as_bytes())
@@ -44,14 +44,7 @@ macro_rules! raise_error {
 
             FFIReturnValue::FFIError(message)
         }
-    }
-    
-    //  {{
-    //     let message: String = ;
-    //     let message: &str = message.as_str();
-    //     let (message, length) = (message.as_ptr(), message.len());
-    //     return FFIReturnValue::FFIError { message: $message.to_string().as_str().as_ptr(), length }
-    // }}
+    };
 }
 
 #[inline(always)]

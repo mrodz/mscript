@@ -53,15 +53,6 @@ impl Primitive {
 
     pub fn make_str(string: &str) -> Result<Self> {
         Ok(string!(raw string))
-        // let bytes = string.as_bytes();
-
-        // if let (Some(b'\"'), Some(b'\"')) = (bytes.first(), bytes.last()) {
-        //     let sliced = &string[1..string.len() - 1];
-        //     return Ok(string!(raw sliced));
-        // }
-
-        // dbg!(bytes);
-        // bail!("not a Str")
     }
 
     pub fn make_byte(string: &str) -> Result<Self> {

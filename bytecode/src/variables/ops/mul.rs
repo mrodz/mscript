@@ -1,10 +1,6 @@
+use crate::variables::Primitive::{self, *};
+use crate::*;
 use anyhow::{bail, Result};
-
-use crate::{
-    apply_math_bin_op_if_applicable, bigint,
-    variables::Primitive::{self, *},
-    float, int, string, vector,
-};
 
 impl std::ops::Mul for Primitive {
     type Output = Result<Primitive>;
@@ -21,8 +17,8 @@ impl std::ops::Mul for Primitive {
         fn repeat_vec(original: &Vec<Primitive>, new_size: usize) -> Result<Vec<Primitive>> {
             let len = original.len();
             let Some(new_size) = len.checked_mul(new_size) else {
-				bail!("new size is too large")
-			};
+                bail!("new size is too large")
+            };
             let mut result = Vec::with_capacity(new_size);
             for i in 0..new_size {
                 result[i] = original[i % len].clone()

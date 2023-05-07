@@ -1,6 +1,6 @@
+use crate::variables::Primitive;
+use crate::*;
 use anyhow::{bail, Result};
-
-use crate::{apply_math_bin_op_if_applicable, variables::Primitive};
 
 impl std::ops::Sub for Primitive {
     type Output = Result<Primitive>;
@@ -42,6 +42,6 @@ mod test {
     #[test]
     fn integer_limit_minus_one() {
         let result = int!(i32::MAX) - int!(1);
-		assert_eq!(result.unwrap(), int!(i32::MAX - 1))
+        assert_eq!(result.unwrap(), int!(i32::MAX - 1))
     }
 }
