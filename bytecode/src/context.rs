@@ -1,29 +1,22 @@
 use crate::stack::Stack;
 
-use super::file::IfStatement;
+use super::arc_to_ref;
 use super::function::{Function, InstructionExitState};
 use super::stack::VariableMapping;
-use super::variables::{Primitive, Variable};
-use super::{arc_to_ref};
+use super::variables::Primitive;
 use anyhow::{bail, Result};
 use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::sync::Arc;
 
+#[derive(Debug)]
 pub struct Ctx<'a> {
     stack: VecDeque<Primitive>,
     function: &'a Function,
     call_stack: Arc<Stack>,
-    pub active_if_stmts: Vec<(IfStatement, bool)>,
     exit_state: InstructionExitState,
     args: Vec<Primitive>,
     callback_state: Option<Arc<VariableMapping>>,
-}
-
-impl Debug for Ctx<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Ctx")
-    }
 }
 
 impl<'a> Ctx<'a> {
@@ -35,7 +28,6 @@ impl<'a> Ctx<'a> {
     ) -> Self {
         Self {
             stack: VecDeque::new(),
-            active_if_stmts: vec![],
             function,
             call_stack,
             exit_state: InstructionExitState::NoExit,
@@ -44,7 +36,7 @@ impl<'a> Ctx<'a> {
         }
     }
 
-    pub fn update_callback_variable(&mut self, name: String, value: Variable) -> Result<()> {
+    pub fn update_callback_variable(&mut self, name: String, value: Primitive) -> Result<()> {
         let Some(ref mapping) = self.callback_state else {
             bail!("this function is not a callback")
         };
@@ -58,7 +50,7 @@ impl<'a> Ctx<'a> {
         Ok(())
     }
 
-    pub fn load_callback_variable(&self, name: &String) -> Result<Option<&Variable>> {
+    pub fn load_callback_variable(&self, name: &String) -> Result<Option<&Primitive>> {
         let Some(ref mapping) = self.callback_state else {
             bail!("this function is not a callback")
         };
@@ -106,10 +98,6 @@ impl<'a> Ctx<'a> {
     pub fn get_local_operating_stack(&self) -> VecDeque<Primitive> {
         self.stack.clone()
     }
-
-    // pub fn get_attributes(&self) -> &Vec<Attributes> {
-    //     &self.function.attributes
-    // }
 
     pub(crate) fn signal(&mut self, exit_state: InstructionExitState) {
         self.exit_state = exit_state;
@@ -160,7 +148,7 @@ impl<'a> Ctx<'a> {
         arc_to_ref(&self.call_stack).register_variable(name, var)
     }
 
-    pub(crate) fn load_variable(&self, name: &String) -> Option<&Variable> {
+    pub(crate) fn load_variable(&self, name: &String) -> Option<&Primitive> {
         self.call_stack.find_name(name)
     }
 
@@ -168,7 +156,7 @@ impl<'a> Ctx<'a> {
         self.call_stack.get_frame_variables()
     }
 
-    pub(crate) fn load_local(&self, name: &String) -> Option<&Variable> {
+    pub(crate) fn load_local(&self, name: &String) -> Option<&Primitive> {
         self.call_stack.get_frame_variables().get(name)
     }
 }

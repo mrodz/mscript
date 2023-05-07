@@ -1,10 +1,6 @@
+use crate::variables::Primitive::{self, *};
+use crate::*;
 use anyhow::{bail, Result};
-
-use crate::{
-    apply_math_bin_op_if_applicable, bigint,
-    variables::Primitive::{self, *},
-    float, int, string, vector,
-};
 
 impl std::ops::Add for Primitive {
     type Output = Result<Primitive>;
@@ -22,7 +18,8 @@ impl std::ops::Add for Primitive {
             (Str(x), y) => string!(x + &y.to_string()),
             (x, Str(y)) => string!(x.to_string() + &y),
             (Vector(x), Vector(y)) => {
-                let mut x = x.clone();
+                let mut x = arc_to_ref(&x).clone();
+
                 x.extend_from_slice(&y);
                 vector!(raw x)
             }

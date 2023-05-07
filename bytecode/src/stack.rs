@@ -2,23 +2,33 @@ use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 
-use super::variables::{Primitive, Variable};
+use super::variables::Primitive;
 
 #[derive(Default, Debug, PartialEq, Clone)]
-pub struct VariableMapping(pub HashMap<String, Variable>);
+pub struct VariableMapping(pub HashMap<String, Primitive>);
 
 impl Display for VariableMapping {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut result = vec![];
 
         for (key, value) in self.0.iter() {
-            result.push(format!("{key} = {}", value));
+            result.push(format!("{key} = {value}"));
         }
 
         let string = if result.len() == 0 {
             "None".into()
         } else {
-            result.iter().fold("".to_owned(), |x, y| x + "\r\n" + y)
+            let mut ret = String::new();
+
+            ret.push_str(&result[0]);
+
+            for combo in &result[1..] {
+                ret.push_str(", ");
+                ret.push_str(&combo);
+            }
+
+            ret
+            // result.iter().fold("".to_owned(), |x, y| x +  + y)
         };
 
         write!(f, "{string}")
@@ -26,15 +36,15 @@ impl Display for VariableMapping {
 }
 
 impl VariableMapping {
-    pub fn get(&self, key: &String) -> Option<&Variable> {
+    pub fn get(&self, key: &String) -> Option<&Primitive> {
         self.0.get(key)
     }
 
-    pub fn get_mut(&mut self, key: &String) -> Option<&mut Variable> {
+    pub fn get_mut(&mut self, key: &String) -> Option<&mut Primitive> {
         self.0.get_mut(key)
     }
 
-    pub fn update(&mut self, key: String, value: Variable) -> Result<()> {
+    pub fn update(&mut self, key: String, value: Primitive) -> Result<()> {
         // if insert returns None, that means there was no value there,
         // and this `update` is invalid.
         let _ = self
@@ -82,7 +92,7 @@ impl Stack {
         self.0.pop();
     }
 
-    pub fn find_name(&self, name: &String) -> Option<&Variable> {
+    pub fn find_name(&self, name: &String) -> Option<&Primitive> {
         for i in (0..=self.size() - 1).rev() {
             if let Some(var) = self.0[i].variables.0.get(name) {
                 return Some(var);
@@ -98,7 +108,7 @@ impl Stack {
             .expect("nothing in the stack")
             .variables
             .0
-            .insert(name, Variable::new(var));
+            .insert(name, var);
     }
 }
 

@@ -1,44 +1,8 @@
 use crate::{bigint, bool, byte, float, int, string};
 use anyhow::{bail, Result};
-use std::fmt::{Debug, Display};
+use std::fmt::Display;
 
 use super::{primitive::Type, Primitive};
-
-#[derive(Clone, PartialEq)]
-pub struct Variable {
-    pub data: Primitive,
-    pub ty: Type,
-}
-
-impl From<Primitive> for Variable {
-    fn from(value: Primitive) -> Self {
-        Self {
-            ty: value.ty(),
-            data: value,
-        }
-    }
-}
-
-impl Display for Variable {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}({})", self.ty, self.data)
-    }
-}
-
-impl Debug for Variable {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        <Self as Display>::fmt(&self, f)
-    }
-}
-
-impl Variable {
-    pub fn new(data: Primitive) -> Self {
-        Self {
-            ty: data.ty(),
-            data,
-        }
-    }
-}
 
 impl Primitive {
     pub fn equals(&self, rhs: &Self) -> Result<bool> {
@@ -89,15 +53,6 @@ impl Primitive {
 
     pub fn make_str(string: &str) -> Result<Self> {
         Ok(string!(raw string))
-        // let bytes = string.as_bytes();
-
-        // if let (Some(b'\"'), Some(b'\"')) = (bytes.first(), bytes.last()) {
-        //     let sliced = &string[1..string.len() - 1];
-        //     return Ok(string!(raw sliced));
-        // }
-
-        // dbg!(bytes);
-        // bail!("not a Str")
     }
 
     pub fn make_byte(string: &str) -> Result<Self> {
@@ -158,7 +113,7 @@ impl Display for Primitive {
 
         match self {
             Bool(b) => write!(f, "{}", *b),
-            Str(s) => write!(f, "{s:?}"),
+            Str(s) => write!(f, "{s}"),
             Int(n) => write!(f, "{n}"),
             BigInt(n) => write!(f, "{n}"),
             Float(n) => write!(f, "{n}"),

@@ -1,9 +1,6 @@
+use crate::variables::Primitive::{self, *};
+use crate::*;
 use anyhow::{bail, Result};
-
-use crate::{
-    apply_math_bin_op_if_applicable,
-    variables::Primitive::{self, *},
-};
 
 impl std::ops::Rem for Primitive {
     type Output = Result<Primitive>;

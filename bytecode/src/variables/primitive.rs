@@ -41,7 +41,7 @@ primitive! {
     BigInt(i128),
     Float(f64),
     Byte(u8),
-    Function(crate::function::PrimitiveFunction),
-    Vector(Vec<crate::variables::Primitive>),
+    Function(std::sync::Arc<crate::function::PrimitiveFunction>),
+    Vector(std::sync::Arc<Vec<crate::variables::Primitive>>),
     Object(std::sync::Arc<crate::variables::Object>),
 }

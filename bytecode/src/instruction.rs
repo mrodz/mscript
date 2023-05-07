@@ -1,5 +1,3 @@
-use crate::instruction_constants::BIN_TO_REPR;
-
 use super::context::Ctx;
 use super::function::InstructionExitState;
 use super::instruction_constants;
@@ -71,7 +69,7 @@ pub mod implementations {
     use super::*;
     use crate::arc_to_ref;
     use crate::function::{PrimitiveFunction, ReturnValue};
-    use crate::variables::{Object, Variable};
+    use crate::variables::Object;
     use crate::{bool, function, int, object, vector};
     use std::collections::HashMap;
     use std::sync::Arc;
@@ -133,10 +131,8 @@ pub mod implementations {
             use Primitive::*;
             let symbols = args.first().context("Expected an operation [+,-,*,/,%,>,>=,<,<=]")?;
 
-            // let symbol = symbols[0] as char;
-
             let (Some(right), Some(left)) = (ctx.pop(), ctx.pop()) else {
-                bail!("bin_op requires two items on the local operating stack.")
+                bail!("bin_op requires two items on the local operating stack (found {:?})", ctx.get_local_operating_stack())
             };
 
             let result = match (symbols.as_str(), &left, &right) {
@@ -145,6 +141,10 @@ pub mod implementations {
                 ("*", ..) => left * right,
                 ("/", ..) => left / right,
                 ("%", ..) => left % right,
+                (">", ..) => Ok(bool!(left > right)),
+                ("<", ..) => Ok(bool!(left < right)),
+                (">=", ..) => Ok(bool!(left >= right)),
+                ("<=", ..) => Ok(bool!(left <= right)),
                 ("=", ..) => Ok(bool!(left.equals(&right)?)),
                 ("and", Bool(x), Bool(y)) => Ok(bool!(*x && *y)),
                 ("or", Bool(x), Bool(y)) => Ok(bool!(*x || *y)),
@@ -192,13 +192,13 @@ pub mod implementations {
                             bail!("Cannot perform a vector operation on a non-vector")
                         };
 
-                        vector.reverse()
+                        let reference = Arc::get_mut(vector).context("could not get reference to vector")?;
+                        reference.reverse();
                     },
                     "mut" => {
                         let idx = arg_iter.next().context("mutating an array requires an argument")?;
                         let idx = usize::from_str_radix(idx, 10)?;
 
-                        // let len = ctx.stack_size();
                         if ctx.stack_size() != 2 {
                             bail!("mutating an array requires two items in the local operating stack")
                         }
@@ -209,7 +209,7 @@ pub mod implementations {
                             bail!("Cannot perform a vector operation on a non-vector")
                         };
 
-                        vector[idx] = new_item;
+                        Arc::get_mut(vector).context("could not get reference to vector")?[idx] = new_item;
 
                     }
                     not_found => bail!("operation not found: `{not_found}`")
@@ -287,7 +287,7 @@ pub mod implementations {
 
             let len = args.len();
             let callback_state = if len != 1 {
-                let mut arguments: HashMap<String, Variable> = HashMap::with_capacity(len - 1); // maybe len
+                let mut arguments: HashMap<String, Primitive> = HashMap::with_capacity(len - 1); // maybe len
                 for var_name in &args[1..] {
                     let Some(var) = ctx.load_variable(var_name) else {
                         bail!("{var_name} is not in scope")
@@ -384,6 +384,8 @@ pub mod implementations {
                     print!(", {var}")
                 }
 
+                stdout().flush()?;
+
                 println!();
 
                 return Ok(());
@@ -427,7 +429,7 @@ pub mod implementations {
                 bail!("mutating an object requires two items in the local operating stack (obj, data)")
             }
 
-            let new_item: Variable = ctx.pop().context("could not pop first item")?.into();
+            let new_item: Primitive = ctx.pop().context("could not pop first item")?.into();
 
             let Some(Primitive::Object(o)) = ctx.get_last_op_item_mut() else {
                 bail!("Cannot perform an object mutation on a non-object")
@@ -437,8 +439,8 @@ pub mod implementations {
                 // this bypass of Arc protections is messy and should be refactored.
                 let var = (*(Arc::as_ptr(&o) as *mut Object)).has_variable_mut(var_name).context("variable does not exist on object")?;
 
-                if var.ty != new_item.ty {
-                    bail!("mismatched types in assignment ({:?} & {:?})", var.ty, new_item.ty)
+                if var.ty() != new_item.ty() {
+                    bail!("mismatched types in assignment ({:?} & {:?})", var.ty(), new_item.ty())
                 }
 
                 *var = new_item.into();
@@ -552,7 +554,7 @@ pub mod implementations {
                 bail!("load before store (`{name}` not in scope)")
             };
 
-            ctx.push(var.data.clone());
+            ctx.push(var.clone());
 
             Ok(())
         }
@@ -566,7 +568,7 @@ pub mod implementations {
                 bail!("load before store (`{name}` not in this stack frame)")
             };
 
-            ctx.push(var.data.clone());
+            ctx.push(var.clone());
 
             Ok(())
         }
@@ -580,7 +582,7 @@ pub mod implementations {
                 bail!("this callback does not have `{name}`")
             };
 
-            ctx.push(var.data.clone());
+            ctx.push(var.clone());
 
             Ok(())
         }
@@ -667,19 +669,6 @@ pub mod implementations {
 
             Ok(())
         }
-
-
-        // else_stmt(ctx=ctx) {
-        //     ctx.signal(InstructionExitState::GotoElse);
-
-        //     Ok(())
-        // }
-
-        // endif_stmt(ctx=ctx) {
-        //     ctx.signal(InstructionExitState::GotoEndif);
-
-        //     Ok(())
-        // }
     }
 
     instruction! {
@@ -707,22 +696,13 @@ pub mod implementations {
     }
 }
 
-#[cfg(feature = "string_instructions")]
-pub fn query(name: &InstructionId) -> InstructionSignature {
-    let bin = instruction_constants::REPR_TO_BIN
-        .get(name.0.as_bytes())
-        .expect("unknown bytecode instruction");
-    instruction_constants::FUNCTION_POINTER_LOOKUP[*bin as usize]
-}
-
-#[cfg(not(feature = "string_instructions"))]
-pub fn query(byte: &InstructionId) -> InstructionSignature {
-    instruction_constants::FUNCTION_POINTER_LOOKUP[byte.0 as usize]
+pub fn query(byte: u8) -> InstructionSignature {
+    instruction_constants::FUNCTION_POINTER_LOOKUP[byte as usize]
 }
 
 #[inline(always)]
 pub fn run_instruction(ctx: &mut Ctx, instruction: &Instruction) -> Result<()> {
-    let instruction_fn = query(&instruction.name);
+    let instruction_fn = query(instruction.id);
     instruction_fn(ctx, &instruction.arguments)?;
     Ok(())
 }
@@ -810,20 +790,6 @@ pub fn split_string(string: Cow<str>) -> Result<Box<[String]>> {
     }
 }
 
-// pub fn parse_line(line: &String) -> Result<Instruction> {
-//     if line.trim().is_empty() {
-//         return Ok(Instruction::new("nop".into(), Box::new([])));
-//     }
-
-//     let mut arguments = split_string(Cow::Borrowed(line.as_str())).context("splitting line")?;
-
-//     let name = arguments.remove(0);
-
-//     let instruction = Instruction::new(name, arguments.into_boxed_slice());
-
-//     Ok(instruction)
-// }
-
 #[derive(Clone, Debug)]
 pub enum JumpRequestDestination {
     Standard(String),
@@ -838,45 +804,14 @@ pub struct JumpRequest {
     pub arguments: Vec<Primitive>,
 }
 
-#[cfg(not(feature = "string_instructions"))]
-pub struct InstructionId(u8);
-#[cfg(feature = "string_instructions")]
-pub struct InstructionId(String);
-
-impl Debug for InstructionId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        #[cfg(not(feature = "string_instructions"))]
-        return write!(
-            f,
-            "{}",
-            String::from_utf8_lossy(BIN_TO_REPR[self.0 as usize])
-        );
-
-        #[cfg(feature = "string_instructions")]
-        write!(f, "{}", self.0)
-    }
-}
-
 #[derive(Debug)]
 pub struct Instruction {
-    pub name: InstructionId,
+    pub id: u8,
     arguments: Box<[String]>,
 }
 
 impl Instruction {
-    #[cfg(not(feature = "string_instructions"))]
-    pub fn new(name: u8, arguments: Box<[String]>) -> Self {
-        Instruction {
-            name: InstructionId(name),
-            arguments,
-        }
-    }
-
-    #[cfg(feature = "string_instructions")]
-    pub fn new(name: String, arguments: Box<[String]>) -> Self {
-        Instruction {
-            name: InstructionId(name),
-            arguments,
-        }
+    pub fn new(id: u8, arguments: Box<[String]>) -> Self {
+        Instruction { id, arguments }
     }
 }

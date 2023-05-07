@@ -1,18 +1,105 @@
 # Bytecode
-Here is the implementation of the bytecode interpreter. The interpreter will start at a file and look for...
+Here is the implementation of the bytecode interpreter. 
 
+There are two forms of bytecode: Human-Readable Bytecode and the actual raw bytes. 
+
+The first, Human-Readable Bytecode (HRB), can be used to write actual bytecode much faster than one could do with a Hex editor. There is CLI tooling to help transpile files (use the `.transpiled.mmm` extension for HRB) into actual bytecode (`.mmm` extension).
+
+The idea of "bytecode" is really just a series of executable instructions. These instructions are grouped together under labels called functions. Certain bytecode instructions allow functions to jump to other functions, others might produce side effects, and more. A function can have exactly one return value.
+
+When writing bytecode by hand (using HRB + transpilation), statements are separated by OS-independent newlines. The bytecode that actually gets executed by the interpreter has statements seperated by null bytes (0x00).
+
+Example HRB format:
 ```
 function main
+	instruction_name arg1 arg2 "long arg"
+	instruction_without_args
 	...
 end
 ```
 
-...to start executing. This is the sole entrypoint to the program.
+The actual bytecode takes the following shape:
+```
+f function_name{NUL}{instruction_byte} arg1 arg2 "long arg"{NULL}...e{NULL}
+```
+
+## Hello World
+To better explain how bytecode is laid out, let's look at the code for Hello World. This example can be found [here](../examples/bytecode/hello_world/).
+
+In its human form, the code would be:
+```
+function main
+	string "Hello World"
+	printn *
+end
+```
+
+In its raw instruction form:
+```
+f main{NUL}{BEL} "Hello World"{NUL}{DC3} *{NUL}e{NUL}
+```
+
+In a Hex Editor:
+```
+(1). 66 20 6D 61 69 6E 00 (2). 07 20 22 48 65 6C 6C 6F 20 57 6F 72 6C 22 00 (3). 13 20 2A 00 (4). 65 00
+```
+1. function main
+2. string "Hello World"
+3. printn *
+4. end
+
+# Interpreter Internals
+When a file is opened for the first time, a parser will identify functions and group together instructions. Instructions store their identifying byte plus their arguments as a `String` slice on the heap. Once a file is opened, a lookup table of functions -> instructions for that unit will stay open for the lifetime of the interpreter. The handle to the file, though, will be freed after an initial read of its contents.
+
+Primitives are wrappers around Rust's own datatypes. Most are copied when passed to functions and when shared by variables. Some, like Objects and Vectors, are reference-counted atomically.
+
+Stack space allocated to the program can be controlled via a CLI flag (-X, --stack-size). The default is 4MB.
+
+# Foreign Function Interface
+Using dynamically-loaded libraries (.dll, .so, .lib, ...) files allows for interoperability between MScript and other languages. Currently, there is only support for libraries compiled from Rust, but stay tuned for C/C++ Header files.
+
+## How to use this feature in bytecode:
+Create a new crate. Its `Cargo.toml` should contain the following:
+
+```toml
+...
+
+[lib]
+crate-type = ["dylib"]
+
+[dependencies]
+bytecode = { path = "path/to/bytecode" }
+
+...
+```
+
+Put your functions in the crate's lib.rs!
+```rs
+use bytecode::BytecodePrimitive;
+use bytecode::{int, raise_error};
+use bytecode::FFIReturnValue;
+
+#[no_mangle]
+pub fn adder(args: &[BytecodePrimitive]) -> FFIReturnValue {
+    let (Some(BytecodePrimitive::Int(x)), Some(BytecodePrimitive::Int(y))) = (args.get(0), args.get(1)) else {
+        raise_error!("cannot add two non-ints!")
+    };
+
+    let result = x + y;
+
+    println!("hello from rust!!! the answer is {result}");
+
+    FFIReturnValue::Value(int!(result))
+}
+```
+
+The #[no_mangle] attribute is critical; otherwise, you might not be able to find your symbol.
+
+Once this is set up, take a look at the `call_lib` function in the `Bytecode Instruction List`. You can also view this function in action [here](../ffi/).
 
 # Terminology & Concepts
 ### Local Operating Stack  
-Bytecode is stack-based, and all operations go through this operating stack. Here is a visualization:
-
+The MScript Interpreter is a Stack Machine. To demonstrate, examine the following bytecode.
 ```
 int 5     # stack = [5]
 int 10    # stack = [5, 10]
@@ -21,13 +108,13 @@ bin_op +  # stack = [15]
 printn *  # <- outputs "15"
 ```
 ### Path  
-This is the way the interpreter stores locations. Format:
+This is the way the interpreter stores absolute locations. Format:
 
 ```
 /path/to/file/bytecode.mmm#function_name_here
 ```
 
-Under the hood, the interpreter opens a read-only handle to the file and saves symbols (functions, consts, etc.). The handle is kept for the lifetime of the running program.
+Under the hood, the interpreter opens a read-only handle to the file and saves symbols (functions, consts, etc.).
 
 ### Instruction
 A single line of bytecode. Format:

@@ -1,17 +1,12 @@
+use crate::variables::Primitive;
+use crate::*;
 use std::cmp::Ordering;
 
-use crate::{
-    apply_bool_bin_op_if_applicable,
-    variables::Primitive::{self},
-};
-
 impl std::cmp::PartialOrd for Primitive {
-    // Required method
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 
-    // Provided methods
     fn lt(&self, other: &Self) -> bool {
         apply_bool_bin_op_if_applicable!(self < other)
     }

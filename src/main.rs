@@ -4,27 +4,38 @@ mod cli;
 
 use anyhow::Result;
 use bytecode::Program;
+use bytecode_dev_transpiler;
 use clap::Parser;
-use cli::Args;
+use cli::{Args, Commands};
 use std::thread;
 
 fn main() -> Result<()> {
     let args = Args::parse();
-    // default: 4 MB
 
-    let builder = thread::Builder::new()
-        .name("Main".into())
-        .stack_size(args.stack_size);
+    let command = args.command;
 
-    let handler = builder.spawn(|| -> Result<()> {
-        let program = Program::new(args.path)?;
+    match command {
+        Commands::Run { path, stack_size } => {
+            let builder = thread::Builder::new()
+                .name("Main".into())
+                .stack_size(stack_size);
 
-        program.execute()?;
+            let handler = builder.spawn(|| -> Result<()> {
+                let program = Program::new(path)?;
 
-        Ok(())
-    })?;
+                program.execute()?;
 
-    handler.join().unwrap()?;
+                Ok(())
+            })?;
+            handler.join().unwrap()?;
+        }
+        Commands::Transpile { path } => {
+            bytecode_dev_transpiler::transpile_file(path)?;
+        }
+        Commands::Compile { path: _ } => {
+            unimplemented!();
+        }
+    }
 
     Ok(())
 }

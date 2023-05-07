@@ -9,11 +9,11 @@ edition = "2021"
 anyhow = "1.0.69"
 clap = { version = "4.2.4", features = ["derive"] }
 bytecode = { path = "./bytecode" }
+bytecode_dev_transpiler = { path = "./bytecode_dev_transpiler" }
 
 [features]
-string_instructions = ["bytecode/string_instructions"]
 developer = ["bytecode/developer"]
 
 [workspace]
-members = ["bytecode"]
+members = ["bytecode", "bytecode_dev_transpiler"]
 exclude = ["ffi"]
