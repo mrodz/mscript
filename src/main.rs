@@ -2,7 +2,7 @@
 
 mod cli;
 
-use anyhow::Result;
+use anyhow::{Result, Context};
 use bytecode::Program;
 use bytecode_dev_transpiler;
 use clap::Parser;
@@ -30,7 +30,7 @@ fn main() -> Result<()> {
             handler.join().unwrap()?;
         }
         Commands::Transpile { path } => {
-            bytecode_dev_transpiler::transpile_file(path)?;
+            bytecode_dev_transpiler::transpile_file(path).context("Could not transpile file")?;
         }
         Commands::Compile { path: _ } => {
             unimplemented!();

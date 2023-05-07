@@ -1,8 +1,9 @@
 use anyhow::{bail, Result};
 use bytecode::compilation_lookups::*;
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::borrow::Cow;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Seek, Write};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -39,11 +40,26 @@ struct Function {
     pub(crate) name: Arc<String>,
 }
 
+pub fn is_instruction_deprecated(name: &str) -> bool {
+    matches!(name, "nop" | "char" | "else" | "endif")
+}
+
 pub fn transpile_file(path: String) -> Result<()> {
     let path = Path::new(&path);
     let new_path = path.with_extension("").with_extension("mmm");
 
     let file = File::open(&path)?;
+    // let spinner_style = ProgressStyle::with_template("{prefix:.bold.dim} {spinner} {wide_msg}")?;
+    let functions = MultiProgress::new();
+
+    let pb = functions.add(ProgressBar::new(file.metadata()?.len()));
+    pb.set_style(ProgressStyle::with_template("{prefix:.bold.dim} [{elapsed_precise}] {wide_bar:.cyan/blue} {human_pos:>7}/{human_len:7} bytes")?);
+    pb.set_prefix("Transpiling:");
+
+    let spinner_style = ProgressStyle::with_template("{prefix:.bold.dim} {spinner} {wide_msg}")
+        .unwrap()
+        .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
+
     let mut reader = BufReader::new(file);
     let mut buffer = String::new();
 
@@ -51,15 +67,19 @@ pub fn transpile_file(path: String) -> Result<()> {
         .write(true)
         .create(true)
         .truncate(true)
-        .open(new_path)?;
+        .open(new_path.clone())?;
 
     let mut instruction_buffer: Vec<Instruction> = Vec::new();
     let mut current_function_name: Option<String> = None;
+    let mut current_function_pb: Option<ProgressBar> = None;
 
     while let Ok(size) = reader.read_line(&mut buffer) {
         if size == 0 {
             break;
         }
+
+        let pos = reader.stream_position()?;
+        pb.set_position(pos);
 
         let bytes = buffer.as_bytes();
 
@@ -75,6 +95,12 @@ pub fn transpile_file(path: String) -> Result<()> {
             if let (b"function", [b' ', name @ ..]) = parts {
                 let name = String::from_utf8_lossy(name).trim_end().to_string();
 
+                let pb = functions.add(ProgressBar::new_spinner());
+                pb.set_style(spinner_style.clone());
+                pb.set_message(name.clone());
+
+                current_function_pb = Some(pb);
+                
                 current_function_name = Some(name);
 
                 buffer.clear();
@@ -102,13 +128,27 @@ pub fn transpile_file(path: String) -> Result<()> {
             write!(new_file, "f {}\0{body}e\0", function.name)?;
 
             instruction_buffer = Vec::new();
+
+            if let Some(ref pb) = current_function_pb {
+                pb.finish_with_message(format!("finished {current_function_name}"));
+            }
         } else {
             let whitespace_parts = buffer.split_once(' ');
 
             if let Some((name, args)) = whitespace_parts {
+                if let Some(ref pb) = current_function_pb {
+                    pb.tick();
+                }
+
                 let arguments = split_string(Cow::Borrowed(args))?;
 
-                let Some(instruction_in_byte_fmt) = string_instruction_representation_to_byte(name.trim_start()) else {
+                let name = name.trim_start();
+
+                if is_instruction_deprecated(name) {
+                    bail!("{name:?} is deprecated and not supported by this interpreter")
+                }
+
+                let Some(instruction_in_byte_fmt) = string_instruction_representation_to_byte(name) else {
                     bail!("{name} is not a valid instruction")
                 };
 
@@ -120,6 +160,10 @@ pub fn transpile_file(path: String) -> Result<()> {
                 instruction_buffer.push(instruction);
             } else {
                 let instruction = trimmed_end;
+
+                if is_instruction_deprecated(trimmed_end) {
+                    bail!("{trimmed_end:?} is deprecated and not supported by this interpreter")
+                }
 
                 let Some(instruction_in_byte_fmt) = string_instruction_representation_to_byte(&instruction) else {
                     bail!("{instruction} is not a valid instruction")
@@ -134,6 +178,12 @@ pub fn transpile_file(path: String) -> Result<()> {
 
         buffer.clear();
     }
+
+    pb.finish();
+
+    let meta = new_file.metadata()?;
+
+    println!("Success! Wrote {} bytes to {}", meta.len(), new_path.as_os_str().to_string_lossy());
 
     Ok(())
 }

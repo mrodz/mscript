@@ -1,0 +1,47 @@
+function fizz_buzz
+	string ""
+	store result
+
+	arg 0
+	int 3
+	bin_op %
+	int 0
+	equ
+
+	if 10
+		string "Fizz"
+		store result
+
+	arg 0
+	int 5
+	bin_op %
+	int 0
+	equ
+
+	if 20
+		load result
+		string "Buzz" 
+		bin_op +
+		store result
+
+	load result
+	len
+	int 0
+	equ
+
+	if 29
+		load result
+		arg 0
+		bin_op +
+		store result
+
+	load result
+	ret
+end
+
+function main
+	int 15
+	call fizz_buzz.mmm#fizz_buzz
+
+	printn *
+end

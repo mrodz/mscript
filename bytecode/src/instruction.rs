@@ -221,10 +221,26 @@ pub mod implementations {
     }
 
     instruction! {
-        nop Ok(())
+        nop bail!("nop instructions are deprecated")
     }
 
     instruction! {
+        len(ctx=ctx) {
+            let Some(top) = ctx.pop() else {
+                bail!("len requires an item on the local stack")
+            };
+
+            let result = match top {
+                Primitive::Vector(v) => int!(v.len().try_into()?),
+                Primitive::Str(s) => int!(s.len().try_into()?),
+                _ => bail!("cannot get the raw length of a non-string/vector"),
+            };
+
+            ctx.push(result);
+
+            Ok(())
+        }
+
         void(ctx=ctx) {
             ctx.clear_stack();
             Ok(())
@@ -273,13 +289,26 @@ pub mod implementations {
     }
 
     make_type!(make_bool);
-    make_type!(make_str);
     make_type!(make_int);
     make_type!(make_float);
     make_type!(make_byte);
     make_type!(make_bigint);
 
     instruction! {
+        make_str(ctx, args) {
+            let raw_str = match args.len() {
+                0 => "",
+                1 => &args[0],
+                _ => bail!("make_str requires 0 arguments (empty string) or one argument (the string)")
+            };
+
+            let var = crate::string!(raw raw_str);
+
+            ctx.push(var);
+
+            Ok(())
+        }
+
         make_function(ctx, args) {
             let Some(location) = args.first() else {
                 bail!("making a function pointer requires a path to find it")

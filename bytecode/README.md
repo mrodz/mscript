@@ -580,14 +580,14 @@ Equivalent to `load_callback`. This was introduced to make it clearer when you'r
 
 ---
 
-### `if ! (>=1)`
-Will enter an if-statement context for conditional jumping. Start by peeking at the last item on the local stack, unwrap expecting a boolean value. Sends a signal up to the interpreter sharing whether the expression evaluated truthily. Once done, will clear the local stack.
+### `if ! [falsey_jump_index] (>=1)`
+This function will pop a boolean value from the top of the local stack. If truthy, this statement returns. If falsey, it will instruct the interpreter to jump to the Nth instruction in its function, as denoted by [falsey_jump_index].
 
 | ! | Reason |
 | - | - |
-| 1 | Argument length == 0. |
-| 2 | Argument[0] != Bool. |
-| 3 | *panics!* The interpreter cannot find an `else`/`endif` for this `if`.
+| 1 | Argument length != 1. |
+| 2 | Last stack item != Bool. |
+| 3 | Argument[0] != usize. |
 
 ---
 

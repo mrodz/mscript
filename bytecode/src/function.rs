@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::path::Path;
@@ -6,6 +7,7 @@ use std::sync::Arc;
 use anyhow::{bail, Context, Result};
 
 use crate::arc_to_ref;
+use crate::compilation_lookups::raw_byte_instruction_to_string_representation;
 use crate::context::Ctx;
 use crate::file::MScriptFile;
 use crate::instruction::{run_instruction, Instruction};
@@ -149,9 +151,12 @@ impl<'a> Function {
             run_instruction(&mut context, &instruction)
                 .context("failed to run instruction")
                 .with_context(|| {
+                    let instruction_as_str =
+                        raw_byte_instruction_to_string_representation(instruction.id)
+                            .unwrap_or(Cow::Borrowed("Unknown Instruction"));
                     format!(
-                        "{:?} (instruction #{} of {})",
-                        instruction.id, instruction_ptr, self.name
+                        "{instruction_as_str:?} (instruction #{instruction_ptr} of {})",
+                        self.name
                     )
                 })?;
 
@@ -163,7 +168,8 @@ impl<'a> Function {
                     return Ok(ret.clone());
                 }
                 InstructionExitState::JumpRequest(jump_request) => {
-                    let result = jump_callback(jump_request).context("Failed to jump")?;
+                    let result = jump_callback(jump_request)
+                        .with_context(|| context.get_call_stack_string())?;
 
                     if let ReturnValue::FFIError(message) = result {
                         bail!("FFI: {message}")
