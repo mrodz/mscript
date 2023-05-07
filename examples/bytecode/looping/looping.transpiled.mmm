@@ -1,0 +1,56 @@
+function factorial
+	arg 0
+	store limit_upper
+
+	bigint 1
+	store result
+
+	int 1
+	store i
+
+	load i
+	load limit_upper
+	bin_op <=
+	if 19
+		load result
+		load i
+		bin_op *
+		store result
+
+		load i
+		int 1
+		bin_op +
+		store i
+
+		jmp 6
+
+	load result
+	ret
+end
+
+function main
+	int 0
+	store counter
+
+	load counter
+	int 33
+	bin_op <
+
+	if 15
+		load counter
+		int 1
+		bin_op +
+		store counter
+		load counter
+		call looping.mmm#factorial
+
+		printn *
+		void
+		jmp 2
+
+	string "Done"
+	printn *
+
+	void
+	ret
+end

@@ -1,0 +1,12 @@
+function square_number
+	string "Hello From File B"
+	printn *
+	void
+
+	arg 0
+	store x
+	load x
+	load x
+	bin_op *
+	ret
+end

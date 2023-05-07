@@ -14,6 +14,24 @@ pub use interpreter::Program;
 pub use variables::Primitive as BytecodePrimitive;
 pub use function::ReturnValue as FFIReturnValue;
 
+pub mod compilation_lookups {
+    use std::borrow::Cow;
+
+    use crate::instruction_constants::{REPR_TO_BIN, BIN_TO_REPR};
+    pub use crate::instruction::split_string;
+
+    pub fn string_instruction_representation_to_byte(string: &str) -> Option<&u8> {
+        REPR_TO_BIN.get(string.as_bytes())
+    }
+
+    pub fn raw_byte_instruction_to_string_representation(byte: u8) -> Option<Cow<'static, str>> {
+        let byte_string = BIN_TO_REPR.get(byte as usize)?;
+        let as_str = String::from_utf8_lossy(&byte_string);
+
+        Some(as_str)
+    }
+}
+
 mod variables;
 
 #[macro_export]

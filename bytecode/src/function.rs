@@ -63,9 +63,9 @@ impl Display for PrimitiveFunction {
 }
 
 pub struct Function {
-    pub location: Arc<MScriptFile>,
+    pub(crate) location: Arc<MScriptFile>,
     pub(crate) instructions: Box<[Instruction]>,
-    pub name: String,
+    pub(crate) name: String,
 }
 
 impl Debug for Function {
@@ -108,23 +108,8 @@ impl Display for ReturnValue {
     }
 }
 
-// impl Debug for Function {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        
-//         // write!(f, "Function {{ name: {:?}, location: {}, line_number: {}, seek_pos: {}, attributes: {:?} }}", self.name, self.location.path, self.line_number, self.seek_pos, self.attributes)
-//     }
-// }
-
 impl Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // let mut attributes = String::new();
-
-        // for attribute in &self.attributes {
-        //     attributes.push_str(&(attribute.to_string() + " "))
-        // }
-
-        // let name = self.name.upgrade().expect("the name has been dropped");
-
         write!(
             f,
             "{} function {}",
@@ -200,7 +185,7 @@ impl<'a> Function {
             
             run_instruction(&mut context, &instruction)
                 .context("failed to run instruction")
-                .with_context(|| format!("{:?}", instruction.name))?;
+                .with_context(|| format!("{:?} (instruction #{} of {})", instruction.id, instruction_ptr, self.name))?;
 
             let ret = context.poll();
 
@@ -222,6 +207,8 @@ impl<'a> Function {
                 }
                 InstructionExitState::Goto(offset) => {
                     instruction_ptr = offset;
+                    context.clear_signal();
+                    continue;
                 }
                 InstructionExitState::NoExit => (),
             }

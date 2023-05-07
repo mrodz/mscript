@@ -74,6 +74,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "bytecode_dev_transpiler"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytecode",
+]
+
+[[package]]
 name = "cc"
 version = "1.0.79"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -223,6 +231,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bytecode",
+ "bytecode_dev_transpiler",
  "clap",
 ]
 

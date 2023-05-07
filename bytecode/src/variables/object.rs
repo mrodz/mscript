@@ -1,4 +1,4 @@
-use super::{Primitive, Variable};
+use super::Primitive;
 use crate::context::Ctx;
 use crate::function::InstructionExitState;
 use crate::instruction::JumpRequest;
@@ -93,7 +93,7 @@ impl Object {
         }
     }
 
-    pub fn has_variable_mut(&mut self, variable_name: &String) -> Option<&mut Variable> {
+    pub fn has_variable_mut(&mut self, variable_name: &String) -> Option<&mut Primitive> {
         let object_variables = Arc::as_ptr(&self.object_variables) as *mut VariableMapping;
 
         unsafe { (*object_variables).0.get_mut(variable_name) }
@@ -132,6 +132,6 @@ impl Object {
 
 impl Display for Object {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[object {} @ {:#x}]", self.name, self as *const Self as usize)
+        write!(f, "[object {} @ {:#x}] {{ {} }}", self.name, self as *const Self as usize, self.object_variables)
     }
 }
