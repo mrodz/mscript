@@ -1,0 +1,15 @@
+function main
+	bool true
+	if 6
+		string "hello world"
+		printn *
+		done
+		jmp 10
+
+	scope
+		string "falsey :(("
+		printn *
+		done
+
+	ret
+end

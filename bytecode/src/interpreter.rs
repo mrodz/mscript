@@ -5,6 +5,7 @@ use crate::file::MScriptFile;
 use crate::stack::Stack;
 use crate::BytecodePrimitive;
 use anyhow::{bail, Context, Result};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::panic;
 use std::path::Path;
@@ -58,9 +59,9 @@ impl Program {
 
     fn process_standard_jump_request(
         arc_of_self: Arc<Self>,
-        request: JumpRequest,
+        request: &JumpRequest,
     ) -> Result<ReturnValue> {
-        let JumpRequestDestination::Standard(destination_label) = request.destination else {
+        let JumpRequestDestination::Standard(ref destination_label) = request.destination else {
             unreachable!()
         };
 
@@ -89,10 +90,16 @@ impl Program {
             bail!("could not find function (missing `{symbol}`)")
         };
 
+        let callback_state = if let Some(ref cb) = request.callback_state {
+            Some(cb.clone())
+        } else {
+            None
+        };
+
         let return_value = function.run(
-            request.arguments,
+            Cow::Borrowed(&request.arguments),
             Arc::clone(&request.stack),
-            request.callback_state,
+            callback_state,
             &mut |req| Self::process_jump_request(arc_of_self.clone(), req),
         )?;
 
@@ -123,8 +130,8 @@ impl Program {
         }
     }
 
-    fn process_jump_request(arc_of_self: Arc<Self>, request: JumpRequest) -> Result<ReturnValue> {
-        match request.destination {
+    fn process_jump_request(arc_of_self: Arc<Self>, request: &JumpRequest) -> Result<ReturnValue> {
+        match &request.destination {
             JumpRequestDestination::Standard(_) => {
                 Self::process_standard_jump_request(arc_of_self, request)
             }
@@ -151,7 +158,7 @@ impl Program {
             bail!("could not find entrypoint (hint: try adding `function main`)")
         };
 
-        function.run(vec![], stack, None, &mut |req| {
+        function.run(Cow::Owned(vec![]), stack, None, &mut |req| {
             Self::process_jump_request(arc_of_self.clone(), req)
         })?;
 

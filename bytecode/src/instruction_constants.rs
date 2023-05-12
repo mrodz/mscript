@@ -51,6 +51,10 @@ pub static BIN_TO_REPR: &[&[u8]] = &[
     /* 0x24 [36] */ b"load_object", // }
     /* 0x25 [37] */ b"call_lib",
     /* 0x26 [38] */ b"len",
+    /* 0x27 [39] */ b"step_iter",
+    /* 0x28 [40] */ b"done",
+    /* 0x29 [41] */ b"update",
+    /* 0x30 [42] */ b"scope",
 ];
 
 pub static FUNCTION_POINTER_LOOKUP: &[InstructionSignature] = &[
@@ -93,4 +97,8 @@ pub static FUNCTION_POINTER_LOOKUP: &[InstructionSignature] = &[
     implementations::load_callback, // }
     implementations::call_lib,
     implementations::len,
+    implementations::step_iter,
+    implementations::done,
+    implementations::update,
+    implementations::else_stmt,
 ];

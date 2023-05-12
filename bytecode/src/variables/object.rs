@@ -1,8 +1,9 @@
 use super::Primitive;
+use crate::arc_to_ref;
 use crate::context::Ctx;
 use crate::function::InstructionExitState;
 use crate::instruction::JumpRequest;
-use crate::stack::VariableMapping;
+use crate::stack::{VariableMapping, VariableFlags};
 use anyhow::{Context, Result};
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
@@ -92,10 +93,8 @@ impl Object {
         }
     }
 
-    pub fn has_variable_mut(&mut self, variable_name: &String) -> Option<&mut Primitive> {
-        let object_variables = Arc::as_ptr(&self.object_variables) as *mut VariableMapping;
-
-        unsafe { (*object_variables).0.get_mut(variable_name) }
+    pub fn has_variable_mut(&mut self, variable_name: &String) -> Option<&mut (Primitive, VariableFlags)> {
+        arc_to_ref(&self.object_variables).get_mut(variable_name)
     }
 
     pub fn has_function(&self, function_name: &String) -> bool {

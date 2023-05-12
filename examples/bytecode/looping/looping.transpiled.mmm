@@ -29,24 +29,13 @@ function factorial
 end
 
 function main
-	int 0
-	store counter
-
-	load counter
-	int 33
-	bin_op <
-
-	if 15
-		load counter
-		int 1
-		bin_op +
-		store counter
+	step_iter 6 counter 1 31
 		load counter
 		call looping.mmm#factorial
 
 		printn *
 		void
-		jmp 2
+		jmp 0
 
 	string "Done"
 	printn *

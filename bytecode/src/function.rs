@@ -8,7 +8,7 @@ use anyhow::{bail, Context, Result};
 
 use crate::arc_to_ref;
 use crate::compilation_lookups::raw_byte_instruction_to_string_representation;
-use crate::context::Ctx;
+use crate::context::{Ctx, SpecialScope};
 use crate::file::MScriptFile;
 use crate::instruction::{run_instruction, Instruction};
 
@@ -110,11 +110,14 @@ impl Display for Function {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum InstructionExitState {
     ReturnValue(ReturnValue),
     JumpRequest(JumpRequest),
     Goto(usize),
+    PushScope(SpecialScope),
+    GotoPushScope(usize, SpecialScope),
+    PopScope,
     NoExit,
 }
 
@@ -134,16 +137,18 @@ impl<'a> Function {
 
     pub fn run(
         &mut self,
-        args: Vec<Primitive>,
+        args: Cow<Vec<Primitive>>,
         current_frame: Arc<Stack>,
         callback_state: Option<Arc<VariableMapping>>,
-        jump_callback: &mut impl FnMut(JumpRequest) -> Result<ReturnValue>,
+        jump_callback: &mut impl FnMut(&JumpRequest) -> Result<ReturnValue>,
     ) -> Result<ReturnValue> {
         arc_to_ref(&current_frame).extend(self.get_qualified_name());
 
         let mut context = Ctx::new(&self, current_frame.clone(), args, callback_state);
 
         let mut instruction_ptr = 0;
+
+        let mut special_scopes: Vec<SpecialScope> = vec![];
 
         while instruction_ptr < self.instructions.len() {
             let instruction = &self.instructions[instruction_ptr];
@@ -180,9 +185,29 @@ impl<'a> Function {
                     }
                 }
                 InstructionExitState::Goto(offset) => {
-                    instruction_ptr = offset;
+                    instruction_ptr = *offset;
                     context.clear_signal();
                     continue;
+                }
+                InstructionExitState::PushScope(ty) => {
+                    special_scopes.push(*ty);
+                    context.add_frame(ty.to_string());
+                }
+                InstructionExitState::GotoPushScope(offset, ty) => {
+                    instruction_ptr = *offset;
+                    special_scopes.push(*ty);
+
+                    let string = ty.to_string();
+
+                    context.clear_signal();
+
+                    context.add_frame(string);
+                    continue;
+                }
+                InstructionExitState::PopScope => {
+                    if special_scopes.pop().is_some() {
+                        context.pop_frame();
+                    }
                 }
                 InstructionExitState::NoExit => (),
             }
