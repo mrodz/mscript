@@ -23,6 +23,9 @@ pub enum Commands {
         /// 4 MB default: 4 * 1024 * 1024
         #[arg(short = 'X', long = "stack-size", default_value = "4194304")]
         stack_size: usize,
+        /// This flag looks for an input path ending in `.transpiled.mmm` and will transpile it before executing.
+        #[arg(long = "transpile", default_value = "false")]
+        transpile_first: bool
     },
     /// Compile a `.ms` file into executable bytecode.
     Compile {
@@ -37,4 +40,5 @@ pub enum Commands {
         #[arg(required(true), index = 1)]
         path: String,
     },
+    
 }

@@ -5,8 +5,7 @@ function main
 		printn *
 		done
 		jmp 10
-
-	scope
+	else
 		string "falsey :(("
 		printn *
 		done

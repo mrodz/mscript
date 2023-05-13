@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 
@@ -7,7 +7,7 @@ use super::variables::Primitive;
 const READ_ONLY: u8 = 0b00000001;
 const PUBLIC: u8 = 0b00000010;
 const LOCAL_FRAME_ONLY: u8 = 0b00000100;
-// ...
+const LOOP_VARIABLE: u8 = 0b00001000;
 
 #[derive(PartialEq, Clone)]
 pub struct VariableFlags(u8);
@@ -31,6 +31,10 @@ impl VariableFlags {
     #[inline(always)]
     pub fn is_exclusive_to_frame(&self) -> bool {
         self.0 | LOCAL_FRAME_ONLY == 1
+    }
+
+    pub fn is_loop_variable(&self) -> bool {
+        self.0 | LOOP_VARIABLE == 1
     }
 }
 
@@ -101,10 +105,16 @@ impl VariableMapping {
     pub fn update(&mut self, key: String, value: Primitive) -> Result<()> {
         // if insert returns None, that means there was no value there,
         // and this `update` is invalid.
-        let _ = self
-            .0
-            .insert(key, (value, VariableFlags::none()))
-            .context("variable has not been mapped")?;
+        if let Some(pair) = self.get_mut(&key) {
+            if pair.1.can_update() {
+                pair.0 = value;
+            } else {
+                bail!("variable is read-only")
+            }
+        } else {
+            bail!("variable has not been mapped")
+        }
+
         Ok(())
     }
 }

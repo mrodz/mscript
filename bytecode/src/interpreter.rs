@@ -8,7 +8,6 @@ use anyhow::{bail, Context, Result};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::panic;
-use std::path::Path;
 use std::sync::Arc;
 
 pub struct Program {
@@ -19,9 +18,9 @@ pub struct Program {
 impl Program {
     pub fn new<T>(path: T) -> Result<Self>
     where
-        T: AsRef<Path> + ToString,
+        T: Into<String>,
     {
-        let path = path.to_string();
+        let path = path.into();
         let main_file = MScriptFile::open(&path)?;
         let entrypoint = Arc::new(path.clone());
         let mut files_in_use = HashMap::with_capacity(1);
