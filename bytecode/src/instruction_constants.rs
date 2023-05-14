@@ -13,7 +13,7 @@ pub static REPR_TO_BIN: Lazy<HashMap<&[u8], u8>> = Lazy::new(|| {
 
 /// Makes it harder for the arrays to fall out of sync by requiring 
 /// that they both take the same size.
-pub const INSTRUCTION_COUNT: usize = 44;
+pub const INSTRUCTION_COUNT: usize = 43;
 
 pub static BIN_TO_REPR: [&[u8]; INSTRUCTION_COUNT] = [
     /* 0x00 [0]  */ b"nop",
@@ -55,11 +55,10 @@ pub static BIN_TO_REPR: [&[u8]; INSTRUCTION_COUNT] = [
     /* 0x24 [36] */ b"load_object", // Same as `load_callback`
     /* 0x25 [37] */ b"call_lib",
     /* 0x26 [38] */ b"len",
-    /* 0x27 [39] */ b"step_iter",
-    /* 0x28 [40] */ b"done",
-    /* 0x29 [41] */ b"update",
-    /* 0x30 [42] */ b"scope", // Same as `else`
-    /* 0x31 [43] */ b"else", // Same as `scope`
+    /* 0x27 [39] */ b"done",
+    /* 0x28 [40] */ b"update",
+    /* 0x29 [41] */ b"scope", // Same as `else`
+    /* 0x30 [42] */ b"else", // Same as `scope`
 ];
 
 pub static FUNCTION_POINTER_LOOKUP: [InstructionSignature; INSTRUCTION_COUNT] = [
@@ -102,7 +101,6 @@ pub static FUNCTION_POINTER_LOOKUP: [InstructionSignature; INSTRUCTION_COUNT] = 
     implementations::load_callback, // Same as `load_callback`
     implementations::call_lib,
     implementations::len,
-    implementations::step_iter,
     implementations::done,
     implementations::update,
     implementations::else_stmt, // Same as `else`

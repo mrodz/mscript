@@ -720,52 +720,6 @@ pub mod implementations {
             Ok(())
         }
 
-        step_iter(_ctx, _args) {
-            #[allow(unused)]
-            let (ctx, args) = (_ctx, _args);
-
-            unimplemented!();
-
-            let Some(Ok(end_idx)) = args.get(0).map(|s| i32::from_str_radix(s, 10)) else {
-                bail!("step_iter statements require an argument to instruct where to jump after completion")
-            };
-
-            let Some(binding_name) = args.get(1) else {
-                bail!("step_iter statements require a binding name")
-            };
-
-            let Some(Ok(start_inclusive)) = args.get(2).map(|s| i32::from_str_radix(s, 10)) else {
-                bail!("step_iter statements require a start position (inclusive)")
-            };
-
-            let Some(Ok(stop_exclusive)) = args.get(3).map(|s| i32::from_str_radix(s, 10)) else {
-                bail!("step_iter statements require a stop position (exclusive)")
-            };
-
-            let step = args.get(4).map(|s| i32::from_str_radix(s, 10)).unwrap_or(Ok(1))?;
-
-            match ctx.load_local(binding_name) {
-                Some((_val, flags)) if flags.is_loop_variable() => {
-                    //
-                }
-                None => {
-                    ctx.push(int!(start_inclusive))
-                }
-                _ => {
-                    bail!("step_iter could not find the variable associated with this loop. Has it been dropped?")
-                }
-            }
-
-            // let value = if let Some(val) = ctx.load_variable(binding_name) {
-            //     val
-            // }
-
-            // ctx.register_variable(binding_name, )
-            dbg!(end_idx, binding_name, start_inclusive, stop_exclusive, step);
-
-            Ok(())
-        }
-
         done(ctx, _args) {
             ctx.signal(InstructionExitState::PopScope);
 

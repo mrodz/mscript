@@ -12,7 +12,6 @@ use std::sync::Arc;
 pub enum SpecialScope {
     If,
     Else,
-    StepIter,
 }
 
 impl Display for SpecialScope {
@@ -22,7 +21,6 @@ impl Display for SpecialScope {
             "{}",
             match self {
                 Self::If => "<if>",
-                Self::StepIter => "<step_iter>",
                 Self::Else => "<else>"
             }
         )
