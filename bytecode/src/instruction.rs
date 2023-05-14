@@ -68,7 +68,9 @@ macro_rules! make_type {
 pub mod implementations {
     use super::*;
     use crate::arc_to_ref;
+    use crate::context::SpecialScope;
     use crate::function::{PrimitiveFunction, ReturnValue};
+    use crate::stack::VariableFlags;
     use crate::variables::Object;
     use crate::{bool, function, int, object, vector};
     use std::collections::HashMap;
@@ -316,16 +318,16 @@ pub mod implementations {
 
             let len = args.len();
             let callback_state = if len != 1 {
-                let mut arguments: HashMap<String, Primitive> = HashMap::with_capacity(len - 1); // maybe len
+                let mut arguments = HashMap::with_capacity(len - 1); // maybe len
                 for var_name in &args[1..] {
                     let Some(var) = ctx.load_variable(var_name) else {
                         bail!("{var_name} is not in scope")
                     };
 
-                    arguments.insert(var_name.clone(), var.clone());
+                    arguments.insert(var_name.clone(), (var.0.clone(), VariableFlags::none()));
                 }
 
-                Some(Arc::new(VariableMapping(arguments)))
+                Some(Arc::new(arguments.into()))
             } else {
                 None
             };
@@ -432,18 +434,22 @@ pub mod implementations {
         call_object(ctx, args) {
             let path = args.last().context("missing method name argument")?;
 
-            let first = ctx.pop_front().context("there is no item in the local stack")?;
+            let Some(first) = ctx.get_nth_op_item(0) else {
+                bail!("there is no item in the local stack")
+            };
 
             let Primitive::Object(o) = first else {
                 bail!("last item in the local stack {first:?} is not an object.")
             };
 
-            let arguments = ctx.get_local_operating_stack().into();
+            let callback_state = Some(o.object_variables.clone());
+
+            let arguments = ctx.get_local_operating_stack();
             ctx.clear_stack();
 
             ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                 destination: JumpRequestDestination::Standard(path.clone()),
-                callback_state: Some(Arc::clone(&o.object_variables)),
+                callback_state,
                 stack: ctx.arced_call_stack().clone(),
                 arguments,
             }));
@@ -468,11 +474,11 @@ pub mod implementations {
                 // this bypass of Arc protections is messy and should be refactored.
                 let var = (*(Arc::as_ptr(&o) as *mut Object)).has_variable_mut(var_name).context("variable does not exist on object")?;
 
-                if var.ty() != new_item.ty() {
-                    bail!("mismatched types in assignment ({:?} & {:?})", var.ty(), new_item.ty())
+                if var.0.ty() != new_item.ty() {
+                    bail!("mismatched types in assignment ({:?} & {:?})", var.0.ty(), new_item.ty())
                 }
 
-                *var = new_item.into();
+                var.0 = new_item.into();
             }
 
             Ok(())
@@ -558,6 +564,22 @@ pub mod implementations {
             Ok(())
         }
 
+        update(ctx, args) {
+            let Some(name) = args.first() else {
+                bail!("store requires a name")
+            };
+
+            if ctx.stack_size() != 1 {
+                bail!("store can only store a single item");
+            }
+
+            let arg = ctx.pop().unwrap();
+
+            ctx.update_variable(name.clone(), arg)?;
+
+            Ok(())
+        }
+
         store_object(ctx, args) {
             let Some(name) = args.first() else {
                 bail!("store_object requires a name")
@@ -583,7 +605,7 @@ pub mod implementations {
                 bail!("load before store (`{name}` not in scope)")
             };
 
-            ctx.push(var.clone());
+            ctx.push(var.0.clone());
 
             Ok(())
         }
@@ -597,7 +619,7 @@ pub mod implementations {
                 bail!("load before store (`{name}` not in this stack frame)")
             };
 
-            ctx.push(var.clone());
+            ctx.push(var.0.clone());
 
             Ok(())
         }
@@ -607,9 +629,7 @@ pub mod implementations {
                 bail!("loading a callback variable requires one parameter: (name)")
             };
 
-            let Some(var) = ctx.load_callback_variable(name)? else {
-                bail!("this callback does not have `{name}`")
-            };
+            let var = ctx.load_callback_variable(name)?;
 
             ctx.push(var.clone());
 
@@ -682,7 +702,8 @@ pub mod implementations {
             };
 
             if !b {
-                ctx.signal(InstructionExitState::Goto(usize::from_str_radix(offset, 10)?));
+                dbg!("falsey; jumping...");
+                ctx.signal(InstructionExitState::GotoPushScope(usize::from_str_radix(offset, 10)?, SpecialScope::If));
             }
 
 
@@ -695,6 +716,18 @@ pub mod implementations {
             };
 
             ctx.signal(InstructionExitState::Goto(usize::from_str_radix(offset, 10)?));
+
+            Ok(())
+        }
+
+        done(ctx, _args) {
+            ctx.signal(InstructionExitState::PopScope);
+
+            Ok(())
+        }
+
+        else_stmt(ctx, _args) {
+            ctx.signal(InstructionExitState::PushScope(SpecialScope::Else));
 
             Ok(())
         }

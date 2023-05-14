@@ -1,38 +1,58 @@
-use crate::stack::Stack;
-
 use super::arc_to_ref;
 use super::function::{Function, InstructionExitState};
 use super::stack::VariableMapping;
 use super::variables::Primitive;
+use crate::stack::{Stack, VariableFlags};
 use anyhow::{bail, Result};
-use std::collections::VecDeque;
-use std::fmt::Debug;
+use std::borrow::Cow;
+use std::fmt::{Debug, Display};
 use std::sync::Arc;
+
+#[derive(Debug, Clone, Copy)]
+pub enum SpecialScope {
+    If,
+    Else,
+}
+
+impl Display for SpecialScope {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::If => "<if>",
+                Self::Else => "<else>"
+            }
+        )
+    }
+}
 
 #[derive(Debug)]
 pub struct Ctx<'a> {
-    stack: VecDeque<Primitive>,
+    stack: Vec<Primitive>,
     function: &'a Function,
     call_stack: Arc<Stack>,
     exit_state: InstructionExitState,
-    args: Vec<Primitive>,
+    args: Cow<'a, Vec<Primitive>>,
     callback_state: Option<Arc<VariableMapping>>,
+    special_scopes: Option<&'a mut Vec<SpecialScope>>,
 }
 
 impl<'a> Ctx<'a> {
     pub fn new(
         function: &'a Function,
         call_stack: Arc<Stack>,
-        args: Vec<Primitive>,
+        args: Cow<'a, Vec<Primitive>>,
         callback_state: Option<Arc<VariableMapping>>,
     ) -> Self {
         Self {
-            stack: VecDeque::new(),
+            stack: Vec::new(),
             function,
             call_stack,
             exit_state: InstructionExitState::NoExit,
             args,
             callback_state,
+            special_scopes: None,
         }
     }
 
@@ -50,12 +70,18 @@ impl<'a> Ctx<'a> {
         Ok(())
     }
 
-    pub fn load_callback_variable(&self, name: &String) -> Result<Option<&Primitive>> {
+    pub fn load_callback_variable(&self, name: &String) -> Result<&Primitive> {
         let Some(ref mapping) = self.callback_state else {
             bail!("this function is not a callback")
         };
 
-        Ok(mapping.get(name))
+        let Some(pair) = mapping.get(name) else {
+            bail!("this callback does not have `{name}`")
+        };
+
+        let primitive = &pair.0;
+
+        Ok(primitive)
     }
 
     pub fn owner(&self) -> &Function {
@@ -95,7 +121,7 @@ impl<'a> Ctx<'a> {
         self.call_stack.to_string()
     }
 
-    pub fn get_local_operating_stack(&self) -> VecDeque<Primitive> {
+    pub fn get_local_operating_stack(&self) -> Vec<Primitive> {
         self.stack.clone()
     }
 
@@ -103,8 +129,8 @@ impl<'a> Ctx<'a> {
         self.exit_state = exit_state;
     }
 
-    pub(crate) fn poll(&mut self) -> InstructionExitState {
-        self.exit_state.clone()
+    pub(crate) fn poll(&self) -> &InstructionExitState {
+        &self.exit_state
     }
 
     pub(crate) fn clear_signal(&mut self) {
@@ -113,6 +139,10 @@ impl<'a> Ctx<'a> {
 
     pub(crate) fn add_frame(&self, label: String) {
         arc_to_ref(&self.call_stack).extend(label)
+    }
+
+    pub(crate) fn pop_frame(&self) {
+        arc_to_ref(&self.call_stack).pop()
     }
 
     pub(crate) fn frames_count(&self) -> usize {
@@ -125,7 +155,7 @@ impl<'a> Ctx<'a> {
 
     pub(crate) fn clear_and_set_stack(&mut self, var: Primitive) {
         self.stack.clear();
-        self.stack.push_back(var);
+        self.stack.push(var);
     }
 
     pub(crate) fn stack_size(&self) -> usize {
@@ -133,22 +163,22 @@ impl<'a> Ctx<'a> {
     }
 
     pub(crate) fn push(&mut self, var: Primitive) {
-        self.stack.push_back(var);
-    }
-
-    pub(crate) fn pop_front(&mut self) -> Option<Primitive> {
-        self.stack.pop_front()
+        self.stack.push(var);
     }
 
     pub(crate) fn pop(&mut self) -> Option<Primitive> {
-        self.stack.pop_back()
+        self.stack.pop()
     }
 
     pub(crate) fn register_variable(&self, name: String, var: Primitive) {
         arc_to_ref(&self.call_stack).register_variable(name, var)
     }
 
-    pub(crate) fn load_variable(&self, name: &String) -> Option<&Primitive> {
+    pub(crate) fn update_variable(&self, name: String, var: Primitive) -> Result<()> {
+        arc_to_ref(&self.call_stack).update_variable(name, var)
+    }
+
+    pub(crate) fn load_variable(&self, name: &String) -> Option<&(Primitive, VariableFlags)> {
         self.call_stack.find_name(name)
     }
 
@@ -156,7 +186,7 @@ impl<'a> Ctx<'a> {
         self.call_stack.get_frame_variables()
     }
 
-    pub(crate) fn load_local(&self, name: &String) -> Option<&Primitive> {
+    pub(crate) fn load_local(&self, name: &String) -> Option<&(Primitive, VariableFlags)> {
         self.call_stack.get_frame_variables().get(name)
     }
 }

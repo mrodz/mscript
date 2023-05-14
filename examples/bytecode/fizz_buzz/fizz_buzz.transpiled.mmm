@@ -8,9 +8,10 @@ function fizz_buzz
 	int 0
 	equ
 
-	if 10
+	if 11
 		string "Fizz"
 		store result
+		done
 
 	arg 0
 	int 5
@@ -18,22 +19,24 @@ function fizz_buzz
 	int 0
 	equ
 
-	if 20
+	if 22
 		load result
 		string "Buzz" 
 		bin_op +
 		store result
+		done
 
 	load result
 	len
 	int 0
 	equ
 
-	if 29
+	if 31
 		load result
 		arg 0
 		bin_op +
 		store result
+		done
 
 	load result
 	ret

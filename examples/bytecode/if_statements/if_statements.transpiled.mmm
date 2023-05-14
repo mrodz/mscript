@@ -1,0 +1,14 @@
+function main
+	bool true
+	if 6
+		string "hello world"
+		printn *
+		done
+		jmp 10
+	else
+		string "falsey :(("
+		printn *
+		done
+
+	ret
+end

@@ -11,7 +11,11 @@ pub static REPR_TO_BIN: Lazy<HashMap<&[u8], u8>> = Lazy::new(|| {
         .collect()
 });
 
-pub static BIN_TO_REPR: &[&[u8]] = &[
+/// Makes it harder for the arrays to fall out of sync by requiring 
+/// that they both take the same size.
+pub const INSTRUCTION_COUNT: usize = 43;
+
+pub static BIN_TO_REPR: [&[u8]; INSTRUCTION_COUNT] = [
     /* 0x00 [0]  */ b"nop",
     /* 0x01 [1]  */ b"constexpr",
     /* 0x02 [2]  */ b"stack_dump",
@@ -42,18 +46,22 @@ pub static BIN_TO_REPR: &[&[u8]] = &[
     /* 0x1B [27] */ b"typecmp",
     /* 0x1C [28] */ b"if",
     /* 0x1D [29] */ b"jmp",
-    /* 0x1E [30] */ b"endif", // deprecated
+    /* 0x1E [30] */ b"endif", // @DEPRECATED
     /* 0x1F [31] */ b"strict_equ",
     /* 0x20 [32] */ b"equ",
     /* 0x21 [33] */ b"arg",
     /* 0x22 [34] */ b"mutate",
-    /* 0x23 [35] */ b"load_callback", // {
-    /* 0x24 [36] */ b"load_object", // }
+    /* 0x23 [35] */ b"load_callback", // Same as `load_object`
+    /* 0x24 [36] */ b"load_object", // Same as `load_callback`
     /* 0x25 [37] */ b"call_lib",
     /* 0x26 [38] */ b"len",
+    /* 0x27 [39] */ b"done",
+    /* 0x28 [40] */ b"update",
+    /* 0x29 [41] */ b"scope", // Same as `else`
+    /* 0x30 [42] */ b"else", // Same as `scope`
 ];
 
-pub static FUNCTION_POINTER_LOOKUP: &[InstructionSignature] = &[
+pub static FUNCTION_POINTER_LOOKUP: [InstructionSignature; INSTRUCTION_COUNT] = [
     implementations::nop,
     implementations::constexpr,
     implementations::stack_dump,
@@ -89,8 +97,12 @@ pub static FUNCTION_POINTER_LOOKUP: &[InstructionSignature] = &[
     implementations::equ,
     implementations::arg,
     implementations::mutate,
-    implementations::load_callback, // {
-    implementations::load_callback, // }
+    implementations::load_callback, // Same as `load_object`
+    implementations::load_callback, // Same as `load_callback`
     implementations::call_lib,
     implementations::len,
+    implementations::done,
+    implementations::update,
+    implementations::else_stmt, // Same as `else`
+    implementations::else_stmt, // Same as `scope`
 ];

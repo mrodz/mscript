@@ -41,12 +41,27 @@ struct Function {
 }
 
 pub fn is_instruction_deprecated(name: &str) -> bool {
-    matches!(name, "nop" | "char" | "else" | "endif")
+    matches!(name, "nop" | "char" | "endif")
 }
 
-pub fn transpile_file(path: String) -> Result<()> {
+pub const TRANSPILED_SOURCE_FILE_EXTENSION: &str = ".transpiled.mmm";
+
+pub fn is_path_a_transpiled_source(path: &String) -> bool {
+    fn ends_with_ignore_case(string: &str, pat: &str) -> bool {
+        for (c1, c2) in string.chars().rev().zip(pat.chars().rev()) {
+            if !c1.eq_ignore_ascii_case(&c2) {
+                return false
+            } 
+        }
+
+        true
+    }
+
+    ends_with_ignore_case(&path, TRANSPILED_SOURCE_FILE_EXTENSION)
+}
+
+pub fn transpile_file(path: &str, new_path: &str) -> Result<()> {
     let path = Path::new(&path);
-    let new_path = path.with_extension("").with_extension("mmm");
 
     let file = File::open(&path)?;
     // let spinner_style = ProgressStyle::with_template("{prefix:.bold.dim} {spinner} {wide_msg}")?;
@@ -183,7 +198,7 @@ pub fn transpile_file(path: String) -> Result<()> {
 
     let meta = new_file.metadata()?;
 
-    println!("Success! Wrote {} bytes to {}", meta.len(), new_path.as_os_str().to_string_lossy());
+    println!("Success! Wrote {} bytes to {}", meta.len(), new_path);
 
     Ok(())
 }
