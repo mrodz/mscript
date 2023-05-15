@@ -1,0 +1,22 @@
+WHITESPACE = _{ " " | NEWLINE | "\t" }
+
+keywords = _{
+	"fn" | 
+	"obj"
+}
+
+ident = @{ !keywords ~ (!('0'..'9') ~ (('a'..'z') | ('0'..'9') | "_")+) }
+
+function_arguments = { (ident ~ ("," ~ ident)*)? }
+function_body = { statement* }
+function = { "fn " ~ ident ~ "(" ~ function_arguments ~ ")" ~ "{" ~ function_body ~ "}"}
+
+top_level_declarations = { function }
+
+file = {
+    SOI ~
+    top_level_declarations* ~
+    EOI
+}
+
+statement = { "hello" }

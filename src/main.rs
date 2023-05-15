@@ -7,6 +7,7 @@ use bytecode::Program;
 use bytecode_dev_transpiler;
 use clap::Parser;
 use cli::{Args, Commands};
+use compiler::compile;
 use std::{path::Path, thread};
 
 fn main() -> Result<()> {
@@ -64,8 +65,8 @@ fn main() -> Result<()> {
         Commands::Transpile { path } => {
             transpile_command(&path)?;
         }
-        Commands::Compile { path: _ } => {
-            unimplemented!();
+        Commands::Compile { path } => {
+            compile(&path)?;
         }
     }
 
