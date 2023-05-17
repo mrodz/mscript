@@ -1,6 +1,8 @@
 mod parser;
+mod ast;
 
-use std::{path::Path, fs::File, io::{BufReader, Read}};
+use std::fs::File;
+use std::io::{BufReader, Read};
 
 use anyhow::Result;
 
@@ -17,7 +19,7 @@ pub fn compile(path: &str) -> Result<()> {
 
     let input = root_node_from_str(&buffer)?;
 
-	let result: Vec<String> = Parser::file(input)?;
+	let result = Parser::file(input)?;
 
 	dbg!(result);
 
