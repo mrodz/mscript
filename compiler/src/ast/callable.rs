@@ -1,13 +1,26 @@
 use anyhow::Result;
 
-use crate::parser::{Parser, Node};
+use crate::{parser::{Parser, Node}, instruction};
 
-use super::{Ident, FunctionArguments, Dependencies, };
+use super::{Ident, FunctionArguments, Dependencies, Compile, Value, CompiledItem, };
 
 #[derive(Debug)]
 pub struct Callable {
 	ident: Ident,
 	function_arguments: FunctionArguments
+}
+
+impl Compile for Callable {
+	fn compile(&self) -> Vec<CompiledItem> {
+		let mut args: Vec<CompiledItem> = self.function_arguments.iter().flat_map(Value::compile).collect();
+
+		let func_name = &self.ident;
+
+		args.push(instruction!(load func_name));
+		args.push(instruction!(call));
+
+		args
+	}
 }
 
 impl Dependencies for Callable {

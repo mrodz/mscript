@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::parser::{Node, Parser, Rule};
 
-use super::{Dependencies, Function, Ident, Number};
+use super::{Dependencies, Function, Ident, Number, Compile};
 
 
 
@@ -21,6 +21,16 @@ impl Dependencies for Value {
 			Self::Number(number) => number.get_dependencies(),
         }
     }
+}
+
+impl Compile for Value {
+	fn compile(&self) -> Vec<super::CompiledItem> {
+		match self {
+            Self::Function(function) => function.compile(),
+            Self::Ident(ident) => unimplemented!(),
+			Self::Number(number) =>  number.compile(),
+        }
+	}
 }
 
 impl Parser {

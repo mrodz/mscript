@@ -1,3 +1,5 @@
+use std::slice::Iter;
+
 use anyhow::Result;
 
 use crate::parser::{Parser, Node};
@@ -6,6 +8,12 @@ use super::{Value, Dependencies, Ident};
 
 #[derive(Debug)]
 pub struct FunctionArguments(Vec<Value>);
+
+impl FunctionArguments {
+	pub fn iter<'a>(&'a self) -> Iter<'a, Value> {
+		self.0.iter()
+	}
+}
 
 impl Dependencies for FunctionArguments {
 	fn get_dependencies(&self) -> Option<Box<[&Ident]>> {

@@ -29,7 +29,9 @@ value = _{ function | ident | callable | number }
 
 assignment = { ident ~ "=" ~ value }
 
-declaration = { assignment | callable }
+print_statement = { "print" ~ value }
+
+declaration = { assignment | callable | print_statement }
 
 file = {
     SOI ~

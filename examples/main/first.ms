@@ -1,15 +1,7 @@
-main = fn() {
-	x = 50
+x = 5.0
+
+print_x = fn() {
+	print x
 }
 
-shadow = main
-
-second_function = fn(x, y) {
-	x = 5
-	y = 2
-}
-
-integer = 123_456_789
-hex_int = 0xFF
-byte = 0b101
-float = 3.14159
+print_x()
