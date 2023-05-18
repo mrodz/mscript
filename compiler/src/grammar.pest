@@ -5,22 +5,36 @@ keywords = _{
 	"obj"
 }
 
+
+integer = @{ '0'..'9' ~ ('0'..'9' | ("_" ~ ('0'..'9')))* }
+
+hex_digit = _{ '0'..'9' | 'a'..'f' | 'A'..'F' }
+hex_int = @{ "0x" ~ (hex_digit ~ (hex_digit | ("_" ~ (hex_digit)))*) }
+
+byte = @{ "0b" ~ ('0'..'1' ~ ('0'..'1' | ("_" ~ ('0'..'1')))*) }
+float = @{ integer ~ "." ~ integer }
+
+number = { hex_int | byte | float | integer }
+
 ident = @{ !keywords ~ (!('0'..'9') ~ (('a'..'z') | ('0'..'9') | "_")+) }
 
-function_arguments = { (ident ~ ("," ~ ident)*)? }
-function_body = { statement* }
-function = { "fn" ~ "(" ~ function_arguments ~ ")" ~ "{" ~ function_body ~ "}"}
+function_arguments = { (value ~ ("," ~ value)*)? }
+callable = { ident ~ "(" ~ function_arguments ~ ")" }
 
-value = _{ function | ident }
+function_parameters = { (ident ~ ("," ~ ident)*)? }
+function_body = { declaration* }
+function = { "fn" ~ "(" ~ function_parameters ~ ")" ~ "{" ~ function_body ~ "}"}
+
+value = _{ function | ident | callable | number }
 
 assignment = { ident ~ "=" ~ value }
 
-top_level_declaration = { assignment }
+print_statement = { "print" ~ value }
+
+declaration = { assignment | callable | print_statement }
 
 file = {
     SOI ~
-    top_level_declaration* ~
+    declaration* ~
     EOI
 }
-
-statement = { "hello" }

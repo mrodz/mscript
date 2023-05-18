@@ -1,12 +1,7 @@
+x = 5.0
 
-main = fn() {
-	hello
+print_x = fn() {
+	print x
 }
 
-shadow = main
-
-second_function = fn(x, y) {
-	hello
-	hello
-	hello
-}
+print_x()

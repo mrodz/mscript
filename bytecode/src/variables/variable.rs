@@ -162,21 +162,6 @@ impl From<&str> for Primitive {
     }
 }
 
-pub type BinOpFn<T> = fn(T, T) -> T;
-pub type CheckedBinOpFn<T> = fn(T, T) -> Option<T>;
-
-pub enum BinOp {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Mod,
-    Lt,
-    Lte,
-    Gt,
-    Gte,
-}
-
 #[cfg(test)]
 mod primitives {
     use super::Primitive;

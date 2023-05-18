@@ -1,3 +1,6 @@
+#![feature(iter_intersperse)]
+#![feature(iter_collect_into)]
+
 mod parser;
 mod ast;
 
@@ -5,6 +8,7 @@ use std::fs::File;
 use std::io::{BufReader, Read};
 
 use anyhow::Result;
+use ast::Compile;
 
 use crate::parser::{Parser, root_node_from_str};
 
@@ -21,7 +25,9 @@ pub fn compile(path: &str) -> Result<()> {
 
 	let result = Parser::file(input)?;
 
-	dbg!(result);
+	let compiled = result.compile();
+
+	// dbg!(result);
 
 	Ok(())
 }
