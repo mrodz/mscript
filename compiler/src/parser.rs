@@ -1,7 +1,7 @@
 use anyhow::{Result};
 use pest_consume::{Parser as ParserDerive};
 
-use crate::ast::TopLevelDeclaration;
+use crate::ast::Declaration;
 
 #[allow(unused)]
 pub type Node<'i> = pest_consume::Node<'i, Rule, ()>;
@@ -16,12 +16,12 @@ pub fn root_node_from_str(str: &str) -> Result<Node> {
 
 #[pest_consume::parser]
 impl Parser {
-	pub fn file(input: Node) -> Result<Vec<TopLevelDeclaration>> {
+	pub fn file(input: Node) -> Result<Vec<Declaration>> {
 		let mut result = vec![];
 		for child in input.children() {
 			match child.as_rule() {
-				Rule::top_level_declaration => {
-					result.push(Self::top_level_declaration(child)?);
+				Rule::declaration => {
+					result.push(Self::declaration(child)?);
 				}
 				_ => ()
 			}

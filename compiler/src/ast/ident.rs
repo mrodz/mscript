@@ -1,5 +1,7 @@
 use crate::parser::{Parser, Node};
 
+use super::Dependencies;
+
 #[derive(Debug)]
 pub struct Ident(String);
 
@@ -14,6 +16,8 @@ impl From<&str> for Ident {
         Self(value.into())
     }
 }
+
+impl Dependencies for Ident {}
 
 impl Parser {
     pub fn ident(input: Node) -> Ident {
