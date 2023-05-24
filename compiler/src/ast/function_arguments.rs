@@ -4,20 +4,20 @@ use anyhow::Result;
 
 use crate::parser::{Parser, Node};
 
-use super::{Value, Dependencies, Ident};
+use super::{Value, Dependencies, Dependency};
 
-#[derive(Debug)]
-pub struct FunctionArguments(Vec<Value>);
+#[derive(Debug, Clone)]
+pub(crate) struct FunctionArguments(Vec<Value>);
 
 impl FunctionArguments {
-	pub fn iter<'a>(&'a self) -> Iter<'a, Value> {
+	pub fn iter(&self) -> Iter<Value> {
 		self.0.iter()
 	}
 }
 
 impl Dependencies for FunctionArguments {
-	fn get_dependencies(&self) -> Option<Box<[&Ident]>> {
-		let x: Vec<&Ident> = self.0.iter()
+	fn get_dependencies(&self) -> Option<Box<[Dependency]>> {
+		let x: Vec<Dependency> = self.0.iter()
 			.filter_map(|x| x.get_dependencies())
 			.flat_map(|x| x.into_vec())
 			.collect();

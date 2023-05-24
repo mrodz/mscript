@@ -17,17 +17,28 @@ float = @{ integer ~ "." ~ integer }
 number = { hex_int | byte | float | integer }
 
 ident = @{ !keywords ~ (!('0'..'9') ~ (('a'..'z') | ('0'..'9') | "_")+) }
+type = _{ ident }
+ident_type = { ident ~ ":" ~ type }
 
 function_arguments = { (value ~ ("," ~ value)*)? }
 callable = { ident ~ "(" ~ function_arguments ~ ")" }
 
-function_parameters = { (ident ~ ("," ~ ident)*)? }
+
+
+function_parameters = { (ident_type ~ ("," ~ ident_type)*)? }
 function_body = { declaration* }
-function = { "fn" ~ "(" ~ function_parameters ~ ")" ~ "{" ~ function_body ~ "}"}
+
+// allow braces around the return type in case it is long
+function_return_type = { "->" ~ (type | ("(" ~ type ~ ")")) }
+function = { "fn" ~ "(" ~ function_parameters ~ ")" ~ function_return_type? ~ "{" ~ function_body ~ "}"}
 
 value = _{ function | ident | callable | number }
 
-assignment = { ident ~ "=" ~ value }
+
+assignment_no_type = { ident ~ "=" ~ value }
+assignment_type = { ident ~ ":" ~ type ~ "=" ~ value }
+assignment = { assignment_no_type | assignment_type }
+
 
 print_statement = { "print" ~ value }
 

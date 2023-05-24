@@ -1,7 +1,5 @@
-x = 5.0
+x = 8
+y: float = 3.14159
 
-print_x = fn() {
-	print x
-}
-
-print_x()
+print x
+print y
