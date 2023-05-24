@@ -44,7 +44,7 @@ impl Function {
             parameters,
             body,
             return_type,
-            path_str
+            path_str,
         }
     }
 }
@@ -100,7 +100,7 @@ impl Compile for Function {
             let x = CompiledItem::Function {
                 id: CompiledFunctionId::Generated(FUNCTION_ID),
                 content: args,
-                location: self.path_str.clone()
+                location: self.path_str.clone(),
             };
             FUNCTION_ID += 1;
 

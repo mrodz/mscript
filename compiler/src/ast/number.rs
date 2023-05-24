@@ -2,10 +2,8 @@ use std::fmt::Display;
 
 use anyhow::Result;
 
-use crate::{
-    instruction,
-    parser::{Node, Parser, Rule},
-};
+use crate::instruction;
+use crate::parser::{Node, Parser, Rule};
 
 use super::{
     r#type::{IntoType, NativeType},
@@ -50,7 +48,7 @@ impl Compile for Number {
             Number::Byte(val) => vec![instruction!(byte val)],
             Number::Float(val) => vec![instruction!(float val)],
             Number::Integer(val) => vec![instruction!(int val)],
-            Number::BigInt(val) => vec![instruction!(bigint val)]
+            Number::BigInt(val) => vec![instruction!(bigint val)],
         };
 
         Ok(matched)
@@ -70,7 +68,7 @@ impl Parser {
                     .map_err(|e| child.error(e))?
                     .to_string();
 
-                Number::Integer(as_hex)
+                Number::BigInt(as_hex)
             }
             Rule::float => Number::Float(as_str),
             Rule::byte => Number::Byte(as_str),

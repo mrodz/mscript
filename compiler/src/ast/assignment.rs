@@ -1,8 +1,12 @@
 use anyhow::Result;
 
-use crate::{parser::{Node, Parser, Rule}, instruction, ast::CompiledItem};
+use crate::{
+    ast::CompiledItem,
+    instruction,
+    parser::{Node, Parser, Rule},
+};
 
-use super::{value::Value, Ident, Dependencies, Compile, Dependency};
+use super::{value::Value, Compile, Dependencies, Dependency, Ident};
 
 #[derive(Debug, Clone)]
 pub(crate) struct Assignment {
@@ -13,15 +17,9 @@ pub(crate) struct Assignment {
 impl Dependencies for Assignment {
     fn get_dependencies(&self) -> Option<Box<[Dependency]>> {
         match self.value {
-            Value::Ident(ref name) => {
-                name.get_dependencies()
-            }
-            Value::Function(ref function) => {
-                function.get_dependencies()
-            }
-            Value::Number(ref number) => {
-                number.get_dependencies()
-            }
+            Value::Ident(ref name) => name.get_dependencies(),
+            Value::Function(ref function) => function.get_dependencies(),
+            Value::Number(ref number) => number.get_dependencies(),
         }
     }
 }
@@ -32,11 +30,7 @@ impl Compile for Assignment {
 
         let matched = match &self.value {
             Value::Ident(ident) => {
-
-                vec![
-                    instruction!(load ident),
-                    instruction!(store name)
-                ]
+                vec![instruction!(load ident), instruction!(store name)]
             }
             Value::Function(function) => {
                 let compiled_function = function.compile()?.remove(0);
@@ -70,13 +64,14 @@ impl Compile for Assignment {
                 const MAKE_FUNCTION: u8 = 0x0D;
 
                 let make_function_instruction = CompiledItem::Instruction {
-                    id: MAKE_FUNCTION, arguments
+                    id: MAKE_FUNCTION,
+                    arguments,
                 };
 
                 vec![
                     compiled_function,
                     make_function_instruction,
-                    instruction!(store name)
+                    instruction!(store name),
                 ]
             }
             Value::Number(number) => {
@@ -98,7 +93,7 @@ impl Parser {
         let x = match child.as_rule() {
             Rule::assignment_no_type => Self::assignment_no_type(child)?,
             Rule::assignment_type => Self::assignment_type(child)?,
-            _ => unreachable!()
+            _ => unreachable!(),
         };
 
         Ok(x)

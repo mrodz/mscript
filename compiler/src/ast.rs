@@ -29,7 +29,7 @@ pub(crate) use value::Value;
 
 use anyhow::Result;
 use bytecode::compilation_lookups::raw_byte_instruction_to_string_representation;
-use std::{borrow::{Cow}, fmt::Display, rc::Rc};
+use std::{borrow::Cow, fmt::Display, rc::Rc};
 
 #[derive(Debug)]
 pub(crate) enum CompiledFunctionId {
@@ -52,7 +52,7 @@ pub(crate) enum CompiledItem {
     Function {
         id: CompiledFunctionId,
         content: Vec<CompiledItem>,
-        location: Rc<String>
+        location: Rc<String>,
     },
     Instruction {
         id: u8,
@@ -67,7 +67,9 @@ impl CompiledItem {
                 let content: String = content.iter().map(|x| x.repr(use_string_version)).collect();
 
                 let func_name = match id {
-                    CompiledFunctionId::Generated(id) => Cow::Owned(function::name_from_function_id(*id)),
+                    CompiledFunctionId::Generated(id) => {
+                        Cow::Owned(function::name_from_function_id(*id))
+                    }
                     CompiledFunctionId::Custom(str) => Cow::Borrowed(str),
                 };
 
@@ -110,24 +112,24 @@ impl CompiledItem {
 
 #[macro_export]
 macro_rules! instruction {
-	($name:tt $($arg:tt)*) => {{
-		use crate::ast::*;
+    ($name:tt $($arg:tt)*) => {{
+        use crate::ast::*;
 
-		let id = bytecode::compilation_lookups::string_instruction_representation_to_byte(stringify!($name))
-			.expect("instruction does not exist");
+        let id = bytecode::compilation_lookups::string_instruction_representation_to_byte(stringify!($name))
+            .expect("instruction does not exist");
 
         #[allow(unused_mut)]
-		let mut arguments = vec![];
+        let mut arguments = vec![];
 
-		$(
-			arguments.push($arg.to_string());
-		)*
+        $(
+            arguments.push($arg.to_string());
+        )*
 
-		let arguments = arguments.into_boxed_slice();
+        let arguments = arguments.into_boxed_slice();
 
-		CompiledItem::Instruction { id: *id, arguments }
+        CompiledItem::Instruction { id: *id, arguments }
 
-	}};
+    }};
 }
 
 pub(crate) trait Compile {

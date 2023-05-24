@@ -9,7 +9,7 @@ use std::fs::File;
 use std::io::{BufReader, Read, Write};
 use std::path::Path;
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 use ast::Compile;
 use parser::AssocFileData;
 use scope::ScopeType;

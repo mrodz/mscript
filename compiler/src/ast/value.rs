@@ -2,9 +2,7 @@ use anyhow::Result;
 
 use crate::parser::{Node, Parser, Rule};
 
-use super::{Dependencies, Function, Ident, Number, Compile, Dependency};
-
-
+use super::{Compile, Dependencies, Dependency, Function, Ident, Number};
 
 #[derive(Debug, Clone)]
 pub(crate) enum Value {
@@ -18,19 +16,19 @@ impl Dependencies for Value {
         match self {
             Self::Function(function) => function.get_dependencies(),
             Self::Ident(name) => name.get_dependencies(),
-			Self::Number(number) => number.get_dependencies(),
+            Self::Number(number) => number.get_dependencies(),
         }
     }
 }
 
 impl Compile for Value {
-	fn compile(&self) -> Result<Vec<super::CompiledItem>> {
-		match self {
+    fn compile(&self) -> Result<Vec<super::CompiledItem>> {
+        match self {
             Self::Function(function) => function.compile(),
             Self::Ident { .. } => unimplemented!(),
-			Self::Number(number) =>  number.compile(),
+            Self::Number(number) => number.compile(),
         }
-	}
+    }
 }
 
 impl Parser {
@@ -40,7 +38,7 @@ impl Parser {
             Rule::ident => {
                 let ident = Self::ident(input);
                 Value::Ident(ident.clone())
-            },
+            }
             Rule::number => Value::Number(Self::number(input)?),
             x => unreachable!("{x:?}"),
         };

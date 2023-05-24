@@ -11,7 +11,7 @@ pub static REPR_TO_BIN: Lazy<HashMap<&[u8], u8>> = Lazy::new(|| {
         .collect()
 });
 
-/// Makes it harder for the arrays to fall out of sync by requiring 
+/// Makes it harder for the arrays to fall out of sync by requiring
 /// that they both take the same size.
 pub const INSTRUCTION_COUNT: usize = 43;
 

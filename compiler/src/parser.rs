@@ -3,11 +3,9 @@ use std::{cell::RefCell, rc::Rc};
 use anyhow::{Context, Result};
 use pest_consume::Parser as ParserDerive;
 
-use crate::{
-    ast::{Compile, CompiledFunctionId, CompiledItem, Declaration, Ident, TypeLayout},
-    instruction,
-    scope::{Scope, ScopeType},
-};
+use crate::ast::{Compile, CompiledFunctionId, CompiledItem, Declaration, Ident};
+use crate::instruction;
+use crate::scope::{Scope, ScopeType};
 
 #[allow(unused)]
 pub(crate) type Node<'i> = pest_consume::Node<'i, Rule, AssocFileData>;
@@ -19,16 +17,14 @@ pub(crate) struct Parser;
 #[derive(Clone, Debug)]
 pub(crate) struct AssocFileData {
     scopes: Rc<RefCell<Vec<Scope>>>,
-    file_name: Rc<String>
-    // last_arg_type: Rc<RefCell<Vec<IdentType>>>
+    file_name: Rc<String>, // last_arg_type: Rc<RefCell<Vec<IdentType>>>
 }
 
 impl AssocFileData {
     pub fn new(ty: ScopeType, file_name: String) -> Self {
         Self {
             scopes: Rc::new(RefCell::new(vec![Scope::new(ty)])),
-            file_name: Rc::new(file_name)
-            // last_arg_type: Rc::new(RefCell::new(vec![]))
+            file_name: Rc::new(file_name), // last_arg_type: Rc::new(RefCell::new(vec![]))
         }
     }
 
@@ -82,12 +78,9 @@ impl AssocFileData {
 }
 
 pub(crate) fn root_node_from_str(input_str: &str, user_data: AssocFileData) -> Result<Node> {
-    let x = <Parser as pest_consume::Parser>::parse_with_userdata(
-        Rule::file,
-        input_str,
-        user_data
-    )?
-    .single()?;
+    let x =
+        <Parser as pest_consume::Parser>::parse_with_userdata(Rule::file, input_str, user_data)?
+            .single()?;
 
     Ok(x)
 }
@@ -95,7 +88,7 @@ pub(crate) fn root_node_from_str(input_str: &str, user_data: AssocFileData) -> R
 #[derive(Debug, Default)]
 pub(crate) struct File {
     pub declarations: Vec<Declaration>,
-    pub location: Rc<String>
+    pub location: Rc<String>,
 }
 
 impl File {

@@ -15,7 +15,7 @@ pub struct Args {
 #[derive(ValueEnum, Clone, Debug)]
 pub enum CompilationTargets {
     RawText,
-    Binary
+    Binary,
 }
 
 #[derive(Subcommand, Debug)]
@@ -31,7 +31,7 @@ pub enum Commands {
         stack_size: usize,
         /// This flag looks for an input path ending in `.transpiled.mmm` and will transpile it before executing.
         #[arg(long = "transpile", default_value = "false")]
-        transpile_first: bool
+        transpile_first: bool,
     },
     /// Compile a `.ms` file into executable bytecode.
     Compile {
@@ -48,5 +48,4 @@ pub enum Commands {
         #[arg(required(true), index = 1)]
         path: String,
     },
-    
 }

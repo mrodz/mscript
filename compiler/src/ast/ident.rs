@@ -1,19 +1,13 @@
-use std::{borrow::Cow, fmt::Display, hash::Hash};
+use std::borrow::Cow;
+use std::fmt::Display;
+use std::hash::Hash;
 
 use anyhow::{bail, Context, Result};
 
 use crate::parser::{AssocFileData, Node, Parser};
 
-use super::{
-    r#type::{IntoType, TypeLayout},
-    Dependencies, Dependency,
-};
-
-// #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-// pub enum IdentType {
-//     Simple,
-//     Function,
-// }
+use super::r#type::TypeLayout;
+use super::{Dependencies, Dependency};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Ident {
@@ -28,13 +22,6 @@ impl Hash for Ident {
 }
 
 impl Ident {
-    pub fn new(name: String, ty: TypeLayout) -> Self {
-        Self {
-            name,
-            ty: Some(Cow::Owned(ty)),
-        }
-    }
-
     pub fn lookup(&mut self, user_data: &AssocFileData) -> &mut Self {
         if let Some(ref ty) = self.ty {
             panic!("already has type {ty:?}")
@@ -53,7 +40,7 @@ impl Ident {
                 x.to_owned()
             }
         });
-        
+
         let ty = x.unwrap();
 
         self.ty = Some(ty);
@@ -68,14 +55,6 @@ impl Ident {
 
         self
         // Ok(ty.clone())
-    }
-
-    pub fn new_unsafe(name: String, ty: Option<Cow<'static, TypeLayout>>) -> Self {
-        Self { name, ty }
-    }
-
-    pub fn set_ty(&mut self, ty: TypeLayout) {
-        self.ty = Some(Cow::Owned(ty));
     }
 
     pub fn name(&self) -> &String {
@@ -104,8 +83,9 @@ impl Dependencies for Ident {
 }
 
 impl Ident {
+    #[allow(dead_code)]
     pub fn load_type(&mut self, user_data: &AssocFileData) -> Result<()> {
-        let (ident, is_callback) = user_data
+        let (ident, _) = user_data
             .get_dependency_flags_from_name(self.name.clone())
             .context("variable has not been mapped")?;
 
@@ -154,7 +134,7 @@ impl Ident {
                     x.to_owned()
                 }
             });
-    
+
             self.ty = new_ty;
             // self.ty = Some(ident.ty.clone().context("no type")?);
 
