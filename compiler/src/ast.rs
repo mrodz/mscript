@@ -8,7 +8,6 @@ mod function_arguments;
 mod function_body;
 mod function_parameters;
 mod ident;
-mod ident_type;
 mod number;
 mod print_statement;
 mod r#type;

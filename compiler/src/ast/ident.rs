@@ -1,4 +1,4 @@
-use std::{fmt::Display, hash::Hash};
+use std::{borrow::Cow, fmt::Display, hash::Hash};
 
 use anyhow::{bail, Context, Result};
 
@@ -18,7 +18,7 @@ use super::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Ident {
     name: String,
-    ty: Option<TypeLayout>,
+    ty: Option<Cow<'static, TypeLayout>>,
 }
 
 impl Hash for Ident {
@@ -29,22 +29,54 @@ impl Hash for Ident {
 
 impl Ident {
     pub fn new(name: String, ty: TypeLayout) -> Self {
-        Self { name, ty: Some(ty) }
+        Self {
+            name,
+            ty: Some(Cow::Owned(ty)),
+        }
     }
 
-    pub fn new_unsafe(name: String, ty: Option<TypeLayout>) -> Self {
+    pub fn lookup(&mut self, user_data: &AssocFileData) -> &mut Self {
+        if let Some(ref ty) = self.ty {
+            panic!("already has type {ty:?}")
+        }
+
+        let mut ident = user_data
+            .get_dependency_flags_from_name(self.name.clone())
+            .expect("variable has not been mapped");
+
+        let mut ty = ident.ty.clone();
+
+        let x = ty.map(|x| x.to_owned());
+        
+        let ty = x.unwrap();
+
+        self.ty = Some(ty);
+        // let ty = ident.ty().unwrap().to_owned(); //.expect("trying to inherit nothing instead of a type").clone();
+
+        // // let ty = ty.unwrap();
+
+        // // let ty = ty.clone();
+        // // let ty = ty.to_owned();/
+
+        // ident.ty = Some(ty.clone());
+
+        self
+        // Ok(ty.clone())
+    }
+
+    pub fn new_unsafe(name: String, ty: Option<Cow<'static, TypeLayout>>) -> Self {
         Self { name, ty }
     }
 
     pub fn set_ty(&mut self, ty: TypeLayout) {
-        self.ty = Some(ty);
+        self.ty = Some(Cow::Owned(ty));
     }
 
     pub fn name(&self) -> &String {
         &self.name
     }
 
-    pub fn ty(&self) -> Result<&TypeLayout> {
+    pub fn ty(&self) -> Result<&Cow<TypeLayout>> {
         if let Some(ref ty) = self.ty {
             Ok(ty)
         } else {
@@ -67,7 +99,7 @@ impl Ident {
             .get_dependency_flags_from_name(self.name.clone())
             .context("variable has not been mapped")?;
 
-        self.ty = Some(ident.ty()?.clone());
+        self.ty = Some(ident.ty.clone().context("no type")?);
 
         Ok(())
     }
@@ -81,26 +113,28 @@ impl Ident {
             .get_dependency_flags_from_name(self.name.clone())
             .context("variable has not been mapped")?;
 
-        self.ty = Some(ident.ty()?.clone());
+        self.ty = Some(ident.ty.clone().context("no type")?);
 
         Ok(())
         // Ok(ty.clone())
     }
 
-    pub fn link(&mut self, user_data: &AssocFileData, ty: Option<TypeLayout>) -> Result<bool> {
+    pub fn link(
+        &mut self,
+        user_data: &AssocFileData,
+        ty: Option<Cow<'static, TypeLayout>>,
+    ) -> Result<bool> {
         let ident = user_data.get_dependency_flags_from_name(self.name.clone());
 
         let inherited = if let Some(ident) = ident {
-            self.ty = Some(ident.ty()?.clone());
+            self.ty = Some(ident.ty.clone().context("no type")?);
 
             true
         } else {
             if ty.is_none() {
-                bail!(
-                    "ident has not already been registered and needs a type",
-                )
+                bail!("ident has not already been registered and needs a type",)
             }
-            self.ty = ty;
+            self.ty = Some(ty.unwrap());
 
             false
         };

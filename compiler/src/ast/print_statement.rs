@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use anyhow::Result;
 
 use crate::{parser::{Parser, Node}, instruction, ast::TypeLayout};
@@ -26,10 +28,8 @@ impl Compile for PrintStatement {
 			Value::Ident(ident) => {
 				let name_str = ident.name();
 
-				dbg!(ident);
-
 				let load_instruction = match ident.ty()? {
-					TypeLayout::Function(..) => instruction!(load_callback name_str),
+					Cow::Owned(TypeLayout::Function(..)) | Cow::Borrowed(TypeLayout::Function(..)) => instruction!(load_callback name_str),
 					_ => instruction!(load name_str),
 				};
 
@@ -58,7 +58,11 @@ impl Parser {
 	pub fn print_statement(input: Node) -> Result<PrintStatement> {
 		let item = input.children().next().unwrap();
 
-		let value = Self::value(item)?;
+		let mut value = Self::value(item)?;
+
+		if let Value::Ident(ref mut ident) = value {
+			ident.lookup(input.user_data());
+		}
 
 		Ok(PrintStatement(value))
 	}

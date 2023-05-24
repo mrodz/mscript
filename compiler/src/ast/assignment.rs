@@ -97,41 +97,10 @@ impl Parser {
         let child = input.children().next().unwrap();
         let x = match child.as_rule() {
             Rule::assignment_no_type => Self::assignment_no_type(child)?,
-            Rule::assignment_type => unimplemented!(),
+            Rule::assignment_type => Self::assignment_type(child)?,
             _ => unreachable!()
         };
 
         Ok(x)
-        // let mut children = input.children();
-
-        // let (Some(ident), Some(rhs)) = (children.next(), children.next()) else {
-		// 	unreachable!()
-		// };
-
-        // let mut ident = Self::ident(ident);
-        // // let (mut ident, flags) = (packed.0, packed.1);
-
-        // let value = Self::value(rhs)?;
-
-        // let user_data = input.user_data();
-
-        // match value {
-        //     Value::Function(ref f) => {
-        //         let inherited = ident.link(user_data, Some(f.clone().consume_for_type()))?;
-        //         if !inherited {
-        //             unreachable!()
-        //         }
-        //     },
-        //     Value::Ident(..) => {
-        //         ident.link_from_pointed_type_with_lookup(user_data)?;
-        //     }
-        //     Value::Number(ref number) => {
-        //         let ty = number.clone().into_type();
-        //         ident.link(user_data, Some(ty))?;
-        //     }
-        // }
-
-
-        // Ok(Assignment { ident, value })
     }
 }

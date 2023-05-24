@@ -36,7 +36,7 @@ value = _{ function | ident | callable | number }
 
 
 assignment_no_type = { ident ~ "=" ~ value }
-assignment_type = { ident_type ~ "=" ~ value }
+assignment_type = { ident ~ ":" ~ type ~ "=" ~ value }
 assignment = { assignment_no_type | assignment_type }
 
 
