@@ -21,7 +21,7 @@ impl Display for SpecialScope {
             "{}",
             match self {
                 Self::If => "<if>",
-                Self::Else => "<else>"
+                Self::Else => "<else>",
             }
         )
     }

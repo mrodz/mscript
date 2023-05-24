@@ -4,14 +4,14 @@ use anyhow::Result;
 
 use crate::parser::{Node, Parser};
 
-use super::{Assignment, Value, r#type::IntoType};
+use super::{r#type::IntoType, Assignment, Value};
 
 impl Parser {
     pub fn assignment_no_type(input: Node) -> Result<Assignment> {
         let mut children = input.children();
 
-		let ident = children.next().unwrap();
-		let rhs = children.next().unwrap();
+        let ident = children.next().unwrap();
+        let rhs = children.next().unwrap();
 
         let mut ident = Self::ident(ident);
         let value = Self::value(rhs)?;
@@ -20,11 +20,8 @@ impl Parser {
 
         match value {
             Value::Function(ref f) => {
-                let inherited = ident.link(user_data, Some(Cow::Owned(f.clone().consume_for_type())))?;
-                if !inherited {
-                    unreachable!()
-                }
-            },
+                ident.link(user_data, Some(Cow::Owned(f.clone().consume_for_type())))?;
+            }
             Value::Ident(..) => {
                 ident.link_from_pointed_type_with_lookup(user_data)?;
             }

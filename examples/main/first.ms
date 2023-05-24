@@ -1,5 +1,9 @@
-x = 8
-y: float = 3.14159
+y = 3
 
-print x
-print y
+test = fn(x: int) -> int {
+	print x
+	print y
+	print 5
+}
+
+test(20)

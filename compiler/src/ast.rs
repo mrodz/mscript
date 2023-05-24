@@ -7,6 +7,7 @@ mod function;
 mod function_arguments;
 mod function_body;
 mod function_parameters;
+mod function_return_type;
 mod ident;
 mod number;
 mod print_statement;
@@ -26,19 +27,19 @@ pub(crate) use print_statement::PrintStatement;
 pub(crate) use r#type::TypeLayout;
 pub(crate) use value::Value;
 
-use self::function::name_from_function_id;
 use anyhow::Result;
 use bytecode::compilation_lookups::raw_byte_instruction_to_string_representation;
-use std::{borrow::Cow, fmt::Display};
+use std::{borrow::Cow, fmt::Display, rc::Rc};
 
 #[derive(Debug)]
-pub enum CompiledFunctionId {
+pub(crate) enum CompiledFunctionId {
     Generated(isize),
     Custom(String),
 }
 
 impl Display for CompiledFunctionId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use function::name_from_function_id;
         match self {
             CompiledFunctionId::Custom(string) => write!(f, "{string}"),
             CompiledFunctionId::Generated(id) => write!(f, "{}", name_from_function_id(*id)),
@@ -47,10 +48,11 @@ impl Display for CompiledFunctionId {
 }
 
 #[derive(Debug)]
-pub enum CompiledItem {
+pub(crate) enum CompiledItem {
     Function {
         id: CompiledFunctionId,
         content: Vec<CompiledItem>,
+        location: Rc<String>,
     },
     Instruction {
         id: u8,
@@ -61,11 +63,13 @@ pub enum CompiledItem {
 impl CompiledItem {
     pub fn repr(&self, use_string_version: bool) -> String {
         match self {
-            Self::Function { id, content } => {
+            Self::Function { id, content, .. } => {
                 let content: String = content.iter().map(|x| x.repr(use_string_version)).collect();
 
                 let func_name = match id {
-                    CompiledFunctionId::Generated(id) => Cow::Owned(name_from_function_id(*id)),
+                    CompiledFunctionId::Generated(id) => {
+                        Cow::Owned(function::name_from_function_id(*id))
+                    }
                     CompiledFunctionId::Custom(str) => Cow::Borrowed(str),
                 };
 
@@ -108,24 +112,24 @@ impl CompiledItem {
 
 #[macro_export]
 macro_rules! instruction {
-	($name:tt $($arg:tt)*) => {{
-		use crate::ast::*;
+    ($name:tt $($arg:tt)*) => {{
+        use crate::ast::*;
 
-		let id = bytecode::compilation_lookups::string_instruction_representation_to_byte(stringify!($name))
-			.expect("instruction does not exist");
+        let id = bytecode::compilation_lookups::string_instruction_representation_to_byte(stringify!($name))
+            .expect("instruction does not exist");
 
         #[allow(unused_mut)]
-		let mut arguments = vec![];
+        let mut arguments = vec![];
 
-		$(
-			arguments.push($arg.to_string());
-		)*
+        $(
+            arguments.push($arg.to_string());
+        )*
 
-		let arguments = arguments.into_boxed_slice();
+        let arguments = arguments.into_boxed_slice();
 
-		CompiledItem::Instruction { id: *id, arguments }
+        CompiledItem::Instruction { id: *id, arguments }
 
-	}};
+    }};
 }
 
 pub(crate) trait Compile {
@@ -134,12 +138,15 @@ pub(crate) trait Compile {
 
 pub(crate) trait Optimize {}
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub(crate) struct Dependency<'a> {
     pub ident: Cow<'a, Ident>,
 }
 
 impl<'a> Dependency<'a> {
+    pub fn name(&self) -> &String {
+        self.ident.as_ref().name()
+    }
     pub fn new(ident: Cow<'a, Ident>) -> Self {
         Self { ident }
     }
@@ -168,6 +175,10 @@ impl<'a> From<Ident> for Dependency<'a> {
 }
 
 pub(crate) trait Dependencies {
+    fn supplies(&self) -> Option<Box<[Dependency]>> {
+        None
+    }
+
     fn get_dependencies(&self) -> Option<Box<[Dependency]>> {
         None
     }

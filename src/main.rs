@@ -10,6 +10,8 @@ use cli::{Args, Commands};
 use compiler::compile;
 use std::{path::Path, thread};
 
+use crate::cli::CompilationTargets;
+
 fn main() -> Result<()> {
     let args = Args::parse();
 
@@ -20,9 +22,7 @@ fn main() -> Result<()> {
             bail!("The standard extension for file transpilation sources is `.mmm.transpiled`. Please check your file extensions. (Found {path})")
         }
 
-        let new_path = Path::new(&path)
-            .with_extension("")
-            .with_extension("mmm");
+        let new_path = Path::new(&path).with_extension("").with_extension("mmm");
 
         let Some(new_path) = new_path.to_str() else {
             bail!("path is not valid unicode")
@@ -59,14 +59,17 @@ fn main() -> Result<()> {
                 Ok(())
             })?;
 
-
             handler.join().unwrap()?;
         }
         Commands::Transpile { path } => {
             transpile_command(&path)?;
         }
-        Commands::Compile { path } => {
-            compile(&path)?;
+        Commands::Compile {
+            path,
+            output_format,
+        } => {
+            let output_bin = matches!(output_format, CompilationTargets::Binary);
+            compile(&path, output_bin)?;
         }
     }
 

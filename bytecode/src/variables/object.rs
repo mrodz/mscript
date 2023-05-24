@@ -3,7 +3,7 @@ use crate::arc_to_ref;
 use crate::context::Ctx;
 use crate::function::InstructionExitState;
 use crate::instruction::JumpRequest;
-use crate::stack::{VariableMapping, VariableFlags};
+use crate::stack::{VariableFlags, VariableMapping};
 use anyhow::{Context, Result};
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
@@ -93,7 +93,10 @@ impl Object {
         }
     }
 
-    pub fn has_variable_mut(&mut self, variable_name: &String) -> Option<&mut (Primitive, VariableFlags)> {
+    pub fn has_variable_mut(
+        &mut self,
+        variable_name: &String,
+    ) -> Option<&mut (Primitive, VariableFlags)> {
         arc_to_ref(&self.object_variables).get_mut(variable_name)
     }
 

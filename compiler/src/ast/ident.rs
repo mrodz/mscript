@@ -1,19 +1,13 @@
-use std::{borrow::Cow, fmt::Display, hash::Hash};
+use std::borrow::Cow;
+use std::fmt::Display;
+use std::hash::Hash;
 
 use anyhow::{bail, Context, Result};
 
 use crate::parser::{AssocFileData, Node, Parser};
 
-use super::{
-    r#type::{IntoType, TypeLayout},
-    Dependencies,
-};
-
-// #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-// pub enum IdentType {
-//     Simple,
-//     Function,
-// }
+use super::r#type::TypeLayout;
+use super::{Dependencies, Dependency};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Ident {
@@ -28,26 +22,25 @@ impl Hash for Ident {
 }
 
 impl Ident {
-    pub fn new(name: String, ty: TypeLayout) -> Self {
-        Self {
-            name,
-            ty: Some(Cow::Owned(ty)),
-        }
-    }
-
     pub fn lookup(&mut self, user_data: &AssocFileData) -> &mut Self {
         if let Some(ref ty) = self.ty {
             panic!("already has type {ty:?}")
         }
 
-        let mut ident = user_data
+        let (ident, is_callback) = user_data
             .get_dependency_flags_from_name(self.name.clone())
             .expect("variable has not been mapped");
 
-        let mut ty = ident.ty.clone();
+        let ty = ident.ty.clone();
 
-        let x = ty.map(|x| x.to_owned());
-        
+        let x = ty.map(|x| {
+            if is_callback {
+                Cow::Owned(TypeLayout::CallbackVariable(x.into_owned().into()))
+            } else {
+                x.to_owned()
+            }
+        });
+
         let ty = x.unwrap();
 
         self.ty = Some(ty);
@@ -62,14 +55,6 @@ impl Ident {
 
         self
         // Ok(ty.clone())
-    }
-
-    pub fn new_unsafe(name: String, ty: Option<Cow<'static, TypeLayout>>) -> Self {
-        Self { name, ty }
-    }
-
-    pub fn set_ty(&mut self, ty: TypeLayout) {
-        self.ty = Some(Cow::Owned(ty));
     }
 
     pub fn name(&self) -> &String {
@@ -91,11 +76,16 @@ impl Display for Ident {
     }
 }
 
-impl Dependencies for Ident {}
+impl Dependencies for Ident {
+    fn get_dependencies(&self) -> Option<Box<[super::Dependency]>> {
+        Some(Box::new([Dependency::new(Cow::Borrowed(self))]))
+    }
+}
 
 impl Ident {
+    #[allow(dead_code)]
     pub fn load_type(&mut self, user_data: &AssocFileData) -> Result<()> {
-        let ident = user_data
+        let (ident, _) = user_data
             .get_dependency_flags_from_name(self.name.clone())
             .context("variable has not been mapped")?;
 
@@ -109,11 +99,21 @@ impl Ident {
             bail!("already has type {ty:?}")
         }
 
-        let ident = user_data
+        let (ident, is_callback) = user_data
             .get_dependency_flags_from_name(self.name.clone())
             .context("variable has not been mapped")?;
 
-        self.ty = Some(ident.ty.clone().context("no type")?);
+        let new_ty = ident.ty.clone().map(|x| {
+            if is_callback {
+                Cow::Owned(TypeLayout::CallbackVariable(x.into_owned().into()))
+                // Cow::Owned(TypeLayout::CallbackVariable(callback_variable));
+                // Cow::Owned(TypeLayout::CallbackVariable(AsRef::<&'static TypeLayout>::as_ref(x)))
+            } else {
+                x.to_owned()
+            }
+        });
+
+        self.ty = new_ty;
 
         Ok(())
         // Ok(ty.clone())
@@ -126,20 +126,30 @@ impl Ident {
     ) -> Result<bool> {
         let ident = user_data.get_dependency_flags_from_name(self.name.clone());
 
-        let inherited = if let Some(ident) = ident {
-            self.ty = Some(ident.ty.clone().context("no type")?);
+        let inherited = if let Some((ident, is_callback)) = ident {
+            let new_ty = ident.ty.clone().map(|x| {
+                if is_callback {
+                    Cow::Owned(TypeLayout::CallbackVariable(x.into_owned().into()))
+                } else {
+                    x.to_owned()
+                }
+            });
+
+            self.ty = new_ty;
+            // self.ty = Some(ident.ty.clone().context("no type")?);
 
             true
         } else {
             if ty.is_none() {
                 bail!("ident has not already been registered and needs a type",)
             }
-            self.ty = Some(ty.unwrap());
+
+            self.ty = ty;
 
             false
         };
 
-        user_data.add_dependency(self);
+        user_data.add_dependency(self)?;
 
         Ok(inherited)
     }

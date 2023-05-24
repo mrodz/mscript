@@ -1,16 +1,11 @@
-use std::{
-    cell::RefCell,
-    rc::Rc,
-};
+use std::{cell::RefCell, rc::Rc};
 
 use anyhow::{Context, Result};
 use pest_consume::Parser as ParserDerive;
 
-use crate::{
-    ast::{Compile, CompiledFunctionId, CompiledItem, Declaration, Ident, TypeLayout},
-    instruction,
-    scope::{Scope, ScopeType},
-};
+use crate::ast::{Compile, CompiledFunctionId, CompiledItem, Declaration, Ident};
+use crate::instruction;
+use crate::scope::{Scope, ScopeType};
 
 #[allow(unused)]
 pub(crate) type Node<'i> = pest_consume::Node<'i, Rule, AssocFileData>;
@@ -22,15 +17,26 @@ pub(crate) struct Parser;
 #[derive(Clone, Debug)]
 pub(crate) struct AssocFileData {
     scopes: Rc<RefCell<Vec<Scope>>>,
-    // last_arg_type: Rc<RefCell<Vec<IdentType>>>
+    file_name: Rc<String>, // last_arg_type: Rc<RefCell<Vec<IdentType>>>
 }
 
 impl AssocFileData {
-    pub fn new(ty: ScopeType) -> Self {
+    pub fn new(ty: ScopeType, file_name: String) -> Self {
         Self {
             scopes: Rc::new(RefCell::new(vec![Scope::new(ty)])),
-            // last_arg_type: Rc::new(RefCell::new(vec![]))
+            file_name: Rc::new(file_name), // last_arg_type: Rc::new(RefCell::new(vec![]))
         }
+    }
+
+    pub fn get_file_name(&self) -> Rc<String> {
+        self.file_name.clone()
+    }
+
+    pub fn run_in_scope<R>(&self, ty: ScopeType, code: impl FnOnce() -> R) -> R {
+        self.push_scope(ty);
+        let result: R = code();
+        self.pop_scope();
+        result
     }
 
     pub fn push_scope(&self, ty: ScopeType) {
@@ -51,33 +57,30 @@ impl AssocFileData {
             .add_dependency(dependency)
     }
 
-    pub fn get_dependency_flags_from_name(
-        &self,
-        dependency: String,
-    ) -> Option<&Ident> {
+    pub fn get_dependency_flags_from_name(&self, dependency: String) -> Option<(&Ident, bool)> {
         let iter = unsafe { (*self.scopes.as_ptr()).iter() };
 
-        // let flags = Ref::filter_map(self.scopes, |scopes: &Vec<Scope>| {
-            for scope in iter.rev() {
-                if let Some(flags) = scope.contains(&dependency) {
-                    return Some(flags);
-                }
+        let mut is_callback = false;
+
+        for scope in iter.rev() {
+            if let Some(flags) = scope.contains(&dependency) {
+                return Some((flags, is_callback));
             }
 
-            None
-        // });
+            // should come after we check the contents of a scope.
+            if matches!(scope.ty, ScopeType::Function) {
+                is_callback = true;
+            }
+        }
 
-        // flags.ok()
+        None
     }
 }
 
-pub(crate) fn root_node_from_str(str: &str) -> Result<Node> {
-    let x = <Parser as pest_consume::Parser>::parse_with_userdata(
-        Rule::file,
-        str,
-        AssocFileData::new(ScopeType::File),
-    )?
-    .single()?;
+pub(crate) fn root_node_from_str(input_str: &str, user_data: AssocFileData) -> Result<Node> {
+    let x =
+        <Parser as pest_consume::Parser>::parse_with_userdata(Rule::file, input_str, user_data)?
+            .single()?;
 
     Ok(x)
 }
@@ -85,6 +88,7 @@ pub(crate) fn root_node_from_str(str: &str) -> Result<Node> {
 #[derive(Debug, Default)]
 pub(crate) struct File {
     pub declarations: Vec<Declaration>,
+    pub location: Rc<String>,
 }
 
 impl File {
@@ -121,17 +125,10 @@ impl Compile for File {
         functions.push(CompiledItem::Function {
             id: CompiledFunctionId::Custom("main".into()),
             content: global_scope_code,
+            location: self.location.clone(),
         });
 
-        // dbg!(&functions);
-
-        for function in functions {
-            println!("{}", function.repr(true))
-        }
-
-        todo!()
-
-        // functions
+        Ok(functions)
     }
 }
 

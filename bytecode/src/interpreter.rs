@@ -64,16 +64,13 @@ impl Program {
             unreachable!()
         };
 
-        let mut last_hash = 0;
+        let mut last_hash = destination_label.len() - 1;
 
-        for (idx, char) in destination_label.chars().enumerate() {
+        for char in destination_label.chars().rev() {
             if char == '#' {
-                last_hash = idx;
+                break;
             }
-        }
-
-        if last_hash == 0 || last_hash == destination_label.len() - 1 {
-            bail!("invalid path (syntax: /path/to/file#function_name)");
+            last_hash -= 1;
         }
 
         let (path, symbol) = destination_label.split_at(last_hash);

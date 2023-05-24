@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -10,6 +10,12 @@ use clap::{Parser, Subcommand};
 pub struct Args {
     #[command(subcommand)]
     pub command: Commands,
+}
+
+#[derive(ValueEnum, Clone, Debug)]
+pub enum CompilationTargets {
+    RawText,
+    Binary,
 }
 
 #[derive(Subcommand, Debug)]
@@ -25,13 +31,15 @@ pub enum Commands {
         stack_size: usize,
         /// This flag looks for an input path ending in `.transpiled.mmm` and will transpile it before executing.
         #[arg(long = "transpile", default_value = "false")]
-        transpile_first: bool
+        transpile_first: bool,
     },
     /// Compile a `.ms` file into executable bytecode.
     Compile {
         /// this is the path to the file
-        #[arg(required(true), index = 1)]
+        #[arg(required(true))]
         path: String,
+        #[arg(value_enum, default_value = "binary", long = "output-format")]
+        output_format: CompilationTargets,
     },
     /// Transpile human-readable bytecode (`.transpiled.mmm` extension)
     /// into an executable `.mmm` file.
@@ -40,5 +48,4 @@ pub enum Commands {
         #[arg(required(true), index = 1)]
         path: String,
     },
-    
 }

@@ -50,8 +50,8 @@ pub fn is_path_a_transpiled_source(path: &String) -> bool {
     fn ends_with_ignore_case(string: &str, pat: &str) -> bool {
         for (c1, c2) in string.chars().rev().zip(pat.chars().rev()) {
             if !c1.eq_ignore_ascii_case(&c2) {
-                return false
-            } 
+                return false;
+            }
         }
 
         true
@@ -115,7 +115,7 @@ pub fn transpile_file(path: &str, new_path: &str) -> Result<()> {
                 pb.set_message(name.clone());
 
                 current_function_pb = Some(pb);
-                
+
                 current_function_name = Some(name);
 
                 buffer.clear();
