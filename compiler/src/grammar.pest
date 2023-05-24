@@ -18,7 +18,7 @@ number = { hex_int | byte | float | integer }
 
 ident = @{ !keywords ~ (!('0'..'9') ~ (('a'..'z') | ('0'..'9') | "_")+) }
 type = _{ ident }
-ident_type = { ident ~ ":" ~ type }
+ident_type = _{ ident ~ ":" ~ type }
 
 function_arguments = { (value ~ ("," ~ value)*)? }
 callable = { ident ~ "(" ~ function_arguments ~ ")" }

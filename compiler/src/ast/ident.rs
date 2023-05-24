@@ -40,11 +40,11 @@ impl Ident {
             panic!("already has type {ty:?}")
         }
 
-        let mut ident = user_data
+        let ident = user_data
             .get_dependency_flags_from_name(self.name.clone())
             .expect("variable has not been mapped");
 
-        let mut ty = ident.ty.clone();
+        let ty = ident.ty.clone();
 
         let x = ty.map(|x| x.to_owned());
         
@@ -134,12 +134,13 @@ impl Ident {
             if ty.is_none() {
                 bail!("ident has not already been registered and needs a type",)
             }
-            self.ty = Some(ty.unwrap());
+
+            self.ty = ty;
 
             false
         };
 
-        user_data.add_dependency(self);
+        user_data.add_dependency(self)?;
 
         Ok(inherited)
     }

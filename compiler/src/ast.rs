@@ -7,6 +7,7 @@ mod function;
 mod function_arguments;
 mod function_body;
 mod function_parameters;
+mod function_return_type;
 mod ident;
 mod number;
 mod print_statement;
@@ -26,7 +27,6 @@ pub(crate) use print_statement::PrintStatement;
 pub(crate) use r#type::TypeLayout;
 pub(crate) use value::Value;
 
-use self::function::name_from_function_id;
 use anyhow::Result;
 use bytecode::compilation_lookups::raw_byte_instruction_to_string_representation;
 use std::{borrow::Cow, fmt::Display};
@@ -39,6 +39,7 @@ pub enum CompiledFunctionId {
 
 impl Display for CompiledFunctionId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use function::name_from_function_id;
         match self {
             CompiledFunctionId::Custom(string) => write!(f, "{string}"),
             CompiledFunctionId::Generated(id) => write!(f, "{}", name_from_function_id(*id)),
@@ -65,7 +66,7 @@ impl CompiledItem {
                 let content: String = content.iter().map(|x| x.repr(use_string_version)).collect();
 
                 let func_name = match id {
-                    CompiledFunctionId::Generated(id) => Cow::Owned(name_from_function_id(*id)),
+                    CompiledFunctionId::Generated(id) => Cow::Owned(function::name_from_function_id(*id)),
                     CompiledFunctionId::Custom(str) => Cow::Borrowed(str),
                 };
 

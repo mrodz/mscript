@@ -1,7 +1,4 @@
-use std::{
-    cell::RefCell,
-    rc::Rc,
-};
+use std::{cell::RefCell, rc::Rc};
 
 use anyhow::{Context, Result};
 use pest_consume::Parser as ParserDerive;
@@ -33,6 +30,13 @@ impl AssocFileData {
         }
     }
 
+    pub fn run_in_scope<R>(&self, ty: ScopeType, code: impl FnOnce() -> R) -> R {
+        self.push_scope(ty);
+        let result: R = code();
+        self.pop_scope();
+        result
+    }
+
     pub fn push_scope(&self, ty: ScopeType) {
         let mut scopes = self.scopes.borrow_mut();
         scopes.push(Scope::new(ty));
@@ -51,23 +55,16 @@ impl AssocFileData {
             .add_dependency(dependency)
     }
 
-    pub fn get_dependency_flags_from_name(
-        &self,
-        dependency: String,
-    ) -> Option<&Ident> {
+    pub fn get_dependency_flags_from_name(&self, dependency: String) -> Option<&Ident> {
         let iter = unsafe { (*self.scopes.as_ptr()).iter() };
 
-        // let flags = Ref::filter_map(self.scopes, |scopes: &Vec<Scope>| {
-            for scope in iter.rev() {
-                if let Some(flags) = scope.contains(&dependency) {
-                    return Some(flags);
-                }
+        for scope in iter.rev() {
+            if let Some(flags) = scope.contains(&dependency) {
+                return Some(flags);
             }
+        }
 
-            None
-        // });
-
-        // flags.ok()
+        None
     }
 }
 

@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::{
     ast::CompiledFunctionId,
-    parser::{Node, Parser},
+    parser::{Node, Parser, Rule},
     scope::ScopeType,
 };
 
@@ -21,11 +21,13 @@ pub fn name_from_function_id(id: isize) -> String {
 pub struct Function {
     pub arguments: FunctionParameters,
     pub body: FunctionBody,
+    pub return_type: Option<&'static TypeLayout>
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionType {
     pub arguments: FunctionParameters,
+    pub return_type: Option<&'static TypeLayout>
 }
 
 impl IntoType for Function {
@@ -40,6 +42,7 @@ impl IntoType for Function {
     {
 		TypeLayout::Function(FunctionType {
             arguments: self.arguments,
+            return_type: self.return_type
         })
     }
 }
@@ -71,17 +74,39 @@ impl Compile for Function {
 
 impl Parser {
     pub fn function(input: Node) -> Result<Function> {
-        input.user_data().push_scope(ScopeType::Function);
+        input.user_data().run_in_scope(ScopeType::Function, || {
+            let mut children = input.children();
 
-        let mut children = input.children();
-        let arguments = children.next().unwrap();
-        let function_body = children.next().unwrap();
+            let arguments = children.next().unwrap();
+            let arguments = Self::function_parameters(arguments)?;
 
-        let arguments = Self::function_parameters(arguments)?;
-        let body = Self::function_body(function_body)?;
+            let next = children.next();
 
-        input.user_data().pop_scope();
+            // if there are no more children, there is no return type or body
+            let Some(next) = next else {
+                return Ok(Function { arguments, body: FunctionBody::empty_body(), return_type: None })
+            };
 
-        Ok(Function { arguments, body })
+            let (body, return_type) = if matches!(next.as_rule(), Rule::function_return_type) {
+                let body = children.next();
+                (body, Some(next))
+            } else {
+                (Some(next), None)
+            };
+
+            let body = if let Some(body) = body {
+                Self::function_body(body)?
+            } else {
+                FunctionBody::empty_body()
+            };
+
+            let return_type = if let Some(return_type) = return_type {
+                Some(Self::function_return_type(return_type)?)
+            } else {
+                None
+            };
+
+            Ok(Function { arguments, body, return_type })
+        })
     }
 }

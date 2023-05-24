@@ -2,10 +2,16 @@ use anyhow::Result;
 
 use crate::{parser::{Node, Parser}, instruction};
 
-use super::{Dependencies, Ident, Declaration, Compile, CompiledItem, Dependency};
+use super::{Dependencies, Declaration, Compile, CompiledItem, Dependency};
 
 #[derive(Debug, Clone)]
 pub struct FunctionBody(Vec<Declaration>);
+
+impl FunctionBody {
+	pub fn empty_body() -> Self {
+		Self(vec![])
+	}
+}
 
 impl Dependencies for FunctionBody {
 	fn get_dependencies(&self) -> Option<Box<[Dependency]>> {

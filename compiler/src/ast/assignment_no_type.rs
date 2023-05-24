@@ -20,10 +20,7 @@ impl Parser {
 
         match value {
             Value::Function(ref f) => {
-                let inherited = ident.link(user_data, Some(Cow::Owned(f.clone().consume_for_type())))?;
-                if !inherited {
-                    unreachable!()
-                }
+                ident.link(user_data, Some(Cow::Owned(f.clone().consume_for_type())))?;
             },
             Value::Ident(..) => {
                 ident.link_from_pointed_type_with_lookup(user_data)?;

@@ -24,6 +24,10 @@ impl Scope {
         }
     }
 
+    pub fn run_inside(code: fn() -> ()) {
+        
+    }
+
     pub fn add_dependency(
         &mut self,
         dependency: &Ident,
