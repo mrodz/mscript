@@ -15,6 +15,7 @@ impl FunctionBody {
 
 impl Dependencies for FunctionBody {
 	fn get_dependencies(&self) -> Option<Box<[Dependency]>> {
+		dbg!("_____:)_____");
 		let x: Vec<Dependency> = self.0.iter()
 			.filter_map(|x| x.get_dependencies())
 			.flat_map(|x| x.into_vec())

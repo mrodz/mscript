@@ -13,7 +13,7 @@ pub(crate) enum ScopeType {
 #[derive(Debug)]
 pub(crate) struct Scope {
     variables: HashSet<Ident>,
-    ty: ScopeType,
+    pub ty: ScopeType,
 }
 
 impl Scope {
@@ -22,10 +22,6 @@ impl Scope {
             variables: HashSet::new(),
             ty,
         }
-    }
-
-    pub fn run_inside(code: fn() -> ()) {
-        
     }
 
     pub fn add_dependency(

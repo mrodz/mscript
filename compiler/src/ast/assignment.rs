@@ -1,6 +1,6 @@
-use anyhow::{Result, bail};
+use anyhow::Result;
 
-use crate::{parser::{Node, Parser, Rule}, instruction, ast::{CompiledItem, r#type::IntoType}};
+use crate::{parser::{Node, Parser, Rule}, instruction, ast::CompiledItem};
 
 use super::{value::Value, Ident, Dependencies, Compile, Dependency};
 
@@ -40,11 +40,9 @@ impl Compile for Assignment {
             }
             Value::Function(function) => {
                 let compiled_function = function.compile()?.remove(0);
-                let CompiledItem::Function { ref id, .. } = compiled_function else {
+                let CompiledItem::Function { ref id, ref location, .. } = compiled_function else {
                     unreachable!()
                 };
-
-                // let function_name = name_from_function_id(id);
 
                 let dependencies = function.get_dependencies();
 
@@ -57,11 +55,13 @@ impl Compile for Assignment {
 
                 let mut arguments = Vec::with_capacity(len);
 
-                arguments.push(id.to_string());
+                let x = location.replace('\\', "/");
+
+                arguments.push(format!("{x}#{}", id.to_string()));
 
                 dependencies
                     .iter()
-                    .map(|ident| ident.to_string())
+                    .map(|ident| ident.name().clone())
                     .collect_into(&mut arguments);
 
                 let arguments = arguments.into_boxed_slice();

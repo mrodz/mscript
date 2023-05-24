@@ -6,7 +6,7 @@ use crate::parser::{AssocFileData, Node, Parser};
 
 use super::{
     r#type::{IntoType, TypeLayout},
-    Dependencies,
+    Dependencies, Dependency,
 };
 
 // #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -40,13 +40,19 @@ impl Ident {
             panic!("already has type {ty:?}")
         }
 
-        let ident = user_data
+        let (ident, is_callback) = user_data
             .get_dependency_flags_from_name(self.name.clone())
             .expect("variable has not been mapped");
 
         let ty = ident.ty.clone();
 
-        let x = ty.map(|x| x.to_owned());
+        let x = ty.map(|x| {
+            if is_callback {
+                Cow::Owned(TypeLayout::CallbackVariable(x.into_owned().into()))
+            } else {
+                x.to_owned()
+            }
+        });
         
         let ty = x.unwrap();
 
@@ -91,11 +97,15 @@ impl Display for Ident {
     }
 }
 
-impl Dependencies for Ident {}
+impl Dependencies for Ident {
+    fn get_dependencies(&self) -> Option<Box<[super::Dependency]>> {
+        Some(Box::new([Dependency::new(Cow::Borrowed(self))]))
+    }
+}
 
 impl Ident {
     pub fn load_type(&mut self, user_data: &AssocFileData) -> Result<()> {
-        let ident = user_data
+        let (ident, is_callback) = user_data
             .get_dependency_flags_from_name(self.name.clone())
             .context("variable has not been mapped")?;
 
@@ -109,11 +119,21 @@ impl Ident {
             bail!("already has type {ty:?}")
         }
 
-        let ident = user_data
+        let (ident, is_callback) = user_data
             .get_dependency_flags_from_name(self.name.clone())
             .context("variable has not been mapped")?;
 
-        self.ty = Some(ident.ty.clone().context("no type")?);
+        let new_ty = ident.ty.clone().map(|x| {
+            if is_callback {
+                Cow::Owned(TypeLayout::CallbackVariable(x.into_owned().into()))
+                // Cow::Owned(TypeLayout::CallbackVariable(callback_variable));
+                // Cow::Owned(TypeLayout::CallbackVariable(AsRef::<&'static TypeLayout>::as_ref(x)))
+            } else {
+                x.to_owned()
+            }
+        });
+
+        self.ty = new_ty;
 
         Ok(())
         // Ok(ty.clone())
@@ -126,8 +146,17 @@ impl Ident {
     ) -> Result<bool> {
         let ident = user_data.get_dependency_flags_from_name(self.name.clone());
 
-        let inherited = if let Some(ident) = ident {
-            self.ty = Some(ident.ty.clone().context("no type")?);
+        let inherited = if let Some((ident, is_callback)) = ident {
+            let new_ty = ident.ty.clone().map(|x| {
+                if is_callback {
+                    Cow::Owned(TypeLayout::CallbackVariable(x.into_owned().into()))
+                } else {
+                    x.to_owned()
+                }
+            });
+    
+            self.ty = new_ty;
+            // self.ty = Some(ident.ty.clone().context("no type")?);
 
             true
         } else {

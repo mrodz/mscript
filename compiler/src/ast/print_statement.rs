@@ -28,8 +28,10 @@ impl Compile for PrintStatement {
 			Value::Ident(ident) => {
 				let name_str = ident.name();
 
+				dbg!(ident);
+
 				let load_instruction = match ident.ty()? {
-					Cow::Owned(TypeLayout::Function(..)) | Cow::Borrowed(TypeLayout::Function(..)) => instruction!(load_callback name_str),
+					Cow::Owned(TypeLayout::CallbackVariable(..)) | Cow::Borrowed(TypeLayout::CallbackVariable(..)) => instruction!(load_callback name_str),
 					_ => instruction!(load name_str),
 				};
 

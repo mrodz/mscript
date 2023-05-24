@@ -19,11 +19,6 @@ pub static mut TYPES: Lazy<HashMap<&str, TypeLayout>> = Lazy::new(|| {
     x
 });
 
-// pub enum Types {
-// 	Int = "int",
-// 	Float = "float"
-// }
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NativeType {
     Bool,
@@ -32,15 +27,12 @@ pub enum NativeType {
     BigInt,
     Float,
     Byte,
-    Function(Vec<NativeType>),
-    Vector,
-    Object(HashMap<String, NativeType>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypeLayout {
     Function(FunctionType),
-    Standard(String),
+    CallbackVariable(Box<TypeLayout>),
     Native(NativeType),
 }
 

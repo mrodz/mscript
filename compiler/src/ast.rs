@@ -29,10 +29,10 @@ pub(crate) use value::Value;
 
 use anyhow::Result;
 use bytecode::compilation_lookups::raw_byte_instruction_to_string_representation;
-use std::{borrow::Cow, fmt::Display};
+use std::{borrow::{Cow}, fmt::Display, rc::Rc};
 
 #[derive(Debug)]
-pub enum CompiledFunctionId {
+pub(crate) enum CompiledFunctionId {
     Generated(isize),
     Custom(String),
 }
@@ -48,10 +48,11 @@ impl Display for CompiledFunctionId {
 }
 
 #[derive(Debug)]
-pub enum CompiledItem {
+pub(crate) enum CompiledItem {
     Function {
         id: CompiledFunctionId,
         content: Vec<CompiledItem>,
+        location: Rc<String>
     },
     Instruction {
         id: u8,
@@ -62,7 +63,7 @@ pub enum CompiledItem {
 impl CompiledItem {
     pub fn repr(&self, use_string_version: bool) -> String {
         match self {
-            Self::Function { id, content } => {
+            Self::Function { id, content, .. } => {
                 let content: String = content.iter().map(|x| x.repr(use_string_version)).collect();
 
                 let func_name = match id {
@@ -135,12 +136,15 @@ pub(crate) trait Compile {
 
 pub(crate) trait Optimize {}
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub(crate) struct Dependency<'a> {
     pub ident: Cow<'a, Ident>,
 }
 
 impl<'a> Dependency<'a> {
+    pub fn name(&self) -> &String {
+        self.ident.as_ref().name()
+    }
     pub fn new(ident: Cow<'a, Ident>) -> Self {
         Self { ident }
     }
@@ -169,6 +173,10 @@ impl<'a> From<Ident> for Dependency<'a> {
 }
 
 pub(crate) trait Dependencies {
+    fn supplies(&self) -> Option<Box<[Dependency]>> {
+        None
+    }
+
     fn get_dependencies(&self) -> Option<Box<[Dependency]>> {
         None
     }

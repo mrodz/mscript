@@ -10,6 +10,8 @@ use cli::{Args, Commands};
 use compiler::compile;
 use std::{path::Path, thread};
 
+use crate::cli::CompilationTargets;
+
 fn main() -> Result<()> {
     let args = Args::parse();
 
@@ -65,8 +67,9 @@ fn main() -> Result<()> {
         Commands::Transpile { path } => {
             transpile_command(&path)?;
         }
-        Commands::Compile { path } => {
-            compile(&path)?;
+        Commands::Compile { path, output_format } => {
+            let output_bin = matches!(output_format, CompilationTargets::Binary);
+            compile(&path, output_bin)?;
         }
     }
 

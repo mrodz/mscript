@@ -23,7 +23,7 @@ impl Compile for Callable {
 		let ident = &self.ident;
 		
 		let load_instruction = match ident.ty()? {
-			Cow::Owned(TypeLayout::Function(..)) | Cow::Borrowed(TypeLayout::Function(..)) => instruction!(load_callback func_name),
+			Cow::Owned(TypeLayout::CallbackVariable(..)) | Cow::Borrowed(TypeLayout::CallbackVariable(..)) => instruction!(load_callback func_name),
 			_ => instruction!(load func_name)
 		};
 

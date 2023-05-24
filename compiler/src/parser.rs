@@ -19,15 +19,21 @@ pub(crate) struct Parser;
 #[derive(Clone, Debug)]
 pub(crate) struct AssocFileData {
     scopes: Rc<RefCell<Vec<Scope>>>,
+    file_name: Rc<String>
     // last_arg_type: Rc<RefCell<Vec<IdentType>>>
 }
 
 impl AssocFileData {
-    pub fn new(ty: ScopeType) -> Self {
+    pub fn new(ty: ScopeType, file_name: String) -> Self {
         Self {
             scopes: Rc::new(RefCell::new(vec![Scope::new(ty)])),
+            file_name: Rc::new(file_name)
             // last_arg_type: Rc::new(RefCell::new(vec![]))
         }
+    }
+
+    pub fn get_file_name(&self) -> Rc<String> {
+        self.file_name.clone()
     }
 
     pub fn run_in_scope<R>(&self, ty: ScopeType, code: impl FnOnce() -> R) -> R {
@@ -55,12 +61,19 @@ impl AssocFileData {
             .add_dependency(dependency)
     }
 
-    pub fn get_dependency_flags_from_name(&self, dependency: String) -> Option<&Ident> {
+    pub fn get_dependency_flags_from_name(&self, dependency: String) -> Option<(&Ident, bool)> {
         let iter = unsafe { (*self.scopes.as_ptr()).iter() };
+
+        let mut is_callback = false;
 
         for scope in iter.rev() {
             if let Some(flags) = scope.contains(&dependency) {
-                return Some(flags);
+                return Some((flags, is_callback));
+            }
+
+            // should come after we check the contents of a scope.
+            if matches!(scope.ty, ScopeType::Function) {
+                is_callback = true;
             }
         }
 
@@ -68,11 +81,11 @@ impl AssocFileData {
     }
 }
 
-pub(crate) fn root_node_from_str(str: &str) -> Result<Node> {
+pub(crate) fn root_node_from_str(input_str: &str, user_data: AssocFileData) -> Result<Node> {
     let x = <Parser as pest_consume::Parser>::parse_with_userdata(
         Rule::file,
-        str,
-        AssocFileData::new(ScopeType::File),
+        input_str,
+        user_data
     )?
     .single()?;
 
@@ -82,6 +95,7 @@ pub(crate) fn root_node_from_str(str: &str) -> Result<Node> {
 #[derive(Debug, Default)]
 pub(crate) struct File {
     pub declarations: Vec<Declaration>,
+    pub location: Rc<String>
 }
 
 impl File {
@@ -118,17 +132,10 @@ impl Compile for File {
         functions.push(CompiledItem::Function {
             id: CompiledFunctionId::Custom("main".into()),
             content: global_scope_code,
+            location: self.location.clone(),
         });
 
-        // dbg!(&functions);
-
-        for function in functions {
-            println!("{}", function.repr(true))
-        }
-
-        todo!()
-
-        // functions
+        Ok(functions)
     }
 }
 
