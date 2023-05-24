@@ -2,14 +2,14 @@ use anyhow::Result;
 
 use crate::{parser::{Node, Parser}, instruction};
 
-use super::{Dependencies, Ident, Declaration, Compile, CompiledItem};
+use super::{Dependencies, Ident, Declaration, Compile, CompiledItem, Dependency};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FunctionBody(Vec<Declaration>);
 
 impl Dependencies for FunctionBody {
-	fn get_dependencies(&self) -> Option<Box<[&Ident]>> {
-		let x: Vec<&Ident> = self.0.iter()
+	fn get_dependencies(&self) -> Option<Box<[Dependency]>> {
+		let x: Vec<Dependency> = self.0.iter()
 			.filter_map(|x| x.get_dependencies())
 			.flat_map(|x| x.into_vec())
 			.collect();
@@ -26,9 +26,10 @@ impl Dependencies for FunctionBody {
 }
 
 impl Compile for FunctionBody {
-	fn compile(&self) -> Vec<super::CompiledItem> {
+	fn compile(&self) -> Result<Vec<super::CompiledItem>> {
 		let mut compiled_body: Vec<super::CompiledItem> = self.0.iter()
-			.flat_map(|x| x.compile())
+			.flat_map(|x| x.compile().unwrap())
+			// .flatten()
 			.collect();
 
 		const RET: u8 = 0x12;
@@ -40,7 +41,7 @@ impl Compile for FunctionBody {
 			compiled_body.push(instruction!(ret));
 		}
 
-		compiled_body
+		Ok(compiled_body)
 	}
 }
 

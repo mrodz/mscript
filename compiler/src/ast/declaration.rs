@@ -2,17 +2,17 @@ use anyhow::Result;
 
 use crate::parser::{Parser, Node, Rule};
 
-use super::{assignment::Assignment, Dependencies, Callable, PrintStatement, Compile};
+use super::{assignment::Assignment, Dependencies, Callable, PrintStatement, Compile, Dependency};
 
-#[derive(Debug)]
-pub enum Declaration {
+#[derive(Debug, Clone)]
+pub(crate) enum Declaration {
 	Assignment(Assignment),
 	Callable(Callable),
 	PrintStatement(PrintStatement)
 }
 
 impl Dependencies for Declaration {
-	fn get_dependencies(&self) -> Option<Box<[&super::Ident]>> {
+	fn get_dependencies(&self) -> Option<Box<[Dependency]>> {
 		match self {
 			Self::Assignment(assignment) => assignment.get_dependencies(),
 			Self::Callable(callable) => callable.get_dependencies(),
@@ -22,7 +22,7 @@ impl Dependencies for Declaration {
 }
 
 impl Compile for Declaration {
-	fn compile(&self) -> Vec<super::CompiledItem> {
+	fn compile(&self) -> Result<Vec<super::CompiledItem>> {
 		match self {
 			Self::PrintStatement(x) => x.compile(),
 			Self::Callable(x) => x.compile(),

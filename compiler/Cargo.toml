@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.71"
 bytecode = { path = "../bytecode" }
+once_cell = "1.17.1"
 pest = "2.6.0"
 pest_consume = "1.1.3"
 pest_derive = "2.6.0"

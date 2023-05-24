@@ -1,20 +1,20 @@
-use anyhow::Result;
+use anyhow::{Result, bail};
 
-use crate::{parser::{Node, Parser}, instruction, ast::{CompiledItem, function::name_from_function_id}};
+use crate::{parser::{Node, Parser, Rule}, instruction, ast::{CompiledItem, r#type::IntoType}};
 
-use super::{value::Value, Ident, Dependencies, Compile};
+use super::{value::Value, Ident, Dependencies, Compile, Dependency};
 
-#[derive(Debug)]
-pub struct Assignment {
+#[derive(Debug, Clone)]
+pub(crate) struct Assignment {
     pub ident: Ident,
     pub value: Value,
 }
 
 impl Dependencies for Assignment {
-    fn get_dependencies(&self) -> Option<Box<[&Ident]>> {
+    fn get_dependencies(&self) -> Option<Box<[Dependency]>> {
         match self.value {
-            Value::Ident(ref ident) => {
-                ident.get_dependencies()
+            Value::Ident(ref name) => {
+                name.get_dependencies()
             }
             Value::Function(ref function) => {
                 function.get_dependencies()
@@ -27,18 +27,19 @@ impl Dependencies for Assignment {
 }
 
 impl Compile for Assignment {
-    fn compile(&self) -> Vec<super::CompiledItem> {
-        let name = &self.ident;
+    fn compile(&self) -> Result<Vec<super::CompiledItem>> {
+        let name = &self.ident.name();
 
-        match &self.value {
+        let matched = match &self.value {
             Value::Ident(ident) => {
+
                 vec![
                     instruction!(load ident),
                     instruction!(store name)
                 ]
             }
             Value::Function(function) => {
-                let compiled_function = function.compile().remove(0);
+                let compiled_function = function.compile()?.remove(0);
                 let CompiledItem::Function { ref id, .. } = compiled_function else {
                     unreachable!()
                 };
@@ -60,7 +61,7 @@ impl Compile for Assignment {
 
                 dependencies
                     .iter()
-                    .map(|ident| ident.0.clone())
+                    .map(|ident| ident.to_string())
                     .collect_into(&mut arguments);
 
                 let arguments = arguments.into_boxed_slice();
@@ -79,30 +80,58 @@ impl Compile for Assignment {
                 ]
             }
             Value::Number(number) => {
-                let mut number_init = number.compile();
+                let mut number_init = number.compile()?;
 
                 number_init.push(instruction!(store name));
 
                 number_init
             }
-        }
+        };
 
-
+        Ok(matched)
     }
 }
 
 impl Parser {
     pub fn assignment(input: Node) -> Result<Assignment> {
-        let mut children = input.children();
+        let child = input.children().next().unwrap();
+        let x = match child.as_rule() {
+            Rule::assignment_no_type => Self::assignment_no_type(child)?,
+            Rule::assignment_type => unimplemented!(),
+            _ => unreachable!()
+        };
 
-        let (Some(ident), Some(rhs)) = (children.next(), children.next()) else {
-			unreachable!()
-		};
+        Ok(x)
+        // let mut children = input.children();
 
-        let ident = Self::ident(ident);
+        // let (Some(ident), Some(rhs)) = (children.next(), children.next()) else {
+		// 	unreachable!()
+		// };
 
-        let value = Self::value(rhs)?;
+        // let mut ident = Self::ident(ident);
+        // // let (mut ident, flags) = (packed.0, packed.1);
 
-        Ok(Assignment { ident, value })
+        // let value = Self::value(rhs)?;
+
+        // let user_data = input.user_data();
+
+        // match value {
+        //     Value::Function(ref f) => {
+        //         let inherited = ident.link(user_data, Some(f.clone().consume_for_type()))?;
+        //         if !inherited {
+        //             unreachable!()
+        //         }
+        //     },
+        //     Value::Ident(..) => {
+        //         ident.link_from_pointed_type_with_lookup(user_data)?;
+        //     }
+        //     Value::Number(ref number) => {
+        //         let ty = number.clone().into_type();
+        //         ident.link(user_data, Some(ty))?;
+        //     }
+        // }
+
+
+        // Ok(Assignment { ident, value })
     }
 }

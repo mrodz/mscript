@@ -1,21 +1,21 @@
 use anyhow::Result;
 
-use crate::{parser::{Parser, Node}, instruction};
+use crate::{parser::{Parser, Node}, instruction, ast::TypeLayout};
 
-use super::{Dependencies, Value, Compile};
+use super::{Dependencies, Value, Compile, Dependency};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PrintStatement(Value);
 
 impl Dependencies for PrintStatement {
-	fn get_dependencies(&self) -> Option<Box<[&super::Ident]>> {
+	fn get_dependencies(&self) -> Option<Box<[Dependency]>> {
 		self.0.get_dependencies()
 	}
 }
 
 impl Compile for PrintStatement {
-	fn compile(&self) -> Vec<super::CompiledItem> {
-		match &self.0 {
+	fn compile(&self) -> Result<Vec<super::CompiledItem>> {
+		let matched = match &self.0 {
 			Value::Function(_) => {
 				vec![
 					instruction!(string "<function>"),
@@ -24,9 +24,17 @@ impl Compile for PrintStatement {
 				]
 			}
 			Value::Ident(ident) => {
-				let val = &ident.0;
+				let name_str = ident.name();
+
+				dbg!(ident);
+
+				let load_instruction = match ident.ty()? {
+					TypeLayout::Function(..) => instruction!(load_callback name_str),
+					_ => instruction!(load name_str),
+				};
+
 				vec![
-					instruction!(load val),
+					load_instruction,
 					instruction!(printn '*'),
 					instruction!(void),
 				]
@@ -40,7 +48,9 @@ impl Compile for PrintStatement {
 				]	
 			}
 
-		}
+		};
+
+		Ok(matched)
 	}
 }
 

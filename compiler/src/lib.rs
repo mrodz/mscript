@@ -1,8 +1,9 @@
 #![feature(iter_intersperse)]
 #![feature(iter_collect_into)]
 
-mod parser;
 mod ast;
+mod parser;
+mod scope;
 
 use std::fs::File;
 use std::io::{BufReader, Read};
@@ -10,24 +11,24 @@ use std::io::{BufReader, Read};
 use anyhow::Result;
 use ast::Compile;
 
-use crate::parser::{Parser, root_node_from_str};
+use crate::parser::{root_node_from_str, Parser};
 
 pub fn compile(path: &str) -> Result<()> {
-	let file = File::open(path)?;
+    let file = File::open(path)?;
 
-	let mut reader = BufReader::new(file);
+    let mut reader = BufReader::new(file);
 
-	let mut buffer = String::new();
+    let mut buffer = String::new();
 
-	reader.read_to_string(&mut buffer)?;
+    reader.read_to_string(&mut buffer)?;
 
     let input = root_node_from_str(&buffer)?;
 
-	let result = Parser::file(input)?;
+    let result = Parser::file(input)?;
 
-	let compiled = result.compile();
+    let compiled = result.compile();
 
-	// dbg!(result);
+    // dbg!(result);
 
-	Ok(())
+    Ok(())
 }
