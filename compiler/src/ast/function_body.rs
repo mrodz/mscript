@@ -18,7 +18,6 @@ impl FunctionBody {
 
 impl Dependencies for FunctionBody {
     fn get_dependencies(&self) -> Option<Box<[Dependency]>> {
-        dbg!("_____:)_____");
         let x: Vec<Dependency> = self
             .0
             .iter()

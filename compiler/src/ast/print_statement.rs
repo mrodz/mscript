@@ -32,8 +32,6 @@ impl Compile for PrintStatement {
             Value::Ident(ident) => {
                 let name_str = ident.name();
 
-                dbg!(ident);
-
                 let load_instruction = match ident.ty()? {
                     Cow::Owned(TypeLayout::CallbackVariable(..))
                     | Cow::Borrowed(TypeLayout::CallbackVariable(..)) => {
@@ -56,6 +54,15 @@ impl Compile for PrintStatement {
                     instruction!(void),
                 ]
             }
+			Value::String(content) => {
+				let mut string_init = content.compile()?;
+				string_init.append(&mut vec![
+					instruction!(printn '*'),
+                    instruction!(void),
+				]);
+
+				string_init
+			}
         };
 
         Ok(matched)

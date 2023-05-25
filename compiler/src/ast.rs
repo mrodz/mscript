@@ -8,6 +8,7 @@ mod function_arguments;
 mod function_body;
 mod function_parameters;
 mod function_return_type;
+mod string;
 mod ident;
 mod number;
 mod print_statement;
@@ -27,7 +28,7 @@ pub(crate) use print_statement::PrintStatement;
 pub(crate) use r#type::TypeLayout;
 pub(crate) use value::Value;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use bytecode::compilation_lookups::raw_byte_instruction_to_string_representation;
 use std::{borrow::Cow, fmt::Display, rc::Rc};
 
@@ -62,6 +63,23 @@ pub(crate) enum CompiledItem {
 
 impl CompiledItem {
     pub fn repr(&self, use_string_version: bool) -> String {
+        fn fix_arg_if_needed(arg: &String) -> Result<Cow<String>> {
+            let starts = arg.starts_with('\"');
+            let ends = arg.ends_with('\"');
+
+            if starts ^ ends {
+                bail!("non-matching `\"` on arg {arg}")
+            }
+
+            let has_quotes = starts && ends;
+
+            if !has_quotes && arg.contains(' ') {
+                Ok(Cow::Owned("\"".to_owned() + arg + "\""))
+            } else {
+                Ok(Cow::Borrowed(arg))
+            }
+        }
+
         match self {
             Self::Function { id, content, .. } => {
                 let content: String = content.iter().map(|x| x.repr(use_string_version)).collect();
@@ -87,13 +105,8 @@ impl CompiledItem {
                 if arguments.len() >= 1 {
                     for arg in &arguments[..] {
                         args.push(' ');
-                        if arg.contains(' ') {
-                            args.push('\"');
-                            args.push_str(&arg);
-                            args.push('\"');
-                        } else {
-                            args.push_str(&arg);
-                        }
+                        let arg = fix_arg_if_needed(arg).unwrap();
+                        args.push_str(arg.as_str());
                     }
                 }
 

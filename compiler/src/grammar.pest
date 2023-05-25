@@ -16,6 +16,12 @@ float = @{ integer ~ "." ~ integer }
 
 number = { hex_int | byte | float | integer }
 
+escape_character = _{ "\\" | "r" | "n" }
+escape_sequence = @{ "\\" ~ escape_character }
+
+string = { "\"" ~ (("\\\"") | (!("\"") ~ ANY))* ~ "\"" }
+
+
 ident = @{ !keywords ~ (!('0'..'9') ~ (('a'..'z') | ('0'..'9') | "_")+) }
 type = _{ ident }
 ident_type = _{ ident ~ ":" ~ type }
@@ -32,7 +38,7 @@ function_body = { declaration* }
 function_return_type = { "->" ~ (type | ("(" ~ type ~ ")")) }
 function = { "fn" ~ "(" ~ function_parameters ~ ")" ~ function_return_type? ~ "{" ~ function_body ~ "}"}
 
-value = _{ function | ident | callable | number }
+value = _{ function | ident | callable | number | string }
 
 
 assignment_no_type = { ident ~ "=" ~ value }

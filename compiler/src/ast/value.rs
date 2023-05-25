@@ -2,13 +2,14 @@ use anyhow::Result;
 
 use crate::parser::{Node, Parser, Rule};
 
-use super::{Compile, Dependencies, Dependency, Function, Ident, Number};
+use super::{Compile, Dependencies, Dependency, Function, Ident, Number, string::AstString};
 
 #[derive(Debug, Clone)]
 pub(crate) enum Value {
     Function(Function),
     Ident(Ident),
     Number(Number),
+    String(AstString),
 }
 
 impl Dependencies for Value {
@@ -17,6 +18,7 @@ impl Dependencies for Value {
             Self::Function(function) => function.get_dependencies(),
             Self::Ident(name) => name.get_dependencies(),
             Self::Number(number) => number.get_dependencies(),
+            Self::String(string) => string.get_dependencies()
         }
     }
 }
@@ -27,6 +29,7 @@ impl Compile for Value {
             Self::Function(function) => function.compile(),
             Self::Ident { .. } => unimplemented!(),
             Self::Number(number) => number.compile(),
+            Self::String(string) => string.compile(),
         }
     }
 }
@@ -40,6 +43,7 @@ impl Parser {
                 Value::Ident(ident.clone())
             }
             Rule::number => Value::Number(Self::number(input)?),
+            Rule::string => Value::String(Self::string(input)?),
             x => unreachable!("{x:?}"),
         };
 
