@@ -71,11 +71,11 @@ impl Dependencies for Function {
         let vars_used_by_body = self.body.get_dependencies();
         let vars_provided_by_parameters = self.parameters.supplies();
 
-        let Some(body_vars) = dbg!(vars_used_by_body) else {
+        let Some(body_vars) = vars_used_by_body else {
             return None;
         };
 
-        let Some(param_vars) = dbg!(vars_provided_by_parameters) else {
+        let Some(param_vars) = vars_provided_by_parameters else {
             return Some(body_vars)
         };
 

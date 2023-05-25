@@ -29,6 +29,10 @@ impl Parser {
                 let ty = number.clone().into_type();
                 ident.link(user_data, Some(Cow::Owned(ty)))?;
             }
+            Value::String(ref string) => {
+                let ty = string.into_type();
+                ident.link(user_data, Some(Cow::Owned(ty)))?;
+            }
         }
 
         Ok(Assignment { ident, value })

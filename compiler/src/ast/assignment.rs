@@ -20,6 +20,7 @@ impl Dependencies for Assignment {
             Value::Ident(ref name) => name.get_dependencies(),
             Value::Function(ref function) => function.get_dependencies(),
             Value::Number(ref number) => number.get_dependencies(),
+            Value::String(ref string) => string.get_dependencies(),
         }
     }
 }
@@ -80,6 +81,13 @@ impl Compile for Assignment {
                 number_init.push(instruction!(store name));
 
                 number_init
+            }
+            Value::String(string) => {
+                let mut string_init = string.compile()?;
+
+                string_init.push(instruction!(store name));
+
+                string_init
             }
         };
 
