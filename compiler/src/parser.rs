@@ -77,11 +77,24 @@ impl AssocFileData {
     }
 }
 
-pub(crate) fn root_node_from_str(input_str: &str, user_data: AssocFileData) -> Result<Node> {
-    let x =
-        <Parser as pest_consume::Parser>::parse_with_userdata(Rule::file, input_str, user_data)?
-            .single()?;
+#[allow(dead_code)]
+pub mod util {
+    use pest_consume::Nodes;
 
+    use super::{Rule, Parser};
+
+    pub fn parse_with_userdata<'i, D>(rule: Rule, input_str: &'i str, user_data: D) -> Result<Nodes<'i, Rule, D>, pest_consume::Error<Rule>> {
+        <Parser as pest_consume::Parser>::parse_with_userdata(rule, input_str, user_data)
+    }
+
+    pub fn parse<'i>(rule: Rule, input_str: &'i str) -> Result<Nodes<'i, Rule, ()>, pest_consume::Error<Rule>> {
+        <Parser as pest_consume::Parser>::parse(rule, input_str)
+    }
+
+}
+
+pub(crate) fn root_node_from_str(input_str: &str, user_data: AssocFileData) -> Result<Node> {
+    let x = util::parse_with_userdata(Rule::file, input_str, user_data)?.single()?;
     Ok(x)
 }
 

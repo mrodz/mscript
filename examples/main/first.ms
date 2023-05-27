@@ -1,6 +1,6 @@
 print "Hello World"
 
-y = 3
+y = 3.10 + 10 * 2
 hello = "\"awesome\"\nsauce"
 
 print hello

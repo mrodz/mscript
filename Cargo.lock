@@ -160,6 +160,7 @@ dependencies = [
  "once_cell",
  "pest",
  "pest_consume",
+ "pest_consume_macros",
  "pest_derive",
 ]
 

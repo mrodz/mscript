@@ -44,6 +44,7 @@ impl Parser {
             }
             Rule::number => Value::Number(Self::number(input)?),
             Rule::string => Value::String(Self::string(input)?),
+            Rule::math_expr => Self::math_expr(input)?,
             x => unreachable!("{x:?}"),
         };
 
