@@ -13,7 +13,7 @@ pub static REPR_TO_BIN: Lazy<HashMap<&[u8], u8>> = Lazy::new(|| {
 
 /// Makes it harder for the arrays to fall out of sync by requiring
 /// that they both take the same size.
-pub const INSTRUCTION_COUNT: usize = 43;
+pub const INSTRUCTION_COUNT: usize = 44;
 
 pub static BIN_TO_REPR: [&[u8]; INSTRUCTION_COUNT] = [
     /* 0x00 [0]  */ b"nop",
@@ -58,7 +58,8 @@ pub static BIN_TO_REPR: [&[u8]; INSTRUCTION_COUNT] = [
     /* 0x27 [39] */ b"done",
     /* 0x28 [40] */ b"update",
     /* 0x29 [41] */ b"scope", // Same as `else`
-    /* 0x30 [42] */ b"else", // Same as `scope`
+    /* 0x2A [42] */ b"else", // Same as `scope`
+    /* 0x2B [43] */ b"neg",
 ];
 
 pub static FUNCTION_POINTER_LOOKUP: [InstructionSignature; INSTRUCTION_COUNT] = [
@@ -105,4 +106,5 @@ pub static FUNCTION_POINTER_LOOKUP: [InstructionSignature; INSTRUCTION_COUNT] = 
     implementations::update,
     implementations::else_stmt, // Same as `else`
     implementations::else_stmt, // Same as `scope`
+    implementations::neg,
 ];

@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, fmt::Display};
 
 use anyhow::Result;
 
@@ -11,6 +11,13 @@ use super::{r#type::TypeLayout, Compile, Dependencies, Dependency, Ident};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionParameters(Vec<Ident>);
+
+impl Display for FunctionParameters {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let x = format!("{:?}", self.0);
+        write!(f, "{}", &x[1..x.len() - 1])
+    }
+}
 
 impl Dependencies for FunctionParameters {
     fn supplies(&self) -> Option<Box<[super::Dependency]>> {

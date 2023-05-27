@@ -8,10 +8,11 @@ mod function_arguments;
 mod function_body;
 mod function_parameters;
 mod function_return_type;
-mod string;
 mod ident;
+mod math_expr;
 mod number;
 mod print_statement;
+mod string;
 mod r#type;
 mod value;
 
@@ -28,7 +29,7 @@ pub(crate) use print_statement::PrintStatement;
 pub(crate) use r#type::TypeLayout;
 pub(crate) use value::Value;
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 use bytecode::compilation_lookups::raw_byte_instruction_to_string_representation;
 use std::{borrow::Cow, fmt::Display, rc::Rc};
 

@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{rc::Rc, fmt::Display};
 
 use anyhow::Result;
 
@@ -33,6 +33,12 @@ pub struct FunctionType {
     pub return_type: Option<&'static TypeLayout>,
 }
 
+impl Display for FunctionType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "fn()")
+    }
+}
+
 impl Function {
     pub fn new(
         parameters: FunctionParameters,
@@ -51,18 +57,18 @@ impl Function {
 
 impl IntoType for Function {
     /// unimplemented
-    fn into_type(&self) -> TypeLayout {
+    fn into_type(&self) -> Result<TypeLayout> {
         unimplemented!()
     }
 
-    fn consume_for_type(self) -> TypeLayout
+    fn consume_for_type(self) -> Result<TypeLayout>
     where
         Self: Sized,
     {
-        TypeLayout::Function(FunctionType {
+        Ok(TypeLayout::Function(FunctionType {
             parameters: self.parameters,
             return_type: self.return_type,
-        })
+        }))
     }
 }
 

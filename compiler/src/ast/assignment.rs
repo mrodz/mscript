@@ -16,12 +16,8 @@ pub(crate) struct Assignment {
 
 impl Dependencies for Assignment {
     fn get_dependencies(&self) -> Option<Box<[Dependency]>> {
-        match self.value {
-            Value::Ident(ref name) => name.get_dependencies(),
-            Value::Function(ref function) => function.get_dependencies(),
-            Value::Number(ref number) => number.get_dependencies(),
-            Value::String(ref string) => string.get_dependencies(),
-        }
+        let value = &self.value as &dyn Dependencies;
+        value.get_dependencies()
     }
 }
 
@@ -84,6 +80,13 @@ impl Compile for Assignment {
             }
             Value::String(string) => {
                 let mut string_init = string.compile()?;
+
+                string_init.push(instruction!(store name));
+
+                string_init
+            }
+            Value::MathExpr(math_expr) => {
+                let mut string_init = math_expr.compile()?;
 
                 string_init.push(instruction!(store name));
 

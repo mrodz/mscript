@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 
 use crate::ast::Ident;
 
@@ -25,12 +25,14 @@ impl Scope {
     }
 
     pub fn add_dependency(&mut self, dependency: &Ident) -> Result<()> {
+        self.variables.insert(dependency.clone());
+        Ok(())
         // let ty = dependency.ty()?.clone();
-        if !self.variables.insert(dependency.clone()) {
-            bail!("conflicting mapping")
-        } else {
-            Ok(())
-        }
+        // if !self.variables.insert(dependency.clone()) {
+        //     bail!("conflicting mapping")
+        // } else {
+        //     Ok(())
+        // }
         // if self.variables.insert(dependency.name().clone(), (dependency, ty)).is_some() {
         // bail!("conflicting variable mapping")
         // } else {

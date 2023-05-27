@@ -129,6 +129,16 @@ pub mod implementations {
     }
 
     instruction! {
+        neg(ctx, _args) {
+            let Some(val) = ctx.get_last_op_item_mut() else {
+                bail!("neg requires one item on the local operating stack")
+            };
+
+            val.negate()?;
+
+            Ok(())
+        }
+
         bin_op(ctx, args) {
             use Primitive::*;
             let symbols = args.first().context("Expected an operation [+,-,*,/,%,>,>=,<,<=]")?;

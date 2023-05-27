@@ -2,9 +2,9 @@ WHITESPACE = _{ " " | NEWLINE | "\t" }
 
 keywords = _{
     "fn" | 
-    "obj"
+    "obj" |
+    "print"
 }
-
 
 integer = @{ '0'..'9' ~ ('0'..'9' | ("_" ~ ('0'..'9')))* }
 
@@ -15,6 +15,22 @@ byte = @{ "0b" ~ ('0'..'1' ~ ('0'..'1' | ("_" ~ ('0'..'1')))*) }
 float = @{ integer ~ "." ~ integer }
 
 number = { hex_int | byte | float | integer }
+
+unary_minus = { "-" }
+
+allow_bin_op = _{ ident | number | string }
+
+math_primary = _{ allow_bin_op | "(" ~ math_expr ~ ")" }
+math_atom = _{ unary_minus? ~ math_primary }
+
+bin_op = _{ add | subtract | multiply | divide | modulo }
+add = { "+" }
+subtract = { "-" }
+multiply = { "*" }
+divide = { "/" }
+modulo = { "%" }
+
+math_expr = { math_atom ~ (bin_op ~ math_atom)* }
 
 escape_character = _{ "\\" | "r" | "n" }
 escape_sequence = @{ "\\" ~ escape_character }
@@ -38,7 +54,7 @@ function_body = { declaration* }
 function_return_type = { "->" ~ (type | ("(" ~ type ~ ")")) }
 function = { "fn" ~ "(" ~ function_parameters ~ ")" ~ function_return_type? ~ "{" ~ function_body ~ "}"}
 
-value = _{ function | ident | callable | number | string }
+value = _{ function | callable | math_expr | ident | string }
 
 
 assignment_no_type = { ident ~ "=" ~ value }
