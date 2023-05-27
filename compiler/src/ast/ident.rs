@@ -7,12 +7,24 @@ use anyhow::{bail, Context, Result};
 use crate::parser::{AssocFileData, Node, Parser};
 
 use super::r#type::TypeLayout;
-use super::{Dependencies, Dependency};
+use super::{Compile, CompiledItem, Dependencies, Dependency};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Ident {
     name: String,
     ty: Option<Cow<'static, TypeLayout>>,
+}
+
+impl Compile for Ident {
+    fn compile(&self) -> Result<Vec<CompiledItem>> {
+        let ty = self.ty()?;
+        let (_, id) = TypeLayout::get_load_instruction(&ty);
+
+        Ok(vec![CompiledItem::Instruction {
+            id,
+            arguments: Box::new([self.name.clone()]),
+        }])
+    }
 }
 
 impl Hash for Ident {

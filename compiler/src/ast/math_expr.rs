@@ -33,13 +33,13 @@
 //! 
 //! END LICENSE
 
-use anyhow::Result;
+use anyhow::{Result, bail, Context};
 use once_cell::sync::Lazy;
 use pest::{pratt_parser::PrattParser, iterators::Pairs};
 
-use crate::{parser::{Parser, Node, Rule}, ast::number};
+use crate::{parser::{Parser, Node, Rule, AssocFileData}, ast::number, instruction};
 
-use super::{Value, Number};
+use super::{Value, string::AstString, Compile, r#type::IntoType, Dependencies, TypeLayout};
 
 pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
 	use pest::pratt_parser::{Assoc::*, Op};
@@ -51,7 +51,7 @@ pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
 		.op(Op::prefix(unary_minus))
 });
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Op {
     Add,
     Subtract,
@@ -60,9 +60,23 @@ pub enum Op {
     Modulo,
 }
 
-#[derive(Debug)]
-pub enum Expr {
-    Number(Number),
+impl Op {
+    pub fn symbol(&self) -> char {
+        use Op::*;
+        match self {
+            Add => '+',
+            Subtract => '-',
+            Multiply => '*',
+            Divide => '/',
+            Modulo => '%',
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum Expr {
+    // Number(Number),
+    Value(Value),
     UnaryMinus(Box<Expr>),
     BinOp {
         lhs: Box<Expr>,
@@ -71,11 +85,136 @@ pub enum Expr {
     },
 }
 
-pub fn parse_expr(pairs: Pairs<Rule>) -> Expr {
+#[allow(unused)]
+#[deprecated]
+pub fn math_output(lhs: TypeLayout, rhs: TypeLayout, op: &Op) -> TypeLayout {
+    macro_rules! native {
+        ($name:ident) => (TypeLayout::Native(NativeType::$name));
+    }
+
+    rhs
+}
+
+impl IntoType for Expr {
+    fn into_type(&self) -> super::TypeLayout {
+        match self {
+            Expr::Value(val) => val.into_type(),
+            Expr::BinOp { lhs, op, rhs } => {
+                let lhs = lhs.into_type();
+                let rhs = rhs.into_type();
+
+                #[allow(deprecated)]
+                math_output(lhs, rhs, op)
+            }
+            Expr::UnaryMinus(val) => {
+                val.into_type()
+            }
+
+        }
+    }
+}
+
+impl Dependencies for Expr {
+    fn get_dependencies(&self) -> Option<Box<[super::Dependency]>> {
+        match self {
+            Self::Value(val) => val.get_dependencies(),
+            Self::UnaryMinus(expr) => expr.get_dependencies(),
+            Self::BinOp { lhs, rhs, ..} => {
+                let lhs_dep = lhs.get_dependencies();
+                let rhs_dep = rhs.get_dependencies();
+                if let Some(lhs) = lhs_dep {
+                    if let Some(rhs) = rhs_dep {
+                        let mut vec = lhs.into_vec();
+                        vec.append(&mut rhs.into_vec());
+                        Some(vec.into_boxed_slice())
+                    } else {
+                        Some(lhs)
+                    }
+                } else {
+                    rhs.get_dependencies()
+                }
+            }
+        }
+    }
+}
+
+fn compile_depth(expr: &Expr, depth: isize) -> Result<Vec<super::CompiledItem>> {
+    match expr {
+        Expr::Value(val) => val.compile(),
+        Expr::UnaryMinus(expr) => {
+            if let box Expr::Value(value) = expr {
+                match value {
+                    Value::Ident(ident) => {
+                        let x = ident.ty().context("no type data")?;
+                        if !x.can_negate() {
+                            bail!("cannot negate")
+                        } 
+                    }
+                    Value::Number(..) => (),
+                    _ => bail!("cannot negate")
+                }
+                
+            }
+
+            let mut eval = expr.compile()?;
+
+            eval.push(instruction!(neg));
+            
+            Ok(eval)
+        },
+        Expr::BinOp { lhs, op, rhs } => {
+            let mut lhs = compile_depth(&lhs, depth + 1)?;
+            let mut rhs = compile_depth(&rhs, depth + 1)?;
+
+            let temp_name = format!("#{}", depth);
+
+            // store the initialization to the "second part"
+            rhs.push(instruction!(store temp_name));
+
+            // init "first part" of the bin_op
+            rhs.append(&mut lhs); 
+
+            // load the "second part" of the bin_op, even though we already calculated it
+            rhs.push(instruction!(load temp_name)); 
+
+            let symbol = op.symbol();
+
+            rhs.push(instruction!(bin_op symbol));
+            
+            Ok(rhs)
+        }
+    }
+}
+
+impl Compile for Expr {
+    fn compile(&self) -> Result<Vec<super::CompiledItem>> {
+        compile_depth(self, 0)
+    }
+}
+
+pub(crate) fn parse_expr(pairs: Pairs<Rule>, user_data: &AssocFileData) -> Expr {
 	PRATT_PARSER
         .map_primary(|primary| match primary.as_rule() {
-            Rule::number => Expr::Number(number::number_from_string(primary.as_str(), primary.into_inner().next().unwrap().as_rule()).unwrap()),
-            Rule::math_expr => parse_expr(primary.into_inner()),
+            Rule::number => {
+                let raw_string = primary.as_str();
+                let child = primary.into_inner().next().unwrap();
+                let number = number::number_from_string(raw_string, child.as_rule()).unwrap();
+
+                Expr::Value(Value::Number(number))
+            }
+            Rule::string => {
+                let raw_string = primary.as_str();
+                Expr::Value(Value::String(AstString::Plain(raw_string.to_owned())))
+            }
+            Rule::ident => {
+                let raw_string = primary.as_str();
+
+                let ty = user_data.get_dependency_flags_from_name(raw_string.to_string()).unwrap();
+                // let ty = ty.unwrap().0.ty().unwrap();
+                Expr::Value(Value::Ident(ty.0.clone()))
+                // Ident::unsafe_new(raw_string, Some())
+            }
+            Rule::math_expr => parse_expr(primary.into_inner(), user_data),
             rule => unreachable!("Expr::parse expected atom, found {:?}", rule),
         })
         .map_infix(|lhs, op, rhs| {
@@ -102,13 +241,11 @@ pub fn parse_expr(pairs: Pairs<Rule>) -> Expr {
 
 impl Parser {
 	// pub fn math_expr(l: )
-	pub fn math_expr(input: Node) -> Result<Value> {
-		// let input = input;
-		let x = input.children().into_pairs();
+	pub fn math_expr(input: Node) -> Expr {
+		let children_as_pairs = input.children().into_pairs();
 
-		let y = parse_expr(x);
-		dbg!(y);
-
-		todo!()
+		let token_tree = parse_expr(children_as_pairs, input.user_data());
+		
+        token_tree
 	}
 }

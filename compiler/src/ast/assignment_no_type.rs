@@ -33,6 +33,10 @@ impl Parser {
                 let ty = string.into_type();
                 ident.link(user_data, Some(Cow::Owned(ty)))?;
             }
+            Value::MathExpr(ref math_expr) => {
+                let ty = math_expr.into_type();
+                ident.link(user_data, Some(Cow::Owned(ty)))?;
+            }
         }
 
         Ok(Assignment { ident, value })

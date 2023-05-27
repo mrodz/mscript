@@ -105,6 +105,17 @@ impl Primitive {
             _ => bail!("not a Bool"),
         }
     }
+
+    pub fn negate(&mut self) -> Result<()> {
+        match self {
+            Primitive::BigInt(x) => *x = -*x,
+            Primitive::Int(x) => *x = -*x,
+            Primitive::Float(x) => *x = -*x,
+            ty => bail!("cannot negate {ty}")
+        }
+
+        Ok(())
+    }
 }
 
 impl Display for Primitive {

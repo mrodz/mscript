@@ -63,6 +63,15 @@ impl Compile for PrintStatement {
 
 				string_init
 			}
+            Value::MathExpr(math_expr) => {
+                let mut math_init = math_expr.compile()?;
+                math_init.append(&mut vec![
+					instruction!(printn '*'),
+                    instruction!(void),
+				]);
+
+                math_init
+            }
         };
 
         Ok(matched)

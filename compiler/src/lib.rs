@@ -1,3 +1,4 @@
+#![feature(box_patterns)]
 #![feature(iter_intersperse)]
 #![feature(iter_collect_into)]
 

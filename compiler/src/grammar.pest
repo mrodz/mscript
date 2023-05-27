@@ -15,9 +15,11 @@ float = @{ integer ~ "." ~ integer }
 
 number = { hex_int | byte | float | integer }
 
-
 unary_minus = { "-" }
-math_primary = _{ number | "(" ~ math_expr ~ ")" }
+
+allow_bin_op = _{ ident | number | string }
+
+math_primary = _{ allow_bin_op | "(" ~ math_expr ~ ")" }
 math_atom = _{ unary_minus? ~ math_primary }
 
 bin_op = _{ add | subtract | multiply | divide | modulo }
@@ -60,7 +62,7 @@ function_body = { declaration* }
 function_return_type = { "->" ~ (type | ("(" ~ type ~ ")")) }
 function = { "fn" ~ "(" ~ function_parameters ~ ")" ~ function_return_type? ~ "{" ~ function_body ~ "}"}
 
-value = _{ function | ident | callable | math_expr | string }
+value = _{ function | callable | math_expr | ident | string }
 
 
 assignment_no_type = { ident ~ "=" ~ value }
