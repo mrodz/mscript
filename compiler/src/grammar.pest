@@ -2,7 +2,8 @@ WHITESPACE = _{ " " | NEWLINE | "\t" }
 
 keywords = _{
     "fn" | 
-    "obj"
+    "obj" |
+    "print"
 }
 
 integer = @{ '0'..'9' ~ ('0'..'9' | ("_" ~ ('0'..'9')))* }
@@ -30,15 +31,6 @@ divide = { "/" }
 modulo = { "%" }
 
 math_expr = { math_atom ~ (bin_op ~ math_atom)* }
-
-// binary_operation = _{ add | subtract | multiply | divide | modulo }
-// add      = { "+" }
-// subtract = { "-" }
-// multiply = { "*" }
-// divide   = { "/" }
-// modulo   = { "%" }
-// math_expr = { math_term ~ (binary_operation ~ math_term)* }
-// math_term = _{ number | "(" ~ math_expr ~ ")" }
 
 escape_character = _{ "\\" | "r" | "n" }
 escape_sequence = @{ "\\" ~ escape_character }

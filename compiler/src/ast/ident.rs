@@ -34,14 +34,14 @@ impl Hash for Ident {
 }
 
 impl Ident {
-    pub fn lookup(&mut self, user_data: &AssocFileData) -> &mut Self {
+    pub fn lookup(&mut self, user_data: &AssocFileData) -> Result<&mut Self> {
         if let Some(ref ty) = self.ty {
-            panic!("already has type {ty:?}")
+            bail!("already has type {ty:?}")
         }
 
         let (ident, is_callback) = user_data
             .get_dependency_flags_from_name(self.name.clone())
-            .expect("variable has not been mapped");
+            .context("variable has not been mapped")?;
 
         let ty = ident.ty.clone();
 
@@ -56,17 +56,8 @@ impl Ident {
         let ty = x.unwrap();
 
         self.ty = Some(ty);
-        // let ty = ident.ty().unwrap().to_owned(); //.expect("trying to inherit nothing instead of a type").clone();
 
-        // // let ty = ty.unwrap();
-
-        // // let ty = ty.clone();
-        // // let ty = ty.to_owned();/
-
-        // ident.ty = Some(ty.clone());
-
-        self
-        // Ok(ty.clone())
+        Ok(self)
     }
 
     pub fn name(&self) -> &String {
@@ -113,13 +104,11 @@ impl Ident {
 
         let (ident, is_callback) = user_data
             .get_dependency_flags_from_name(self.name.clone())
-            .context("variable has not been mapped")?;
+            .with_context(|| format!("'{}' has not been mapped", self.name))?;
 
         let new_ty = ident.ty.clone().map(|x| {
             if is_callback {
                 Cow::Owned(TypeLayout::CallbackVariable(x.into_owned().into()))
-                // Cow::Owned(TypeLayout::CallbackVariable(callback_variable));
-                // Cow::Owned(TypeLayout::CallbackVariable(AsRef::<&'static TypeLayout>::as_ref(x)))
             } else {
                 x.to_owned()
             }
@@ -128,7 +117,6 @@ impl Ident {
         self.ty = new_ty;
 
         Ok(())
-        // Ok(ty.clone())
     }
 
     pub fn link(
@@ -136,9 +124,9 @@ impl Ident {
         user_data: &AssocFileData,
         ty: Option<Cow<'static, TypeLayout>>,
     ) -> Result<bool> {
-        let ident = user_data.get_dependency_flags_from_name(self.name.clone());
+        let ident: Option<(&Ident, bool)> = user_data.get_dependency_flags_from_name(self.name.clone());
 
-        let inherited = if let Some((ident, is_callback)) = ident {
+        let inherited: bool = if let Some((ident, is_callback)) = ident {
             let new_ty = ident.ty.clone().map(|x| {
                 if is_callback {
                     Cow::Owned(TypeLayout::CallbackVariable(x.into_owned().into()))

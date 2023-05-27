@@ -39,7 +39,7 @@ use pest::{pratt_parser::PrattParser, iterators::Pairs};
 
 use crate::{parser::{Parser, Node, Rule, AssocFileData}, ast::number, instruction};
 
-use super::{Value, string::AstString, Compile, r#type::IntoType, Dependencies, TypeLayout};
+use super::{Value, string::AstString, Compile, r#type::IntoType, Dependencies};
 
 pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
 	use pest::pratt_parser::{Assoc::*, Op};
@@ -85,31 +85,26 @@ pub(crate) enum Expr {
     },
 }
 
-#[allow(unused)]
-#[deprecated]
-pub fn math_output(lhs: TypeLayout, rhs: TypeLayout, op: &Op) -> TypeLayout {
-    macro_rules! native {
-        ($name:ident) => (TypeLayout::Native(NativeType::$name));
+impl Expr {
+    pub fn validate(&self) -> Result<()> {
+        self.into_type().map(|_| ())
     }
-
-    rhs
 }
 
 impl IntoType for Expr {
-    fn into_type(&self) -> super::TypeLayout {
+    fn into_type(&self) -> Result<super::TypeLayout> {
         match self {
             Expr::Value(val) => val.into_type(),
             Expr::BinOp { lhs, op, rhs } => {
-                let lhs = lhs.into_type();
-                let rhs = rhs.into_type();
+                let lhs = lhs.into_type()?;
+                let rhs = rhs.into_type()?;
 
-                #[allow(deprecated)]
-                math_output(lhs, rhs, op)
+                lhs.get_output_type(&rhs, op)
+                    .with_context(|| format!("invalid operation: {} {} {rhs}", lhs.get_type_recursively(), op.symbol()))
             }
             Expr::UnaryMinus(val) => {
                 val.into_type()
             }
-
         }
     }
 }
@@ -138,7 +133,52 @@ impl Dependencies for Expr {
     }
 }
 
-fn compile_depth(expr: &Expr, depth: isize) -> Result<Vec<super::CompiledItem>> {
+static mut EXPR_REGISTER: usize = 0;
+
+#[derive(Debug)]
+struct ExprRegister {
+    register: Option<usize>
+}
+
+impl ExprRegister {
+    pub fn new() -> Self {
+        let mut result = Self {
+            register: None
+        };
+
+        result.reserve_register();
+
+        result
+    }
+
+    fn reserve_register(&mut self) {
+        unsafe {
+            self.register = Some(EXPR_REGISTER);
+            EXPR_REGISTER += 1;
+        }
+    }
+
+    pub fn repr(&mut self) -> String {
+        format!("#{}", self.register.unwrap())
+    }
+}
+
+impl Drop for ExprRegister {
+    fn drop(&mut self) {
+        unsafe {
+            if let Some(register) = self.register {
+                if register == EXPR_REGISTER - 1 {
+                    EXPR_REGISTER -= 1;
+                } else {
+                    unreachable!("dropped out of order")
+                }
+            }
+        }
+    }
+}
+
+
+fn compile_depth(expr: &Expr, mut depth: ExprRegister) -> Result<Vec<super::CompiledItem>> {
     match expr {
         Expr::Value(val) => val.compile(),
         Expr::UnaryMinus(expr) => {
@@ -163,10 +203,10 @@ fn compile_depth(expr: &Expr, depth: isize) -> Result<Vec<super::CompiledItem>> 
             Ok(eval)
         },
         Expr::BinOp { lhs, op, rhs } => {
-            let mut lhs = compile_depth(&lhs, depth + 1)?;
-            let mut rhs = compile_depth(&rhs, depth + 1)?;
+            let mut lhs = compile_depth(&lhs, ExprRegister::new())?;
+            let mut rhs = compile_depth(&rhs, ExprRegister::new())?;
 
-            let temp_name = format!("#{}", depth);
+            let temp_name = depth.repr();
 
             // store the initialization to the "second part"
             rhs.push(instruction!(store temp_name));
@@ -188,7 +228,7 @@ fn compile_depth(expr: &Expr, depth: isize) -> Result<Vec<super::CompiledItem>> 
 
 impl Compile for Expr {
     fn compile(&self) -> Result<Vec<super::CompiledItem>> {
-        compile_depth(self, 0)
+        compile_depth(self, ExprRegister::new())
     }
 }
 
@@ -233,6 +273,8 @@ pub(crate) fn parse_expr(pairs: Pairs<Rule>, user_data: &AssocFileData) -> Expr 
             }
         })
         .map_prefix(|op, rhs| match op.as_rule() {
+            // Rule::unary_minus if op.as_str().len() % 2 != 0 => Expr::UnaryMinus(Box::new(rhs)),
+            // Rule::unary_minus => rhs,
             Rule::unary_minus => Expr::UnaryMinus(Box::new(rhs)),
             _ => unreachable!(),
         })

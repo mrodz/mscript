@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use anyhow::Result;
+use anyhow::{Result, anyhow, Context};
 
 use crate::{
     instruction,
@@ -70,7 +70,9 @@ impl Parser {
         let user_data = input.user_data();
 
         let mut ident = Self::ident(ident);
-        ident.link_from_pointed_type_with_lookup(user_data)?;
+        ident.link_from_pointed_type_with_lookup(user_data)
+            .context("Attempting to call a function whose type is not known")
+            .context(anyhow!(input.error("unknown function")))?;
 
         let function_arguments = children.next().unwrap();
         let function_arguments = Self::function_arguments(function_arguments)?;

@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 use crate::{
     instruction,
@@ -11,6 +11,7 @@ use super::{
 };
 
 #[derive(Debug, Clone)]
+#[allow(unused)]
 pub enum AstString {
     Plain(String),
     FormattedString(),
@@ -26,8 +27,8 @@ impl Dependencies for AstString {
 }
 
 impl IntoType for AstString {
-    fn into_type(&self) -> super::TypeLayout {
-        TypeLayout::Native(NativeType::Str)
+    fn into_type(&self) -> Result<super::TypeLayout> {
+        Ok(TypeLayout::Native(NativeType::Str))
     }
 }
 

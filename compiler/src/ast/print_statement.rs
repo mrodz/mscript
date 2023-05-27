@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 
 use crate::{
     ast::TypeLayout,
@@ -64,6 +64,8 @@ impl Compile for PrintStatement {
 				string_init
 			}
             Value::MathExpr(math_expr) => {
+                math_expr.validate()?;
+
                 let mut math_init = math_expr.compile()?;
                 math_init.append(&mut vec![
 					instruction!(printn '*'),
@@ -85,7 +87,7 @@ impl Parser {
         let mut value = Self::value(item)?;
 
         if let Value::Ident(ref mut ident) = value {
-            ident.lookup(input.user_data());
+            ident.lookup(input.user_data()).map_err(|error| anyhow!(input.error("")).context(error))?;
         }
 
         Ok(PrintStatement(value))

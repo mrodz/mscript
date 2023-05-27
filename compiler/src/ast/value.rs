@@ -14,10 +14,10 @@ pub(crate) enum Value {
 }
 
 impl IntoType for Value {
-    fn into_type(&self) -> super::TypeLayout {
+    fn into_type(&self) -> Result<TypeLayout> {
         match self {
             Self::Function(function) => function.clone().consume_for_type(),
-            Self::Ident(ident) => ident.ty().unwrap().clone().into_owned(),
+            Self::Ident(ident) => Ok(ident.ty()?.clone().into_owned()),
             Self::MathExpr(math_expr) => math_expr.into_type(),
             Self::Number(number) => number.into_type(),
             Self::String(string) => string.into_type(),

@@ -129,7 +129,7 @@ pub mod implementations {
     }
 
     instruction! {
-        neg(ctx, args) {
+        neg(ctx, _args) {
             let Some(val) = ctx.get_last_op_item_mut() else {
                 bail!("neg requires one item on the local operating stack")
             };
