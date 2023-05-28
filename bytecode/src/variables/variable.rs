@@ -111,7 +111,7 @@ impl Primitive {
             Primitive::BigInt(x) => *x = -*x,
             Primitive::Int(x) => *x = -*x,
             Primitive::Float(x) => *x = -*x,
-            ty => bail!("cannot negate {ty}")
+            ty => bail!("cannot negate {ty}"),
         }
 
         Ok(())

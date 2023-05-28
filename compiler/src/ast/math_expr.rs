@@ -1,9 +1,9 @@
-//! The official Pest Book implements many of the the exact features needed. 
+//! The official Pest Book implements many of the the exact features needed.
 //! Some of this code is copied from their Github. See [this folder](https://github.com/pest-parser/book/blob/42a2889c6057b1192d2b1682b6cc53ff13799a34/examples/pest-calculator/src/main.rs)
 //! for the exact code.
-//! 
+//!
 //! Huge thanks to the authors for supplying such a useful resource!
-//! 
+//!
 //! BEGIN LICENSE
 //!
 //! MIT:
@@ -16,11 +16,11 @@
 //! the Software, and to permit persons to whom the Software
 //! is furnished to do so, subject to the following
 //! conditions:
-//! 
+//!
 //! The above copyright notice and this permission notice
 //! shall be included in all copies or substantial portions
 //! of the Software.
-//! 
+//!
 //! THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
 //! ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
 //! TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
@@ -30,25 +30,31 @@
 //! OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 //! IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 //! DEALINGS IN THE SOFTWARE.
-//! 
+//!
 //! END LICENSE
 
-use anyhow::{Result, bail, Context};
+use std::borrow::Cow;
+
+use anyhow::{anyhow, bail, Context, Result};
 use once_cell::sync::Lazy;
-use pest::{pratt_parser::PrattParser, iterators::Pairs};
+use pest::{iterators::Pairs, pratt_parser::PrattParser};
 
-use crate::{parser::{Parser, Node, Rule, AssocFileData}, ast::number, instruction};
+use crate::{
+    ast::number,
+    instruction,
+    parser::{AssocFileData, Node, Parser, Rule},
+};
 
-use super::{Value, string::AstString, Compile, r#type::IntoType, Dependencies};
+use super::{r#type::IntoType, string::AstString, Compile, Dependencies, Value};
 
 pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
-	use pest::pratt_parser::{Assoc::*, Op};
-	use Rule::*;
+    use pest::pratt_parser::{Assoc::*, Op};
+    use Rule::*;
 
-	PrattParser::new()
-		.op(Op::infix(add, Left) | Op::infix(subtract, Left))
-		.op(Op::infix(multiply, Left) | Op::infix(divide, Left) | Op::infix(modulo, Left))
-		.op(Op::prefix(unary_minus))
+    PrattParser::new()
+        .op(Op::infix(add, Left) | Op::infix(subtract, Left))
+        .op(Op::infix(multiply, Left) | Op::infix(divide, Left) | Op::infix(modulo, Left))
+        .op(Op::prefix(unary_minus))
 });
 
 #[derive(Debug, Clone)]
@@ -99,12 +105,15 @@ impl IntoType for Expr {
                 let lhs = lhs.into_type()?;
                 let rhs = rhs.into_type()?;
 
-                lhs.get_output_type(&rhs, op)
-                    .with_context(|| format!("invalid operation: {} {} {rhs}", lhs.get_type_recursively(), op.symbol()))
+                lhs.get_output_type(&rhs, op).with_context(|| {
+                    format!(
+                        "invalid operation: {} {} {rhs}",
+                        lhs.get_type_recursively(),
+                        op.symbol()
+                    )
+                })
             }
-            Expr::UnaryMinus(val) => {
-                val.into_type()
-            }
+            Expr::UnaryMinus(val) => val.into_type(),
         }
     }
 }
@@ -114,7 +123,7 @@ impl Dependencies for Expr {
         match self {
             Self::Value(val) => val.get_dependencies(),
             Self::UnaryMinus(expr) => expr.get_dependencies(),
-            Self::BinOp { lhs, rhs, ..} => {
+            Self::BinOp { lhs, rhs, .. } => {
                 let lhs_dep = lhs.get_dependencies();
                 let rhs_dep = rhs.get_dependencies();
                 if let Some(lhs) = lhs_dep {
@@ -137,14 +146,12 @@ static mut EXPR_REGISTER: usize = 0;
 
 #[derive(Debug)]
 struct ExprRegister {
-    register: Option<usize>
+    register: Option<usize>,
 }
 
 impl ExprRegister {
     pub fn new() -> Self {
-        let mut result = Self {
-            register: None
-        };
+        let mut result = Self { register: None };
 
         result.reserve_register();
 
@@ -177,7 +184,6 @@ impl Drop for ExprRegister {
     }
 }
 
-
 fn compile_depth(expr: &Expr, mut depth: ExprRegister) -> Result<Vec<super::CompiledItem>> {
     match expr {
         Expr::Value(val) => val.compile(),
@@ -188,20 +194,19 @@ fn compile_depth(expr: &Expr, mut depth: ExprRegister) -> Result<Vec<super::Comp
                         let x = ident.ty().context("no type data")?;
                         if !x.can_negate() {
                             bail!("cannot negate")
-                        } 
+                        }
                     }
                     Value::Number(..) => (),
-                    _ => bail!("cannot negate")
+                    _ => bail!("cannot negate"),
                 }
-                
             }
 
             let mut eval = expr.compile()?;
 
             eval.push(instruction!(neg));
-            
+
             Ok(eval)
-        },
+        }
         Expr::BinOp { lhs, op, rhs } => {
             let mut lhs = compile_depth(&lhs, ExprRegister::new())?;
             let mut rhs = compile_depth(&rhs, ExprRegister::new())?;
@@ -212,15 +217,15 @@ fn compile_depth(expr: &Expr, mut depth: ExprRegister) -> Result<Vec<super::Comp
             rhs.push(instruction!(store temp_name));
 
             // init "first part" of the bin_op
-            rhs.append(&mut lhs); 
+            rhs.append(&mut lhs);
 
             // load the "second part" of the bin_op, even though we already calculated it
-            rhs.push(instruction!(load temp_name)); 
+            rhs.push(instruction!(load temp_name));
 
             let symbol = op.symbol();
 
             rhs.push(instruction!(bin_op symbol));
-            
+
             Ok(rhs)
         }
     }
@@ -232,30 +237,50 @@ impl Compile for Expr {
     }
 }
 
-pub(crate) fn parse_expr(pairs: Pairs<Rule>, user_data: &AssocFileData) -> Expr {
-	PRATT_PARSER
-        .map_primary(|primary| match primary.as_rule() {
-            Rule::number => {
-                let raw_string = primary.as_str();
-                let child = primary.into_inner().next().unwrap();
-                let number = number::number_from_string(raw_string, child.as_rule()).unwrap();
+pub(crate) fn parse_expr(pairs: Pairs<Rule>, user_data: &AssocFileData) -> Result<Expr> {
+    PRATT_PARSER
+        .map_primary(|primary| -> Result<Expr> {
+            match primary.as_rule() {
+                Rule::number => {
+                    let raw_string = primary.as_str();
+                    let child = primary.into_inner().next().unwrap();
+                    let number = number::number_from_string(raw_string, child.as_rule()).unwrap();
 
-                Expr::Value(Value::Number(number))
-            }
-            Rule::string => {
-                let raw_string = primary.as_str();
-                Expr::Value(Value::String(AstString::Plain(raw_string.to_owned())))
-            }
-            Rule::ident => {
-                let raw_string = primary.as_str();
+                    Ok(Expr::Value(Value::Number(number)))
+                }
+                Rule::string => {
+                    let raw_string = primary.as_str();
+                    Ok(Expr::Value(Value::String(AstString::Plain(
+                        raw_string.to_owned(),
+                    ))))
+                }
+                Rule::ident => {
+                    let raw_string = primary.as_str();
 
-                let ty = user_data.get_dependency_flags_from_name(raw_string.to_string()).unwrap();
-                // let ty = ty.unwrap().0.ty().unwrap();
-                Expr::Value(Value::Ident(ty.0.clone()))
-                // Ident::unsafe_new(raw_string, Some())
+                    let file_name = user_data.get_file_name();
+
+                    let file_name: Cow<String> = if file_name.ends_with(".mmm") {
+                        let mut owned = file_name[..file_name.len() - 3].to_owned();
+                        owned.push_str("ms");
+                        Cow::Owned(owned)
+                    } else {
+                        Cow::Borrowed(&*file_name)
+                    };                
+
+                    let ty = user_data
+                        .get_dependency_flags_from_name(raw_string.to_string())
+                        .context(anyhow!(pest_consume::Error::<()>::new_from_span(
+                            pest::error::ErrorVariant::CustomError {
+                                message: "use of undeclared variable".into()
+                            },
+                            primary.as_span()
+                        ).with_path(&file_name)))?;
+
+                    Ok(Expr::Value(Value::Ident(ty.0.clone())))
+                }
+                Rule::math_expr => parse_expr(primary.into_inner(), user_data),
+                rule => unreachable!("Expr::parse expected atom, found {:?}", rule),
             }
-            Rule::math_expr => parse_expr(primary.into_inner(), user_data),
-            rule => unreachable!("Expr::parse expected atom, found {:?}", rule),
         })
         .map_infix(|lhs, op, rhs| {
             let op = match op.as_rule() {
@@ -266,28 +291,28 @@ pub(crate) fn parse_expr(pairs: Pairs<Rule>, user_data: &AssocFileData) -> Expr 
                 Rule::modulo => Op::Modulo,
                 rule => unreachable!("Expr::parse expected infix operation, found {:?}", rule),
             };
-            Expr::BinOp {
-                lhs: Box::new(lhs),
+            Ok(Expr::BinOp {
+                lhs: Box::new(lhs?),
                 op,
-                rhs: Box::new(rhs),
-            }
+                rhs: Box::new(rhs?),
+            })
         })
         .map_prefix(|op, rhs| match op.as_rule() {
             // Rule::unary_minus if op.as_str().len() % 2 != 0 => Expr::UnaryMinus(Box::new(rhs)),
             // Rule::unary_minus => rhs,
-            Rule::unary_minus => Expr::UnaryMinus(Box::new(rhs)),
+            Rule::unary_minus => Ok(Expr::UnaryMinus(Box::new(rhs?))),
             _ => unreachable!(),
         })
         .parse(pairs)
 }
 
 impl Parser {
-	// pub fn math_expr(l: )
-	pub fn math_expr(input: Node) -> Expr {
-		let children_as_pairs = input.children().into_pairs();
+    // pub fn math_expr(l: )
+    pub fn math_expr(input: Node) -> Result<Expr> {
+        let children_as_pairs = input.children().into_pairs();
 
-		let token_tree = parse_expr(children_as_pairs, input.user_data());
-		
+        let token_tree = parse_expr(children_as_pairs, input.user_data());
+
         token_tree
-	}
+    }
 }

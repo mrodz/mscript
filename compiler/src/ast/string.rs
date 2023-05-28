@@ -49,9 +49,9 @@ impl Parser {
         // assert!(len >= 3);
 
         // let as_str = as_str
-		// 	.get(1..len - 1)
-		// 	.unwrap()
-		// 	.to_owned();
+        // 	.get(1..len - 1)
+        // 	.unwrap()
+        // 	.to_owned();
 
         Ok(AstString::Plain(as_str.to_string()))
     }

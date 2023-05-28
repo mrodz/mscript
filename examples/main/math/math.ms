@@ -22,4 +22,4 @@ print "\n" * 2
 
 print "Wow! I love " + "MScript" 
 
-print -(1 + 2) * 3
+print 3 * ("" + -(1 + 2) * 3)

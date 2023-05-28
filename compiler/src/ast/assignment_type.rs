@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{anyhow, bail, Result};
 
 use super::r#type::IntoType;
 use super::{Assignment, Value};
@@ -24,8 +24,7 @@ impl Parser {
         let value_type = value.into_type()?;
 
         if ty != &value_type {
-            bail!(anyhow!("declaration wanted {ty}, but value is {value_type}")
-                .context(error))
+            bail!(anyhow!("declaration wanted {ty}, but value is {value_type}").context(error))
         }
 
         ident.link(input.user_data(), Some(Cow::Borrowed(ty)))?;

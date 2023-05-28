@@ -25,11 +25,12 @@ pub(crate) use function_body::FunctionBody;
 pub(crate) use function_parameters::FunctionParameters;
 pub(crate) use ident::Ident;
 pub(crate) use number::Number;
+use pest::Span;
 pub(crate) use print_statement::PrintStatement;
 pub(crate) use r#type::TypeLayout;
 pub(crate) use value::Value;
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use bytecode::compilation_lookups::raw_byte_instruction_to_string_representation;
 use std::{borrow::Cow, fmt::Display, rc::Rc};
 
@@ -196,4 +197,43 @@ pub(crate) trait Dependencies {
     fn get_dependencies(&self) -> Option<Box<[Dependency]>> {
         None
     }
+}
+
+pub fn map_err<R>(value: impl Into<Result<R>>, span: Span, file_name: &str, message: String) -> Result<R> {
+    map_err_messages(value.into(), span, file_name, message, || Vec::<u8>::new())
+}
+
+pub fn map_err_messages<R, C>(
+    mut value: Result<R>,
+    span: Span,
+    file_name: &str,
+    message: String,
+    description_messages: impl FnOnce() -> Vec<C>,
+) -> Result<R>
+where
+    C: Display + Send + Sync + 'static,
+{
+    if value.is_ok() {
+        return value; // no unwrap
+    }
+
+    let description_messages = description_messages();
+    for message in description_messages {
+        value = value.context(message)
+    }
+
+    let file_name = if file_name.ends_with(".mmm") {
+        let mut owned = file_name[..file_name.len() - 3].to_owned();
+        owned.push_str("ms");
+        Cow::Owned(owned)
+    } else {
+        Cow::Borrowed(dbg!(file_name))
+    };
+
+    use pest::error::ErrorVariant::CustomError;
+    use pest_consume::Error as PE;
+    let custom_error = PE::<()>::new_from_span(CustomError { message }, span)
+        .with_path(&file_name);
+
+    value.context(anyhow!(custom_error))
 }

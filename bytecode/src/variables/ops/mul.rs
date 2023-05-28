@@ -30,6 +30,9 @@ impl std::ops::Mul for Primitive {
         Ok(match (self, rhs) {
             (Str(x), Int(y)) => string!(x.repeat(y.try_into()?)),
             (Str(x), BigInt(y)) => string!(x.repeat(y.try_into()?)),
+            (Int(y), Str(x)) => string!(x.repeat(y.try_into()?)),
+            (BigInt(y), Str(x)) => string!(x.repeat(y.try_into()?)),
+
             (Vector(ref x), Int(y)) => vector!(raw repeat_vec(x, y.try_into()?)?),
             (Vector(ref x), BigInt(y)) => vector!(raw repeat_vec(x, y.try_into()?)?),
             _ => bail!("valid ops: number * number, str * number, vec * number"),

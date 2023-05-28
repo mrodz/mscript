@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 
 use crate::{
     ast::TypeLayout,
@@ -8,7 +8,7 @@ use crate::{
     parser::{Node, Parser},
 };
 
-use super::{Compile, Dependencies, Dependency, Value};
+use super::{map_err, Compile, Dependencies, Dependency, Value};
 
 #[derive(Debug, Clone)]
 pub struct PrintStatement(Value);
@@ -54,23 +54,17 @@ impl Compile for PrintStatement {
                     instruction!(void),
                 ]
             }
-			Value::String(content) => {
-				let mut string_init = content.compile()?;
-				string_init.append(&mut vec![
-					instruction!(printn '*'),
-                    instruction!(void),
-				]);
+            Value::String(content) => {
+                let mut string_init = content.compile()?;
+                string_init.append(&mut vec![instruction!(printn '*'), instruction!(void)]);
 
-				string_init
-			}
+                string_init
+            }
             Value::MathExpr(math_expr) => {
                 math_expr.validate()?;
 
                 let mut math_init = math_expr.compile()?;
-                math_init.append(&mut vec![
-					instruction!(printn '*'),
-                    instruction!(void),
-				]);
+                math_init.append(&mut vec![instruction!(printn '*'), instruction!(void)]);
 
                 math_init
             }
@@ -87,7 +81,9 @@ impl Parser {
         let mut value = Self::value(item)?;
 
         if let Value::Ident(ref mut ident) = value {
-            ident.lookup(input.user_data()).map_err(|error| anyhow!(input.error("")).context(error))?;
+            let maybe = ident.lookup(input.user_data());
+
+            map_err(maybe, input.as_span(), &*input.user_data().get_file_name(), "Name is not mapped".into())?;
         }
 
         Ok(PrintStatement(value))

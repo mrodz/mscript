@@ -1,4 +1,4 @@
-use std::{rc::Rc, fmt::Display};
+use std::{fmt::Display, rc::Rc};
 
 use anyhow::Result;
 

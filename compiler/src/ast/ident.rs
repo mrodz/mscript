@@ -124,7 +124,8 @@ impl Ident {
         user_data: &AssocFileData,
         ty: Option<Cow<'static, TypeLayout>>,
     ) -> Result<bool> {
-        let ident: Option<(&Ident, bool)> = user_data.get_dependency_flags_from_name(self.name.clone());
+        let ident: Option<(&Ident, bool)> =
+            user_data.get_dependency_flags_from_name(self.name.clone());
 
         let inherited: bool = if let Some((ident, is_callback)) = ident {
             let new_ty = ident.ty.clone().map(|x| {
@@ -160,11 +161,5 @@ impl Parser {
         let name = input.as_str().to_owned();
 
         Ident { name, ty: None }
-
-        // if let Some(ident) = ident {
-        //     Cow::Borrowed(ident)
-        // } else {
-        //     Cow::Owned((Ident { name: as_str, ty: None }, DependencyFlags::default()))
-        // }
     }
 }

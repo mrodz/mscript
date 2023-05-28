@@ -1,10 +1,10 @@
 use std::borrow::Cow;
 
-use anyhow::{Result, anyhow, Context};
+use anyhow::Result;
 
 use crate::parser::{Node, Parser};
 
-use super::{r#type::IntoType, Assignment, Value};
+use super::{map_err_messages, r#type::IntoType, Assignment, Value};
 
 impl Parser {
     pub fn assignment_no_type(input: Node) -> Result<Assignment> {
@@ -41,9 +41,13 @@ impl Parser {
             }
         };
 
-        maybe_error
-            .context("could not understand the type of the input")
-            .context(anyhow!(input.error("could not get type")))?;
+        map_err_messages(
+            maybe_error,
+            input.as_span(),
+            &*input.user_data().get_file_name(),
+            "could not get the type".into(),
+            || vec!["could not understand the type of the input"],
+        )?;
 
         Ok(Assignment { ident, value })
     }

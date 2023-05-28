@@ -1,10 +1,10 @@
 use std::{collections::HashMap, fmt::Display};
 
 use crate::parser::{Node, Parser};
-use anyhow::{bail, Result, Context, anyhow};
+use anyhow::{bail, Result};
 use once_cell::sync::Lazy;
 
-use super::{function::FunctionType, math_expr::Op};
+use super::{function::FunctionType, map_err, math_expr::Op};
 
 pub static mut TYPES: Lazy<HashMap<&str, TypeLayout>> = Lazy::new(|| {
     let mut x = HashMap::new();
@@ -48,7 +48,7 @@ impl Display for TypeLayout {
         match self {
             Self::Function(function_type) => write!(f, "{}", function_type.to_string()),
             Self::CallbackVariable(cb) => write!(f, "{}", cb.get_type_recursively().to_string()),
-            Self::Native(native) => write!(f, "{}", native.to_string())
+            Self::Native(native) => write!(f, "{}", native.to_string()),
         }
     }
 }
@@ -58,7 +58,7 @@ impl TypeLayout {
         match self {
             Self::Native(NativeType::Str) => false,
             Self::Native(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -67,7 +67,7 @@ impl TypeLayout {
 
         match self {
             CallbackVariable(cb) => cb.get_type_recursively(),
-            _ => self
+            _ => self,
         }
     }
 
@@ -102,8 +102,9 @@ impl TypeLayout {
             //======================
             (Str, Str | Int | BigInt | Float | Bool, Add) => Str,
             (Str, Int | BigInt, Multiply) => Str,
+            (Int | BigInt, Str, Multiply) => Str,
             //======================
-            _ => return None
+            _ => return None,
         };
 
         Some(TypeLayout::Native(matched))
@@ -118,7 +119,7 @@ impl TypeLayout {
         match native {
             NativeType::Byte if allow_byte => true,
             NativeType::BigInt | NativeType::Int | NativeType::Float => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -128,7 +129,7 @@ impl TypeLayout {
 
         match self {
             Self::CallbackVariable(..) => ("load_callback", LOAD_CALLBACK),
-            _ => ("load", LOAD)
+            _ => ("load", LOAD),
         }
     }
 }
@@ -156,6 +157,11 @@ pub fn type_from_str(input: &str) -> Result<&'static TypeLayout> {
 impl Parser {
     pub fn r#type(input: Node) -> Result<&'static TypeLayout> {
         let as_str = input.as_str();
-        type_from_str(as_str).context(anyhow!(input.error("unknown type")))
+        map_err(
+            type_from_str(as_str),
+            input.as_span(),
+            &*input.user_data().get_file_name(),
+            "unknown type".into(),
+        )
     }
 }

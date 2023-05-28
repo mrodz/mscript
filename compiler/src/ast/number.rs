@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 
 use crate::instruction;
 use crate::parser::{Node, Parser, Rule};
@@ -61,14 +61,13 @@ pub fn number_from_string(string: &str, rule: Rule) -> Result<Number> {
     let matched = match rule {
         Rule::integer => Number::Integer(as_str),
         Rule::hex_int => {
-            let as_hex = i128::from_str_radix(&as_str[2..], 16)?
-                .to_string();
+            let as_hex = i128::from_str_radix(&as_str[2..], 16)?.to_string();
 
             Number::BigInt(as_hex)
         }
         Rule::float => Number::Float(as_str),
         Rule::byte => Number::Byte(as_str),
-        _ => bail!("non-number rule")
+        _ => bail!("non-number rule"),
     };
 
     Ok(matched)

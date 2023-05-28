@@ -2,7 +2,10 @@ use anyhow::Result;
 
 use crate::parser::{Node, Parser, Rule};
 
-use super::{Compile, Dependencies, Dependency, Function, Ident, Number, string::AstString, math_expr::Expr, r#type::IntoType, TypeLayout};
+use super::{
+    math_expr::Expr, r#type::IntoType, string::AstString, Compile, Dependencies, Dependency,
+    Function, Ident, Number, TypeLayout,
+};
 
 #[derive(Debug, Clone)]
 pub(crate) enum Value {
@@ -10,7 +13,7 @@ pub(crate) enum Value {
     Ident(Ident),
     Number(Number),
     String(AstString),
-    MathExpr(Box<Expr>)
+    MathExpr(Box<Expr>),
 }
 
 impl IntoType for Value {
@@ -59,7 +62,7 @@ impl Parser {
             }
             Rule::number => Value::Number(Self::number(input)?),
             Rule::string => Value::String(Self::string(input)?),
-            Rule::math_expr => Value::MathExpr(Box::new(Self::math_expr(input))),
+            Rule::math_expr => Value::MathExpr(Box::new(Self::math_expr(input)?)),
             x => unreachable!("{x:?}"),
         };
 
