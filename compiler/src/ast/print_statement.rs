@@ -83,7 +83,12 @@ impl Parser {
         if let Value::Ident(ref mut ident) = value {
             let maybe = ident.lookup(input.user_data());
 
-            map_err(maybe, input.as_span(), &*input.user_data().get_file_name(), "Name is not mapped".into())?;
+            map_err(
+                maybe,
+                input.as_span(),
+                &*input.user_data().get_file_name(),
+                "Name is not mapped".into(),
+            )?;
         }
 
         Ok(PrintStatement(value))

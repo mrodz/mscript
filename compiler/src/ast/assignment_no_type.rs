@@ -44,7 +44,7 @@ impl Parser {
         map_err_messages(
             maybe_error,
             input.as_span(),
-            &*input.user_data().get_file_name(),
+            &input.user_data().get_source_file_name(),
             "could not get the type".into(),
             || vec!["could not understand the type of the input"],
         )?;

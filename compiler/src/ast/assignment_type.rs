@@ -1,9 +1,9 @@
 use std::borrow::Cow;
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, Result};
 
 use super::r#type::IntoType;
-use super::{Assignment, Value};
+use super::{map_err, Assignment, Value};
 use crate::ast::{Ident, TypeLayout};
 use crate::parser::{Node, Parser};
 
@@ -15,19 +15,26 @@ impl Parser {
         let ty: Node = children.next().unwrap();
         let value_node: Node = children.next().unwrap();
 
-        let error = value_node.error("type mismatch");
+        // map_err(, span, file_name, message)
+        let value_span = value_node.as_span();
 
         let mut ident: Ident = Self::ident(ident);
-        let ty: &'static TypeLayout = Self::r#type(ty)?;
+        let ty: Cow<'static, TypeLayout> = Self::r#type(ty)?;
         let value: Value = Self::value(value_node)?;
 
-        let value_type = value.into_type()?;
-
-        if ty != &value_type {
-            bail!(anyhow!("declaration wanted {ty}, but value is {value_type}").context(error))
+        if let Ok(ref assignment_ty) = value.into_type() {
+            if ty.as_ref() != assignment_ty {
+                let message = format!("declaration wanted {ty}, but value is {assignment_ty}");
+                return map_err(
+                    Err(anyhow!("incompatible types")),
+                    value_span,
+                    &input.user_data().get_source_file_name(),
+                    message,
+                );
+            }
         }
 
-        ident.link(input.user_data(), Some(Cow::Borrowed(ty)))?;
+        ident.link(input.user_data(), Some(ty))?;
 
         let assignment = Assignment { ident, value };
 

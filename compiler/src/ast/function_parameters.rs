@@ -1,28 +1,69 @@
-use std::{borrow::Cow, fmt::Display};
+use std::{
+    borrow::Cow,
+    fmt::{Debug, Display},
+};
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 
 use crate::{
     instruction,
-    parser::{Node, Parser},
+    parser::{Node, Parser, Rule},
 };
 
-use super::{r#type::TypeLayout, Compile, Dependencies, Dependency, Ident};
+use super::{new_err, r#type::TypeLayout, Compile, Dependencies, Dependency, Ident};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FunctionParameters(Vec<Ident>);
+pub(crate) enum FunctionParameters {
+    Named(Vec<Ident>),
+    TypesOnly(Vec<Cow<'static, TypeLayout>>),
+}
+
+impl FunctionParameters {
+    pub fn len(&self) -> usize {
+        match self {
+            Self::Named(x) => x.len(),
+            Self::TypesOnly(x) => x.len(),
+        }
+    }
+    pub fn to_types(&self) -> Cow<Vec<Cow<TypeLayout>>> {
+        match self {
+            FunctionParameters::Named(names) => {
+                Cow::Owned(names.iter().map(|x| x.ty().unwrap().clone()).collect())
+            }
+            FunctionParameters::TypesOnly(types) => Cow::Borrowed(types),
+        }
+    }
+}
 
 impl Display for FunctionParameters {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let x = format!("{:?}", self.0);
-        write!(f, "{}", &x[1..x.len() - 1])
+        let mut buf: String = String::new();
+
+        let types: Cow<Vec<Cow<TypeLayout>>> = self.to_types();
+
+        let mut iter = types.iter();
+        let Some(first) = iter.next() else {
+            return Ok(())
+        };
+
+        buf.push_str(&first.to_string());
+
+        for param in iter {
+            buf.push_str(", ");
+            buf.push_str(&param.to_string());
+        }
+
+        write!(f, "{buf}")
     }
 }
 
 impl Dependencies for FunctionParameters {
     fn supplies(&self) -> Option<Box<[super::Dependency]>> {
-        let mapped = self
-            .0
+        let Self::Named(names) = self else {
+            return None;
+        };
+
+        let mapped = names
             .iter()
             .map(|x| Dependency::new(Cow::Borrowed(x)))
             .collect();
@@ -33,8 +74,12 @@ impl Dependencies for FunctionParameters {
 
 impl Compile for FunctionParameters {
     fn compile(&self) -> Result<Vec<super::CompiledItem>> {
+        let Self::Named(names) = self else {
+            bail!("cannot compile unnamed function parameters (typically found in a type declaration) for a normal function")
+        };
+
         let mut result = vec![];
-        for (idx, ident) in self.0.iter().enumerate() {
+        for (idx, ident) in names.iter().enumerate() {
             let name = ident.name();
             result.push(instruction!(arg idx));
             result.push(instruction!(store name));
@@ -48,18 +93,39 @@ impl Parser {
     pub fn function_parameters(input: Node) -> Result<FunctionParameters> {
         let mut children = input.children();
 
-        let mut result = vec![];
+        let mut result: Vec<Ident> = vec![];
 
-        while let (Some(ident), Some(ty)) = (children.next(), children.next()) {
-            let mut ident = Self::ident(ident);
-            let ty: &'static TypeLayout = Self::r#type(ty)?;
+        let file_name = input.user_data().get_source_file_name();
 
-            // ident.link(input.user_data(), Some(Cow::Owned(TypeLayout::CallbackVariable(ty))))?;
-            ident.link(input.user_data(), Some(Cow::Borrowed(ty)))?;
+        loop {
+            let Some(ident_node) = children.next() else {
+                break;
+            };
+
+            let ident_span = ident_node.as_span();
+            let mut ident = Self::ident(ident_node);
+
+            let ty: Option<Node> = children.next();
+
+            let err = || {
+                bail!(new_err(ident_span, &file_name, format!("for type safety, function parameters require type signatures. (try: `{}: type`)", ident.name())))
+            };
+
+            let Some(ty) = ty else {
+                err()?
+            };
+
+            if ty.as_rule() != Rule::r#type {
+                err()?
+            }
+
+            let ty: Cow<'static, TypeLayout> = Self::r#type(ty)?;
+
+            ident.link(input.user_data(), Some(ty))?;
 
             result.push(ident);
         }
 
-        Ok(FunctionParameters(result))
+        Ok(FunctionParameters::Named(result))
     }
 }

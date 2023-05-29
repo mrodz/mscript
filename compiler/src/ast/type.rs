@@ -1,12 +1,12 @@
-use std::{collections::HashMap, fmt::Display};
+use std::{borrow::Cow, collections::HashMap, fmt::Display};
 
-use crate::parser::{Node, Parser};
+use crate::parser::{util::parse_with_userdata, AssocFileData, Node, Parser, Rule};
 use anyhow::{bail, Result};
 use once_cell::sync::Lazy;
 
-use super::{function::FunctionType, map_err, math_expr::Op};
+use super::{function::FunctionType, map_err, math_expr::Op, FunctionParameters};
 
-pub static mut TYPES: Lazy<HashMap<&str, TypeLayout>> = Lazy::new(|| {
+pub(crate) static mut TYPES: Lazy<HashMap<&str, TypeLayout>> = Lazy::new(|| {
     let mut x = HashMap::new();
 
     x.insert("bool", TypeLayout::Native(NativeType::Bool));
@@ -31,12 +31,13 @@ pub enum NativeType {
 
 impl Display for NativeType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        let name = format!("{:?}", self).to_ascii_lowercase();
+        write!(f, "{name}")
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TypeLayout {
+pub(crate) enum TypeLayout {
     Function(FunctionType),
     /// metadata wrapper around a [TypeLayout]
     CallbackVariable(Box<TypeLayout>),
@@ -134,7 +135,7 @@ impl TypeLayout {
     }
 }
 
-pub trait IntoType {
+pub(crate) trait IntoType {
     fn into_type(&self) -> Result<TypeLayout>;
     fn consume_for_type(self) -> Result<TypeLayout>
     where
@@ -144,23 +145,71 @@ pub trait IntoType {
     }
 }
 
-pub fn type_from_str(input: &str) -> Result<&'static TypeLayout> {
+pub(crate) fn type_from_str(
+    input: &str,
+    user_data: AssocFileData,
+) -> Result<Cow<'static, TypeLayout>> {
     unsafe {
         if let Some(r#type) = TYPES.get(input) {
-            Ok(r#type)
+            Ok(Cow::Borrowed(r#type))
         } else {
+            if let Ok(function_type) = parse_with_userdata(Rule::function_type, input, user_data) {
+                let single = function_type.single()?;
+                let ty = Parser::function_type(single)?;
+                return Ok(Cow::Owned(TypeLayout::Function(ty)));
+            }
+
             bail!("type '{input}' has not been registered")
         }
     }
 }
 
 impl Parser {
-    pub fn r#type(input: Node) -> Result<&'static TypeLayout> {
+    pub fn function_type(input: Node) -> Result<FunctionType> {
+        let mut children = input.children();
+
+        let mut child_and_rule = || {
+            let Some(child) = children.next() else {
+                return None
+            };
+
+            let rule = child.as_rule();
+
+            Some((child, rule))
+        };
+
+        let mut types = vec![];
+
+        let mut child_and_rule_pair = child_and_rule();
+
+        while let Some((child, Rule::r#type)) = child_and_rule_pair {
+            let ty = Parser::r#type(child)?;
+            types.push(ty);
+
+            child_and_rule_pair = child_and_rule();
+        }
+
+        let return_type =
+            if let Some((return_value, Rule::function_return_type)) = child_and_rule_pair {
+                let ty = Parser::function_return_type(return_value)?;
+                Some(Box::new(ty))
+            } else {
+                None
+            };
+
+        let types = FunctionParameters::TypesOnly(types);
+
+        Ok(FunctionType::new(types, return_type))
+    }
+
+    pub fn r#type(input: Node) -> Result<Cow<'static, TypeLayout>> {
         let as_str = input.as_str();
+        let span = input.as_span();
+        let file_name = input.user_data().get_file_name();
         map_err(
-            type_from_str(as_str),
-            input.as_span(),
-            &*input.user_data().get_file_name(),
+            type_from_str(as_str, input.into_user_data()),
+            span,
+            &*file_name,
             "unknown type".into(),
         )
     }

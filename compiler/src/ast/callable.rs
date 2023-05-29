@@ -74,9 +74,13 @@ impl Parser {
 
         let maybe = ident.link_from_pointed_type_with_lookup(user_data);
 
-        map_err_messages(maybe, input.as_span(), &*input.user_data().get_file_name(), "unknown function".into(), || {
-            vec!["Attempting to call a function whose type is not known"]
-        })?;
+        map_err_messages(
+            maybe,
+            input.as_span(),
+            &input.user_data().get_source_file_name(),
+            "unknown function".into(),
+            || vec!["Attempting to call a function whose type is not known"],
+        )?;
 
         let function_arguments = children.next().unwrap();
         let function_arguments = Self::function_arguments(function_arguments)?;

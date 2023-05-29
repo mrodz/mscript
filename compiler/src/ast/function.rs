@@ -1,4 +1,4 @@
-use std::{fmt::Display, rc::Rc};
+use std::{borrow::Cow, fmt::Display, rc::Rc};
 
 use anyhow::Result;
 
@@ -20,22 +20,63 @@ pub fn name_from_function_id(id: isize) -> String {
 }
 
 #[derive(Debug, Clone)]
-pub struct Function {
+pub(crate) struct Function {
     pub parameters: FunctionParameters,
     pub body: FunctionBody,
-    pub return_type: Option<&'static TypeLayout>,
+    pub return_type: Option<Cow<'static, TypeLayout>>,
     pub path_str: Rc<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FunctionType {
+#[derive(Debug, Clone, Eq)]
+pub(crate) struct FunctionType {
     pub parameters: FunctionParameters,
-    pub return_type: Option<&'static TypeLayout>,
+    pub return_type: ReturnType,
 }
+
+impl PartialEq for FunctionType {
+    fn eq(&self, other: &Self) -> bool {
+        if self.parameters.len() != other.parameters.len() {
+            return false;
+        }
+
+        if self.return_type != other.return_type {
+            return false;
+        }
+
+        let t1 = self.parameters.to_types();
+        let t2 = other.parameters.to_types();
+
+        t1 == t2
+    }
+}
+
+impl FunctionType {
+    pub fn new(parameters: FunctionParameters, return_type: ReturnType) -> Self {
+        Self {
+            parameters,
+            return_type,
+        }
+    }
+}
+
+type ReturnType = Option<Box<Cow<'static, TypeLayout>>>;
 
 impl Display for FunctionType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "fn()")
+        let return_type: Cow<'static, str> = if let Some(box return_type) = &self.return_type {
+            let actual_type = match return_type.as_ref() {
+                TypeLayout::Function(..) => {
+                    format!("({})", return_type)
+                }
+                _ => return_type.to_string(),
+            };
+
+            Cow::Owned(" -> ".to_owned() + &actual_type)
+        } else {
+            Cow::Borrowed("")
+        };
+
+        write!(f, "fn({}){}", self.parameters, return_type)
     }
 }
 
@@ -43,7 +84,7 @@ impl Function {
     pub fn new(
         parameters: FunctionParameters,
         body: FunctionBody,
-        return_type: Option<&'static TypeLayout>,
+        return_type: Option<Cow<'static, TypeLayout>>,
         path_str: Rc<String>,
     ) -> Self {
         Self {
@@ -65,10 +106,10 @@ impl IntoType for Function {
     where
         Self: Sized,
     {
-        Ok(TypeLayout::Function(FunctionType {
-            parameters: self.parameters,
-            return_type: self.return_type,
-        }))
+        Ok(TypeLayout::Function(FunctionType::new(
+            self.parameters,
+            self.return_type.map(|x| Box::new(x)),
+        )))
     }
 }
 
@@ -117,7 +158,7 @@ impl Compile for Function {
 
 impl Parser {
     pub fn function(input: Node) -> Result<Function> {
-        let path_str = input.user_data().get_file_name();
+        let path_str = input.user_data().get_source_file_name();
         input.user_data().run_in_scope(ScopeType::Function, || {
             let mut children = input.children();
 
