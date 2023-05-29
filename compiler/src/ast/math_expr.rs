@@ -35,7 +35,7 @@
 
 use std::borrow::Cow;
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{bail, Context, Result};
 use once_cell::sync::Lazy;
 use pest::{iterators::Pairs, pratt_parser::PrattParser};
 
@@ -45,7 +45,7 @@ use crate::{
     parser::{AssocFileData, Node, Parser, Rule},
 };
 
-use super::{r#type::IntoType, string::AstString, Compile, Dependencies, Value};
+use super::{new_err, r#type::IntoType, string::AstString, Compile, Dependencies, Value};
 
 pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
     use pest::pratt_parser::{Assoc::*, Op};
@@ -265,17 +265,17 @@ pub(crate) fn parse_expr(pairs: Pairs<Rule>, user_data: &AssocFileData) -> Resul
                         Cow::Owned(owned)
                     } else {
                         Cow::Borrowed(&*file_name)
-                    };                
+                    };
 
                     let ty = user_data
                         .get_dependency_flags_from_name(raw_string.to_string())
-                        .context(anyhow!(pest_consume::Error::<()>::new_from_span(
-                            pest::error::ErrorVariant::CustomError {
-                                message: "use of undeclared variable".into()
-                            },
-                            primary.as_span()
-                        ).with_path(&file_name)))?;
-
+                        .with_context(|| {
+                            new_err(
+                                primary.as_span(),
+                                &file_name,
+                                "use of undeclared variable".into(),
+                            )
+                        })?;
                     Ok(Expr::Value(Value::Ident(ty.0.clone())))
                 }
                 Rule::math_expr => parse_expr(primary.into_inner(), user_data),

@@ -1,4 +1,4 @@
-add_five = fn(x: int) {
+add_five: fn(int) = fn(x: int) {
 	x = x + 5
 	print x
 }

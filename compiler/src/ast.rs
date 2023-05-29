@@ -30,7 +30,7 @@ pub(crate) use print_statement::PrintStatement;
 pub(crate) use r#type::TypeLayout;
 pub(crate) use value::Value;
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Error, Result};
 use bytecode::compilation_lookups::raw_byte_instruction_to_string_representation;
 use std::{borrow::Cow, fmt::Display, rc::Rc};
 
@@ -199,7 +199,20 @@ pub(crate) trait Dependencies {
     }
 }
 
-pub fn map_err<R>(value: impl Into<Result<R>>, span: Span, file_name: &str, message: String) -> Result<R> {
+pub fn new_err(span: Span, file_name: &str, message: String) -> Error {
+    use pest::error::ErrorVariant::CustomError;
+    use pest_consume::Error as PE;
+    let custom_error = PE::<()>::new_from_span(CustomError { message }, span).with_path(&file_name);
+
+    anyhow!(custom_error)
+}
+
+pub fn map_err<R>(
+    value: impl Into<Result<R>>,
+    span: Span,
+    file_name: &str,
+    message: String,
+) -> Result<R> {
     map_err_messages(value.into(), span, file_name, message, || Vec::<u8>::new())
 }
 
@@ -222,18 +235,9 @@ where
         value = value.context(message)
     }
 
-    let file_name = if file_name.ends_with(".mmm") {
-        let mut owned = file_name[..file_name.len() - 3].to_owned();
-        owned.push_str("ms");
-        Cow::Owned(owned)
-    } else {
-        Cow::Borrowed(dbg!(file_name))
-    };
-
     use pest::error::ErrorVariant::CustomError;
     use pest_consume::Error as PE;
-    let custom_error = PE::<()>::new_from_span(CustomError { message }, span)
-        .with_path(&file_name);
+    let custom_error = PE::<()>::new_from_span(CustomError { message }, span).with_path(&file_name);
 
     value.context(anyhow!(custom_error))
 }

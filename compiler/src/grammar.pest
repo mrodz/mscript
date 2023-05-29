@@ -39,7 +39,7 @@ string = { "\"" ~ (("\\\"") | (!("\"") ~ ANY))* ~ "\"" }
 
 
 ident = @{ !keywords ~ (!('0'..'9') ~ (('a'..'z') | ('0'..'9') | "_")+) }
-type = _{ ident }
+type = { ident | function_type }
 ident_type = _{ ident ~ ":" ~ type }
 
 function_arguments = { (value ~ ("," ~ value)*)? }
@@ -47,12 +47,13 @@ callable = { ident ~ "(" ~ function_arguments ~ ")" }
 
 
 
-function_parameters = { (ident_type ~ ("," ~ ident_type)*)? }
-function_body = { declaration* }
+function_parameters = { ((ident ~ (":" ~ type)?))? ~ ("," ~ ((ident ~ (":" ~ type)?))*)? }
+function_body = { "{" ~ declaration* ~ "}" }
 
+function_type = { "fn" ~ "(" ~ (type ~ ("," ~ type)*)? ~ ")" ~ function_return_type?  }
 // allow braces around the return type in case it is long
 function_return_type = { "->" ~ (type | ("(" ~ type ~ ")")) }
-function = { "fn" ~ "(" ~ function_parameters ~ ")" ~ function_return_type? ~ "{" ~ function_body ~ "}"}
+function = { "fn" ~ "(" ~ (function_parameters) ~ ")" ~ function_return_type? ~ function_body }
 
 value = _{ function | callable | math_expr | ident | string }
 

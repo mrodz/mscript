@@ -18,14 +18,28 @@ pub(crate) struct Parser;
 pub(crate) struct AssocFileData {
     scopes: Rc<RefCell<Vec<Scope>>>,
     file_name: Rc<String>, // last_arg_type: Rc<RefCell<Vec<IdentType>>>
+    source_name: Rc<String>,
 }
 
 impl AssocFileData {
-    pub fn new(ty: ScopeType, file_name: String) -> Self {
+    pub fn new(ty: ScopeType, destination_name: String) -> Self {
+        let source_name = if destination_name.ends_with(".mmm") {
+            let mut owned = destination_name[..destination_name.len() - 3].to_owned();
+            owned.push_str("ms");
+            owned
+        } else {
+            panic!("destination must be .mmm")
+        };
+
         Self {
             scopes: Rc::new(RefCell::new(vec![Scope::new(ty)])),
-            file_name: Rc::new(file_name), // last_arg_type: Rc::new(RefCell::new(vec![]))
+            file_name: Rc::new(destination_name), // last_arg_type: Rc::new(RefCell::new(vec![]))
+            source_name: Rc::new(source_name),
         }
+    }
+
+    pub fn get_source_file_name(&self) -> Rc<String> {
+        self.source_name.clone()
     }
 
     pub fn get_file_name(&self) -> Rc<String> {
@@ -100,7 +114,17 @@ pub mod util {
 }
 
 pub(crate) fn root_node_from_str(input_str: &str, user_data: AssocFileData) -> Result<Node> {
-    let x = util::parse_with_userdata(Rule::file, input_str, user_data)?.single()?;
+    let source_name = &*user_data.get_source_file_name();
+    let x = util::parse_with_userdata(Rule::file, input_str, user_data).map_err(|err| {
+        err.with_path(source_name).renamed_rules(|rule| match rule {
+            Rule::function_body => "function body".to_owned(),
+            Rule::math_expr => "expression".to_owned(),
+            Rule::function_return_type => "return type".to_owned(),
+            rule => format!("{rule:?}"),
+        })
+    });
+
+    let x = x?.single()?;
     Ok(x)
 }
 
