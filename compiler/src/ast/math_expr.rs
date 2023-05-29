@@ -45,7 +45,7 @@ use crate::{
     parser::{AssocFileData, Node, Parser, Rule},
 };
 
-use super::{new_err, r#type::IntoType, string::AstString, Compile, Dependencies, Value};
+use super::{new_err, r#type::IntoType, string::AstString, Compile, Dependencies, Value, CompiledItem, Dependency};
 
 pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
     use pest::pratt_parser::{Assoc::*, Op};
@@ -119,24 +119,17 @@ impl IntoType for Expr {
 }
 
 impl Dependencies for Expr {
-    fn get_dependencies(&self) -> Option<Box<[super::Dependency]>> {
+    fn dependencies(&self) -> Vec<Dependency> {
         match self {
-            Self::Value(val) => val.get_dependencies(),
-            Self::UnaryMinus(expr) => expr.get_dependencies(),
+            Self::Value(val) => val.net_dependencies(),
+            Self::UnaryMinus(expr) => expr.net_dependencies(),
             Self::BinOp { lhs, rhs, .. } => {
-                let lhs_dep = lhs.get_dependencies();
-                let rhs_dep = rhs.get_dependencies();
-                if let Some(lhs) = lhs_dep {
-                    if let Some(rhs) = rhs_dep {
-                        let mut vec = lhs.into_vec();
-                        vec.append(&mut rhs.into_vec());
-                        Some(vec.into_boxed_slice())
-                    } else {
-                        Some(lhs)
-                    }
-                } else {
-                    rhs.get_dependencies()
-                }
+                let mut lhs_dep = lhs.net_dependencies();
+                let mut rhs_dep = rhs.net_dependencies();
+
+                lhs_dep.append(&mut rhs_dep);
+
+                lhs_dep
             }
         }
     }
@@ -184,9 +177,9 @@ impl Drop for ExprRegister {
     }
 }
 
-fn compile_depth(expr: &Expr, mut depth: ExprRegister) -> Result<Vec<super::CompiledItem>> {
+fn compile_depth(expr: &Expr, function_buffer: &mut Vec<CompiledItem>, mut depth: ExprRegister) -> Result<Vec<CompiledItem>> {
     match expr {
-        Expr::Value(val) => val.compile(),
+        Expr::Value(val) => val.compile(function_buffer),
         Expr::UnaryMinus(expr) => {
             if let box Expr::Value(value) = expr {
                 match value {
@@ -201,15 +194,15 @@ fn compile_depth(expr: &Expr, mut depth: ExprRegister) -> Result<Vec<super::Comp
                 }
             }
 
-            let mut eval = expr.compile()?;
+            let mut eval = expr.compile(function_buffer)?;
 
             eval.push(instruction!(neg));
 
             Ok(eval)
         }
         Expr::BinOp { lhs, op, rhs } => {
-            let mut lhs = compile_depth(&lhs, ExprRegister::new())?;
-            let mut rhs = compile_depth(&rhs, ExprRegister::new())?;
+            let mut lhs = compile_depth(&lhs, function_buffer, ExprRegister::new())?;
+            let mut rhs = compile_depth(&rhs, function_buffer, ExprRegister::new())?;
 
             let temp_name = depth.repr();
 
@@ -232,8 +225,8 @@ fn compile_depth(expr: &Expr, mut depth: ExprRegister) -> Result<Vec<super::Comp
 }
 
 impl Compile for Expr {
-    fn compile(&self) -> Result<Vec<super::CompiledItem>> {
-        compile_depth(self, ExprRegister::new())
+    fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<super::CompiledItem>> {
+        compile_depth(self, function_buffer, ExprRegister::new())
     }
 }
 
@@ -267,7 +260,7 @@ pub(crate) fn parse_expr(pairs: Pairs<Rule>, user_data: &AssocFileData) -> Resul
                         Cow::Borrowed(&*file_name)
                     };
 
-                    let ty = user_data
+                    let (ident, is_callback) = user_data
                         .get_dependency_flags_from_name(raw_string.to_string())
                         .with_context(|| {
                             new_err(
@@ -276,7 +269,14 @@ pub(crate) fn parse_expr(pairs: Pairs<Rule>, user_data: &AssocFileData) -> Resul
                                 "use of undeclared variable".into(),
                             )
                         })?;
-                    Ok(Expr::Value(Value::Ident(ty.0.clone())))
+
+                    let cloned = if is_callback {
+                        ident.clone().wrap_in_callback()?
+                    } else {
+                        ident.clone()
+                    };
+
+                    Ok(Expr::Value(Value::Ident(cloned)))
                 }
                 Rule::math_expr => parse_expr(primary.into_inner(), user_data),
                 rule => unreachable!("Expr::parse expected atom, found {:?}", rule),

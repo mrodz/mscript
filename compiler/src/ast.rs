@@ -32,9 +32,9 @@ pub(crate) use value::Value;
 
 use anyhow::{anyhow, bail, Context, Error, Result};
 use bytecode::compilation_lookups::raw_byte_instruction_to_string_representation;
-use std::{borrow::Cow, fmt::Display, rc::Rc};
+use std::{borrow::Cow, fmt::{Display, Debug}, rc::Rc};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) enum CompiledFunctionId {
     Generated(isize),
     Custom(String),
@@ -54,7 +54,7 @@ impl Display for CompiledFunctionId {
 pub(crate) enum CompiledItem {
     Function {
         id: CompiledFunctionId,
-        content: Vec<CompiledItem>,
+        content: Option<Vec<CompiledItem>>,
         location: Rc<String>,
     },
     Instruction {
@@ -84,6 +84,10 @@ impl CompiledItem {
 
         match self {
             Self::Function { id, content, .. } => {
+                let Some(ref content) = content else {
+                    unreachable!();
+                };
+
                 let content: String = content.iter().map(|x| x.repr(use_string_version)).collect();
 
                 let func_name = match id {
@@ -148,14 +152,19 @@ macro_rules! instruction {
 }
 
 pub(crate) trait Compile {
-    fn compile(&self) -> Result<Vec<CompiledItem>>;
+    fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>>;
 }
 
 pub(crate) trait Optimize {}
 
-#[derive(Debug, PartialEq)]
 pub(crate) struct Dependency<'a> {
     pub ident: Cow<'a, Ident>,
+}
+
+impl PartialEq for Dependency<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.ident.name() == other.ident.name()
+    }
 }
 
 impl<'a> Dependency<'a> {
@@ -164,6 +173,12 @@ impl<'a> Dependency<'a> {
     }
     pub fn new(ident: Cow<'a, Ident>) -> Self {
         Self { ident }
+    }
+}
+
+impl Debug for Dependency<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self)
     }
 }
 
@@ -190,12 +205,21 @@ impl<'a> From<Ident> for Dependency<'a> {
 }
 
 pub(crate) trait Dependencies {
-    fn supplies(&self) -> Option<Box<[Dependency]>> {
-        None
+    fn supplies(&self) -> Vec<Dependency> {
+        vec![]
     }
 
-    fn get_dependencies(&self) -> Option<Box<[Dependency]>> {
-        None
+    fn dependencies(&self) -> Vec<Dependency> {
+        vec![]
+    }
+
+    fn net_dependencies(&self) -> Vec<Dependency> {
+        let supplies = self.supplies();
+        let dependencies = self.dependencies();
+
+        dependencies.into_iter()
+            .filter(|dependency| !supplies.contains(&dependency))
+            .collect()
     }
 }
 

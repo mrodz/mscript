@@ -114,51 +114,66 @@ impl IntoType for Function {
 }
 
 impl Dependencies for Function {
-    fn get_dependencies(&self) -> Option<Box<[Dependency]>> {
-        let vars_used_by_body = self.body.get_dependencies();
-        let vars_provided_by_parameters = self.parameters.supplies();
+    fn supplies(&self) -> Vec<Dependency> {
+        let mut body_supplies = self.body.supplies();
+        let mut param_supplies = self.parameters.supplies();
 
-        let Some(body_vars) = vars_used_by_body else {
-            return None;
-        };
+        body_supplies.append(&mut param_supplies);
 
-        let Some(param_vars) = vars_provided_by_parameters else {
-            return Some(body_vars)
-        };
+        body_supplies
+        // let Some(param_supplies) = self.parameters.supplies() else {
+        //     return body_supplies;
+        // };
 
-        let body_vars = body_vars.into_vec();
+        // let mut param_supplies = param_supplies.into_vec();
 
-        let x = body_vars
-            .into_iter()
-            .filter(|x| !param_vars.contains(x))
-            .collect();
-        Some(x)
+        // let Some(body_supplies) = body_supplies else {
+        //     return Some(param_supplies.into_boxed_slice())
+        // };
+
+        // param_supplies.append(&mut body_supplies.into_vec());
+
+        // let supplies = param_supplies.into_boxed_slice();
+
+        // Some(supplies)
+    }
+
+    fn dependencies(&self) -> Vec<Dependency> {
+        self.body.net_dependencies()
     }
 }
 
 impl Compile for Function {
-    fn compile(&self) -> Result<Vec<super::CompiledItem>> {
-        let mut args = self.parameters.compile()?;
-        let mut body = self.body.compile()?;
+    fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<super::CompiledItem>> {
+        let mut args = self.parameters.compile(function_buffer)?;
+        let mut body = self.body.compile(function_buffer)?;
 
         args.append(&mut body);
 
         unsafe {
+            let id = CompiledFunctionId::Generated(FUNCTION_ID);
             let x = CompiledItem::Function {
-                id: CompiledFunctionId::Generated(FUNCTION_ID),
-                content: args,
+                id: id.clone(),
+                content: Some(args),
                 location: self.path_str.clone(),
             };
             FUNCTION_ID += 1;
 
-            Ok(vec![x])
+            function_buffer.push(x);
+
+            Ok(vec![CompiledItem::Function {
+                id,
+                content: None,
+                location: self.path_str.clone(),
+            }])
+            // Ok(vec![x])
         }
     }
 }
 
 impl Parser {
     pub fn function(input: Node) -> Result<Function> {
-        let path_str = input.user_data().get_source_file_name();
+        let path_str = input.user_data().get_file_name();
         input.user_data().run_in_scope(ScopeType::Function, || {
             let mut children = input.children();
 

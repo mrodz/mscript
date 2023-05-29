@@ -19,11 +19,11 @@ pub struct Callable {
 }
 
 impl Compile for Callable {
-    fn compile(&self) -> Result<Vec<CompiledItem>> {
+    fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>> {
         let mut args: Vec<CompiledItem> = self
             .function_arguments
             .iter()
-            .flat_map(|x| x.compile().unwrap())
+            .flat_map(|x| x.compile(function_buffer).unwrap())
             // .flatten()
             .collect();
 
@@ -46,19 +46,14 @@ impl Compile for Callable {
 }
 
 impl Dependencies for Callable {
-    fn get_dependencies(&self) -> Option<Box<[Dependency]>> {
+    fn dependencies(&self) -> Vec<Dependency> {
         // a call needs to have access to the function/object
-        let maybe_arg_dependencies = self.function_arguments.get_dependencies();
+        // println!("Function Call");
+        let mut maybe_arg_dependencies = self.function_arguments.net_dependencies();
 
-        if let Some(arg_dependencies) = maybe_arg_dependencies {
-            let mut arg_dependencies = arg_dependencies.into_vec();
+        maybe_arg_dependencies.push(Dependency::new(Cow::Borrowed(&self.ident)));
 
-            arg_dependencies.push(Dependency::new(Cow::Borrowed(&self.ident)));
-
-            Some(arg_dependencies.into_boxed_slice())
-        } else {
-            Some([Dependency::new(Cow::Borrowed(&self.ident))].into())
-        }
+        maybe_arg_dependencies
     }
 }
 

@@ -16,7 +16,7 @@ pub(crate) struct Ident {
 }
 
 impl Compile for Ident {
-    fn compile(&self) -> Result<Vec<CompiledItem>> {
+    fn compile(&self, _: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>> {
         let ty = self.ty()?;
         let (_, id) = TypeLayout::get_load_instruction(&ty);
 
@@ -34,6 +34,16 @@ impl Hash for Ident {
 }
 
 impl Ident {
+    pub fn wrap_in_callback(mut self) -> Result<Self> {
+        let Some(ty) = self.ty else {
+            bail!("this variable does not have a type; it can't be wrapped in a callback")
+        };
+
+        self.ty = Some(Cow::Owned(TypeLayout::CallbackVariable(ty.into_owned().into())));
+        
+        Ok(self)
+    }
+
     pub fn lookup(&mut self, user_data: &AssocFileData) -> Result<&mut Self> {
         if let Some(ref ty) = self.ty {
             bail!("already has type {ty:?}")
@@ -80,8 +90,8 @@ impl Display for Ident {
 }
 
 impl Dependencies for Ident {
-    fn get_dependencies(&self) -> Option<Box<[super::Dependency]>> {
-        Some(Box::new([Dependency::new(Cow::Borrowed(self))]))
+    fn dependencies(&self) -> Vec<Dependency> {
+        vec![Dependency::new(Cow::Borrowed(self))]
     }
 }
 

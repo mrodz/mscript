@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use anyhow::Result;
 
 use crate::{
@@ -15,14 +17,21 @@ pub(crate) struct Assignment {
 }
 
 impl Dependencies for Assignment {
-    fn get_dependencies(&self) -> Option<Box<[Dependency]>> {
+    fn supplies(&self) -> Vec<Dependency> {
+        // let value = &self.value as &dyn Dependencies;
+        // println!("\t\tIntroduced {}", self.ident.name());
+        vec![Dependency::new(Cow::Borrowed(&self.ident))]
+    }
+
+    fn dependencies(&self) -> Vec<Dependency> {
         let value = &self.value as &dyn Dependencies;
-        value.get_dependencies()
+        // println!("\tLooking up the dependencies for {}", self.ident.name());
+        value.net_dependencies()
     }
 }
 
 impl Compile for Assignment {
-    fn compile(&self) -> Result<Vec<super::CompiledItem>> {
+    fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<super::CompiledItem>> {
         let name = &self.ident.name();
 
         let matched = match &self.value {
@@ -30,21 +39,18 @@ impl Compile for Assignment {
                 vec![instruction!(load ident), instruction!(store name)]
             }
             Value::Function(function) => {
-                let compiled_function = function.compile()?.remove(0);
+                let compiled_function = function.compile(function_buffer)?.remove(0);
                 let CompiledItem::Function { ref id, ref location, .. } = compiled_function else {
                     unreachable!()
                 };
 
-                let dependencies = function.get_dependencies();
+                println!("Net Dependencies for {name}");
+                let dependencies = function.net_dependencies();
+                println!("The net is: {dependencies:?}\r\n\r\n=========\r\n");
 
-                let (dependencies, len) = if let Some(dependencies) = dependencies {
-                    let len = dependencies.len() + 1;
-                    (dependencies, len)
-                } else {
-                    ([].into(), 1)
-                };
+                // dbg!(name, &dependencies);
 
-                let mut arguments = Vec::with_capacity(len);
+                let mut arguments = Vec::with_capacity(dependencies.len() + 1);
 
                 let x = location.replace('\\', "/");
 
@@ -66,27 +72,27 @@ impl Compile for Assignment {
                 };
 
                 vec![
-                    compiled_function,
+                    // compiled_function,
                     make_function_instruction,
                     instruction!(store name),
                 ]
             }
             Value::Number(number) => {
-                let mut number_init = number.compile()?;
+                let mut number_init = number.compile(function_buffer)?;
 
                 number_init.push(instruction!(store name));
 
                 number_init
             }
             Value::String(string) => {
-                let mut string_init = string.compile()?;
+                let mut string_init = string.compile(function_buffer)?;
 
                 string_init.push(instruction!(store name));
 
                 string_init
             }
             Value::MathExpr(math_expr) => {
-                let mut string_init = math_expr.compile()?;
+                let mut string_init = math_expr.compile(function_buffer)?;
 
                 string_init.push(instruction!(store name));
 

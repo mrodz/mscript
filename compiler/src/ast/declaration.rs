@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::parser::{Node, Parser, Rule};
 
-use super::{assignment::Assignment, Callable, Compile, Dependencies, Dependency, PrintStatement};
+use super::{assignment::Assignment, Callable, Compile, Dependencies, Dependency, PrintStatement, CompiledItem};
 
 #[derive(Debug, Clone)]
 pub(crate) enum Declaration {
@@ -12,21 +12,37 @@ pub(crate) enum Declaration {
 }
 
 impl Dependencies for Declaration {
-    fn get_dependencies(&self) -> Option<Box<[Dependency]>> {
+    fn supplies(&self) -> Vec<Dependency> {
         match self {
-            Self::Assignment(assignment) => assignment.get_dependencies(),
-            Self::Callable(callable) => callable.get_dependencies(),
-            Self::PrintStatement(print_statement) => print_statement.get_dependencies(),
+            Self::Assignment(assignment) => assignment.supplies(),
+            Self::Callable(callable) => callable.supplies(),
+            Self::PrintStatement(print_statement) => print_statement.supplies(),
+        }
+    }
+    fn dependencies(&self) -> Vec<Dependency> {
+        match self {
+            Self::Assignment(assignment) => {
+                // println!("Assignment");
+                assignment.net_dependencies()
+            }
+            Self::Callable(callable) => {
+                // println!("Callable");
+                callable.net_dependencies()
+            }
+            Self::PrintStatement(print_statement) => {
+                // println!("Print Statement");
+                print_statement.net_dependencies()
+            }
         }
     }
 }
 
 impl Compile for Declaration {
-    fn compile(&self) -> Result<Vec<super::CompiledItem>> {
+    fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>> {
         match self {
-            Self::PrintStatement(x) => x.compile(),
-            Self::Callable(x) => x.compile(),
-            Self::Assignment(x) => x.compile(),
+            Self::PrintStatement(x) => x.compile(function_buffer),
+            Self::Callable(x) => x.compile(function_buffer),
+            Self::Assignment(x) => x.compile(function_buffer),
         }
     }
 }

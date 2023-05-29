@@ -7,7 +7,7 @@ use crate::{
 
 use super::{
     r#type::{IntoType, NativeType},
-    Compile, Dependencies, TypeLayout,
+    Compile, Dependencies, TypeLayout, CompiledItem, Dependency,
 };
 
 #[derive(Debug, Clone)]
@@ -18,9 +18,9 @@ pub enum AstString {
 }
 
 impl Dependencies for AstString {
-    fn get_dependencies(&self) -> Option<Box<[super::Dependency]>> {
+    fn dependencies(&self) -> Vec<Dependency> {
         match self {
-            AstString::Plain(_) => None,
+            AstString::Plain(_) => vec![],
             AstString::FormattedString() => todo!(),
         }
     }
@@ -33,7 +33,7 @@ impl IntoType for AstString {
 }
 
 impl Compile for AstString {
-    fn compile(&self) -> Result<Vec<super::CompiledItem>> {
+    fn compile(&self, _: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>> {
         match self {
             AstString::Plain(content) => Ok(vec![instruction!(string content)]),
             AstString::FormattedString() => todo!(),

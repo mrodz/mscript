@@ -82,7 +82,7 @@ impl AssocFileData {
             }
 
             // should come after we check the contents of a scope.
-            if matches!(scope.ty, ScopeType::Function) {
+            if scope.ty == ScopeType::Function {
                 is_callback = true;
             }
         }
@@ -141,37 +141,24 @@ impl File {
 }
 
 impl Compile for File {
-    fn compile(&self) -> Result<Vec<CompiledItem>> {
-        let statements: Vec<CompiledItem> = self
+    fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>> {
+        let mut global_scope_code: Vec<CompiledItem> = self
             .declarations
             .iter()
-            .flat_map(|x| x.compile().unwrap())
-            // .flatten()
+            .flat_map(|x| x.compile(function_buffer).unwrap())
             .collect();
-
-        let mut functions = vec![];
-        let mut global_scope_code = vec![];
-
-        for statement in statements {
-            match statement {
-                function @ CompiledItem::Function { .. } => {
-                    functions.push(function);
-                }
-                instruction @ CompiledItem::Instruction { .. } => {
-                    global_scope_code.push(instruction)
-                }
-            }
-        }
 
         global_scope_code.push(instruction!(ret));
 
-        functions.push(CompiledItem::Function {
+        let main_function = CompiledItem::Function {
             id: CompiledFunctionId::Custom("main".into()),
-            content: global_scope_code,
+            content: Some(global_scope_code),
             location: self.location.clone(),
-        });
+        };
 
-        Ok(functions)
+        function_buffer.push(main_function);
+
+        Ok(vec![])
     }
 }
 
