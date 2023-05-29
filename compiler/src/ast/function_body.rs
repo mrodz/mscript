@@ -17,30 +17,30 @@ impl FunctionBody {
 }
 
 impl Dependencies for FunctionBody {
-    fn get_dependencies(&self) -> Option<Box<[Dependency]>> {
-        let x: Vec<Dependency> = self
+    fn supplies(&self) -> Vec<Dependency> {
+        self
             .0
             .iter()
-            .filter_map(|x| x.get_dependencies())
-            .flat_map(|x| x.into_vec())
-            .collect();
+            .flat_map(|x| x.supplies())
+            .collect()
+    }
 
-        let x = x.into_boxed_slice();
-
-        if x.is_empty() {
-            None
-        } else {
-            Some(x)
-        }
+    fn dependencies(&self) -> Vec<Dependency> {
+        self
+            .0
+            .iter()
+            // .filter_map(|x| )
+            .flat_map(|x| x.net_dependencies())
+            .collect()
     }
 }
 
 impl Compile for FunctionBody {
-    fn compile(&self) -> Result<Vec<super::CompiledItem>> {
+    fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<super::CompiledItem>> {
         let mut compiled_body: Vec<super::CompiledItem> = self
             .0
             .iter()
-            .flat_map(|x| x.compile().unwrap())
+            .flat_map(|x| x.compile(function_buffer).unwrap())
             // .flatten()
             .collect();
 

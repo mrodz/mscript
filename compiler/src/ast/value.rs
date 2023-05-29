@@ -4,7 +4,7 @@ use crate::parser::{Node, Parser, Rule};
 
 use super::{
     math_expr::Expr, r#type::IntoType, string::AstString, Compile, Dependencies, Dependency,
-    Function, Ident, Number, TypeLayout,
+    Function, Ident, Number, TypeLayout, CompiledItem,
 };
 
 #[derive(Debug, Clone)]
@@ -29,25 +29,28 @@ impl IntoType for Value {
 }
 
 impl Dependencies for Value {
-    fn get_dependencies(&self) -> Option<Box<[Dependency]>> {
+    fn dependencies(&self) -> Vec<Dependency> {
         match self {
-            Self::Function(function) => function.get_dependencies(),
-            Self::Ident(name) => name.get_dependencies(),
-            Self::Number(number) => number.get_dependencies(),
-            Self::String(string) => string.get_dependencies(),
-            Self::MathExpr(math_expr) => math_expr.get_dependencies(),
+            Self::Function(function) => {
+                // println!("\t\t\t\tI depend on a function!!!");
+                function.net_dependencies()
+            }
+            Self::Ident(name) => name.net_dependencies(),
+            Self::Number(number) => number.net_dependencies(),
+            Self::String(string) => string.net_dependencies(),
+            Self::MathExpr(math_expr) => math_expr.net_dependencies(),
         }
     }
 }
 
 impl Compile for Value {
-    fn compile(&self) -> Result<Vec<super::CompiledItem>> {
+    fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>> {
         match self {
-            Self::Function(function) => function.compile(),
-            Self::Ident(ident) => ident.compile(),
-            Self::Number(number) => number.compile(),
-            Self::String(string) => string.compile(),
-            Self::MathExpr(math_expr) => math_expr.compile(),
+            Self::Function(function) => function.compile(function_buffer),
+            Self::Ident(ident) => ident.compile(function_buffer),
+            Self::Number(number) => number.compile(function_buffer),
+            Self::String(string) => string.compile(function_buffer),
+            Self::MathExpr(math_expr) => math_expr.compile(function_buffer),
         }
     }
 }

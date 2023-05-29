@@ -16,19 +16,12 @@ impl FunctionArguments {
 }
 
 impl Dependencies for FunctionArguments {
-    fn get_dependencies(&self) -> Option<Box<[Dependency]>> {
-        let x: Vec<Dependency> = self
+    fn dependencies(&self) -> Vec<Dependency> {
+        self
             .0
             .iter()
-            .filter_map(|x| x.get_dependencies())
-            .flat_map(|x| x.into_vec())
-            .collect();
-
-        if x.is_empty() {
-            None
-        } else {
-            Some(x.into_boxed_slice())
-        }
+            .flat_map(|x| x.net_dependencies())
+            .collect()
     }
 }
 

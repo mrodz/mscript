@@ -45,7 +45,11 @@ pub fn compile(path: &str, output_bin: bool) -> Result<()> {
 
     let result = Parser::file(input)?;
 
-    let compiled_functions = result.compile()?;
+    let mut function_buffer = vec![];
+
+    result.compile(&mut function_buffer)?;
+
+    // function_buffer is initialized now.
 
     let mut new_file = File::options()
         .create(true)
@@ -54,7 +58,7 @@ pub fn compile(path: &str, output_bin: bool) -> Result<()> {
         .truncate(true)
         .open(output_path)?;
 
-    for function in compiled_functions {
+    for function in function_buffer {
         let this_repr = function.repr(!output_bin);
         new_file.write_all(this_repr.as_bytes())?;
     }

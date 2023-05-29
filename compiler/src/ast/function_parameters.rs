@@ -10,7 +10,7 @@ use crate::{
     parser::{Node, Parser, Rule},
 };
 
-use super::{new_err, r#type::TypeLayout, Compile, Dependencies, Dependency, Ident};
+use super::{new_err, r#type::TypeLayout, Compile, CompiledItem, Dependencies, Dependency, Ident};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum FunctionParameters {
@@ -58,22 +58,20 @@ impl Display for FunctionParameters {
 }
 
 impl Dependencies for FunctionParameters {
-    fn supplies(&self) -> Option<Box<[super::Dependency]>> {
+    fn supplies(&self) -> Vec<Dependency> {
         let Self::Named(names) = self else {
-            return None;
+            return vec![];
         };
 
-        let mapped = names
+        names
             .iter()
             .map(|x| Dependency::new(Cow::Borrowed(x)))
-            .collect();
-
-        Some(mapped)
+            .collect()
     }
 }
 
 impl Compile for FunctionParameters {
-    fn compile(&self) -> Result<Vec<super::CompiledItem>> {
+    fn compile(&self, _: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>> {
         let Self::Named(names) = self else {
             bail!("cannot compile unnamed function parameters (typically found in a type declaration) for a normal function")
         };

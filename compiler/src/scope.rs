@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use crate::ast::Ident;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum ScopeType {
     File,
     Function,

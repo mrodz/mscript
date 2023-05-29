@@ -8,19 +8,19 @@ use crate::{
     parser::{Node, Parser},
 };
 
-use super::{map_err, Compile, Dependencies, Dependency, Value};
+use super::{map_err, Compile, Dependencies, Dependency, Value, CompiledItem};
 
 #[derive(Debug, Clone)]
 pub struct PrintStatement(Value);
 
 impl Dependencies for PrintStatement {
-    fn get_dependencies(&self) -> Option<Box<[Dependency]>> {
-        self.0.get_dependencies()
+    fn dependencies(&self) -> Vec<Dependency> {
+        self.0.net_dependencies()
     }
 }
 
 impl Compile for PrintStatement {
-    fn compile(&self) -> Result<Vec<super::CompiledItem>> {
+    fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>> {
         let matched = match &self.0 {
             Value::Function(_) => {
                 vec![
@@ -55,7 +55,7 @@ impl Compile for PrintStatement {
                 ]
             }
             Value::String(content) => {
-                let mut string_init = content.compile()?;
+                let mut string_init = content.compile(function_buffer)?;
                 string_init.append(&mut vec![instruction!(printn '*'), instruction!(void)]);
 
                 string_init
@@ -63,7 +63,7 @@ impl Compile for PrintStatement {
             Value::MathExpr(math_expr) => {
                 math_expr.validate()?;
 
-                let mut math_init = math_expr.compile()?;
+                let mut math_init = math_expr.compile(function_buffer)?;
                 math_init.append(&mut vec![instruction!(printn '*'), instruction!(void)]);
 
                 math_init
