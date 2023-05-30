@@ -8,7 +8,7 @@ use crate::{
     parser::{Node, Parser},
 };
 
-use super::{map_err, Compile, Dependencies, Dependency, Value, CompiledItem};
+use super::{map_err, Compile, CompiledItem, Dependencies, Dependency, Value};
 
 #[derive(Debug, Clone)]
 pub struct PrintStatement(Value);

@@ -44,11 +44,7 @@ impl Compile for Assignment {
                     unreachable!()
                 };
 
-                println!("Net Dependencies for {name}");
                 let dependencies = function.net_dependencies();
-                println!("The net is: {dependencies:?}\r\n\r\n=========\r\n");
-
-                // dbg!(name, &dependencies);
 
                 let mut arguments = Vec::with_capacity(dependencies.len() + 1);
 

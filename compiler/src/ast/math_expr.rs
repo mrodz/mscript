@@ -45,7 +45,10 @@ use crate::{
     parser::{AssocFileData, Node, Parser, Rule},
 };
 
-use super::{new_err, r#type::IntoType, string::AstString, Compile, Dependencies, Value, CompiledItem, Dependency};
+use super::{
+    new_err, r#type::IntoType, string::AstString, Compile, CompiledItem, Dependencies, Dependency,
+    Value,
+};
 
 pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
     use pest::pratt_parser::{Assoc::*, Op};
@@ -177,7 +180,11 @@ impl Drop for ExprRegister {
     }
 }
 
-fn compile_depth(expr: &Expr, function_buffer: &mut Vec<CompiledItem>, mut depth: ExprRegister) -> Result<Vec<CompiledItem>> {
+fn compile_depth(
+    expr: &Expr,
+    function_buffer: &mut Vec<CompiledItem>,
+    mut depth: ExprRegister,
+) -> Result<Vec<CompiledItem>> {
     match expr {
         Expr::Value(val) => val.compile(function_buffer),
         Expr::UnaryMinus(expr) => {

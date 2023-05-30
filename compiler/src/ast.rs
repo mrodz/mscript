@@ -32,7 +32,11 @@ pub(crate) use value::Value;
 
 use anyhow::{anyhow, bail, Context, Error, Result};
 use bytecode::compilation_lookups::raw_byte_instruction_to_string_representation;
-use std::{borrow::Cow, fmt::{Display, Debug}, rc::Rc};
+use std::{
+    borrow::Cow,
+    fmt::{Debug, Display},
+    rc::Rc,
+};
 
 #[derive(Debug, Clone)]
 pub(crate) enum CompiledFunctionId {
@@ -217,7 +221,8 @@ pub(crate) trait Dependencies {
         let supplies = self.supplies();
         let dependencies = self.dependencies();
 
-        dependencies.into_iter()
+        dependencies
+            .into_iter()
             .filter(|dependency| !supplies.contains(&dependency))
             .collect()
     }

@@ -39,8 +39,10 @@ impl Ident {
             bail!("this variable does not have a type; it can't be wrapped in a callback")
         };
 
-        self.ty = Some(Cow::Owned(TypeLayout::CallbackVariable(ty.into_owned().into())));
-        
+        self.ty = Some(Cow::Owned(TypeLayout::CallbackVariable(
+            ty.into_owned().into(),
+        )));
+
         Ok(self)
     }
 

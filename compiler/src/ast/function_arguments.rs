@@ -17,11 +17,7 @@ impl FunctionArguments {
 
 impl Dependencies for FunctionArguments {
     fn dependencies(&self) -> Vec<Dependency> {
-        self
-            .0
-            .iter()
-            .flat_map(|x| x.net_dependencies())
-            .collect()
+        self.0.iter().flat_map(|x| x.net_dependencies()).collect()
     }
 }
 

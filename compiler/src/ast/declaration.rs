@@ -2,7 +2,10 @@ use anyhow::Result;
 
 use crate::parser::{Node, Parser, Rule};
 
-use super::{assignment::Assignment, Callable, Compile, Dependencies, Dependency, PrintStatement, CompiledItem};
+use super::{
+    assignment::Assignment, Callable, Compile, CompiledItem, Dependencies, Dependency,
+    PrintStatement,
+};
 
 #[derive(Debug, Clone)]
 pub(crate) enum Declaration {
