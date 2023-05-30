@@ -11,7 +11,6 @@ use std::borrow::Cow;
 use std::fs::File;
 use std::io::{BufReader, Read, Write};
 use std::path::Path;
-use std::thread;
 use std::time::{Duration, Instant};
 
 use anyhow::{bail, Result};

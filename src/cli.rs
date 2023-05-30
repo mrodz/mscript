@@ -20,9 +20,16 @@ pub enum CompilationTargets {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
+    Run {
+        /// this is the path to a `.ms` file
+        #[arg(required(true), index = 1)]
+        path: String,
+        #[arg(short = 'X', long = "stack-size", default_value = "4194304")]
+        stack_size: usize,
+    },
     /// Build the interpreter and have it look for the
     /// entrypoint of a `.mmm` file
-    Run {
+    Execute {
         /// this is the path to the file
         #[arg(required(true), index = 1)]
         path: String,
