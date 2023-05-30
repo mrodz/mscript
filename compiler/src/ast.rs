@@ -12,6 +12,7 @@ mod ident;
 mod math_expr;
 mod number;
 mod print_statement;
+mod r#return;
 mod string;
 mod r#type;
 mod value;
@@ -25,13 +26,13 @@ pub(crate) use function_body::FunctionBody;
 pub(crate) use function_parameters::FunctionParameters;
 pub(crate) use ident::Ident;
 pub(crate) use number::Number;
-use pest::Span;
 pub(crate) use print_statement::PrintStatement;
 pub(crate) use r#type::TypeLayout;
 pub(crate) use value::Value;
 
 use anyhow::{anyhow, bail, Context, Error, Result};
 use bytecode::compilation_lookups::raw_byte_instruction_to_string_representation;
+use pest::Span;
 use std::{
     borrow::Cow,
     fmt::{Debug, Display},

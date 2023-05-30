@@ -11,11 +11,12 @@ use std::borrow::Cow;
 use std::fs::File;
 use std::io::{BufReader, Read, Write};
 use std::path::Path;
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use anyhow::{bail, Result};
 use ast::Compile;
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle, ProgressFinish};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle, ProgressFinish, ProgressDrawTarget};
 use once_cell::sync::Lazy;
 use parser::AssocFileData;
 use scope::ScopeType;
@@ -46,6 +47,7 @@ pub fn compile(path_str: &str, output_bin: bool) -> Result<()> {
     reader.read_to_string(&mut buffer)?;
 
     let files = MultiProgress::new();
+    files.set_draw_target(ProgressDrawTarget::hidden());
     // pb.set_style(ProgressStyle::with_template("{prefix:.bold.dim} [{elapsed_precise}] {wide_bar:.cyan/blue}")?);
 
     static SPINNER_STYLE: Lazy<ProgressStyle> = Lazy::new(|| {
@@ -66,7 +68,7 @@ pub fn compile(path_str: &str, output_bin: bool) -> Result<()> {
         spinner
     }
 
-    let user_data = AssocFileData::new(ScopeType::File, output_path.to_string_lossy().to_string());
+    let user_data = Rc::new(AssocFileData::new(ScopeType::File, output_path.to_string_lossy().to_string()));
 
     let parse_spinner = make_spinner(&files, format!("Parsing ({path_str}):"));
     let input = root_node_from_str(&buffer, user_data)?;

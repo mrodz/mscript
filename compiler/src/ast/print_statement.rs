@@ -68,6 +68,13 @@ impl Compile for PrintStatement {
 
                 math_init
             }
+            Value::Callable(callable) => {
+                let mut callable_init = callable.compile(function_buffer)?;
+                
+                callable_init.append(&mut vec![instruction!(printn '*'), instruction!(void)]);
+
+                callable_init
+            }
         };
 
         Ok(matched)

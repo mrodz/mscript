@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap, fmt::Display};
+use std::{borrow::Cow, collections::HashMap, fmt::Display, rc::Rc};
 
 use crate::parser::{util::parse_with_userdata, AssocFileData, Node, Parser, Rule};
 use anyhow::{bail, Result};
@@ -55,8 +55,19 @@ impl Display for TypeLayout {
 }
 
 impl TypeLayout {
+    pub fn is_function(&self) -> Option<&FunctionType> {
+        let me = self.get_type_recursively();
+
+        let TypeLayout::Function(f) = me else {
+            return None;
+        };
+
+        Some(f)
+    }
+
     pub fn can_negate(&self) -> bool {
-        match self {
+        let me = self.get_type_recursively();
+        match me {
             Self::Native(NativeType::Str) => false,
             Self::Native(_) => true,
             _ => false,
@@ -147,7 +158,7 @@ pub(crate) trait IntoType {
 
 pub(crate) fn type_from_str(
     input: &str,
-    user_data: AssocFileData,
+    user_data: Rc<AssocFileData>,
 ) -> Result<Cow<'static, TypeLayout>> {
     unsafe {
         if let Some(r#type) = TYPES.get(input) {

@@ -33,7 +33,7 @@
 //!
 //! END LICENSE
 
-use std::borrow::Cow;
+use std::{borrow::Cow, rc::Rc};
 
 use anyhow::{bail, Context, Result};
 use once_cell::sync::Lazy;
@@ -42,12 +42,12 @@ use pest::{iterators::Pairs, pratt_parser::PrattParser};
 use crate::{
     ast::number,
     instruction,
-    parser::{AssocFileData, Node, Parser, Rule},
+    parser::{AssocFileData, Node, Parser, Rule, util},
 };
 
 use super::{
-    new_err, r#type::IntoType, string::AstString, Compile, CompiledItem, Dependencies, Dependency,
-    Value,
+    new_err, r#type::IntoType, string::AstString, Compile, CompiledItem, Dependencies,
+    Dependency, Value,
 };
 
 pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
@@ -237,7 +237,7 @@ impl Compile for Expr {
     }
 }
 
-pub(crate) fn parse_expr(pairs: Pairs<Rule>, user_data: &AssocFileData) -> Result<Expr> {
+pub(crate) fn parse_expr(pairs: Pairs<Rule>, user_data: Rc<AssocFileData>) -> Result<Expr> {
     PRATT_PARSER
         .map_primary(|primary| -> Result<Expr> {
             match primary.as_rule() {
@@ -257,8 +257,9 @@ pub(crate) fn parse_expr(pairs: Pairs<Rule>, user_data: &AssocFileData) -> Resul
                 Rule::ident => {
                     let raw_string = primary.as_str();
 
-                    let file_name = user_data.get_file_name();
+                    let file_name = user_data.get_source_file_name();
 
+                    // todo: see if this check is necessary.
                     let file_name: Cow<String> = if file_name.ends_with(".mmm") {
                         let mut owned = file_name[..file_name.len() - 3].to_owned();
                         owned.push_str("ms");
@@ -285,7 +286,36 @@ pub(crate) fn parse_expr(pairs: Pairs<Rule>, user_data: &AssocFileData) -> Resul
 
                     Ok(Expr::Value(Value::Ident(cloned)))
                 }
-                Rule::math_expr => parse_expr(primary.into_inner(), user_data),
+                Rule::math_expr => parse_expr(primary.into_inner(), user_data.clone()),
+                Rule::callable => {
+                    // let (raw_str_name, _) = primary.as_str().split_once('(').unwrap();
+
+                    // // todo!();
+                    // let (ident, is_callback) = user_data
+                    //     .get_dependency_flags_from_name(raw_str_name.to_owned())
+                    //     .with_context(|| {
+                    //         new_err(
+                    //             primary.as_span(),
+                    //             &user_data.get_source_file_name(),
+                    //             "use of undeclared variable".into(),
+                    //         )
+                    //     })?;
+
+                    // let function_type = ident.ty()?.is_function().with_context(|| {
+                    //     new_err(
+                    //         primary.as_span(),
+                    //         &user_data.get_source_file_name(),
+                    //         "not a function".into(),
+                    //     )
+                    // })?;
+                    let x = util::parse_with_userdata(Rule::callable, primary.as_str(), user_data.clone())?;
+
+                    let single = x.single()?;
+
+                    let callable = Parser::callable(single)?;
+
+                    Ok(Expr::Value(Value::Callable(callable)))
+                }
                 rule => unreachable!("Expr::parse expected atom, found {:?}", rule),
             }
         })
@@ -318,7 +348,7 @@ impl Parser {
     pub fn math_expr(input: Node) -> Result<Expr> {
         let children_as_pairs = input.children().into_pairs();
 
-        let token_tree = parse_expr(children_as_pairs, input.user_data());
+        let token_tree = parse_expr(children_as_pairs, input.user_data().clone());
 
         token_tree
     }

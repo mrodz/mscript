@@ -38,6 +38,10 @@ impl Parser {
                     let ty = math_expr.into_type()?;
                     ident.link(user_data, Some(Cow::Owned(ty)))?;
                 }
+                Value::Callable(ref callback) => {
+                    let ty = callback.into_type()?;
+                    ident.link(user_data, Some(Cow::Owned(ty)))?;
+                }
             }
         };
 

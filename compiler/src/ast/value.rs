@@ -4,7 +4,7 @@ use crate::parser::{Node, Parser, Rule};
 
 use super::{
     math_expr::Expr, r#type::IntoType, string::AstString, Compile, CompiledItem, Dependencies,
-    Dependency, Function, Ident, Number, TypeLayout,
+    Dependency, Function, Ident, Number, TypeLayout, Callable,
 };
 
 #[derive(Debug, Clone)]
@@ -14,6 +14,13 @@ pub(crate) enum Value {
     Number(Number),
     String(AstString),
     MathExpr(Box<Expr>),
+    Callable(Callable),
+}
+
+impl Value {
+    pub fn is_callable(&self) -> bool {
+        matches!(self, Value::Callable(..) | Value::MathExpr(box Expr::Value(Value::Callable(..))))
+    }
 }
 
 impl IntoType for Value {
@@ -24,6 +31,7 @@ impl IntoType for Value {
             Self::MathExpr(math_expr) => math_expr.into_type(),
             Self::Number(number) => number.into_type(),
             Self::String(string) => string.into_type(),
+            Self::Callable(callable) => callable.into_type(),
         }
     }
 }
@@ -39,6 +47,7 @@ impl Dependencies for Value {
             Self::Number(number) => number.net_dependencies(),
             Self::String(string) => string.net_dependencies(),
             Self::MathExpr(math_expr) => math_expr.net_dependencies(),
+            Self::Callable(callable) => callable.net_dependencies(),
         }
     }
 }
@@ -51,6 +60,7 @@ impl Compile for Value {
             Self::Number(number) => number.compile(function_buffer),
             Self::String(string) => string.compile(function_buffer),
             Self::MathExpr(math_expr) => math_expr.compile(function_buffer),
+            Self::Callable(callable) => callable.compile(function_buffer)
         }
     }
 }
@@ -66,6 +76,7 @@ impl Parser {
             Rule::number => Value::Number(Self::number(input)?),
             Rule::string => Value::String(Self::string(input)?),
             Rule::math_expr => Value::MathExpr(Box::new(Self::math_expr(input)?)),
+            Rule::callable => Value::Callable(Self::callable(input)?),
             x => unreachable!("{x:?}"),
         };
 

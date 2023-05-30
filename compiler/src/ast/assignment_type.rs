@@ -13,21 +13,30 @@ impl Parser {
 
         let ident: Node = children.next().unwrap();
         let ty: Node = children.next().unwrap();
-        let value_node: Node = children.next().unwrap();
+        let value: Node = children.next().unwrap();
 
         // map_err(, span, file_name, message)
-        let value_span = value_node.as_span();
+        let ty_span = ty.as_span();
 
         let mut ident: Ident = Self::ident(ident);
         let ty: Cow<'static, TypeLayout> = Self::r#type(ty)?;
-        let value: Value = Self::value(value_node)?;
+        let value: Value = Self::value(value)?;
+
+        // dbg!(value_span);
 
         if let Ok(ref assignment_ty) = value.into_type() {
             if ty.as_ref() != assignment_ty {
-                let message = format!("declaration wanted {ty}, but value is {assignment_ty}");
+                let message = if value.is_callable() {
+                    // let return_type = function_type.get_return_type().map_or_else(|| Cow::Borrowed("None"), |ok| Cow::Owned(ok.to_string()));
+                    format!("declaration wanted {ty}, but value is a function that returns {assignment_ty}")
+                } else {
+                    // panic!(" ?????? ");
+                    format!("declaration wanted {ty}, but value is {assignment_ty}")
+                };
+
                 return map_err(
                     Err(anyhow!("incompatible types")),
-                    value_span,
+                    ty_span,
                     &input.user_data().get_source_file_name(),
                     message,
                 );

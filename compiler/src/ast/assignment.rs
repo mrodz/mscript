@@ -94,6 +94,13 @@ impl Compile for Assignment {
 
                 string_init
             }
+            Value::Callable(callable) => {
+                let mut callable_init = callable.compile(function_buffer)?;
+
+                callable_init.push(instruction!(store name));
+
+                callable_init
+            }
         };
 
         Ok(matched)

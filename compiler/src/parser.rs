@@ -8,7 +8,7 @@ use crate::instruction;
 use crate::scope::{Scope, ScopeType};
 
 #[allow(unused)]
-pub(crate) type Node<'i> = pest_consume::Node<'i, Rule, AssocFileData>;
+pub(crate) type Node<'i> = pest_consume::Node<'i, Rule, Rc<AssocFileData>>;
 
 #[derive(ParserDerive)]
 #[grammar = "grammar.pest"]
@@ -113,7 +113,7 @@ pub mod util {
     }
 }
 
-pub(crate) fn root_node_from_str(input_str: &str, user_data: AssocFileData) -> Result<Node> {
+pub(crate) fn root_node_from_str(input_str: &str, user_data: Rc<AssocFileData>) -> Result<Node> {
     let source_name = &*user_data.get_source_file_name();
     let x = util::parse_with_userdata(Rule::file, input_str, user_data).map_err(|err| {
         err.with_path(source_name).renamed_rules(|rule| match rule {

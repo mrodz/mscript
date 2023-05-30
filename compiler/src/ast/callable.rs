@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use anyhow::Result;
+use anyhow::{Context, Result, bail};
 
 use crate::{
     instruction,
@@ -8,14 +8,29 @@ use crate::{
 };
 
 use super::{
-    map_err_messages, Compile, CompiledItem, Dependencies, Dependency, FunctionArguments, Ident,
-    TypeLayout,
+    map_err_messages, r#type::IntoType, Compile, CompiledItem, Dependencies, Dependency,
+    FunctionArguments, Ident, TypeLayout,
 };
 
 #[derive(Debug, Clone)]
-pub struct Callable {
-    ident: Ident,
-    function_arguments: FunctionArguments,
+pub(crate) struct Callable {
+    pub ident: Ident,
+    pub function_arguments: FunctionArguments,
+}
+
+impl IntoType for Callable {
+    fn into_type(&self) -> Result<TypeLayout> {
+        let ident = self.ident.ty()?;
+        let ident = ident.get_type_recursively();
+
+        let Some(box ref return_type) = ident.is_function().context("not a function")?.return_type else {
+            bail!("function returns void")
+        };
+
+        let return_type_cloned: TypeLayout = return_type.as_ref().clone();
+
+        Ok(return_type_cloned)
+    }
 }
 
 impl Compile for Callable {

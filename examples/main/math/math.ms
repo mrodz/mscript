@@ -23,3 +23,15 @@ print "\n" * 2
 print "Wow! I love " + "MScript" 
 
 print 3 * ("" + -(1 + 2) * 3)
+
+give_five = fn() -> int {
+	return 5
+}
+
+
+idk: int = give_five()
+
+
+i: str = "5"
+
+give_five()
