@@ -7,7 +7,7 @@ use crate::{
 
 use super::{
     r#type::{IntoType, NativeType},
-    Compile, Dependencies, TypeLayout, CompiledItem, Dependency,
+    Compile, CompiledItem, Dependencies, Dependency, TypeLayout,
 };
 
 #[derive(Debug, Clone)]

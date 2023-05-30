@@ -18,16 +18,11 @@ impl FunctionBody {
 
 impl Dependencies for FunctionBody {
     fn supplies(&self) -> Vec<Dependency> {
-        self
-            .0
-            .iter()
-            .flat_map(|x| x.supplies())
-            .collect()
+        self.0.iter().flat_map(|x| x.supplies()).collect()
     }
 
     fn dependencies(&self) -> Vec<Dependency> {
-        self
-            .0
+        self.0
             .iter()
             // .filter_map(|x| )
             .flat_map(|x| x.net_dependencies())

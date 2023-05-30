@@ -3,8 +3,8 @@ use anyhow::Result;
 use crate::parser::{Node, Parser, Rule};
 
 use super::{
-    math_expr::Expr, r#type::IntoType, string::AstString, Compile, Dependencies, Dependency,
-    Function, Ident, Number, TypeLayout, CompiledItem,
+    math_expr::Expr, r#type::IntoType, string::AstString, Compile, CompiledItem, Dependencies,
+    Dependency, Function, Ident, Number, TypeLayout,
 };
 
 #[derive(Debug, Clone)]

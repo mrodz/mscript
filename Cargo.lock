@@ -157,6 +157,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bytecode",
+ "indicatif",
  "once_cell",
  "pest",
  "pest_consume",
