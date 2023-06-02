@@ -11,11 +11,11 @@ a = fn(c: int) {
 a(100)
 
 adder = fn(b: int) -> (fn(int) -> int) {
-	temp = fn(input: int) {
+	return fn(input: int) -> int {
 		return input + b
 	}
-	return temp
 }
 
 add_twenty = adder(20)
 print add_twenty(5)
+

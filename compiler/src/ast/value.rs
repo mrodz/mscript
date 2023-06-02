@@ -55,7 +55,7 @@ impl Dependencies for Value {
 impl Compile for Value {
     fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>> {
         match self {
-            Self::Function(function) => function.compile(function_buffer),
+            Self::Function(function) => function.in_place_compile_for_value(function_buffer),
             Self::Ident(ident) => ident.compile(function_buffer),
             Self::Number(number) => number.compile(function_buffer),
             Self::String(string) => string.compile(function_buffer),

@@ -121,21 +121,6 @@ impl Dependencies for Function {
         body_supplies.append(&mut param_supplies);
 
         body_supplies
-        // let Some(param_supplies) = self.parameters.supplies() else {
-        //     return body_supplies;
-        // };
-
-        // let mut param_supplies = param_supplies.into_vec();
-
-        // let Some(body_supplies) = body_supplies else {
-        //     return Some(param_supplies.into_boxed_slice())
-        // };
-
-        // param_supplies.append(&mut body_supplies.into_vec());
-
-        // let supplies = param_supplies.into_boxed_slice();
-
-        // Some(supplies)
     }
 
     fn dependencies(&self) -> Vec<Dependency> {
@@ -143,8 +128,47 @@ impl Dependencies for Function {
     }
 }
 
+impl Function {
+    pub fn in_place_compile_for_value(
+        &self,
+        function_buffer: &mut Vec<CompiledItem>,
+    ) -> Result<Vec<CompiledItem>> {
+        // adds the real function to the function buffer, and returns a shadow function without a body.
+        let shadow_function = self.compile(function_buffer)?.remove(0);
+
+        let CompiledItem::Function { id, location, .. } = shadow_function else {
+            unreachable!()
+        };
+
+        let dependencies = self.net_dependencies();
+
+        let mut arguments = Vec::with_capacity(dependencies.len() + 1);
+
+        let x = location.replace('\\', "/");
+
+        arguments.push(format!("{x}#{}", id.to_string()));
+
+        dependencies
+            .iter()
+            .map(|ident| ident.name().clone())
+            .collect_into(&mut arguments);
+
+        let arguments = arguments.into_boxed_slice();
+
+        // as per `bytecode/src/instruction_constants.rs`
+        const MAKE_FUNCTION: u8 = 0x0D;
+
+        let make_function_instruction = CompiledItem::Instruction {
+            id: MAKE_FUNCTION,
+            arguments,
+        };
+
+        Ok(vec![make_function_instruction])
+    }
+}
+
 impl Compile for Function {
-    fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<super::CompiledItem>> {
+    fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>> {
         let mut args = self.parameters.compile(function_buffer)?;
         let mut body = self.body.compile(function_buffer)?;
 
@@ -157,6 +181,10 @@ impl Compile for Function {
                 content: Some(args),
                 location: self.path_str.clone(),
             };
+
+            if FUNCTION_ID == 2 {
+                dbg!(&x);
+            }
             FUNCTION_ID += 1;
 
             function_buffer.push(x);

@@ -8,7 +8,10 @@ use bytecode_dev_transpiler;
 use clap::Parser;
 use cli::{Args, Commands};
 use compiler::compile;
-use std::{path::{Path, PathBuf}, thread};
+use std::{
+    path::{Path, PathBuf},
+    thread,
+};
 
 use crate::cli::CompilationTargets;
 
@@ -55,7 +58,7 @@ pub fn is_path_source(input: &String) -> Result<PathBuf> {
     let path = Path::new(input);
     if let Some(ext) = path.extension() {
         if ext.eq_ignore_ascii_case("ms") {
-            return Ok(path.with_extension("mmm"))
+            return Ok(path.with_extension("mmm"));
         }
     }
     bail!("Please use the .ms file extension for MScript source files.")
@@ -67,9 +70,13 @@ fn main() -> Result<()> {
     let command = args.command;
 
     match command {
-        Commands::Run { path, stack_size } => {
+        Commands::Run {
+            path,
+            stack_size,
+            verbose,
+        } => {
             let output_path = is_path_source(&path)?;
-            compile(&path, true)?;
+            compile(&path, true, verbose)?;
             println!("Running...\n");
             execute_command(output_path.to_string_lossy().to_string(), stack_size, false)?
         }
@@ -77,18 +84,17 @@ fn main() -> Result<()> {
             path,
             stack_size,
             transpile_first,
-        } => {
-            execute_command(path, stack_size, transpile_first)?
-        }
+        } => execute_command(path, stack_size, transpile_first)?,
         Commands::Transpile { path } => {
             transpile_command(&path)?;
         }
         Commands::Compile {
             path,
             output_format,
+            verbose,
         } => {
             let output_bin = matches!(output_format, CompilationTargets::Binary);
-            compile(&path, output_bin)?;
+            compile(&path, output_bin, verbose)?;
         }
     }
 
