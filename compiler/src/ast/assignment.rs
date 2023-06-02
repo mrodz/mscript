@@ -39,39 +39,11 @@ impl Compile for Assignment {
                 vec![instruction!(load ident), instruction!(store name)]
             }
             Value::Function(function) => {
-                let compiled_function = function.compile(function_buffer)?.remove(0);
-                let CompiledItem::Function { ref id, ref location, .. } = compiled_function else {
-                    unreachable!()
-                };
+                let mut function_init = function.in_place_compile_for_value(function_buffer)?;
 
-                let dependencies = function.net_dependencies();
+                function_init.push(instruction!(store name));
 
-                let mut arguments = Vec::with_capacity(dependencies.len() + 1);
-
-                let x = location.replace('\\', "/");
-
-                arguments.push(format!("{x}#{}", id.to_string()));
-
-                dependencies
-                    .iter()
-                    .map(|ident| ident.name().clone())
-                    .collect_into(&mut arguments);
-
-                let arguments = arguments.into_boxed_slice();
-
-                // as per `bytecode/src/instruction_constants.rs`
-                const MAKE_FUNCTION: u8 = 0x0D;
-
-                let make_function_instruction = CompiledItem::Instruction {
-                    id: MAKE_FUNCTION,
-                    arguments,
-                };
-
-                vec![
-                    // compiled_function,
-                    make_function_instruction,
-                    instruction!(store name),
-                ]
+                function_init
             }
             Value::Number(number) => {
                 let mut number_init = number.compile(function_buffer)?;

@@ -69,7 +69,7 @@ pub(crate) enum CompiledItem {
 }
 
 impl CompiledItem {
-    pub fn repr(&self, use_string_version: bool) -> String {
+    pub fn repr(&self, use_string_version: bool) -> Result<String> {
         fn fix_arg_if_needed(arg: &String) -> Result<Cow<String>> {
             let starts = arg.starts_with('\"');
             let ends = arg.ends_with('\"');
@@ -81,7 +81,11 @@ impl CompiledItem {
             let has_quotes = starts && ends;
 
             if !has_quotes && arg.contains(' ') {
-                Ok(Cow::Owned("\"".to_owned() + arg + "\""))
+                let mut combined = String::with_capacity(arg.len() + 2);
+                combined.push('"');
+                combined.push_str(&arg);
+                combined.push('"');
+                Ok(Cow::Owned(combined))
             } else {
                 Ok(Cow::Borrowed(arg))
             }
@@ -90,10 +94,14 @@ impl CompiledItem {
         match self {
             Self::Function { id, content, .. } => {
                 let Some(ref content) = content else {
-                    unreachable!();
+                    return Ok("ERROR HERE!!!!".to_owned())
+                    // bail!("this is a function symbol, not a compilable function. {self:?}");
                 };
 
-                let content: String = content.iter().map(|x| x.repr(use_string_version)).collect();
+                let mut result = String::new();
+                for item in content {
+                    result += &item.repr(use_string_version)?;
+                }
 
                 let func_name = match id {
                     CompiledFunctionId::Generated(id) => {
@@ -108,7 +116,7 @@ impl CompiledItem {
                     ('\0', "f", "e")
                 };
 
-                format!("{f} {func_name}{sep}{content}{e}{sep}")
+                Ok(format!("{f} {func_name}{sep}{result}{e}{sep}"))
             }
             Self::Instruction { id, arguments } => {
                 let mut args = String::new();
@@ -122,12 +130,12 @@ impl CompiledItem {
                 }
 
                 if use_string_version {
-                    format!(
+                    Ok(format!(
                         "\t{}{args}\n",
                         raw_byte_instruction_to_string_representation(*id).unwrap()
-                    )
+                    ))
                 } else {
-                    format!("{}{}\0", *id as char, args)
+                    Ok(format!("{}{}\0", *id as char, args))
                 }
             }
         }
