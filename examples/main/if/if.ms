@@ -6,8 +6,12 @@ falsey = fn() -> bool {
 	return false
 }
 
-if falsey() {
-	print "hi"
-} else if true {
-	print "awww"
+if false {
+	print "unreachable"
+} else if falsey() {
+	print "wooh! this message is a secret."
+} else if truthy() {
+	print "boo-yah!!"
+} else {
+	print "never"
 }

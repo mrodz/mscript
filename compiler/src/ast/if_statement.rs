@@ -36,12 +36,13 @@ impl Compile for IfStatement {
 
         if let Some(ref else_statement) = self.else_statement {
             let mut compiled = else_statement.compile(function_buffer)?;
+
 			let len = compiled.len();
 			body_init.push(instruction!(jmp len));
 			body_init.append(&mut compiled);
-
-            result.append(&mut body_init);
         }
+
+        result.append(&mut body_init);
 
         Ok(result)
     }
@@ -63,7 +64,10 @@ impl Compile for ElseStatement {
     fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>> {
         let mut content = match self {
 			Self::Block(block) => block.compile(function_buffer),
-			Self::IfStatement(if_statement) => if_statement.compile(function_buffer),
+			Self::IfStatement(if_statement) => {
+                // dbg!(if_statement);
+                if_statement.compile(function_buffer)
+            },
 		}?;
 
 		content.insert(0, instruction!(else));
