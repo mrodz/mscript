@@ -1,9 +1,10 @@
+use std::borrow::Cow;
 use std::{cell::RefCell, rc::Rc};
 
 use anyhow::{Context, Result};
 use pest_consume::Parser as ParserDerive;
 
-use crate::ast::{Compile, CompiledFunctionId, CompiledItem, Declaration, Ident};
+use crate::ast::{Compile, CompiledFunctionId, CompiledItem, Declaration, Ident, TypeLayout};
 use crate::instruction;
 use crate::scope::{Scope, ScopeType};
 
@@ -46,21 +47,23 @@ impl AssocFileData {
         self.file_name.clone()
     }
 
-    pub fn run_in_scope<R>(&self, ty: ScopeType, code: impl FnOnce() -> R) -> R {
-        self.push_scope(ty);
-        let result: R = code();
-        self.pop_scope();
-        result
+    pub fn get_return_type(&self) -> &Option<Cow<'static, TypeLayout>> {
+        unsafe {
+            (*self.scopes.as_ptr())
+                .last()
+                .expect("no scope registered")
+                .peek_yields_value()
+        }
     }
 
-    pub fn push_scope(&self, ty: ScopeType) {
+    pub fn push_scope_typed(&self, ty: ScopeType, yields: Option<Cow<'static, TypeLayout>>) {
         let mut scopes = self.scopes.borrow_mut();
-        scopes.push(Scope::new(ty));
+        scopes.push(Scope::new_with_yields(ty, yields));
     }
 
-    pub fn pop_scope(&self) {
+    pub fn pop_scope(&self) -> Option<Cow<'static, TypeLayout>> {
         let mut scopes = self.scopes.borrow_mut();
-        scopes.pop();
+        scopes.pop().expect("pop without scope").get_yields_value()
     }
 
     pub fn add_dependency(&self, dependency: &Ident) -> Result<()> {
@@ -82,7 +85,7 @@ impl AssocFileData {
             }
 
             // should come after we check the contents of a scope.
-            if scope.ty == ScopeType::Function {
+            if scope.is_function() {
                 is_callback = true;
             }
         }

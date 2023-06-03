@@ -1,8 +1,8 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, borrow::Cow};
 
 use anyhow::Result;
 
-use crate::ast::Ident;
+use crate::ast::{Ident, TypeLayout};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum ScopeType {
@@ -13,7 +13,8 @@ pub(crate) enum ScopeType {
 #[derive(Debug)]
 pub(crate) struct Scope {
     variables: HashSet<Ident>,
-    pub ty: ScopeType,
+    ty: ScopeType,
+    yields: Option<Cow<'static, TypeLayout>>,
 }
 
 impl Scope {
@@ -21,7 +22,32 @@ impl Scope {
         Self {
             variables: HashSet::new(),
             ty,
+            yields: None,
         }
+    }
+
+    pub fn new_with_yields(ty: ScopeType, yields: Option<Cow<'static, TypeLayout>>) -> Self {
+        Self {
+            variables: HashSet::new(),
+            ty,
+            yields: yields,
+        }
+    }
+
+    pub fn does_yield_value(&self) -> bool {
+        self.yields.is_some()
+    }
+
+    pub fn peek_yields_value(&self) -> &Option<Cow<'static, TypeLayout>> {
+        &self.yields
+    }
+
+    pub fn get_yields_value(self) -> Option<Cow<'static, TypeLayout>> {
+        self.yields
+    }
+
+    pub fn is_function(&self) -> bool {
+        self.ty == ScopeType::Function
     }
 
     pub fn add_dependency(&mut self, dependency: &Ident) -> Result<()> {

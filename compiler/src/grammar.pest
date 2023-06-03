@@ -1,4 +1,4 @@
-WHITESPACE = _{ " " | NEWLINE | "\t" }
+WHITESPACE = _{ " " | "\r\n" | "\n" | "\t" }
 
 keywords = _{
     "fn" | 
@@ -41,7 +41,7 @@ math_expr = { math_atom ~ (bin_op ~ math_atom)* }
 escape_character = _{ "\\" | "r" | "n" }
 escape_sequence = @{ "\\" ~ escape_character }
 
-string = { "\"" ~ (("\\\"") | (!("\"") ~ ANY))* ~ "\"" }
+string = @{ "\"" ~ (("\\\"") | (!("\"") ~ ANY))* ~ "\"" }
 
 
 ident_chars = _{ (('a'..'z') | ('0'..'9') | "_") }
@@ -75,7 +75,7 @@ if_statement = { "if" ~ value ~ block ~ else_statement? }
 
 print_statement = { "print" ~ value }
 
-return_statement = { "return" ~ value }
+return_statement = { "return" ~ value? }
 
 declaration = { assignment | callable | print_statement | return_statement | if_statement }
 

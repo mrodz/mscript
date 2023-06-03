@@ -208,39 +208,42 @@ impl Compile for Function {
 impl Parser {
     pub fn function(input: Node) -> Result<Function> {
         let path_str = input.user_data().get_file_name();
-        input.user_data().run_in_scope(ScopeType::Function, || {
-            let mut children = input.children();
+        let mut children = input.children();
+        let parameters = children.next().unwrap();
 
-            let parameters = children.next().unwrap();
-            let parameters = Self::function_parameters(parameters)?;
+        let parameters = Self::function_parameters(parameters)?;
 
-            let next = children.next();
+        let next = children.next();
 
             // if there are no more children, there is no return type or body
-            let Some(next) = next else {
-                return Ok(Function::new(parameters, Block::empty_body(), None, path_str));
-            };
+        let Some(next) = next else {
+            return Ok(Function::new(parameters, Block::empty_body(), None, path_str));
+        };
 
-            let (body, return_type) = if matches!(next.as_rule(), Rule::function_return_type) {
-                let body = children.next();
-                (body, Some(next))
-            } else {
-                (Some(next), None)
-            };
+        let (body, return_type) = if matches!(next.as_rule(), Rule::function_return_type) {
+            let body = children.next();
+            (body, Some(next))
+        } else {
+            (Some(next), None)
+        };
 
-            let body = if let Some(body) = body {
-                Self::block(body)?
-            } else {
-                Block::empty_body()
-            };
+        let return_type = if let Some(return_type) = return_type {
+            Some(Self::function_return_type(return_type)?)
+        } else {
+            None
+        };
 
-            let return_type = if let Some(return_type) = return_type {
-                Some(Self::function_return_type(return_type)?)
-            } else {
-                None
-            };
+        input.user_data().push_scope_typed(ScopeType::Function, return_type);
 
-            Ok(Function::new(parameters, body, return_type, path_str))
-        })
+        let body = if let Some(body) = body {
+            Self::block(body)?
+        } else {
+            Block::empty_body()
+        };
+
+        let return_type = input.user_data().pop_scope();
+
+        Ok(Function::new(parameters, body, return_type, path_str))
+
     }
 }
