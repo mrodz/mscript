@@ -15,6 +15,7 @@ pub(crate) enum Value {
     String(AstString),
     MathExpr(Box<Expr>),
     Callable(Callable),
+    Boolean(bool)
 }
 
 impl Value {
@@ -32,6 +33,7 @@ impl IntoType for Value {
             Self::Number(number) => number.into_type(),
             Self::String(string) => string.into_type(),
             Self::Callable(callable) => callable.into_type(),
+            Self::Boolean(boolean) => boolean.into_type(),
         }
     }
 }
@@ -48,6 +50,7 @@ impl Dependencies for Value {
             Self::String(string) => string.net_dependencies(),
             Self::MathExpr(math_expr) => math_expr.net_dependencies(),
             Self::Callable(callable) => callable.net_dependencies(),
+            Self::Boolean(boolean) => boolean.net_dependencies(),
         }
     }
 }
@@ -60,7 +63,8 @@ impl Compile for Value {
             Self::Number(number) => number.compile(function_buffer),
             Self::String(string) => string.compile(function_buffer),
             Self::MathExpr(math_expr) => math_expr.compile(function_buffer),
-            Self::Callable(callable) => callable.compile(function_buffer)
+            Self::Callable(callable) => callable.compile(function_buffer),
+            Self::Boolean(boolean) => boolean.compile(function_buffer),
         }
     }
 }
@@ -70,7 +74,7 @@ impl Parser {
         let matched = match input.as_rule() {
             Rule::function => Value::Function(Self::function(input)?),
             Rule::ident => {
-                let ident = Self::ident(input);
+                let ident = Self::ident(input)?;
                 Value::Ident(ident.clone())
             }
             Rule::number => Value::Number(Self::number(input)?),

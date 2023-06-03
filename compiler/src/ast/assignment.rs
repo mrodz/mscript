@@ -73,6 +73,13 @@ impl Compile for Assignment {
 
                 callable_init
             }
+            Value::Boolean(boolean) => {
+                let mut boolean_init = boolean.compile(function_buffer)?;
+
+                boolean_init.push(instruction!(store name));
+
+                boolean_init
+            }
         };
 
         Ok(matched)

@@ -5,11 +5,11 @@ use anyhow::Result;
 use crate::{
     ast::CompiledFunctionId,
     parser::{Node, Parser, Rule},
-    scope::ScopeType,
+    scope::ScopeType, instruction,
 };
 
 use super::{
-    r#type::IntoType, Compile, CompiledItem, Dependencies, Dependency, FunctionBody,
+    r#type::IntoType, Compile, CompiledItem, Dependencies, Dependency, Block,
     FunctionParameters, TypeLayout,
 };
 
@@ -22,7 +22,7 @@ pub fn name_from_function_id(id: isize) -> String {
 #[derive(Debug, Clone)]
 pub(crate) struct Function {
     pub parameters: FunctionParameters,
-    pub body: FunctionBody,
+    pub body: Block,
     pub return_type: Option<Cow<'static, TypeLayout>>,
     pub path_str: Rc<String>,
 }
@@ -83,7 +83,7 @@ impl Display for FunctionType {
 impl Function {
     pub fn new(
         parameters: FunctionParameters,
-        body: FunctionBody,
+        body: Block,
         return_type: Option<Cow<'static, TypeLayout>>,
         path_str: Rc<String>,
     ) -> Self {
@@ -172,7 +172,16 @@ impl Compile for Function {
         let mut args = self.parameters.compile(function_buffer)?;
         let mut body = self.body.compile(function_buffer)?;
 
+        if let Some(CompiledItem::Instruction { id: RET, .. }) = body.last() {
+            // nothing! the function returns by itself
+        } else {
+            body.push(instruction!(void));
+            body.push(instruction!(ret));
+        }
+
         args.append(&mut body);
+
+        const RET: u8 = 0x12;
 
         unsafe {
             let id = CompiledFunctionId::Generated(FUNCTION_ID);
@@ -182,9 +191,6 @@ impl Compile for Function {
                 location: self.path_str.clone(),
             };
 
-            if FUNCTION_ID == 2 {
-                dbg!(&x);
-            }
             FUNCTION_ID += 1;
 
             function_buffer.push(x);
@@ -212,7 +218,7 @@ impl Parser {
 
             // if there are no more children, there is no return type or body
             let Some(next) = next else {
-                return Ok(Function::new(parameters, FunctionBody::empty_body(), None, path_str));
+                return Ok(Function::new(parameters, Block::empty_body(), None, path_str));
             };
 
             let (body, return_type) = if matches!(next.as_rule(), Rule::function_return_type) {
@@ -223,9 +229,9 @@ impl Parser {
             };
 
             let body = if let Some(body) = body {
-                Self::function_body(body)?
+                Self::block(body)?
             } else {
-                FunctionBody::empty_body()
+                Block::empty_body()
             };
 
             let return_type = if let Some(return_type) = return_type {

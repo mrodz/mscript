@@ -117,7 +117,6 @@ pub(crate) fn root_node_from_str(input_str: &str, user_data: Rc<AssocFileData>) 
     let source_name = &*user_data.get_source_file_name();
     let x = util::parse_with_userdata(Rule::file, input_str, user_data).map_err(|err| {
         err.with_path(source_name).renamed_rules(|rule| match rule {
-            Rule::function_body => "function body".to_owned(),
             Rule::math_expr => "expression".to_owned(),
             Rule::function_return_type => "return type".to_owned(),
             rule => format!("{rule:?}"),

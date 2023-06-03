@@ -4,7 +4,11 @@ keywords = _{
     "fn" | 
     "obj" |
     "print" |
-    "return"
+    "return" |
+    "if" |
+    "else" |
+    "true" |
+    "false"
 }
 
 integer = @{ '0'..'9' ~ ('0'..'9' | ("_" ~ ('0'..'9')))* }
@@ -16,10 +20,11 @@ byte = @{ "0b" ~ ('0'..'1' ~ ('0'..'1' | ("_" ~ ('0'..'1')))*) }
 float = @{ integer ~ "." ~ integer }
 
 number = { hex_int | byte | float | integer }
+boolean = { "true" | "false" }
 
 unary_minus = { "-" }
 
-allow_bin_op = _{ callable | ident | number | string }
+allow_bin_op = _{ callable | boolean | ident | number | string }
 
 math_primary = _{ allow_bin_op | "(" ~ math_expr ~ ")" }
 math_atom = _{ unary_minus? ~ math_primary }
@@ -39,22 +44,23 @@ escape_sequence = @{ "\\" ~ escape_character }
 string = { "\"" ~ (("\\\"") | (!("\"") ~ ANY))* ~ "\"" }
 
 
-ident = @{ !keywords ~ (!('0'..'9') ~ (('a'..'z') | ('0'..'9') | "_")+) }
+ident_chars = _{ (('a'..'z') | ('0'..'9') | "_") }
+
+ident = @{ !('0'..'9') ~ ident_chars+ }
 type = { ident | function_type }
 ident_type = _{ ident ~ ":" ~ type }
 
 function_arguments = { (value ~ ("," ~ value)*)? }
 callable = { ident ~ "(" ~ function_arguments ~ ")" }
 
-
+block = { "{" ~ declaration* ~ "}" }
 
 function_parameters = { ((ident ~ (":" ~ type)?))? ~ ("," ~ ((ident ~ (":" ~ type)?))*)? }
-function_body = { "{" ~ declaration* ~ "}" }
 
 function_type = { "fn" ~ "(" ~ (type ~ ("," ~ type)*)? ~ ")" ~ function_return_type?  }
 // allow braces around the return type in case it is long
 function_return_type = { "->" ~ (type | ("(" ~ type ~ ")")) }
-function = { "fn" ~ "(" ~ (function_parameters) ~ ")" ~ function_return_type? ~ function_body }
+function = { "fn" ~ "(" ~ (function_parameters) ~ ")" ~ function_return_type? ~ block }
 
 value = _{ function | math_expr | ident | string }
 
@@ -63,12 +69,15 @@ assignment_no_type = { ident ~ "=" ~ value }
 assignment_type = { ident ~ ":" ~ type ~ "=" ~ value }
 assignment = { assignment_no_type | assignment_type }
 
+else_statement = { "else" ~ (block | if_statement) }
+
+if_statement = { "if" ~ value ~ block ~ else_statement? }
 
 print_statement = { "print" ~ value }
 
 return_statement = { "return" ~ value }
 
-declaration = { assignment | callable | print_statement | return_statement }
+declaration = { assignment | callable | print_statement | return_statement | if_statement }
 
 file = {
     SOI ~

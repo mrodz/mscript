@@ -47,7 +47,7 @@ use crate::{
 
 use super::{
     new_err, r#type::IntoType, string::AstString, Compile, CompiledItem, Dependencies,
-    Dependency, Value,
+    Dependency, Value, boolean::boolean_from_str,
 };
 
 pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
@@ -288,26 +288,6 @@ pub(crate) fn parse_expr(pairs: Pairs<Rule>, user_data: Rc<AssocFileData>) -> Re
                 }
                 Rule::math_expr => parse_expr(primary.into_inner(), user_data.clone()),
                 Rule::callable => {
-                    // let (raw_str_name, _) = primary.as_str().split_once('(').unwrap();
-
-                    // // todo!();
-                    // let (ident, is_callback) = user_data
-                    //     .get_dependency_flags_from_name(raw_str_name.to_owned())
-                    //     .with_context(|| {
-                    //         new_err(
-                    //             primary.as_span(),
-                    //             &user_data.get_source_file_name(),
-                    //             "use of undeclared variable".into(),
-                    //         )
-                    //     })?;
-
-                    // let function_type = ident.ty()?.is_function().with_context(|| {
-                    //     new_err(
-                    //         primary.as_span(),
-                    //         &user_data.get_source_file_name(),
-                    //         "not a function".into(),
-                    //     )
-                    // })?;
                     let x = util::parse_with_userdata(Rule::callable, primary.as_str(), user_data.clone())?;
 
                     let single = x.single()?;
@@ -315,6 +295,9 @@ pub(crate) fn parse_expr(pairs: Pairs<Rule>, user_data: Rc<AssocFileData>) -> Re
                     let callable = Parser::callable(single)?;
 
                     Ok(Expr::Value(Value::Callable(callable)))
+                }
+                Rule::boolean => {
+                    Ok(Expr::Value(Value::Boolean(boolean_from_str(primary.as_str()))))
                 }
                 rule => unreachable!("Expr::parse expected atom, found {:?}", rule),
             }

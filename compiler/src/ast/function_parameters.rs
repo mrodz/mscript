@@ -101,7 +101,7 @@ impl Parser {
             };
 
             let ident_span = ident_node.as_span();
-            let mut ident = Self::ident(ident_node);
+            let mut ident = Self::ident(ident_node)?;
 
             let ty: Option<Node> = children.next();
 

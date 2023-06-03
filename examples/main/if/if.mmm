@@ -1,0 +1,27 @@
+function __fn0
+	bool true
+	ret
+end
+function __fn1
+	bool false
+	ret
+end
+function main
+	make_function ./examples/main/if/if.mmm#__fn0
+	store truthy
+	make_function ./examples/main/if/if.mmm#__fn1
+	store falsey
+	load falsey
+	call
+	if 6
+		string "hi"
+		printn *
+		void
+		done
+		jmp 4
+	else
+		bool true
+		if 5
+		done
+	ret
+end

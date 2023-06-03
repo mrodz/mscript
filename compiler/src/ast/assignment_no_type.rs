@@ -13,7 +13,7 @@ impl Parser {
         let ident = children.next().unwrap();
         let rhs = children.next().unwrap();
 
-        let mut ident = Self::ident(ident);
+        let mut ident = Self::ident(ident)?;
         let value = Self::value(rhs)?;
 
         let user_data = input.user_data();
@@ -40,6 +40,10 @@ impl Parser {
                 }
                 Value::Callable(ref callback) => {
                     let ty = callback.into_type()?;
+                    ident.link(user_data, Some(Cow::Owned(ty)))?;
+                }
+                Value::Boolean(ref boolean) => {
+                    let ty = boolean.into_type()?;
                     ident.link(user_data, Some(Cow::Owned(ty)))?;
                 }
             }
