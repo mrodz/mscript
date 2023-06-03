@@ -18,7 +18,7 @@ impl Parser {
         // map_err(, span, file_name, message)
         let ty_span = ty.as_span();
 
-        let mut ident: Ident = Self::ident(ident);
+        let mut ident: Ident = Self::ident(ident)?;
         let ty: Cow<'static, TypeLayout> = Self::r#type(ty)?;
         let value: Value = Self::value(value)?;
 

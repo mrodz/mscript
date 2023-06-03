@@ -185,7 +185,7 @@ impl<'a> Function {
                     }
                 }
                 InstructionExitState::Goto(offset) => {
-                    instruction_ptr = *offset;
+                    instruction_ptr += *offset;
                     context.clear_signal();
                     continue;
                 }
@@ -194,7 +194,7 @@ impl<'a> Function {
                     context.add_frame(ty.to_string());
                 }
                 InstructionExitState::GotoPushScope(offset, ty) => {
-                    instruction_ptr = *offset;
+                    instruction_ptr += *offset;
                     special_scopes.push(*ty);
 
                     let string = ty.to_string();

@@ -75,6 +75,13 @@ impl Compile for PrintStatement {
 
                 callable_init
             }
+            Value::Boolean(boolean) => {
+                let mut boolean_init = boolean.compile(function_buffer)?;
+                
+                boolean_init.append(&mut vec![instruction!(printn '*'), instruction!(void)]);
+
+                boolean_init
+            }
         };
 
         Ok(matched)

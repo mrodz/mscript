@@ -80,7 +80,7 @@ impl Parser {
 
         let user_data = input.user_data();
 
-        let mut ident = Self::ident(ident);
+        let mut ident = Self::ident(ident)?;
 
         let maybe = ident.link_from_pointed_type_with_lookup(user_data);
 

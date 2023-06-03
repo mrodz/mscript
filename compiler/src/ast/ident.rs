@@ -1,13 +1,15 @@
 use std::borrow::Cow;
+use std::collections::HashSet;
 use std::fmt::Display;
 use std::hash::Hash;
 
 use anyhow::{bail, Context, Result};
+use once_cell::sync::Lazy;
 
 use crate::parser::{AssocFileData, Node, Parser};
 
 use super::r#type::TypeLayout;
-use super::{Compile, CompiledItem, Dependencies, Dependency};
+use super::{new_err, Compile, CompiledItem, Dependencies, Dependency};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Ident {
@@ -32,6 +34,12 @@ impl Hash for Ident {
         self.name.hash(state)
     }
 }
+
+pub static KEYWORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+    HashSet::from_iter([
+        "fn", "obj", "print", "return", "if", "else", "true", "false",
+    ])
+});
 
 impl Ident {
     pub fn wrap_in_callback(mut self) -> Result<Self> {
@@ -169,9 +177,19 @@ impl Ident {
 }
 
 impl Parser {
-    pub fn ident(input: Node) -> Ident {
-        let name = input.as_str().to_owned();
+    pub fn ident(input: Node) -> Result<Ident> {
+        let name = input.as_str();
 
-        Ident { name, ty: None }
+        if KEYWORDS.contains(name) {
+            bail!(new_err(
+                input.as_span(),
+                &input.user_data().get_source_file_name(),
+                "this is a reserved keyword".into()
+            ));
+        }
+
+        let name = name.to_owned();
+
+        Ok(Ident { name, ty: None })
     }
 }

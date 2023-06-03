@@ -712,7 +712,6 @@ pub mod implementations {
             };
 
             if !b {
-                dbg!("falsey; jumping...");
                 ctx.signal(InstructionExitState::GotoPushScope(usize::from_str_radix(offset, 10)?, SpecialScope::If));
             }
 

@@ -4,7 +4,7 @@ use crate::parser::{Node, Parser, Rule};
 
 use super::{
     assignment::Assignment, Callable, Compile, CompiledItem, Dependencies, Dependency,
-    PrintStatement, r#return::ReturnStatement,
+    PrintStatement, r#return::ReturnStatement, if_statement::IfStatement,
 };
 
 #[derive(Debug, Clone)]
@@ -13,6 +13,7 @@ pub(crate) enum Declaration {
     Callable(Callable),
     PrintStatement(PrintStatement),
     ReturnStatement(ReturnStatement),
+    IfStatement(IfStatement)
 }
 
 impl Dependencies for Declaration {
@@ -22,6 +23,7 @@ impl Dependencies for Declaration {
             Self::Callable(callable) => callable.supplies(),
             Self::PrintStatement(print_statement) => print_statement.supplies(),
             Self::ReturnStatement(return_statement) => return_statement.supplies(),
+            Self::IfStatement(if_statement) => if_statement.supplies(),
         }
     }
     fn dependencies(&self) -> Vec<Dependency> {
@@ -41,6 +43,9 @@ impl Dependencies for Declaration {
             Self::ReturnStatement(return_statement) => {
                 return_statement.net_dependencies()
             }
+            Self::IfStatement(if_statement) => {
+                if_statement.net_dependencies()
+            }
         }
     }
 }
@@ -52,6 +57,7 @@ impl Compile for Declaration {
             Self::Callable(x) => x.compile(function_buffer),
             Self::Assignment(x) => x.compile(function_buffer),
             Self::ReturnStatement(x) => x.compile(function_buffer),
+            Self::IfStatement(x) => x.compile(function_buffer),
         }
     }
 }
@@ -68,6 +74,9 @@ impl Parser {
             }
             Rule::return_statement => {
                 Declaration::ReturnStatement(Self::return_statement(declaration)?)
+            }
+            Rule::if_statement => {
+                Declaration::IfStatement(Self::if_statement(declaration)?)
             }
             _ => unreachable!(),
         };
