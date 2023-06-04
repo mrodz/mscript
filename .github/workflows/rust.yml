@@ -17,6 +17,12 @@ jobs:
     steps:
       - name: Set up rust
         uses: actions/checkout@v3
+      - name: Install latest nightly
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+          components: rustfmt, clippy
       - name: Install cargo-audit
         run: cargo install cargo-audit
       - name: Build
