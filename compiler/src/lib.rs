@@ -20,7 +20,6 @@ use indicatif::{MultiProgress, ProgressBar, ProgressFinish, ProgressStyle};
 
 use once_cell::sync::Lazy;
 use parser::AssocFileData;
-use scope::ScopeType;
 
 use crate::ast::CompiledItem;
 use crate::parser::{root_node_from_str, Parser};
@@ -123,7 +122,6 @@ pub fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<()> {
     let logger = VerboseLogger::new(verbose);
 
     let user_data = Rc::new(AssocFileData::new(
-        ScopeType::File,
         output_path.to_string_lossy().to_string(),
     ));
 

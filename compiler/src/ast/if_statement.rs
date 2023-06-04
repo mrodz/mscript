@@ -96,10 +96,15 @@ impl Parser {
             ))
         }
 
+        input.user_data().push_if();
         let body_as_block = Self::block(body)?;
+        input.user_data().pop_scope();
 
         let else_statement = if let Some(else_statement) = else_statement {
-            Some(Self::else_statement(else_statement)?)
+            input.user_data().push_else();
+            let x = Some(Self::else_statement(else_statement)?);
+            input.user_data().pop_scope();
+            x
         } else {
             None
         };

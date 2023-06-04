@@ -5,7 +5,7 @@ use anyhow::{bail, Result};
 use crate::{
     ast::{new_err, r#type::IntoType},
     instruction,
-    parser::{Node, Parser},
+    parser::{Node, Parser}, scope::ScopeReturnStatus,
 };
 
 use super::{Compile, Dependencies, Value};
@@ -42,6 +42,8 @@ impl Parser {
     pub fn return_statement(input: Node) -> Result<ReturnStatement> {
         let expected_return_type = input.user_data().get_return_type();
 
+		expected_return_type.mark_should_return_as_completed()?;
+
         let value_node = input.children().next();
 
 		/*
@@ -56,7 +58,7 @@ impl Parser {
 		*/
 
 		let Some(value_node) = value_node else {
-			if let Some(expected_return_type) = expected_return_type {
+			if let ScopeReturnStatus::DidReturn(expected_return_type) = expected_return_type {
 				// #0
 				bail!(new_err(
 					input.as_span(),
@@ -76,7 +78,7 @@ impl Parser {
 		let supplied_type = value.into_type()?;
 		let supplied_type = supplied_type.get_type_recursively();
 
-		let Some(expected_return_type) = expected_return_type else {
+		let ScopeReturnStatus::DidReturn(expected_return_type) = expected_return_type else {
 			// #3
 			bail!(new_err(
 				input.as_span(),

@@ -145,10 +145,6 @@ impl From<String> for Primitive {
 
 impl From<&str> for Primitive {
     fn from(value: &str) -> Self {
-        if let Ok(str) = Primitive::make_str(value) {
-            return str;
-        }
-
         if let Ok(byte) = Primitive::make_byte(value) {
             return byte;
         }
@@ -167,6 +163,10 @@ impl From<&str> for Primitive {
 
         if let Ok(bool) = Primitive::make_bool(value) {
             return bool;
+        }
+
+        if let Ok(str) = Primitive::make_str(value) {
+            return str;
         }
 
         panic!("Invalid constexpr: {value}")
