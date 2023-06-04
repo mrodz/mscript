@@ -35,7 +35,7 @@ impl PrimitiveFunction {
         callback_state: Option<Arc<VariableMapping>>,
     ) -> Result<Self> {
         let path_no_function = path.trim_end_matches(|c| c != '#');
-        if !Path::exists(&Path::new(&path_no_function[..path_no_function.len() - 1])) {
+        if !Path::exists(Path::new(&path_no_function[..path_no_function.len() - 1])) {
             bail!("path does not exist ({path_no_function})")
         }
 
@@ -121,7 +121,7 @@ pub enum InstructionExitState {
     NoExit,
 }
 
-impl<'a> Function {
+impl Function {
     pub fn new(location: Arc<MScriptFile>, name: String, instructions: Box<[Instruction]>) -> Self {
         Self {
             location,
@@ -144,7 +144,7 @@ impl<'a> Function {
     ) -> Result<ReturnValue> {
         arc_to_ref(&current_frame).extend(self.get_qualified_name());
 
-        let mut context = Ctx::new(&self, current_frame.clone(), args, callback_state);
+        let mut context = Ctx::new(self, current_frame.clone(), args, callback_state);
 
         let mut instruction_ptr = 0;
 
@@ -153,7 +153,7 @@ impl<'a> Function {
         while instruction_ptr < self.instructions.len() {
             let instruction = &self.instructions[instruction_ptr];
 
-            run_instruction(&mut context, &instruction)
+            run_instruction(&mut context, instruction)
                 .context("failed to run instruction")
                 .with_context(|| {
                     let instruction_as_str =

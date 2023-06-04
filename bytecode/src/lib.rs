@@ -26,7 +26,7 @@ pub mod compilation_lookups {
 
     pub fn raw_byte_instruction_to_string_representation(byte: u8) -> Option<Cow<'static, str>> {
         let byte_string = BIN_TO_REPR.get(byte as usize)?;
-        let as_str = String::from_utf8_lossy(&byte_string);
+        let as_str = String::from_utf8_lossy(byte_string);
 
         Some(as_str)
     }

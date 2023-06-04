@@ -96,17 +96,17 @@ pub(crate) enum Expr {
 
 impl Expr {
     pub fn validate(&self) -> Result<()> {
-        self.into_type().map(|_| ())
+        self.for_type().map(|_| ())
     }
 }
 
 impl IntoType for Expr {
-    fn into_type(&self) -> Result<super::TypeLayout> {
+    fn for_type(&self) -> Result<super::TypeLayout> {
         match self {
-            Expr::Value(val) => val.into_type(),
+            Expr::Value(val) => val.for_type(),
             Expr::BinOp { lhs, op, rhs } => {
-                let lhs = lhs.into_type()?;
-                let rhs = rhs.into_type()?;
+                let lhs = lhs.for_type()?;
+                let rhs = rhs.for_type()?;
 
                 lhs.get_output_type(&rhs, op).with_context(|| {
                     format!(
@@ -116,7 +116,7 @@ impl IntoType for Expr {
                     )
                 })
             }
-            Expr::UnaryMinus(val) => val.into_type(),
+            Expr::UnaryMinus(val) => val.for_type(),
         }
     }
 }
@@ -208,8 +208,8 @@ fn compile_depth(
             Ok(eval)
         }
         Expr::BinOp { lhs, op, rhs } => {
-            let mut lhs = compile_depth(&lhs, function_buffer, ExprRegister::new())?;
-            let mut rhs = compile_depth(&rhs, function_buffer, ExprRegister::new())?;
+            let mut lhs = compile_depth(lhs, function_buffer, ExprRegister::new())?;
+            let mut rhs = compile_depth(rhs, function_buffer, ExprRegister::new())?;
 
             let temp_name = depth.repr();
 

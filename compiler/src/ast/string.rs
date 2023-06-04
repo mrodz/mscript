@@ -27,7 +27,7 @@ impl Dependencies for AstString {
 }
 
 impl IntoType for AstString {
-    fn into_type(&self) -> Result<super::TypeLayout> {
+    fn for_type(&self) -> Result<super::TypeLayout> {
         Ok(TypeLayout::Native(NativeType::Str))
     }
 }

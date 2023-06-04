@@ -51,13 +51,11 @@ impl ObjectBuilder {
         let name = self.name.clone().unwrap();
         let functions = self.functions.get(&name).expect("no functions");
 
-        let result = Object {
+        Object {
             name,
             object_variables: self.object_variables.clone().expect("no name"),
             functions,
-        };
-
-        result
+        }
     }
 }
 
@@ -123,7 +121,7 @@ impl Object {
         ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
             destination: crate::instruction::JumpRequestDestination::Standard(destination),
             callback_state: Some(Arc::clone(&self.object_variables)),
-            stack: ctx.arced_call_stack().clone(),
+            stack: ctx.arced_call_stack(),
             arguments,
         }));
 

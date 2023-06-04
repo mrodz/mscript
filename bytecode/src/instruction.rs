@@ -11,7 +11,7 @@ use std::fmt::Debug;
 use std::io::{stdin, stdout, Write};
 use std::sync::Arc;
 
-static mut OBJECT_BUILDER: Lazy<ObjectBuilder> = Lazy::new(|| ObjectBuilder::new());
+static mut OBJECT_BUILDER: Lazy<ObjectBuilder> = Lazy::new(ObjectBuilder::new);
 
 pub type InstructionSignature = fn(&mut Ctx, &[String]) -> Result<()>;
 
@@ -71,7 +71,6 @@ pub mod implementations {
     use crate::context::SpecialScope;
     use crate::function::{PrimitiveFunction, ReturnValue};
     use crate::stack::VariableFlags;
-    use crate::variables::Object;
     use crate::{bool, function, int, object, vector};
     use std::collections::HashMap;
     use std::sync::Arc;
@@ -92,7 +91,7 @@ pub mod implementations {
 
     instruction! {
         pop(ctx, args) {
-            if args.len() != 0 {
+            if !args.is_empty() {
                 bail!("unexpected parameter")
             }
 
@@ -119,7 +118,7 @@ pub mod implementations {
 
                 println!("\nFunction: {}", ctx.owner());
                 println!("\nOperating Stack: {:?}", ctx.get_local_operating_stack());
-                println!("\nStack Trace:\n{}", stack);
+                println!("\nStack Trace:\n{stack}");
                 println!("\nThis Frame's Variables:\n\t{}\n", ctx.get_frame_variables());
             }
             println!("======= End Context Dump =======");
@@ -186,7 +185,7 @@ pub mod implementations {
                 let mut max = 10_usize.pow(content.len() as u32 - 1);
 
                 for byte in content {
-                    if !matches!(byte, b'0'..=b'9') {
+                    if byte.is_ascii_digit() {
                         bail!("'{}' is not numeric", char::from(*byte))
                     }
                     idx += (byte - b'0') as usize * max;
@@ -209,7 +208,7 @@ pub mod implementations {
                     },
                     "mut" => {
                         let idx = arg_iter.next().context("mutating an array requires an argument")?;
-                        let idx = usize::from_str_radix(idx, 10)?;
+                        let idx = idx.parse::<usize>()?;
 
                         if ctx.stack_size() != 2 {
                             bail!("mutating an array requires two items in the local operating stack")
@@ -348,7 +347,7 @@ pub mod implementations {
         }
 
         make_object(ctx, args) {
-            if args.len() != 0 {
+            if !args.is_empty() {
                 bail!("`make_object` does not require arguments")
             }
 
@@ -387,7 +386,7 @@ pub mod implementations {
             }
 
             let Some(arg) = args.first() else {
-                let vec = ctx.get_local_operating_stack().clone().into();
+                let vec = ctx.get_local_operating_stack();
                 // ^^ new capacity = old length
 
                 ctx.clear_stack();
@@ -396,7 +395,7 @@ pub mod implementations {
                 return Ok(())
             };
 
-            let capacity = usize::from_str_radix(arg, 10).context("argument must be of type usize")?;
+            let capacity = arg.parse::<usize>().context("argument must be of type usize")?;
 
             let vec = vector!(raw Vec::with_capacity(capacity));
 
@@ -432,7 +431,7 @@ pub mod implementations {
                 return Ok(());
             }
 
-            let arg = usize::from_str_radix(arg, 10).context("argument must be of type usize")?;
+            let arg = arg.parse::<usize>().context("argument must be of type usize")?;
 
             println!("{}", ctx.get_nth_op_item(arg).context("nothing at index")?);
 
@@ -460,7 +459,7 @@ pub mod implementations {
             ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                 destination: JumpRequestDestination::Standard(path.clone()),
                 callback_state,
-                stack: ctx.arced_call_stack().clone(),
+                stack: ctx.arced_call_stack(),
                 arguments,
             }));
 
@@ -474,22 +473,20 @@ pub mod implementations {
                 bail!("mutating an object requires two items in the local operating stack (obj, data)")
             }
 
-            let new_item: Primitive = ctx.pop().context("could not pop first item")?.into();
+            let new_item: Primitive = ctx.pop().context("could not pop first item")?;
 
             let Some(Primitive::Object(o)) = ctx.get_last_op_item_mut() else {
                 bail!("Cannot perform an object mutation on a non-object")
             };
 
-            unsafe {
-                // this bypass of Arc protections is messy and should be refactored.
-                let var = (*(Arc::as_ptr(&o) as *mut Object)).has_variable_mut(var_name).context("variable does not exist on object")?;
+            // this bypass of Arc protections is messy and should be refactored.
+            let var = arc_to_ref(o).has_variable_mut(var_name).context("variable does not exist on object")?;
 
-                if var.0.ty() != new_item.ty() {
-                    bail!("mismatched types in assignment ({:?} & {:?})", var.0.ty(), new_item.ty())
-                }
-
-                var.0 = new_item.into();
+            if var.0.ty() != new_item.ty() {
+                bail!("mismatched types in assignment ({:?} & {:?})", var.0.ty(), new_item.ty())
             }
+
+            var.0 = new_item;
 
             Ok(())
         }
@@ -498,7 +495,7 @@ pub mod implementations {
             // This never needs to re-allocate, but does need to do O(n) data movement
             // if the circular buffer doesn’t happen to be at the beginning of the
             // allocation (https://doc.rust-lang.org/std/collections/vec_deque/struct.VecDeque.html)
-            let arguments = ctx.get_local_operating_stack().into();
+            let arguments = ctx.get_local_operating_stack();
 
             let Some(first) = args.first() else {
                 let last = ctx.pop();
@@ -510,7 +507,7 @@ pub mod implementations {
                 ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                     destination: JumpRequestDestination::Standard(f.location.clone()),
                     callback_state: f.callback_state.clone(),
-                    stack: ctx.arced_call_stack().clone(),
+                    stack: ctx.arced_call_stack(),
                     arguments,
                 }));
 
@@ -522,7 +519,7 @@ pub mod implementations {
             ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                 destination: JumpRequestDestination::Standard(first.clone()),
                 callback_state: None,
-                stack: ctx.arced_call_stack().clone(),
+                stack: ctx.arced_call_stack(),
                 arguments,
             }));
 
@@ -536,7 +533,7 @@ pub mod implementations {
                 bail!("expected one argument")
             };
 
-            let n = usize::from_str_radix(first, 10).context("argument must be of type usize")?;
+            let n = first.parse::<usize>().context("argument must be of type usize")?;
 
             let Some(nth_arg) = ctx.nth_arg(n) else {
                 bail!("#{n} argument does not exist (range 0..{})", ctx.argc())
@@ -601,7 +598,7 @@ pub mod implementations {
 
             let arg = ctx.pop().unwrap();
 
-            ctx.update_callback_variable(name.to_string(), arg.into())?;
+            ctx.update_callback_variable(name.to_string(), arg)?;
 
             Ok(())
         }
@@ -611,7 +608,7 @@ pub mod implementations {
                 bail!("load requires a name")
             };
 
-            let Some(var) = ctx.load_variable(&name) else {
+            let Some(var) = ctx.load_variable(name) else {
                 bail!("load before store (`{name}` not in scope)")
             };
 
@@ -625,7 +622,7 @@ pub mod implementations {
                 bail!("load requires a name")
             };
 
-            let Some(var) = ctx.load_local(&name) else {
+            let Some(var) = ctx.load_local(name) else {
                 bail!("load before store (`{name}` not in this stack frame)")
             };
 
@@ -712,7 +709,7 @@ pub mod implementations {
             };
 
             if !b {
-                ctx.signal(InstructionExitState::GotoPushScope(usize::from_str_radix(offset, 10)?, SpecialScope::If));
+                ctx.signal(InstructionExitState::GotoPushScope(offset.parse::<usize>()?, SpecialScope::If));
             }
 
 
@@ -724,7 +721,7 @@ pub mod implementations {
                 bail!("jmp statements require an argument to instruct where to jump")
             };
 
-            ctx.signal(InstructionExitState::Goto(usize::from_str_radix(offset, 10)?));
+            ctx.signal(InstructionExitState::Goto(offset.parse::<usize>()?));
 
             Ok(())
         }
@@ -748,7 +745,7 @@ pub mod implementations {
                 bail!("expected syntax: call_lib path/to/lib.dll function_name")
             };
 
-            let arguments = ctx.get_local_operating_stack().into();
+            let arguments = ctx.get_local_operating_stack();
 
             ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                 destination: JumpRequestDestination::Library {
@@ -757,7 +754,7 @@ pub mod implementations {
                 },
                 // destination_label: JumpRequestDestination::Standard(first.clone()),
                 callback_state: None,
-                stack: ctx.arced_call_stack().clone(),
+                stack: ctx.arced_call_stack(),
                 arguments,
             }));
 
@@ -785,14 +782,12 @@ pub fn split_string(string: Cow<str>) -> Result<Box<[String]>> {
     let mut escaping = false;
 
     for char in string.chars() {
-        if !in_quotes {
-            if char.is_whitespace() || char == ',' {
-                if buf.len() != 0 {
-                    result.push(buf.to_string());
-                    buf.clear();
-                }
-                continue;
+        if !in_quotes && (char.is_whitespace() || char == ',') {
+            if !buf.is_empty() {
+                result.push(buf.to_string());
+                buf.clear();
             }
+            continue;
         }
 
         match char {
@@ -854,7 +849,7 @@ pub fn split_string(string: Cow<str>) -> Result<Box<[String]>> {
     if in_quotes {
         bail!("found EOL while parsing string: `{string}`")
     } else {
-        if buf.len() > 0 {
+        if !buf.is_empty() {
             result.push(buf.to_string());
         }
         Ok(result.into_boxed_slice())

@@ -61,6 +61,7 @@ impl AssocFileData {
         self.file_name.clone()
     }
 
+    #[allow(clippy::mut_from_ref)]
     pub fn get_return_type(&self) -> &mut ScopeReturnStatus {
         unsafe {
             (*self.scopes.as_ptr())
@@ -71,11 +72,11 @@ impl AssocFileData {
     }
 
     pub fn push_if(&self) {
-        self.push_scope_typed(ScopeType::IfBlock, ScopeReturnStatus::NoReturn)
+        self.push_scope_typed(ScopeType::IfBlock, ScopeReturnStatus::No)
     }
 
     pub fn push_else(&self) {
-        self.push_scope_typed(ScopeType::ElseBlock, ScopeReturnStatus::NoReturn)
+        self.push_scope_typed(ScopeType::ElseBlock, ScopeReturnStatus::No)
     }
 
     pub fn push_function(&self, yields: ScopeReturnStatus) {
@@ -92,7 +93,7 @@ impl AssocFileData {
         let scopes = self.scopes.borrow();
         let yields = scopes.last().expect("no scope").peek_yields_value();
 
-        !matches!(yields, ScopeReturnStatus::ShouldReturn(..))
+        !matches!(yields, ScopeReturnStatus::Should(..))
     }
 
     pub fn pop_scope(&self) -> ScopeReturnStatus {
@@ -137,19 +138,19 @@ pub mod util {
 
     use super::{Parser, Rule};
 
-    pub fn parse_with_userdata<'i, D>(
+    pub fn parse_with_userdata<D>(
         rule: Rule,
-        input_str: &'i str,
+        input_str: &str,
         user_data: D,
-    ) -> Result<Nodes<'i, Rule, D>, pest_consume::Error<Rule>> {
-        <Parser as pest_consume::Parser>::parse_with_userdata(rule, input_str, user_data)
+    ) -> Result<Nodes<Rule, D>, Box<pest_consume::Error<Rule>>> {
+        <Parser as pest_consume::Parser>::parse_with_userdata(rule, input_str, user_data).map_err(Box::new)
     }
 
-    pub fn parse<'i>(
+    pub fn parse(
         rule: Rule,
-        input_str: &'i str,
-    ) -> Result<Nodes<'i, Rule, ()>, pest_consume::Error<Rule>> {
-        <Parser as pest_consume::Parser>::parse(rule, input_str)
+        input_str: &str,
+    ) -> Result<Nodes<Rule, ()>, Box<pest_consume::Error<Rule>>> {
+        <Parser as pest_consume::Parser>::parse(rule, input_str).map_err(Box::new)
     }
 }
 

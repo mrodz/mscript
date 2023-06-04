@@ -27,6 +27,7 @@ impl std::cmp::PartialOrd for Primitive {
 impl std::cmp::Eq for Primitive {}
 
 impl std::cmp::Ord for Primitive {
+    #[allow(clippy::comparison_chain)]
     fn cmp(&self, other: &Self) -> Ordering {
         if self == other {
             Ordering::Equal

@@ -24,7 +24,7 @@ impl Parser {
 
         // dbg!(value_span);
 
-        if let Ok(ref assignment_ty) = value.into_type() {
+        if let Ok(ref assignment_ty) = value.for_type() {
             if ty.as_ref() != assignment_ty {
                 let message = if value.is_callable() {
                     // let return_type = function_type.get_return_type().map_or_else(|| Cow::Borrowed("None"), |ok| Cow::Owned(ok.to_string()));

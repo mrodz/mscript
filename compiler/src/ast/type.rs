@@ -31,7 +31,7 @@ pub enum NativeType {
 
 impl Display for NativeType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let name = format!("{:?}", self).to_ascii_lowercase();
+        let name = format!("{self:?}").to_ascii_lowercase();
         write!(f, "{name}")
     }
 }
@@ -47,9 +47,9 @@ pub(crate) enum TypeLayout {
 impl Display for TypeLayout {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Function(function_type) => write!(f, "{}", function_type.to_string()),
-            Self::CallbackVariable(cb) => write!(f, "{}", cb.get_type_recursively().to_string()),
-            Self::Native(native) => write!(f, "{}", native.to_string()),
+            Self::Function(function_type) => write!(f, "{function_type}"),
+            Self::CallbackVariable(cb) => write!(f, "{}", cb.get_type_recursively()),
+            Self::Native(native) => write!(f, "{native}"),
         }
     }
 }
@@ -154,12 +154,12 @@ impl TypeLayout {
 }
 
 pub(crate) trait IntoType {
-    fn into_type(&self) -> Result<TypeLayout>;
+    fn for_type(&self) -> Result<TypeLayout>;
     fn consume_for_type(self) -> Result<TypeLayout>
     where
         Self: Sized,
     {
-        self.into_type()
+        self.for_type()
     }
 }
 
@@ -227,7 +227,7 @@ impl Parser {
         map_err(
             type_from_str(as_str, input.into_user_data()),
             span,
-            &*file_name,
+            &file_name,
             "unknown type".into(),
         )
     }

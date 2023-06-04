@@ -20,21 +20,21 @@ impl VariableFlags {
 
     #[inline(always)]
     pub fn can_update(&self) -> bool {
-        self.0 | READ_ONLY == 0
+        self.0 & READ_ONLY == READ_ONLY
     }
 
     #[inline(always)]
     pub fn is_public(&self) -> bool {
-        self.0 | PUBLIC == 1
+        self.0 & PUBLIC == PUBLIC
     }
 
     #[inline(always)]
     pub fn is_exclusive_to_frame(&self) -> bool {
-        self.0 | LOCAL_FRAME_ONLY == 1
+        self.0 & LOCAL_FRAME_ONLY == LOCAL_FRAME_ONLY
     }
 
     pub fn is_loop_variable(&self) -> bool {
-        self.0 | LOOP_VARIABLE == 1
+        self.0 & LOOP_VARIABLE == LOOP_VARIABLE
     }
 }
 
@@ -67,7 +67,7 @@ impl Display for VariableMapping {
             result.push(format!("{key} = {} (attr: {:?})", value.0, value.1));
         }
 
-        let string = if result.len() == 0 {
+        let string = if result.is_empty() {
             "None".into()
         } else {
             let mut ret = String::new();
@@ -76,7 +76,7 @@ impl Display for VariableMapping {
 
             for combo in &result[1..] {
                 ret.push_str(", ");
-                ret.push_str(&combo);
+                ret.push_str(combo);
             }
 
             ret
@@ -125,7 +125,7 @@ struct StackFrame {
     variables: VariableMapping,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Stack(Vec<StackFrame>);
 
 impl Stack {
@@ -143,7 +143,7 @@ impl Stack {
 
     pub fn extend(&mut self, label: String) {
         self.0.push(StackFrame {
-            label: label,
+            label,
             variables: VariableMapping::default(),
         });
     }

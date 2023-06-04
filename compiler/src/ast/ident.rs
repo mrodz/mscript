@@ -11,7 +11,7 @@ use crate::parser::{AssocFileData, Node, Parser};
 use super::r#type::TypeLayout;
 use super::{new_err, Compile, CompiledItem, Dependencies, Dependency};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Eq)]
 pub(crate) struct Ident {
     name: String,
     ty: Option<Cow<'static, TypeLayout>>,
@@ -20,7 +20,7 @@ pub(crate) struct Ident {
 impl Compile for Ident {
     fn compile(&self, _: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>> {
         let ty = self.ty()?;
-        let (_, id) = TypeLayout::get_load_instruction(&ty);
+        let (_, id) = TypeLayout::get_load_instruction(ty);
 
         Ok(vec![CompiledItem::Instruction {
             id,
@@ -32,6 +32,12 @@ impl Compile for Ident {
 impl Hash for Ident {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.name.hash(state)
+    }
+}
+
+impl PartialEq for Ident {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
     }
 }
 
@@ -69,7 +75,7 @@ impl Ident {
             if is_callback {
                 Cow::Owned(TypeLayout::CallbackVariable(x.into_owned().into()))
             } else {
-                x.to_owned()
+                x
             }
         });
 
@@ -130,7 +136,7 @@ impl Ident {
             if is_callback {
                 Cow::Owned(TypeLayout::CallbackVariable(x.into_owned().into()))
             } else {
-                x.to_owned()
+                x
             }
         });
 
@@ -152,7 +158,7 @@ impl Ident {
                 if is_callback {
                     Cow::Owned(TypeLayout::CallbackVariable(x.into_owned().into()))
                 } else {
-                    x.to_owned()
+                    x
                 }
             });
 

@@ -25,15 +25,15 @@ impl Value {
 }
 
 impl IntoType for Value {
-    fn into_type(&self) -> Result<TypeLayout> {
+    fn for_type(&self) -> Result<TypeLayout> {
         match self {
             Self::Function(function) => function.clone().consume_for_type(),
             Self::Ident(ident) => Ok(ident.ty()?.clone().into_owned()),
-            Self::MathExpr(math_expr) => math_expr.into_type(),
-            Self::Number(number) => number.into_type(),
-            Self::String(string) => string.into_type(),
-            Self::Callable(callable) => callable.into_type(),
-            Self::Boolean(boolean) => boolean.into_type(),
+            Self::MathExpr(math_expr) => math_expr.for_type(),
+            Self::Number(number) => number.for_type(),
+            Self::String(string) => string.for_type(),
+            Self::Callable(callable) => callable.for_type(),
+            Self::Boolean(boolean) => boolean.for_type(),
         }
     }
 }
@@ -75,7 +75,7 @@ impl Parser {
             Rule::function => Value::Function(Self::function(input)?),
             Rule::ident => {
                 let ident = Self::ident(input)?;
-                Value::Ident(ident.clone())
+                Value::Ident(ident)
             }
             Rule::number => Value::Number(Self::number(input)?),
             Rule::string => Value::String(Self::string(input)?),

@@ -64,13 +64,13 @@ impl FunctionType {
 
 impl Display for FunctionType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let return_type: Cow<'static, str> = if let box ScopeReturnStatus::ShouldReturn(return_type)
-        | box ScopeReturnStatus::DidReturn(return_type) =
+        let return_type: Cow<'static, str> = if let box ScopeReturnStatus::Should(return_type)
+        | box ScopeReturnStatus::Did(return_type) =
             &self.return_type
         {
             let actual_type = match return_type.as_ref() {
                 TypeLayout::Function(..) => {
-                    format!("({})", return_type)
+                    format!("({return_type})")
                 }
                 _ => return_type.to_string(),
             };
@@ -102,7 +102,7 @@ impl Function {
 
 impl IntoType for Function {
     /// unimplemented
-    fn into_type(&self) -> Result<TypeLayout> {
+    fn for_type(&self) -> Result<TypeLayout> {
         unimplemented!()
     }
 
@@ -150,7 +150,7 @@ impl Function {
 
         let x = location.replace('\\', "/");
 
-        arguments.push(format!("{x}#{}", id.to_string()));
+        arguments.push(format!("{x}#{id}"));
 
         dependencies
             .iter()
@@ -221,7 +221,7 @@ impl Parser {
 
         // if there are no more children, there is no return type or body
         let Some(next) = next else {
-            return Ok(Function::new(parameters, Block::empty_body(), ScopeReturnStatus::VoidReturn, path_str));
+            return Ok(Function::new(parameters, Block::empty_body(), ScopeReturnStatus::Void, path_str));
         };
 
         let (body, return_type) = if matches!(next.as_rule(), Rule::function_return_type) {
@@ -250,7 +250,7 @@ impl Parser {
 
 
         if !input.user_data().did_scope_exit_with_value_if_required() {
-            bail!(new_err(input.as_span(), &input.user_data().get_source_file_name(), format!("this function reached its end without a return, when it expected a value")));
+            bail!(new_err(input.as_span(), &input.user_data().get_source_file_name(), "this function reached its end without a return, when it expected a value".to_owned()));
         }
 
         let return_type = input.user_data().pop_scope();

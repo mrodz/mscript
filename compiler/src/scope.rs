@@ -14,25 +14,25 @@ pub(crate) enum ScopeType {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ScopeReturnStatus {
-    NoReturn,
-    VoidReturn,
-    ShouldReturn(Cow<'static, TypeLayout>),
-    DidReturn(Cow<'static, TypeLayout>),
+    No,
+    Void,
+    Should(Cow<'static, TypeLayout>),
+    Did(Cow<'static, TypeLayout>),
 }
 
 impl ScopeReturnStatus {
     pub fn detect_should_return(val: Option<Cow<'static, TypeLayout>>) -> Self {
         if let Some(type_layout) = val {
-            Self::ShouldReturn(type_layout)
+            Self::Should(type_layout)
         } else {
-            Self::VoidReturn
+            Self::Void
         }
     }
 
     pub fn mark_should_return_as_completed(&mut self) -> Result<&mut Self> {
-        if let Self::ShouldReturn(expected_return_type) | Self::DidReturn(expected_return_type) = self {
-            let x = expected_return_type.to_owned();
-            *self = ScopeReturnStatus::DidReturn(x);
+        if let Self::Should(expected_return_type) | Self::Did(expected_return_type) = self {
+            let x = expected_return_type.clone();
+            *self = ScopeReturnStatus::Did(x);
 
         };
 
@@ -49,7 +49,7 @@ pub(crate) struct Scope {
 
 impl Scope {
     pub fn new_file() -> Self {
-        Self::new_with_ty_yields(ScopeType::File, ScopeReturnStatus::NoReturn)
+        Self::new_with_ty_yields(ScopeType::File, ScopeReturnStatus::No)
     }
 
     pub fn new_with_ty_yields(ty: ScopeType, yields: ScopeReturnStatus) -> Self {
@@ -75,28 +75,11 @@ impl Scope {
     pub fn add_dependency(&mut self, dependency: &Ident) -> Result<()> {
         self.variables.insert(dependency.clone());
         Ok(())
-        // let ty = dependency.ty()?.clone();
-        // if !self.variables.insert(dependency.clone()) {
-        //     bail!("conflicting mapping")
-        // } else {
-        //     Ok(())
-        // }
-        // if self.variables.insert(dependency.name().clone(), (dependency, ty)).is_some() {
-        // bail!("conflicting variable mapping")
-        // } else {
-        // Ok(())
-        // }
     }
 
     /// able to be improved
     pub fn contains(&self, dependency: &String) -> Option<&Ident> {
         // Ident hashes names exclusively, so we can pass `ty = None`
-        for x in self.variables.iter() {
-            if x.name() == dependency {
-                return Some(&x);
-            }
-        }
-
-        None
+        self.variables.iter().find(|&x| x.name() == dependency)
     }
 }
