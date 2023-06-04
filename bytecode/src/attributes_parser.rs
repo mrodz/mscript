@@ -71,7 +71,7 @@ impl Attributes {
     }
 }
 
-pub fn parse_attributes(attribute_str: &String) -> Result<Attributes> {
+pub fn parse_attributes(attribute_str: &str) -> Result<Attributes> {
     const WHITESPACE: u8 = 0b1000;
     const ESCAPING: u8 = 0b0100;
     const IN_QUOT: u8 = 0b0010;
@@ -98,7 +98,7 @@ pub fn parse_attributes(attribute_str: &String) -> Result<Attributes> {
 
     #[inline]
     fn flush(flags: u8, left: &mut String, right: &mut String) -> Result<(String, Option<String>)> {
-        if is(flags, AT_LEFT) && right.len() == 0 {
+        if is(flags, AT_LEFT) && right.is_empty() {
             bail!("extra ','")
         }
 
@@ -113,7 +113,7 @@ pub fn parse_attributes(attribute_str: &String) -> Result<Attributes> {
         Ok(result)
     }
 
-    while let Some(c) = chars.next() {
+    for c in chars {
         if is(flags, ESCAPING) {
             flags ^= ESCAPING;
             buffer.push(match c {
@@ -153,7 +153,7 @@ pub fn parse_attributes(attribute_str: &String) -> Result<Attributes> {
                 bail!("duplicate '='")
             }
 
-            if buffer.len() == 0 {
+            if buffer.is_empty() {
                 bail!("missing key")
             }
 
@@ -177,7 +177,7 @@ pub fn parse_attributes(attribute_str: &String) -> Result<Attributes> {
         buffer.push(c)
     }
 
-    if buffer.len() != 0 {
+    if !buffer.is_empty() {
         bail!("attribute syntax: #[key1=value, key2=\"value\", ...]")
     }
 
@@ -203,7 +203,7 @@ mod test {
 
     #[test]
     fn basic() -> Result<()> {
-        let info = parse_attributes(&"#[hello=1, bye=2]".into()).unwrap();
+        let info = parse_attributes("#[hello=1, bye=2]").unwrap();
 
         assert_key_val!(info["hello"] == "1");
         assert_key_val!(info["bye"] == "2");
@@ -213,7 +213,7 @@ mod test {
 
     #[test]
     fn strings() -> Result<()> {
-        let info = parse_attributes(&"#[hello=\"Lorem Ipsum\", bye=2]".into()).unwrap();
+        let info = parse_attributes("#[hello=\"Lorem Ipsum\", bye=2]").unwrap();
 
         assert_key_val!(info["hello"] == "Lorem Ipsum");
         assert_key_val!(info["bye"] == "2");
@@ -224,7 +224,7 @@ mod test {
     #[test]
     fn escape_sequences() -> Result<()> {
         let info = parse_attributes(
-            &"#[hello=\"Lorem\\\"Ipsum\\r\\n\", bye=\"\\\n\", tab=\"\\t\"]".into(),
+            "#[hello=\"Lorem\\\"Ipsum\\r\\n\", bye=\"\\\n\", tab=\"\\t\"]",
         )
         .unwrap();
 
@@ -237,7 +237,7 @@ mod test {
 
     #[test]
     fn strings_as_keys_and_values() -> Result<()> {
-        let info = parse_attributes(&"#[\"this has a space\"=-3, \"this key has an escaped \\\" in it\"=\"str mapped to a\\tstr\"]".into()).unwrap();
+        let info = parse_attributes("#[\"this has a space\"=-3, \"this key has an escaped \\\" in it\"=\"str mapped to a\\tstr\"]").unwrap();
 
         assert_key_val!(info["this has a space"] == "-3");
         assert_key_val!(info["this key has an escaped \" in it"] == "str mapped to a\tstr");
@@ -248,35 +248,35 @@ mod test {
     #[test]
     #[should_panic(expected = "attribute syntax")]
     fn malformed_start() {
-        parse_attributes(&"[hi=\"world\"]".into()).unwrap();
+        parse_attributes("[hi=\"world\"]").unwrap();
     }
 
     #[test]
     #[should_panic(expected = "missing key")]
     fn no_key() {
-        parse_attributes(&"#[=\"world\"]".into()).unwrap();
+        parse_attributes("#[=\"world\"]").unwrap();
     }
 
     #[test]
     #[should_panic(expected = "duplicate '='")]
     fn too_many_equal_signs_1() {
-        parse_attributes(&"#[hi==\"world\"]".into()).unwrap();
+        parse_attributes("#[hi==\"world\"]").unwrap();
     }
 
     #[test]
     #[should_panic(expected = "duplicate '='")]
     fn too_many_equal_signs_2() {
-        parse_attributes(&"#[hi=========\"world\"]".into()).unwrap();
+        parse_attributes("#[hi=========\"world\"]").unwrap();
     }
 
     #[test]
     fn no_equal_sign() {
-        parse_attributes(&"#[huhhhh]".into()).unwrap();
+        parse_attributes("#[huhhhh]").unwrap();
     }
 
     #[test]
     fn no_equal_sign_and_attr() {
-        let info = parse_attributes(&"#[huhhhh, b=5]".into()).unwrap();
+        let info = parse_attributes("#[huhhhh, b=5]").unwrap();
 
         assert_key_val!(info["huhhhh"] exists);
         assert_key_val!(info["b"] == "5");
@@ -284,7 +284,7 @@ mod test {
 
     #[test]
     fn squashed_no_equal_sign() {
-        let info = parse_attributes(&"#[a=c, \"this has spaces\\nand\\nis an attr\", b=5]".into())
+        let info = parse_attributes("#[a=c, \"this has spaces\\nand\\nis an attr\", b=5]")
             .unwrap();
 
         assert_key_val!(info["a"] == "c");
@@ -294,13 +294,13 @@ mod test {
 
     #[test]
     fn key_and_no_value() {
-        parse_attributes(&"#[a=,\"this has spaces\\nand\\nis an attr\", b=5]".into()).unwrap();
+        parse_attributes("#[a=,\"this has spaces\\nand\\nis an attr\", b=5]").unwrap();
     }
 
     #[test]
     #[should_panic(expected = "extra ','")]
     fn multiple_commas() {
-        let info = parse_attributes(&"#[a=c,, \"this has spaces\\nand\\nis an attr\", b=5]".into())
+        let info = parse_attributes("#[a=c,, \"this has spaces\\nand\\nis an attr\", b=5]")
             .unwrap();
         dbg!(info);
     }
@@ -308,19 +308,19 @@ mod test {
     #[test]
     #[should_panic(expected = "attribute syntax")]
     fn incomplete() {
-        let info = parse_attributes(&"#[this".into()).unwrap();
+        let info = parse_attributes("#[this").unwrap();
         dbg!(info);
     }
 
     #[test]
     fn leading_whitespaces() {
-        let info = parse_attributes(&"#[   this=1,    that=2]".into()).unwrap();
+        let info = parse_attributes("#[   this=1,    that=2]").unwrap();
         dbg!(info);
     }
 
     #[test]
     fn trailing_whitespace() {
-        let info = parse_attributes(&"#[this  = hello   , that      = 2   ]".into()).unwrap();
+        let info = parse_attributes("#[this  = hello   , that      = 2   ]").unwrap();
 
         assert_key_val!(info["this"] == "hello");
         assert_key_val!(info["that"] == "2");

@@ -33,7 +33,7 @@ impl Display for Number {
 impl Dependencies for Number {}
 
 impl IntoType for Number {
-    fn into_type(&self) -> Result<TypeLayout> {
+    fn for_type(&self) -> Result<TypeLayout> {
         Ok(match self {
             Self::Byte(_) => TypeLayout::Native(NativeType::Byte),
             Self::Integer(_) => TypeLayout::Native(NativeType::Int),

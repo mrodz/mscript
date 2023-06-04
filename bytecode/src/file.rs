@@ -66,11 +66,11 @@ pub fn get_line_number_from_pos(reader: &mut BufReader<&File>, pos: u64) -> Resu
 
 impl MScriptFile {
     pub fn get_function(&mut self, name: &str) -> Option<&mut Function> {
-        let name = format!("{}#{name}", self.path.to_string());
+        let name = format!("{}#{name}", self.path);
 
         let function = self.functions.as_mut().unwrap().get_mut(&name);
 
-        return function.map_or_else(|_| None, |ok| Some(ok));
+        function.ok()
     }
 
     pub fn get_object_functions<'a, 'b: 'a>(

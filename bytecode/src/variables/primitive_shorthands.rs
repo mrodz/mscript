@@ -1,12 +1,12 @@
 #[macro_export]
 macro_rules! string {
     ($data:expr) => {{
-        use crate::BytecodePrimitive;
+        use $crate::BytecodePrimitive;
 
         BytecodePrimitive::Str($data)
     }};
     (raw $data:expr) => {{
-        use crate::BytecodePrimitive;
+        use $crate::BytecodePrimitive;
 
         BytecodePrimitive::Str(Into::<String>::into($data))
     }};
@@ -15,7 +15,7 @@ macro_rules! string {
 #[macro_export]
 macro_rules! bigint {
     ($data:expr) => {{
-        use crate::BytecodePrimitive;
+        use $crate::BytecodePrimitive;
 
         BytecodePrimitive::BigInt($data)
     }};
@@ -24,7 +24,7 @@ macro_rules! bigint {
 #[macro_export]
 macro_rules! int {
     ($data:expr) => {{
-        use crate::BytecodePrimitive;
+        use $crate::BytecodePrimitive;
 
         BytecodePrimitive::Int($data)
     }};
@@ -33,7 +33,7 @@ macro_rules! int {
 #[macro_export]
 macro_rules! float {
     ($data:expr) => {{
-        use crate::BytecodePrimitive;
+        use $crate::BytecodePrimitive;
 
         BytecodePrimitive::Float($data)
     }};
@@ -42,7 +42,7 @@ macro_rules! float {
 #[macro_export]
 macro_rules! bool {
     ($data:expr) => {{
-        use crate::BytecodePrimitive;
+        use $crate::BytecodePrimitive;
 
         BytecodePrimitive::Bool($data)
     }};
@@ -51,7 +51,7 @@ macro_rules! bool {
 #[macro_export]
 macro_rules! byte {
     ($data:expr) => {{
-        use crate::BytecodePrimitive;
+        use $crate::BytecodePrimitive;
 
         BytecodePrimitive::Byte($data)
     }};
@@ -60,7 +60,7 @@ macro_rules! byte {
 #[macro_export]
 macro_rules! function {
     ($data:expr) => {{
-        use crate::BytecodePrimitive;
+        use $crate::BytecodePrimitive;
 
         BytecodePrimitive::Function(std::sync::Arc::new($data))
     }};
@@ -69,17 +69,17 @@ macro_rules! function {
 #[macro_export]
 macro_rules! vector {
     () => {{
-        use crate::BytecodePrimitive;
+        use $crate::BytecodePrimitive;
 
         BytecodePrimitive::Vector(std::sync::Arc::new(vec![]))
     }};
     ($elem:expr; $n:expr) => {{
-        use crate::BytecodePrimitive;
+        use $crate::BytecodePrimitive;
 
         BytecodePrimitive::Vector(std::sync::Arc::new(vec![$elem; $n]))
     }};
     ($($x:expr),+ $(,)?) => {{
-        use crate::BytecodePrimitive;
+        use $crate::BytecodePrimitive;
 
         let mut vector = vec![];
         $(
@@ -88,7 +88,7 @@ macro_rules! vector {
         BytecodePrimitive::Vector(std::sync::Arc::new(vector))
     }};
     (raw $data:expr) => {{
-        use crate::BytecodePrimitive;
+        use $crate::BytecodePrimitive;
 
         BytecodePrimitive::Vector(std::sync::Arc::new($data))
     }};
@@ -97,7 +97,7 @@ macro_rules! vector {
 #[macro_export]
 macro_rules! object {
     ($data:expr) => {{
-        use crate::BytecodePrimitive;
+        use $crate::BytecodePrimitive;
 
         BytecodePrimitive::Object($data)
     }};

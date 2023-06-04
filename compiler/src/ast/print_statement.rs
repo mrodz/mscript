@@ -100,7 +100,7 @@ impl Parser {
             map_err(
                 maybe,
                 input.as_span(),
-                &*input.user_data().get_file_name(),
+                &input.user_data().get_file_name(),
                 "Name is not mapped".into(),
             )?;
         }

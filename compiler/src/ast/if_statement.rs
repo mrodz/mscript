@@ -86,13 +86,13 @@ impl Parser {
 
         let condition_as_value = Self::value(condition)?;
 
-        let condition_type = condition_as_value.into_type()?;
+        let condition_type = condition_as_value.for_type()?;
 
         if !condition_type.is_boolean() {
             bail!(new_err(
                 input.as_span(),
                 &input.user_data().get_source_file_name(),
-                format!("this value is not boolean, and cannot be used to evaluate an \"if\" statement")
+                "this value is not boolean, and cannot be used to evaluate an \"if\" statement".to_owned()
             ))
         }
 

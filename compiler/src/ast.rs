@@ -85,7 +85,7 @@ impl CompiledItem {
             if !has_quotes && arg.contains(' ') {
                 let mut combined = String::with_capacity(arg.len() + 2);
                 combined.push('"');
-                combined.push_str(&arg);
+                combined.push_str(arg);
                 combined.push('"');
                 Ok(Cow::Owned(combined))
             } else {
@@ -146,17 +146,16 @@ impl CompiledItem {
 #[macro_export]
 macro_rules! instruction {
     ($name:tt $($arg:tt)*) => {{
-        use crate::ast::*;
+        use $crate::ast::*;
 
         let id = bytecode::compilation_lookups::string_instruction_representation_to_byte(stringify!($name))
             .expect("instruction does not exist");
 
-        #[allow(unused_mut)]
-        let mut arguments = vec![];
-
-        $(
-            arguments.push($arg.to_string());
-        )*
+        let arguments = vec![
+            $(
+                $arg.to_string(),
+            )*
+        ];
 
         let arguments = arguments.into_boxed_slice();
 
@@ -192,7 +191,7 @@ impl<'a> Dependency<'a> {
 
 impl Debug for Dependency<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 
@@ -233,7 +232,7 @@ pub(crate) trait Dependencies {
 
         dependencies
             .into_iter()
-            .filter(|dependency| !supplies.contains(&dependency))
+            .filter(|dependency| !supplies.contains(dependency))
             .collect()
     }
 }
@@ -241,7 +240,7 @@ pub(crate) trait Dependencies {
 pub fn new_err(span: Span, file_name: &str, message: String) -> Error {
     use pest::error::ErrorVariant::CustomError;
     use pest_consume::Error as PE;
-    let custom_error = PE::<()>::new_from_span(CustomError { message }, span).with_path(&file_name);
+    let custom_error = PE::<()>::new_from_span(CustomError { message }, span).with_path(file_name);
 
     anyhow!(custom_error)
 }
@@ -252,7 +251,7 @@ pub fn map_err<R>(
     file_name: &str,
     message: String,
 ) -> Result<R> {
-    map_err_messages(value.into(), span, file_name, message, || Vec::<u8>::new())
+    map_err_messages(value.into(), span, file_name, message, Vec::<u8>::new)
 }
 
 pub fn map_err_messages<R, C>(
@@ -276,7 +275,7 @@ where
 
     use pest::error::ErrorVariant::CustomError;
     use pest_consume::Error as PE;
-    let custom_error = PE::<()>::new_from_span(CustomError { message }, span).with_path(&file_name);
+    let custom_error = PE::<()>::new_from_span(CustomError { message }, span).with_path(file_name);
 
     value.context(anyhow!(custom_error))
 }

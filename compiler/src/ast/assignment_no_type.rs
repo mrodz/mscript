@@ -27,23 +27,23 @@ impl Parser {
                     ident.link_from_pointed_type_with_lookup(user_data)?;
                 }
                 Value::Number(ref number) => {
-                    let ty = number.clone().into_type()?;
+                    let ty = number.clone().for_type()?;
                     ident.link(user_data, Some(Cow::Owned(ty)))?;
                 }
                 Value::String(ref string) => {
-                    let ty = string.into_type()?;
+                    let ty = string.for_type()?;
                     ident.link(user_data, Some(Cow::Owned(ty)))?;
                 }
                 Value::MathExpr(ref math_expr) => {
-                    let ty = math_expr.into_type()?;
+                    let ty = math_expr.for_type()?;
                     ident.link(user_data, Some(Cow::Owned(ty)))?;
                 }
                 Value::Callable(ref callback) => {
-                    let ty = callback.into_type()?;
+                    let ty = callback.for_type()?;
                     ident.link(user_data, Some(Cow::Owned(ty)))?;
                 }
                 Value::Boolean(ref boolean) => {
-                    let ty = boolean.into_type()?;
+                    let ty = boolean.for_type()?;
                     ident.link(user_data, Some(Cow::Owned(ty)))?;
                 }
             }

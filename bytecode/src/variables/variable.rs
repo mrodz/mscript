@@ -58,7 +58,7 @@ impl Primitive {
     pub fn make_byte(string: &str) -> Result<Self> {
         let bytes = string.as_bytes();
 
-        if string.len() >= 3 && &bytes[..2] == [b'0', b'b'] {
+        if string.len() >= 3 && bytes[..2] == [b'0', b'b'] {
             let byte =
                 u8::from_str_radix(&string[2..], 2).expect("malformed byte. format: (0b10101010)");
 
@@ -71,7 +71,7 @@ impl Primitive {
     pub fn make_float(string: &str) -> Result<Self> {
         use std::str::FromStr;
 
-        if let Ok(is_f64) = f64::from_str(&string) {
+        if let Ok(is_f64) = f64::from_str(string) {
             return Ok(float!(is_f64));
         }
 
@@ -81,7 +81,7 @@ impl Primitive {
     pub fn make_int(string: &str) -> Result<Self> {
         use std::str::FromStr;
 
-        if let Ok(is_i64) = i32::from_str(&string) {
+        if let Ok(is_i64) = i32::from_str(string) {
             return Ok(int!(is_i64));
         }
 
@@ -91,7 +91,7 @@ impl Primitive {
     pub fn make_bigint(string: &str) -> Result<Self> {
         use std::str::FromStr;
 
-        if let Ok(is_f64) = i128::from_str(&string) {
+        if let Ok(is_f64) = i128::from_str(string) {
             return Ok(bigint!(is_f64));
         }
 

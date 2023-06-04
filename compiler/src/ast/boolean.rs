@@ -17,7 +17,7 @@ impl Compile for bool {
 impl Dependencies for bool {}
 
 impl IntoType for bool {
-    fn into_type(&self) -> anyhow::Result<super::TypeLayout> {
+    fn for_type(&self) -> anyhow::Result<super::TypeLayout> {
         Ok(super::TypeLayout::Native(super::r#type::NativeType::Bool))
     }
 }

@@ -27,13 +27,13 @@ impl Program {
         files_in_use.insert(path, main_file);
 
         Ok(Self {
-            entrypoint: entrypoint,
+            entrypoint,
             files_in_use,
         })
     }
 
     pub fn is_file_loaded(&self, path: &String) -> Option<Arc<MScriptFile>> {
-        self.files_in_use.get(path).map(|arc| arc.clone())
+        self.files_in_use.get(path).cloned()
     }
 
     pub fn add_file(&mut self, path: &String) -> Result<Option<()>> {
@@ -86,11 +86,9 @@ impl Program {
             bail!("could not find function (missing `{symbol}`)")
         };
 
-        let callback_state = if let Some(ref cb) = request.callback_state {
-            Some(cb.clone())
-        } else {
-            None
-        };
+
+
+        let callback_state = request.callback_state.as_ref().cloned();
 
         let return_value = function.run(
             Cow::Borrowed(&request.arguments),
@@ -134,7 +132,7 @@ impl Program {
             JumpRequestDestination::Library {
                 lib_name,
                 func_name,
-            } => Self::process_library_jump_request(&lib_name, &func_name, &request.arguments)
+            } => Self::process_library_jump_request(lib_name, func_name, &request.arguments)
                 .context("External error in foreign function interface"),
         }
     }

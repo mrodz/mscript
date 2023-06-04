@@ -22,10 +22,10 @@ impl Instruction {
                 args.push(' ');
                 if arg.contains(' ') {
                     args.push('\"');
-                    args.push_str(&arg);
+                    args.push_str(arg);
                     args.push('\"');
                 } else {
-                    args.push_str(&arg);
+                    args.push_str(arg);
                 }
             }
         }
@@ -46,7 +46,7 @@ pub fn is_instruction_deprecated(name: &str) -> bool {
 
 pub const TRANSPILED_SOURCE_FILE_EXTENSION: &str = ".transpiled.mmm";
 
-pub fn is_path_a_transpiled_source(path: &String) -> bool {
+pub fn is_path_a_transpiled_source(path: &str) -> bool {
     fn ends_with_ignore_case(string: &str, pat: &str) -> bool {
         for (c1, c2) in string.chars().rev().zip(pat.chars().rev()) {
             if !c1.eq_ignore_ascii_case(&c2) {
@@ -57,13 +57,13 @@ pub fn is_path_a_transpiled_source(path: &String) -> bool {
         true
     }
 
-    ends_with_ignore_case(&path, TRANSPILED_SOURCE_FILE_EXTENSION)
+    ends_with_ignore_case(path, TRANSPILED_SOURCE_FILE_EXTENSION)
 }
 
 pub fn transpile_file(path: &str, new_path: &str) -> Result<()> {
     let path = Path::new(&path);
 
-    let file = File::open(&path)?;
+    let file = File::open(path)?;
     // let spinner_style = ProgressStyle::with_template("{prefix:.bold.dim} {spinner} {wide_msg}")?;
     let functions = MultiProgress::new();
 
@@ -82,7 +82,7 @@ pub fn transpile_file(path: &str, new_path: &str) -> Result<()> {
         .write(true)
         .create(true)
         .truncate(true)
-        .open(new_path.clone())?;
+        .open(new_path)?;
 
     let mut instruction_buffer: Vec<Instruction> = Vec::new();
     let mut current_function_name: Option<String> = None;
@@ -100,7 +100,7 @@ pub fn transpile_file(path: &str, new_path: &str) -> Result<()> {
 
         let trimmed_end = buffer.trim();
 
-        if trimmed_end.len() == 0 {
+        if trimmed_end.is_empty() {
             buffer.clear();
             continue;
         }
@@ -180,7 +180,7 @@ pub fn transpile_file(path: &str, new_path: &str) -> Result<()> {
                     bail!("{trimmed_end:?} is deprecated and not supported by this interpreter")
                 }
 
-                let Some(instruction_in_byte_fmt) = string_instruction_representation_to_byte(&instruction) else {
+                let Some(instruction_in_byte_fmt) = string_instruction_representation_to_byte(instruction) else {
                     bail!("{instruction} is not a valid instruction")
                 };
 

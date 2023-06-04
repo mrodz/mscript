@@ -4,7 +4,6 @@ mod cli;
 
 use anyhow::{bail, Context, Result};
 use bytecode::Program;
-use bytecode_dev_transpiler;
 use clap::Parser;
 use cli::{Args, Commands};
 use compiler::compile;
@@ -16,7 +15,7 @@ use std::{
 use crate::cli::CompilationTargets;
 
 fn transpile_command(path: &String) -> Result<Box<str>> {
-    if !bytecode_dev_transpiler::is_path_a_transpiled_source(&path) {
+    if !bytecode_dev_transpiler::is_path_a_transpiled_source(path) {
         bail!("The standard extension for file transpilation sources is `.mmm.transpiled`. Please check your file extensions. (Found {path})")
     }
 
@@ -26,7 +25,7 @@ fn transpile_command(path: &String) -> Result<Box<str>> {
         bail!("path is not valid unicode")
     };
 
-    bytecode_dev_transpiler::transpile_file(&path, new_path).context("Could not transpile file")?;
+    bytecode_dev_transpiler::transpile_file(path, new_path).context("Could not transpile file")?;
 
     Ok(new_path.into())
 }

@@ -164,7 +164,7 @@ pub fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<()> {
     // function_buffer is initialized now.
 
     // TODO:
-    let _optimized = logger.wrap_in_spinner(format!("Optimizing ({path_str}):"), || Ok(()))?;
+    logger.wrap_in_spinner(format!("Optimizing ({path_str}):"), || Ok(()))?;
 
     let mut new_file = File::options()
         .create(true)
@@ -196,7 +196,7 @@ pub fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<()> {
 
         if let CompiledItem::Function { id, .. } = function {
             writing_pb.maybe(|writing_pb| {
-                writing_pb.set_message(format!("f {} ({} bytes)", id.to_string(), bytes.len()))
+                writing_pb.set_message(format!("f {} ({} bytes)", id, bytes.len()))
             });
         }
 
