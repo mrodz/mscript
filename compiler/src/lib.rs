@@ -14,7 +14,7 @@ use std::path::Path;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use anyhow::{bail, Result, Context};
+use anyhow::{anyhow, bail, Context, Result};
 use ast::Compile;
 use indicatif::{MultiProgress, ProgressBar, ProgressFinish, ProgressStyle};
 
@@ -128,7 +128,7 @@ pub fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<()> {
     ));
 
     let input = logger.wrap_in_spinner(format!("Parsing ({path_str}):"), || {
-        root_node_from_str(&buffer, user_data)
+        root_node_from_str(&buffer, user_data.clone())
     })?;
 
     let file = logger.wrap_in_spinner(format!("Creating AST ({path_str}):"), || {
@@ -137,8 +137,32 @@ pub fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<()> {
 
     let mut function_buffer = vec![];
     logger.wrap_in_spinner(format!("Compiling AST ({path_str}):"), || {
-        file.compile(&mut function_buffer)
+        let _ = file.compile(&mut function_buffer);
+
+        let errors = user_data.get_errors();
+
+        let error_c = errors.len();
+
+        if error_c != 0 {
+            // let mut main_error = anyhow!("Did not compile successfully");
+
+            let first_error = user_data.get_nth_error(error_c - 1).unwrap();
+
+            let mut main_error = anyhow!(format!("{first_error:?}"));
+
+            for error_idx in (0..error_c - 1).rev() {
+                let this_error = user_data.get_nth_error(error_idx).unwrap();
+                main_error = main_error.context(format!("{this_error:?}"));
+            }
+
+            main_error = main_error.context(format!("{error_c} errors found"));
+
+            bail!(main_error)
+        }
+
+        Ok(())
     })?;
+
     // function_buffer is initialized now.
 
     // TODO:
@@ -166,7 +190,9 @@ pub fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<()> {
     let iter = function_buffer.iter();
 
     let mut for_each = |function: &CompiledItem| -> Result<()> {
-        let this_repr = function.repr(!output_bin).context("getting the string representation of a compiled item")?;
+        let this_repr = function
+            .repr(!output_bin)
+            .context("getting the string representation of a compiled item")?;
 
         let bytes = this_repr.as_bytes();
 
@@ -191,7 +217,9 @@ pub fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<()> {
         }
     }
 
-    writing_pb.maybe(|writing_pb| writing_pb.finish_with_message(format!("Done in {} ms", writing_pb.elapsed().as_millis())));
+    writing_pb.maybe(|writing_pb| {
+        writing_pb.finish_with_message(format!("Done in {} ms", writing_pb.elapsed().as_millis()))
+    });
     println!("Compiled in {:?}", start_time.elapsed());
 
     Ok(())

@@ -71,7 +71,6 @@ impl Parser {
 			}
 		};
 
-		let value_span = value_node.as_span();
         let value = Self::value(value_node)?;
 
 		let supplied_type = value.into_type()?;
@@ -91,7 +90,7 @@ impl Parser {
 		if expected_return_type != &Cow::Borrowed(supplied_type) {
 			// #1
 			bail!(new_err(
-				value_span,
+				input.as_span(),
 				&input.user_data().get_source_file_name(),
 				format!(
 					"this function was expected to return {expected_return_type}, but {supplied_type} was supplied"

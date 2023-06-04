@@ -34,10 +34,6 @@ impl Scope {
         }
     }
 
-    pub fn does_yield_value(&self) -> bool {
-        self.yields.is_some()
-    }
-
     pub fn peek_yields_value(&self) -> &Option<Cow<'static, TypeLayout>> {
         &self.yields
     }

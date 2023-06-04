@@ -18,4 +18,6 @@ adder = fn(input: int) -> int {
 	return "hello!"
 }
 
+idk: str = 5
+
 print adder(5)

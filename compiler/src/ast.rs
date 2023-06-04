@@ -96,8 +96,7 @@ impl CompiledItem {
         match self {
             Self::Function { id, content, .. } => {
                 let Some(ref content) = content else {
-                    return Ok("ERROR HERE!!!!".to_owned())
-                    // bail!("this is a function symbol, not a compilable function. {self:?}");
+                    bail!("this is a function symbol, not a compilable function. {self:?}");
                 };
 
                 let mut result = String::new();

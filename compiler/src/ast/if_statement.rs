@@ -1,11 +1,11 @@
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 
 use crate::{
     instruction,
     parser::{Node, Parser, Rule},
 };
 
-use super::{Block, Compile, CompiledItem, Dependencies, Value};
+use super::{new_err, r#type::IntoType, Block, Compile, CompiledItem, Dependencies, Value};
 
 #[derive(Debug, Clone)]
 pub struct IfStatement {
@@ -26,20 +26,16 @@ impl Compile for IfStatement {
         let mut body_init = self.body.compile(function_buffer)?;
         body_init.push(instruction!(done));
 
-		let if_size = body_init.len() + if self.else_statement.is_some() {
-			2
-		} else {
-			1
-		};
+        let if_size = body_init.len() + if self.else_statement.is_some() { 2 } else { 1 };
 
         result.push(instruction!(if if_size));
 
         if let Some(ref else_statement) = self.else_statement {
             let mut compiled = else_statement.compile(function_buffer)?;
 
-			let len = compiled.len();
-			body_init.push(instruction!(jmp len));
-			body_init.append(&mut compiled);
+            let len = compiled.len();
+            body_init.push(instruction!(jmp len));
+            body_init.append(&mut compiled);
         }
 
         result.append(&mut body_init);
@@ -54,26 +50,17 @@ pub enum ElseStatement {
     IfStatement(Box<IfStatement>),
 }
 
-// impl ElseStatement {
-//     pub fn len(&self) -> usize {
-        
-//     }
-// }
-
 impl Compile for ElseStatement {
     fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>> {
         let mut content = match self {
-			Self::Block(block) => block.compile(function_buffer),
-			Self::IfStatement(if_statement) => {
-                // dbg!(if_statement);
-                if_statement.compile(function_buffer)
-            },
-		}?;
+            Self::Block(block) => block.compile(function_buffer),
+            Self::IfStatement(if_statement) => if_statement.compile(function_buffer),
+        }?;
 
-		content.insert(0, instruction!(else));
-		content.push(instruction!(done));
+        content.insert(0, instruction!(else));
+        content.push(instruction!(done));
 
-		Ok(content)
+        Ok(content)
     }
 }
 
@@ -98,6 +85,17 @@ impl Parser {
         let else_statement = children.next();
 
         let condition_as_value = Self::value(condition)?;
+
+        let condition_type = condition_as_value.into_type()?;
+
+        if !condition_type.is_boolean() {
+            bail!(new_err(
+                input.as_span(),
+                &input.user_data().get_source_file_name(),
+                format!("this value is not boolean, and cannot be used to evaluate an \"if\" statement")
+            ))
+        }
+
         let body_as_block = Self::block(body)?;
 
         let else_statement = if let Some(else_statement) = else_statement {

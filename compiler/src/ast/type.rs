@@ -55,6 +55,13 @@ impl Display for TypeLayout {
 }
 
 impl TypeLayout {
+    /// Returns whether a value is boolean. This function **does not** supply the value of the boolean.
+    pub fn is_boolean(&self) -> bool {
+        let me = self.get_type_recursively();
+
+        matches!(me, TypeLayout::Native(NativeType::Bool))
+    }
+
     pub fn is_function(&self) -> Option<&FunctionType> {
         let me = self.get_type_recursively();
 
