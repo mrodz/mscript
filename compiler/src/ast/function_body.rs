@@ -47,7 +47,9 @@ impl Parser {
         let mut result = vec![];
 
         for child in children {
-            result.push(Self::declaration(child)?)
+            if let Some(declaration) = Self::declaration(child) {
+                result.push(declaration);
+            }
         }
 
         Ok(Block(result))

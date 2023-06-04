@@ -1,11 +1,12 @@
+use std::cell::Ref;
 use std::{cell::RefCell, rc::Rc};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Error, Result};
 use pest_consume::Parser as ParserDerive;
 
 use crate::ast::{Compile, CompiledFunctionId, CompiledItem, Declaration, Ident};
 use crate::instruction;
-use crate::scope::{Scope, ScopeType};
+use crate::scope::{Scope, ScopeType, ScopeReturnStatus};
 
 #[allow(unused)]
 pub(crate) type Node<'i> = pest_consume::Node<'i, Rule, Rc<AssocFileData>>;
@@ -14,15 +15,16 @@ pub(crate) type Node<'i> = pest_consume::Node<'i, Rule, Rc<AssocFileData>>;
 #[grammar = "grammar.pest"]
 pub(crate) struct Parser;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub(crate) struct AssocFileData {
-    scopes: Rc<RefCell<Vec<Scope>>>,
+    scopes: RefCell<Vec<Scope>>,
     file_name: Rc<String>, // last_arg_type: Rc<RefCell<Vec<IdentType>>>
     source_name: Rc<String>,
+    errors: RefCell<Vec<Error>>,
 }
 
 impl AssocFileData {
-    pub fn new(ty: ScopeType, destination_name: String) -> Self {
+    pub fn new(destination_name: String) -> Self {
         let source_name = if destination_name.ends_with(".mmm") {
             let mut owned = destination_name[..destination_name.len() - 3].to_owned();
             owned.push_str("ms");
@@ -32,10 +34,23 @@ impl AssocFileData {
         };
 
         Self {
-            scopes: Rc::new(RefCell::new(vec![Scope::new(ty)])),
+            scopes: RefCell::new(vec![Scope::new_file()]),
             file_name: Rc::new(destination_name), // last_arg_type: Rc::new(RefCell::new(vec![]))
             source_name: Rc::new(source_name),
+            errors: RefCell::new(vec![]),
         }
+    }
+
+    pub fn get_errors(&self) -> Ref<Vec<Error>> {
+        self.errors.borrow()
+    }
+
+    pub fn get_nth_error(&self, idx: usize) -> Option<&Error> {
+        unsafe { (*self.errors.as_ptr()).get(idx) }
+    }
+
+    pub fn add_error(&self, error: Error) {
+        self.errors.borrow_mut().push(error);
     }
 
     pub fn get_source_file_name(&self) -> Rc<String> {
@@ -46,26 +61,51 @@ impl AssocFileData {
         self.file_name.clone()
     }
 
-    pub fn run_in_scope<R>(&self, ty: ScopeType, code: impl FnOnce() -> R) -> R {
-        self.push_scope(ty);
-        let result: R = code();
-        self.pop_scope();
-        result
+    pub fn get_return_type(&self) -> &mut ScopeReturnStatus {
+        unsafe {
+            (*self.scopes.as_ptr())
+                .last_mut()
+                .expect("no scope registered")
+                .peek_yields_value_mut()
+        }
     }
 
-    pub fn push_scope(&self, ty: ScopeType) {
-        let mut scopes = self.scopes.borrow_mut();
-        scopes.push(Scope::new(ty));
+    pub fn push_if(&self) {
+        self.push_scope_typed(ScopeType::IfBlock, ScopeReturnStatus::NoReturn)
     }
 
-    pub fn pop_scope(&self) {
-        let mut scopes = self.scopes.borrow_mut();
-        scopes.pop();
+    pub fn push_else(&self) {
+        self.push_scope_typed(ScopeType::ElseBlock, ScopeReturnStatus::NoReturn)
+    }
+
+    pub fn push_function(&self, yields: ScopeReturnStatus) {
+        self.push_scope_typed(ScopeType::Function, yields)
+    }
+
+    pub fn push_scope_typed(&self, ty: ScopeType, yields: ScopeReturnStatus) {
+        self.scopes
+            .borrow_mut()
+            .push(Scope::new_with_ty_yields(ty, yields));
+    }
+
+    pub fn did_scope_exit_with_value_if_required(&self) -> bool {
+        let scopes = self.scopes.borrow();
+        let yields = scopes.last().expect("no scope").peek_yields_value();
+
+        !matches!(yields, ScopeReturnStatus::ShouldReturn(..))
+    }
+
+    pub fn pop_scope(&self) -> ScopeReturnStatus {
+        self.scopes
+            .borrow_mut()
+            .pop()
+            .expect("pop without scope")
+            .get_yields_value()
     }
 
     pub fn add_dependency(&self, dependency: &Ident) -> Result<()> {
-        let mut scopes = self.scopes.borrow_mut();
-        scopes
+        self.scopes
+            .borrow_mut()
             .last_mut()
             .context("no scopes registered")?
             .add_dependency(dependency)
@@ -82,7 +122,7 @@ impl AssocFileData {
             }
 
             // should come after we check the contents of a scope.
-            if scope.ty == ScopeType::Function {
+            if scope.is_function() {
                 is_callback = true;
             }
         }
@@ -169,8 +209,9 @@ impl Parser {
         for child in input.children() {
             match child.as_rule() {
                 Rule::declaration => {
-                    let d = Self::declaration(child)?;
-                    result.add_declaration(d);
+                    if let Some(d) = Self::declaration(child) {
+                        result.add_declaration(d);
+                    }
                 }
                 Rule::EOI => (),
                 _ => unreachable!("{child:?}"),

@@ -81,6 +81,7 @@ impl Parser {
             Rule::string => Value::String(Self::string(input)?),
             Rule::math_expr => Value::MathExpr(Box::new(Self::math_expr(input)?)),
             Rule::callable => Value::Callable(Self::callable(input)?),
+            Rule::WHITESPACE => unreachable!("{:?}", input.as_span()),
             x => unreachable!("{x:?}"),
         };
 

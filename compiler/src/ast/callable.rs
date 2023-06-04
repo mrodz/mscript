@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 
 use crate::{
     instruction,
-    parser::{Node, Parser},
+    parser::{Node, Parser}, scope::ScopeReturnStatus,
 };
 
 use super::{
@@ -23,7 +23,7 @@ impl IntoType for Callable {
         let ident = self.ident.ty()?;
         let ident = ident.get_type_recursively();
 
-        let Some(box ref return_type) = ident.is_function().context("not a function")?.return_type else {
+        let (box ScopeReturnStatus::ShouldReturn(ref return_type) | box ScopeReturnStatus::DidReturn(ref return_type)) = ident.is_function().context("not a function")?.return_type else {
             bail!("function returns void")
         };
 

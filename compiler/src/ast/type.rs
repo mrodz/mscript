@@ -1,6 +1,6 @@
 use std::{borrow::Cow, collections::HashMap, fmt::Display, rc::Rc};
 
-use crate::parser::{util::parse_with_userdata, AssocFileData, Node, Parser, Rule};
+use crate::{parser::{util::parse_with_userdata, AssocFileData, Node, Parser, Rule}, scope::ScopeReturnStatus};
 use anyhow::{bail, Result};
 use once_cell::sync::Lazy;
 
@@ -55,6 +55,13 @@ impl Display for TypeLayout {
 }
 
 impl TypeLayout {
+    /// Returns whether a value is boolean. This function **does not** supply the value of the boolean.
+    pub fn is_boolean(&self) -> bool {
+        let me = self.get_type_recursively();
+
+        matches!(me, TypeLayout::Native(NativeType::Bool))
+    }
+
     pub fn is_function(&self) -> Option<&FunctionType> {
         let me = self.get_type_recursively();
 
@@ -203,14 +210,14 @@ impl Parser {
         let return_type =
             if let Some((return_value, Rule::function_return_type)) = child_and_rule_pair {
                 let ty = Parser::function_return_type(return_value)?;
-                Some(Box::new(ty))
+                Some(ty)
             } else {
                 None
             };
 
         let types = FunctionParameters::TypesOnly(types);
 
-        Ok(FunctionType::new(types, return_type))
+        Ok(FunctionType::new(types, ScopeReturnStatus::detect_should_return(return_type)))
     }
 
     pub fn r#type(input: Node) -> Result<Cow<'static, TypeLayout>> {
