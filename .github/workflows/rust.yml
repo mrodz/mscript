@@ -1,0 +1,29 @@
+name: Rust CI
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set up rust
+        uses: actions/checkout@v3
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+      - name: Build
+        run: cargo build --verbose
+      - name: Unit Tests
+        run: cargo test --verbose --all
+      - name: Clippy
+        run: cargo clippy --verbose -- -D warnings
+      - name: Audit
+        run: cargo audit
