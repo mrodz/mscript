@@ -21,30 +21,36 @@ impl Parser {
         let maybe_error: Result<()> = try {
             match value {
                 Value::Function(ref f) => {
-                    ident.link(user_data, Some(Cow::Owned(f.clone().consume_for_type()?)))?;
+                    ident.link_force_no_inherit(user_data, Cow::Owned(f.clone().consume_for_type()?))?;
+                    // ident.link(user_data, Some(Cow::Owned(f.clone().consume_for_type()?)))?;
                 }
                 Value::Ident(..) => {
                     ident.link_from_pointed_type_with_lookup(user_data)?;
                 }
                 Value::Number(ref number) => {
-                    let ty = number.clone().for_type()?;
-                    ident.link(user_data, Some(Cow::Owned(ty)))?;
+                    let ty = number.for_type()?;
+                    ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
+                    // ident.link(user_data, Some(Cow::Owned(ty)))?;
                 }
                 Value::String(ref string) => {
                     let ty = string.for_type()?;
-                    ident.link(user_data, Some(Cow::Owned(ty)))?;
+                    ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
+                    // ident.link(user_data, Some(Cow::Owned(ty)))?;
                 }
                 Value::MathExpr(ref math_expr) => {
                     let ty = math_expr.for_type()?;
-                    ident.link(user_data, Some(Cow::Owned(ty)))?;
+                    ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
+                    // ident.link(user_data, Some(Cow::Owned(ty)))?;
                 }
                 Value::Callable(ref callback) => {
                     let ty = callback.for_type()?;
-                    ident.link(user_data, Some(Cow::Owned(ty)))?;
+                    ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
+                    // ident.link(user_data, Some(Cow::Owned(ty)))?;
                 }
                 Value::Boolean(ref boolean) => {
                     let ty = boolean.for_type()?;
-                    ident.link(user_data, Some(Cow::Owned(ty)))?;
+                    ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
+                    // ident.link(user_data, Some(Cow::Owned(ty)))?;
                 }
             }
         };
@@ -57,6 +63,6 @@ impl Parser {
             || vec!["could not understand the type of the input"],
         )?;
 
-        Ok(Assignment { ident, value })
+        Ok(Assignment::new(ident, value))
     }
 }

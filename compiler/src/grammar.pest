@@ -8,7 +8,8 @@ keywords = _{
     "if" |
     "else" |
     "true" |
-    "false"
+    "false" |
+    "lookup"
 }
 
 integer = @{ '0'..'9' ~ ('0'..'9' | ("_" ~ ('0'..'9')))* }
@@ -64,10 +65,11 @@ function = { "fn" ~ "(" ~ (function_parameters) ~ ")" ~ function_return_type? ~ 
 
 value = _{ function | math_expr | ident | string }
 
-
+assignment_flag = { "lookup" }
+assignment_flags = { assignment_flag ~ assignment_flag* }
 assignment_no_type = { ident ~ "=" ~ value }
 assignment_type = { ident ~ ":" ~ type ~ "=" ~ value }
-assignment = { assignment_no_type | assignment_type }
+assignment = { assignment_flags? ~ (assignment_no_type | assignment_type) }
 
 else_statement = { "else" ~ (block | if_statement) }
 

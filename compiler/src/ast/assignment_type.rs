@@ -1,9 +1,9 @@
 use std::borrow::Cow;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, bail};
 
 use super::r#type::IntoType;
-use super::{map_err, Assignment, Value};
+use super::{Assignment, Value, new_err};
 use crate::ast::{Ident, TypeLayout};
 use crate::parser::{Node, Parser};
 
@@ -30,22 +30,20 @@ impl Parser {
                     // let return_type = function_type.get_return_type().map_or_else(|| Cow::Borrowed("None"), |ok| Cow::Owned(ok.to_string()));
                     format!("declaration wanted {ty}, but value is a function that returns {assignment_ty}")
                 } else {
-                    // panic!(" ?????? ");
                     format!("declaration wanted {ty}, but value is {assignment_ty}")
                 };
 
-                return map_err(
-                    Err(anyhow!("incompatible types")),
+                bail!(new_err(
                     ty_span,
                     &input.user_data().get_source_file_name(),
                     message,
-                );
+                ));
             }
         }
 
-        ident.link(input.user_data(), Some(ty))?;
+        ident.link_force_no_inherit(input.user_data(), ty)?;
 
-        let assignment = Assignment { ident, value };
+        let assignment = Assignment::new(ident, value);
 
         Ok(assignment)
     }

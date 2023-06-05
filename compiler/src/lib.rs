@@ -3,6 +3,9 @@
 #![feature(iter_collect_into)]
 #![feature(try_blocks)]
 
+/// for #[derive()] macro in `parser.rs`
+extern crate alloc; 
+
 mod ast;
 mod parser;
 mod scope;

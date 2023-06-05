@@ -170,13 +170,17 @@ pub(crate) trait Compile {
 
 pub(crate) trait Optimize {}
 
+// #[derive(PartialEq)]
 pub(crate) struct Dependency<'a> {
     pub ident: Cow<'a, Ident>,
 }
 
 impl PartialEq for Dependency<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.ident.name() == other.ident.name()
+        let same_names: bool = self.ident.name() == other.ident.name();
+        let same_types: bool = self.ident.ty().unwrap() == other.ident.ty().unwrap();
+
+        same_names && same_types 
     }
 }
 
