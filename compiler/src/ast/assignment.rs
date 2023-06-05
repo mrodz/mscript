@@ -14,6 +14,21 @@ use super::{value::Value, Compile, Dependencies, Dependency, Ident};
 pub(crate) struct Assignment {
     pub ident: Ident,
     pub value: Value,
+    pub flags: Option<Box<[AssignmentFlags]>>
+}
+
+impl Assignment {
+    pub fn new(ident: Ident, value: Value) -> Self {
+        Self {
+            ident,
+            value,
+            flags: None
+        }
+    }
+
+    pub fn set_flags(&mut self, flags: Box<[AssignmentFlags]>) {
+        self.flags = Some(flags);
+    }
 }
 
 impl Dependencies for Assignment {
@@ -32,68 +47,96 @@ impl Dependencies for Assignment {
 
 impl Compile for Assignment {
     fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<super::CompiledItem>> {
-        let name = &self.ident.name();
+        let name = self.ident.name();
 
-        let matched = match &self.value {
+        let mut value_init = match &self.value {
             Value::Ident(ident) => {
-                vec![instruction!(load ident), instruction!(store name)]
+                vec![instruction!(load ident)]
             }
             Value::Function(function) => {
-                let mut function_init = function.in_place_compile_for_value(function_buffer)?;
-
-                function_init.push(instruction!(store name));
-
-                function_init
+                function.in_place_compile_for_value(function_buffer)?
             }
             Value::Number(number) => {
-                let mut number_init = number.compile(function_buffer)?;
-
-                number_init.push(instruction!(store name));
-
-                number_init
+                number.compile(function_buffer)?
             }
             Value::String(string) => {
-                let mut string_init = string.compile(function_buffer)?;
-
-                string_init.push(instruction!(store name));
-
-                string_init
+                string.compile(function_buffer)?
             }
             Value::MathExpr(math_expr) => {
-                let mut string_init = math_expr.compile(function_buffer)?;
-
-                string_init.push(instruction!(store name));
-
-                string_init
+                math_expr.compile(function_buffer)?
             }
             Value::Callable(callable) => {
-                let mut callable_init = callable.compile(function_buffer)?;
-
-                callable_init.push(instruction!(store name));
-
-                callable_init
+                callable.compile(function_buffer)?
             }
             Value::Boolean(boolean) => {
-                let mut boolean_init = boolean.compile(function_buffer)?;
-
-                boolean_init.push(instruction!(store name));
-
-                boolean_init
+                boolean.compile(function_buffer)?
             }
         };
 
-        Ok(matched)
+        let store_instruction = if let Some(ref flags) = self.flags {
+            if flags.contains(&AssignmentFlags::Lookup) {
+                instruction!(store_object name)
+            } else {
+                instruction!(store name)
+            }
+        } else {
+            instruction!(store name)
+        };
+
+        value_init.push(store_instruction);
+
+        Ok(value_init)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum AssignmentFlags {
+    Lookup
+}
+
+impl From<&str> for AssignmentFlags {
+    fn from(value: &str) -> Self {
+        match value {
+            "lookup" => Self::Lookup,
+            other => unimplemented!("{other}")
+        }
     }
 }
 
 impl Parser {
+    pub fn assignment_flags(input: Node) -> Result<Box<[AssignmentFlags]>> {
+        let flags = input.children();
+
+        let mut result = vec![];
+
+        for flag in flags {
+            result.push(flag.as_str().into());
+        }
+
+        Ok(result.into_boxed_slice())
+    }
+
     pub fn assignment(input: Node) -> Result<Assignment> {
-        let child = input.children().next().unwrap();
-        let x = match child.as_rule() {
-            Rule::assignment_no_type => Self::assignment_no_type(child)?,
-            Rule::assignment_type => Self::assignment_type(child)?,
-            _ => unreachable!(),
+        let mut children = input.children();
+
+        let maybe_flags_or_assignment = children.next().unwrap();
+
+        let (flags, assignment) = if maybe_flags_or_assignment.as_rule() == Rule::assignment_flags {
+            
+            (Some(Self::assignment_flags(maybe_flags_or_assignment)?), children.next().unwrap())
+        } else {
+            (None, maybe_flags_or_assignment)
         };
+
+        let mut x = match assignment.as_rule() {
+            Rule::assignment_no_type => Self::assignment_no_type(assignment)?,
+            Rule::assignment_type => Self::assignment_type(assignment)?,
+            rule => unreachable!("{rule:?}"),
+        };
+
+        if let Some(flags) = flags {
+            x.set_flags(flags)
+        }
 
         Ok(x)
     }

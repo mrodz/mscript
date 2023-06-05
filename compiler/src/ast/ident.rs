@@ -145,6 +145,12 @@ impl Ident {
         Ok(())
     }
 
+    pub fn link_force_no_inherit(&mut self, user_data: &AssocFileData, ty: Cow<'static, TypeLayout>) -> Result<()> {
+        self.ty = Some(ty);
+        user_data.add_dependency(self)?;
+        Ok(())
+    }
+
     pub fn link(
         &mut self,
         user_data: &AssocFileData,
