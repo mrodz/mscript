@@ -1,7 +1,7 @@
 use std::cell::Ref;
 use std::{cell::RefCell, rc::Rc};
 
-use anyhow::{Context, Error, Result};
+use anyhow::{Error, Result};
 use pest_consume::Parser as ParserDerive;
 
 use crate::ast::{Compile, CompiledFunctionId, CompiledItem, Declaration, Ident};
@@ -104,21 +104,43 @@ impl AssocFileData {
             .get_yields_value()
     }
 
-    pub fn add_dependency(&self, dependency: &Ident) -> Result<()> {
+    pub fn add_dependency(&self, dependency: &Ident) {
         self.scopes
             .borrow_mut()
             .last_mut()
-            .context("no scopes registered")?
-            .add_dependency(dependency)
+            .expect("no scopes registered")
+            .add_dependency(dependency);
     }
 
-    pub fn get_dependency_flags_from_name(&self, dependency: String) -> Option<(&Ident, bool)> {
-        let iter = unsafe { (*self.scopes.as_ptr()).iter() };
+    pub fn has_name_been_mapped_local(&self, dependency: &String) -> bool {
+        self.get_ident_from_name_local(dependency).is_some()
+    }
 
+    pub fn get_ident_from_name_local(&self, dependency: &String) -> Option<&Ident> {
+        let scope = unsafe { (*self.scopes.as_ptr()).last()? };
+
+        scope.contains(dependency)
+    }
+
+    pub fn get_dependency_flags_from_name(&self, dependency: &String) -> Option<(&Ident, bool)> {
+        let scopes = unsafe { (*self.scopes.as_ptr()).iter() }; 
+        self.get_dependency_flags_from_name_and_scopes_plus_skip(dependency, scopes, 0)
+    }
+
+    pub fn get_dependency_flags_from_name_skip_n(&self, dependency: &String, skip: usize) -> Option<(&Ident, bool)> {
+        let scopes = unsafe { (*self.scopes.as_ptr()).iter() }; 
+        self.get_dependency_flags_from_name_and_scopes_plus_skip(dependency, scopes, skip)
+    }
+
+    fn get_dependency_flags_from_name_and_scopes_plus_skip<'a, S>(&'a self, dependency: &String, scopes: S, skip: usize) -> Option<(&Ident, bool)>
+    where
+        S: Iterator<Item = &'a Scope> + DoubleEndedIterator
+    {
         let mut is_callback = false;
 
-        for scope in iter.rev() {
-            if let Some(flags) = scope.contains(&dependency) {
+
+        for (count, scope) in scopes.rev().enumerate() {
+            if let (true, Some(flags)) = (count >= skip, scope.contains(dependency)) {
                 return Some((flags, is_callback));
             }
 

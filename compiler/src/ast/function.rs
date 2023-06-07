@@ -20,7 +20,7 @@ pub fn name_from_function_id(id: isize) -> String {
     format!("__fn{id}")
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct Function {
     pub parameters: FunctionParameters,
     pub body: Block,
@@ -103,16 +103,9 @@ impl Function {
 impl IntoType for Function {
     /// unimplemented
     fn for_type(&self) -> Result<TypeLayout> {
-        unimplemented!()
-    }
-
-    fn consume_for_type(self) -> Result<TypeLayout>
-    where
-        Self: Sized,
-    {
         Ok(TypeLayout::Function(FunctionType::new(
-            self.parameters,
-            self.return_type,
+            self.parameters.clone(),
+            self.return_type.clone(),
         )))
     }
 }

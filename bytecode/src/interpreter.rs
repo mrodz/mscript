@@ -152,9 +152,16 @@ impl Program {
             bail!("could not find entrypoint (hint: try adding `function main`)")
         };
 
-        function.run(Cow::Owned(vec![]), stack, None, &mut |req| {
+        let main_ret = function.run(Cow::Owned(vec![]), stack, None, &mut |req| {
             Self::process_jump_request(arc_of_self.clone(), req)
-        })?;
+        });
+
+        if let Err(e) = main_ret {
+            eprintln!("\n******* MSCRIPT INTERPRETER FATAL RUNTIME ERROR *******\nCall stack trace:\n{e:?}\n\nPlease report this at https://github.com/mrodz/mscript-lang/issues/new\n");
+            bail!("Interpreter crashed")
+            // main_ret?;
+
+        }
 
         Ok(())
     }

@@ -12,7 +12,7 @@ use super::{
     FunctionArguments, Ident, TypeLayout,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct Callable {
     pub ident: Ident,
     pub function_arguments: FunctionArguments,

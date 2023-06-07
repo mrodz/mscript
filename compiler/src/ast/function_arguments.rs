@@ -6,7 +6,7 @@ use crate::parser::{Node, Parser};
 
 use super::{Dependencies, Dependency, Value};
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct FunctionArguments(Vec<Value>);
 
 impl FunctionArguments {

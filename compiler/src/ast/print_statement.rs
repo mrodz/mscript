@@ -10,7 +10,7 @@ use crate::{
 
 use super::{map_err, Compile, CompiledItem, Dependencies, Dependency, Value};
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct PrintStatement(Value);
 
 impl Dependencies for PrintStatement {
