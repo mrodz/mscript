@@ -7,7 +7,7 @@ use super::{
     Dependency, Function, Ident, Number, TypeLayout, Callable,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) enum Value {
     Function(Function),
     Ident(Ident),
@@ -27,7 +27,7 @@ impl Value {
 impl IntoType for Value {
     fn for_type(&self) -> Result<TypeLayout> {
         match self {
-            Self::Function(function) => function.clone().consume_for_type(),
+            Self::Function(function) => function.for_type(),
             Self::Ident(ident) => Ok(ident.ty()?.clone().into_owned()),
             Self::MathExpr(math_expr) => math_expr.for_type(),
             Self::Number(number) => number.for_type(),

@@ -10,7 +10,7 @@ use crate::{
 
 use super::{Compile, Dependencies, Value};
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct ReturnStatement(Option<Value>);
 
 impl Compile for ReturnStatement {

@@ -137,7 +137,7 @@ pub fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<()> {
     })?;
 
     let mut function_buffer = vec![];
-    logger.wrap_in_spinner(format!("Compiling AST ({path_str}):"), || {
+    logger.wrap_in_spinner(format!("Validating AST ({path_str}):"), || {
         let _ = file.compile(&mut function_buffer);
 
         let errors = user_data.get_errors();

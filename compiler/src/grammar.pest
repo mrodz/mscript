@@ -9,7 +9,8 @@ keywords = _{
     "else" |
     "true" |
     "false" |
-    "lookup"
+    "modify" |
+    "const"
 }
 
 integer = @{ '0'..'9' ~ ('0'..'9' | ("_" ~ ('0'..'9')))* }
@@ -48,7 +49,7 @@ string = @{ "\"" ~ (("\\\"") | (!("\"") ~ ANY))* ~ "\"" }
 ident_chars = _{ (('a'..'z') | ('0'..'9') | "_") }
 
 ident = @{ !('0'..'9') ~ ident_chars+ }
-type = { ident | function_type }
+type = { function_type | ident }
 ident_type = _{ ident ~ ":" ~ type }
 
 function_arguments = { (value ~ ("," ~ value)*)? }
@@ -65,11 +66,12 @@ function = { "fn" ~ "(" ~ (function_parameters) ~ ")" ~ function_return_type? ~ 
 
 value = _{ function | math_expr | ident | string }
 
-assignment_flag = { "lookup" }
+assignment_flag = { "modify" | "const" }
+// bad_assignment_flag = { &ident }
 assignment_flags = { assignment_flag ~ assignment_flag* }
 assignment_no_type = { ident ~ "=" ~ value }
 assignment_type = { ident ~ ":" ~ type ~ "=" ~ value }
-assignment = { assignment_flags? ~ (assignment_no_type | assignment_type) }
+assignment = { (assignment_flags ~ (assignment_no_type | assignment_type)) | (assignment_no_type | assignment_type) }
 
 else_statement = { "else" ~ (block | if_statement) }
 

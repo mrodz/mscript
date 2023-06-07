@@ -2,14 +2,14 @@ use std::rc::Rc;
 
 use anyhow::Result;
 
-use crate::parser::{Node, Parser, Rule, AssocFileData};
+use crate::{parser::{Node, Parser, Rule, AssocFileData}, instruction};
 
 use super::{
     assignment::Assignment, Callable, Compile, CompiledItem, Dependencies, Dependency,
     PrintStatement, r#return::ReturnStatement, if_statement::IfStatement,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) enum Declaration {
     Assignment(Assignment),
     Callable(Callable),
@@ -56,7 +56,11 @@ impl Compile for Declaration {
     fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>> {
         match self {
             Self::PrintStatement(x) => x.compile(function_buffer),
-            Self::Callable(x) => x.compile(function_buffer),
+            Self::Callable(x) => {
+                let mut callable_exe = x.compile(function_buffer)?;
+                callable_exe.push(instruction!(void));
+                Ok(callable_exe)
+            }
             Self::Assignment(x) => x.compile(function_buffer),
             Self::ReturnStatement(x) => x.compile(function_buffer),
             Self::IfStatement(x) => x.compile(function_buffer),

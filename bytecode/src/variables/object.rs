@@ -91,11 +91,11 @@ impl Object {
         }
     }
 
-    pub fn has_variable_mut(
+    pub fn has_variable(
         &mut self,
         variable_name: &String,
-    ) -> Option<&mut (Primitive, VariableFlags)> {
-        arc_to_ref(&self.object_variables).get_mut(variable_name)
+    ) -> Option<Arc<(Primitive, VariableFlags)>> {
+        arc_to_ref(&self.object_variables).get(variable_name)
     }
 
     pub fn has_function(&self, function_name: &String) -> bool {

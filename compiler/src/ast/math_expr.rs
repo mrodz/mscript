@@ -82,7 +82,7 @@ impl Op {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) enum Expr {
     // Number(Number),
     Value(Value),
@@ -269,7 +269,7 @@ pub(crate) fn parse_expr(pairs: Pairs<Rule>, user_data: Rc<AssocFileData>) -> Re
                     };
 
                     let (ident, is_callback) = user_data
-                        .get_dependency_flags_from_name(raw_string.to_string())
+                        .get_dependency_flags_from_name(&raw_string.to_string())
                         .with_context(|| {
                             new_err(
                                 primary.as_span(),
