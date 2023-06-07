@@ -7,3 +7,5 @@ def increment_a():
 print(a)
 increment_a()
 print(a)
+increment_a()
+print(a)

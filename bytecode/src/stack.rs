@@ -1,6 +1,9 @@
 use anyhow::{bail, Result};
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
+use std::sync::Arc;
+
+use crate::arc_to_ref;
 
 use super::variables::Primitive;
 
@@ -19,8 +22,13 @@ impl VariableFlags {
     }
 
     #[inline(always)]
-    pub fn can_update(&self) -> bool {
+    pub fn is_read_only(&self) -> bool {
         self.0 & READ_ONLY == READ_ONLY
+    }
+
+    #[inline(always)]
+    pub fn can_update(&self) -> bool {
+        !self.is_read_only()
     }
 
     #[inline(always)]
@@ -42,11 +50,11 @@ impl Debug for VariableFlags {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut buffer = vec![];
 
-        if self.0 | READ_ONLY == READ_ONLY {
+        if self.0 & READ_ONLY == READ_ONLY {
             buffer.push("READ_ONLY")
         }
 
-        if self.0 | PUBLIC == PUBLIC {
+        if self.0 & PUBLIC == PUBLIC {
             buffer.push("PUBLIC")
         } else {
             buffer.push("PRIVATE")
@@ -57,7 +65,7 @@ impl Debug for VariableFlags {
 }
 
 #[derive(Default, Debug, PartialEq, Clone)]
-pub struct VariableMapping(HashMap<String, (Primitive, VariableFlags)>);
+pub struct VariableMapping(HashMap<String, Arc<(Primitive, VariableFlags)>>);
 
 impl Display for VariableMapping {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -87,27 +95,23 @@ impl Display for VariableMapping {
     }
 }
 
-impl From<HashMap<String, (Primitive, VariableFlags)>> for VariableMapping {
-    fn from(value: HashMap<String, (Primitive, VariableFlags)>) -> Self {
+impl From<HashMap<String, Arc<(Primitive, VariableFlags)>>> for VariableMapping {
+    fn from(value: HashMap<String, Arc<(Primitive, VariableFlags)>>) -> Self {
         Self(value)
     }
 }
 
 impl VariableMapping {
-    pub fn get(&self, key: &String) -> Option<&(Primitive, VariableFlags)> {
-        self.0.get(key)
-    }
-
-    pub fn get_mut(&mut self, key: &String) -> Option<&mut (Primitive, VariableFlags)> {
-        self.0.get_mut(key)
+    pub fn get(&self, key: &String) -> Option<Arc<(Primitive, VariableFlags)>> {
+        self.0.get(key).cloned()
     }
 
     pub fn update(&mut self, key: String, value: Primitive) -> Result<()> {
         // if insert returns None, that means there was no value there,
         // and this `update` is invalid.
-        if let Some(pair) = self.get_mut(&key) {
+        if let Some(pair) = self.0.get_mut(&key) {
             if pair.1.can_update() {
-                pair.0 = value;
+                arc_to_ref(pair).0 = value;
             } else {
                 bail!("variable is read-only")
             }
@@ -156,10 +160,12 @@ impl Stack {
         self.0.pop();
     }
 
-    pub fn find_name(&self, name: &String) -> Option<&(Primitive, VariableFlags)> {
+    pub fn find_name(&self, name: &String) -> Option<Arc<(Primitive, VariableFlags)>> {
         for stack_frame in self.0.iter().rev() {
             let tuple = stack_frame.variables.get(name);
-            if let Some((_, flags)) = tuple {
+            if let Some(ref packed) = tuple {
+                let flags = &packed.1;
+
                 if !flags.is_exclusive_to_frame() {
                     return Some(tuple.unwrap());
                 } else {
@@ -177,7 +183,7 @@ impl Stack {
             .expect("nothing in the stack")
             .variables
             .0
-            .insert(name, (var, VariableFlags::none()));
+            .insert(name, Arc::new((var, VariableFlags::none())));
     }
 
     pub fn register_variable_flags(&mut self, name: String, var: Primitive, flags: VariableFlags) {
@@ -186,14 +192,14 @@ impl Stack {
             .expect("nothing in the stack")
             .variables
             .0
-            .insert(name, (var, flags));
+            .insert(name, Arc::new((var, flags)));
     }
 
     pub fn update_variable(&mut self, name: String, new_var: Primitive) -> Result<()> {
         for stack_frame in self.0.iter_mut().rev() {
-            if let Some(old_var) = stack_frame.variables.get_mut(&name) {
+            if let Some(old_var) = stack_frame.variables.0.get_mut(&name) {
                 if old_var.1.can_update() {
-                    old_var.0 = new_var;
+                    arc_to_ref(old_var).0 = new_var;
                 }
                 return Ok(());
             }

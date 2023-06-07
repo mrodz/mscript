@@ -4,7 +4,7 @@ use crate::parser::{Node, Parser};
 
 use super::{Compile, CompiledItem, Declaration, Dependencies, Dependency};
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Block(Vec<Declaration>);
 
 impl Block {

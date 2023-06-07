@@ -72,9 +72,8 @@ impl Scope {
         self.ty == ScopeType::Function
     }
 
-    pub fn add_dependency(&mut self, dependency: &Ident) -> Result<()> {
+    pub fn add_dependency(&mut self, dependency: &Ident) {
         self.variables.insert(dependency.clone());
-        Ok(())
     }
 
     /// able to be improved

@@ -70,7 +70,7 @@ impl<'a> Ctx<'a> {
         Ok(())
     }
 
-    pub fn load_callback_variable(&self, name: &String) -> Result<&Primitive> {
+    pub fn load_callback_variable(&self, name: &String) -> Result<Arc<(Primitive, VariableFlags)>> {
         let Some(ref mapping) = self.callback_state else {
             bail!("this function is not a callback")
         };
@@ -79,9 +79,9 @@ impl<'a> Ctx<'a> {
             bail!("this callback does not have `{name}`")
         };
 
-        let primitive = &pair.0;
+        // let primitive = &pair.0;
 
-        Ok(primitive)
+        Ok(pair)
     }
 
     pub fn owner(&self) -> &Function {
@@ -178,7 +178,7 @@ impl<'a> Ctx<'a> {
         arc_to_ref(&self.call_stack).update_variable(name, var)
     }
 
-    pub(crate) fn load_variable(&self, name: &String) -> Option<&(Primitive, VariableFlags)> {
+    pub(crate) fn load_variable(&self, name: &String) -> Option<Arc<(Primitive, VariableFlags)>> {
         self.call_stack.find_name(name)
     }
 
@@ -186,7 +186,7 @@ impl<'a> Ctx<'a> {
         self.call_stack.get_frame_variables()
     }
 
-    pub(crate) fn load_local(&self, name: &String) -> Option<&(Primitive, VariableFlags)> {
+    pub(crate) fn load_local(&self, name: &String) -> Option<Arc<(Primitive, VariableFlags)>> {
         self.call_stack.get_frame_variables().get(name)
     }
 }

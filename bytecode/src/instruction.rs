@@ -70,7 +70,6 @@ pub mod implementations {
     use crate::arc_to_ref;
     use crate::context::SpecialScope;
     use crate::function::{PrimitiveFunction, ReturnValue};
-    use crate::stack::VariableFlags;
     use crate::{bool, function, int, object, vector};
     use std::collections::HashMap;
     use std::sync::Arc;
@@ -333,7 +332,7 @@ pub mod implementations {
                         bail!("{var_name} is not in scope")
                     };
 
-                    arguments.insert(var_name.clone(), (var.0.clone(), VariableFlags::none()));
+                    arguments.insert(var_name.clone(), var.clone());
                 }
 
                 Some(Arc::new(arguments.into()))
@@ -480,13 +479,16 @@ pub mod implementations {
             };
 
             // this bypass of Arc protections is messy and should be refactored.
-            let var = arc_to_ref(o).has_variable_mut(var_name).context("variable does not exist on object")?;
+            let var = arc_to_ref(o).has_variable(var_name).context("variable does not exist on object")?;
 
             if var.0.ty() != new_item.ty() {
                 bail!("mismatched types in assignment ({:?} & {:?})", var.0.ty(), new_item.ty())
             }
 
-            var.0 = new_item;
+            // let () = arc_to_ref(&var.0);
+            let x = &mut arc_to_ref(&var).0;
+            *x = new_item;
+            // var.0 = new_item;
 
             Ok(())
         }
@@ -638,7 +640,7 @@ pub mod implementations {
 
             let var = ctx.load_callback_variable(name)?;
 
-            ctx.push(var.clone());
+            ctx.push(var.0.clone());
 
             Ok(())
         }

@@ -15,6 +15,7 @@ use super::{new_err, Compile, CompiledItem, Dependencies, Dependency};
 pub(crate) struct Ident {
     name: String,
     ty: Option<Cow<'static, TypeLayout>>,
+    read_only: bool,
 }
 
 impl Compile for Ident {
@@ -48,6 +49,14 @@ pub static KEYWORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
 });
 
 impl Ident {
+    pub fn mark_const(&mut self) {
+        self.read_only = true;
+    }
+
+    pub fn is_const(&self) -> bool {
+        self.read_only
+    }
+
     pub fn wrap_in_callback(mut self) -> Result<Self> {
         let Some(ty) = self.ty else {
             bail!("this variable does not have a type; it can't be wrapped in a callback")
@@ -66,7 +75,7 @@ impl Ident {
         }
 
         let (ident, is_callback) = user_data
-            .get_dependency_flags_from_name(self.name.clone())
+            .get_dependency_flags_from_name(&self.name)
             .context("variable has not been mapped")?;
 
         let ty = ident.ty.clone();
@@ -115,7 +124,7 @@ impl Ident {
     #[allow(dead_code)]
     pub fn load_type(&mut self, user_data: &AssocFileData) -> Result<()> {
         let (ident, _) = user_data
-            .get_dependency_flags_from_name(self.name.clone())
+            .get_dependency_flags_from_name(&self.name)
             .context("variable has not been mapped")?;
 
         self.ty = Some(ident.ty.clone().context("no type")?);
@@ -129,7 +138,7 @@ impl Ident {
         }
 
         let (ident, is_callback) = user_data
-            .get_dependency_flags_from_name(self.name.clone())
+            .get_dependency_flags_from_name(&self.name)
             .with_context(|| format!("'{}' has not been mapped", self.name))?;
 
         let new_ty = ident.ty.clone().map(|x| {
@@ -145,9 +154,13 @@ impl Ident {
         Ok(())
     }
 
-    pub fn link_force_no_inherit(&mut self, user_data: &AssocFileData, ty: Cow<'static, TypeLayout>) -> Result<()> {
+    pub fn link_force_no_inherit(
+        &mut self,
+        user_data: &AssocFileData,
+        ty: Cow<'static, TypeLayout>,
+    ) -> Result<()> {
         self.ty = Some(ty);
-        user_data.add_dependency(self)?;
+        user_data.add_dependency(self);
         Ok(())
     }
 
@@ -156,8 +169,7 @@ impl Ident {
         user_data: &AssocFileData,
         ty: Option<Cow<'static, TypeLayout>>,
     ) -> Result<bool> {
-        let ident: Option<(&Ident, bool)> =
-            user_data.get_dependency_flags_from_name(self.name.clone());
+        let ident: Option<(&Ident, bool)> = user_data.get_dependency_flags_from_name(&self.name);
 
         let inherited: bool = if let Some((ident, is_callback)) = ident {
             let new_ty = ident.ty.clone().map(|x| {
@@ -182,7 +194,7 @@ impl Ident {
             false
         };
 
-        user_data.add_dependency(self)?;
+        user_data.add_dependency(self);
 
         Ok(inherited)
     }
@@ -202,6 +214,6 @@ impl Parser {
 
         let name = name.to_owned();
 
-        Ok(Ident { name, ty: None })
+        Ok(Ident { name, ty: None, read_only: false })
     }
 }

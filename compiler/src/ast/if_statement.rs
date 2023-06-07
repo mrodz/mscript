@@ -7,7 +7,7 @@ use crate::{
 
 use super::{new_err, r#type::IntoType, Block, Compile, CompiledItem, Dependencies, Value};
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct IfStatement {
     value: Value,
     body: Block,
@@ -44,7 +44,7 @@ impl Compile for IfStatement {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum ElseStatement {
     Block(Block),
     IfStatement(Box<IfStatement>),
