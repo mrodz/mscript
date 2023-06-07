@@ -1,7 +1,6 @@
 #![feature(box_patterns)]
 #![allow(dead_code)]
 
-mod attributes_parser;
 mod context;
 mod file;
 mod function;
