@@ -74,6 +74,8 @@ impl MScriptFile {
     /// Open a bytecode file given its path. This method opens
     /// a handle to the file, parses it and loads functions/instructions,
     /// and maps objects.
+    /// 
+    /// # Arguments
     ///
     /// * `path` - The path to the file. This function _does not_ validate the extension.
     ///
@@ -203,6 +205,6 @@ impl MScriptFile {
             buffer.clear();
         }
 
-        Ok(Functions { map: functions })
+        Ok(Functions::new(functions))
     }
 }
