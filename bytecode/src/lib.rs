@@ -1,13 +1,13 @@
 #![feature(box_patterns)]
 #![allow(dead_code)]
 
-mod context;
-mod file;
-mod function;
-mod instruction;
-mod instruction_constants;
-mod interpreter;
-mod stack;
+pub(crate) mod context;
+pub(crate) mod file;
+pub(crate) mod function;
+pub(crate) mod instruction;
+pub(crate) mod instruction_constants;
+pub(crate) mod interpreter;
+pub(crate) mod stack;
 
 pub use function::ReturnValue as FFIReturnValue;
 pub use interpreter::Program;

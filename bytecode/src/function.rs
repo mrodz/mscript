@@ -106,7 +106,7 @@ impl Display for ReturnValue {
 
 impl Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} function {}", self.location.path, self.name,)
+        write!(f, "{} function {}", self.location.path(), self.name,)
     }
 }
 
@@ -132,7 +132,7 @@ impl Function {
 
     #[inline]
     pub fn get_qualified_name(&self) -> String {
-        format!("{}#{}", self.location.path, self.name)
+        format!("{}#{}", self.location.path(), self.name)
     }
 
     pub fn run(
