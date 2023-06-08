@@ -358,7 +358,7 @@ pub mod implementations {
             let obj = unsafe {
                 if !OBJECT_BUILDER.has_class_been_registered(&name) {
                     let location = &function.location;
-                    let object_path = format!("{}#{name}$", location.path);
+                    let object_path = format!("{}#{name}$", location.path());
 
                     let object_functions = arc_to_ref(location).get_object_functions(&object_path)?;
 

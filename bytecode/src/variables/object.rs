@@ -59,6 +59,7 @@ impl ObjectBuilder {
     }
 }
 
+#[doc(alias = "Class")]
 #[derive(Debug)]
 pub struct Object {
     pub name: Arc<String>,
