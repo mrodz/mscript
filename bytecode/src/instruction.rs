@@ -353,11 +353,11 @@ pub mod implementations {
             let object_variables = Arc::new(ctx.get_frame_variables().clone());
 
             let function = ctx.owner();
-            let name = Arc::new(function.name.clone());
+            let name = Arc::new(function.name().clone());
 
             let obj = unsafe {
                 if !OBJECT_BUILDER.has_class_been_registered(&name) {
-                    let location = &function.location;
+                    let location = &function.location();
                     let object_path = format!("{}#{name}$", location.path());
 
                     let object_functions = arc_to_ref(location).get_object_functions(&object_path)?;
@@ -507,8 +507,8 @@ pub mod implementations {
                 };
 
                 ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
-                    destination: JumpRequestDestination::Standard(f.location.clone()),
-                    callback_state: f.callback_state.clone(),
+                    destination: JumpRequestDestination::Standard(f.location().clone()),
+                    callback_state: f.callback_state().clone(),
                     stack: ctx.arced_call_stack(),
                     arguments,
                 }));
