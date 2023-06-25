@@ -1,3 +1,5 @@
+//! Implementation of binary operations over primitive values.
+
 mod add;
 mod div;
 mod mul;
@@ -5,6 +7,20 @@ mod ord;
 mod rem;
 mod sub;
 
+/// Common math operation checks.
+/// 
+/// | Input x | Input y | Output |
+/// | ------- | ------- | ------ |
+/// | Int     | Int     | Int    |
+/// | Int     | Float   | Float  |
+/// | Int     | BigInt  | BigInt |
+/// | Float   | Float   | Float  |
+/// | Float   | Int     | Float  |
+/// | Float   | BigInt  | Float  |
+/// | BigInt  | BigInt  | BigInt |
+/// | BigInt  | Int     | BigInt |
+/// | BigInt  | Float   | Float  |
+/// | Byte    | Byte    | Byte   |
 #[macro_export]
 macro_rules! apply_math_bin_op_if_applicable {
     ($lhs:ident $symbol:tt $rhs:ident) => {{
@@ -31,6 +47,7 @@ macro_rules! apply_math_bin_op_if_applicable {
     }}
 }
 
+/// Standard casts for boolean comparisons.
 #[macro_export]
 macro_rules! apply_bool_bin_op_if_applicable {
     ($lhs:ident $symbol:tt $rhs:ident) => {{
