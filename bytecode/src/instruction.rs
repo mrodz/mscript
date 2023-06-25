@@ -1,3 +1,5 @@
+//! All of the implementations for each bytecode instruction are found here.
+
 use super::context::Ctx;
 use super::function::InstructionExitState;
 use super::instruction_constants;
@@ -11,10 +13,67 @@ use std::fmt::Debug;
 use std::io::{stdin, stdout, Write};
 use std::sync::Arc;
 
+/// This variable allows instructions to register objects on the fly.
 static mut OBJECT_BUILDER: Lazy<ObjectBuilder> = Lazy::new(ObjectBuilder::new);
 
+/// Used for type declarations in lookup tables.
 pub type InstructionSignature = fn(&mut Ctx, &[String]) -> Result<()>;
 
+/// A macro to help generate the boilerplate around instruction implementations.
+/// 
+/// ## Note about the return value:
+/// 
+/// The downside of macros is that the return type of each function is hidden.
+/// Each instruction is expected to return [`anyhow::Result<()>`], and if it
+/// has a special exit state, to pass it through the context ([`Ctx`]).
+/// 
+/// This macro takes the shape...
+/// 
+/// ```ignore
+/// instruction! {
+///     name(...) {
+///         // impl
+///     }
+/// 
+///     ...
+/// }
+/// ```
+/// 
+/// ...and has multiple valid implementations.
+/// 
+/// # Examples
+/// * No args:
+/// ```ignore
+/// instruction! {
+///     nop() Ok(InstructionExitState::NoExit)
+/// }
+/// ```
+/// * Only ctx
+/// ```ignore
+/// instruction! {
+///     do_something_without_args(ctx=my_name_for_context) {
+///         // impl
+/// 
+///         Ok(())
+///     }
+/// }
+/// ```
+/// * Ctx and Args
+/// ```ignore
+/// instruction! {
+///     both_args_and_ctx(ctx=my_name_for_context, args=my_name_for_args) {
+///         // impl
+/// 
+///         Ok(())
+///     }
+/// }
+/// ```
+/// 
+/// # Errors
+/// Each instruction can fail spectacularly in its own way. Thus, as an instruction
+/// author, one must ensure that error messages capture the essense of how the program
+/// blew up. If an instruction errors, it is considered a fatal error by the interpreter
+/// and the **entire** program will shut down.
 macro_rules! instruction {
     ($($name:ident $body:expr)*) => {
         $(
@@ -30,13 +89,6 @@ macro_rules! instruction {
             }
         )*
     };
-    ($($name:ident(args=$args:ident) $body:expr)*) => {
-        $(
-            pub(crate) fn $name(_ctx: &mut Ctx, $args: &[String]) -> Result<()> {
-                $body
-            }
-        )*
-    };
     ($($name:ident($ctx:ident, $args:ident) $body:expr)*) => {
         $(
             pub(crate) fn $name($ctx: &mut Ctx, $args: &[String]) -> Result<()> {
@@ -46,6 +98,12 @@ macro_rules! instruction {
     };
 }
 
+/// Shorthand for identical instructions:
+/// * `make_bool`
+/// * `make_int`
+/// * `make_float`
+/// * `make_byte`
+/// * `make_bigint`
 macro_rules! make_type {
     ($name:ident) => {
         instruction! {
@@ -64,6 +122,8 @@ macro_rules! make_type {
     };
 }
 
+/// This submodule contains the implementations for
+/// each instruction, and nothing more.
 #[deny(dead_code)]
 pub mod implementations {
     use super::*;
@@ -766,10 +826,12 @@ pub mod implementations {
     }
 }
 
+/// Get a function pointer to the bytecode instruction associated with a byte. 
 pub fn query(byte: u8) -> InstructionSignature {
     instruction_constants::FUNCTION_POINTER_LOOKUP[byte as usize]
 }
 
+/// Run an instruction.
 #[inline(always)]
 pub fn run_instruction(ctx: &mut Ctx, instruction: &Instruction) -> Result<()> {
     let instruction_fn = query(instruction.id);
@@ -777,6 +839,37 @@ pub fn run_instruction(ctx: &mut Ctx, instruction: &Instruction) -> Result<()> {
     Ok(())
 }
 
+/// Parse a string into tokens based on preset rules.
+/// 
+/// Tokens can be space-delimited or comma-delimited. To indicate a token
+/// contains a whitespace (`0x20`), the token must be wrapped with `"..."`.
+/// 
+/// This function supports encoding:
+/// * `"\\n"` -> `"\n"`
+/// * `"\\r"` -> `"\r"`
+/// * `"\\t"` -> `"\t"`
+/// 
+/// # Errors
+/// This function will error if its input is invalid.
+/// Such cases arise from tokens that start with a `"` and do not close the quote.
+/// Will also error if given an unknown escape sequence.
+/// 
+/// # Examples
+/// 
+/// ```ignore
+/// let single = split_string("Hello".into());
+/// println!("{single:?}"); // Ok(["Hello"])
+/// 
+/// let with_quotes = split_string("\"Hello\"".into());
+/// assert_eq(single, with_quotes);
+/// 
+/// let multiple = split_string("Hello World".into());
+/// println!("{multiple:?}"); // Ok(["Hello", "World"])
+/// 
+/// let combined = split_string("\"Hello World\"".into());
+/// println!("{combined:?}"); // Ok(["Hello World"])
+/// 
+/// ```
 pub fn split_string(string: Cow<str>) -> Result<Box<[String]>> {
     let mut result = Vec::<String>::new();
     let mut buf = String::new();
@@ -858,27 +951,53 @@ pub fn split_string(string: Cow<str>) -> Result<Box<[String]>> {
     }
 }
 
+/// If the program needs to jump, it must know if it is jumping 
+/// to a `.ms` file or a library. This enum represents that
+/// destination.
 #[derive(Clone, Debug)]
 pub enum JumpRequestDestination {
     Standard(String),
     Library { lib_name: String, func_name: String },
 }
 
+/// This struct packs together data that represents the state of an
+/// interpreter jump.
 #[derive(Clone, Debug)]
 pub struct JumpRequest {
+    /// The place to which the request is going.
     pub destination: JumpRequestDestination,
+    /// If this request is a closure or introduces a unique environment,
+    /// this field will be `Some`.
     pub callback_state: Option<Arc<VariableMapping>>,
+    /// This is a shared reference to the interpreter call stack.
     pub stack: Arc<Stack>,
+    /// The arguments to the jump request. If this request is a function 
+    /// call (which should be 99% of cases), it will be the arguments passed
+    /// from the caller.
     pub arguments: Vec<Primitive>,
 }
 
+/// A wrapper for a bytecode instruction.
+/// In bytecode format, will look like:
+/// 
+/// `{BYTE} (SP {ARG})* NUL`
+/// 
+/// Where:
+/// * BYTE = Instruction#id
+/// * SP = 0x20
+/// * NUL = 0x00
+/// * ARG = "argument" | argument | "with spaces" | {LITERAL}
 #[derive(Debug)]
 pub struct Instruction {
+    /// This instruction's identity. See the [static instruction array](crate::instruction_constants::FUNCTION_POINTER_LOOKUP)
+    /// for valid identities.
     pub id: u8,
+    /// The arguments to the instruction.
     arguments: Box<[String]>,
 }
 
 impl Instruction {
+    /// Simple constructor
     pub fn new(id: u8, arguments: Box<[String]>) -> Self {
         Instruction { id, arguments }
     }
