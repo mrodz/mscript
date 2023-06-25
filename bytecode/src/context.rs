@@ -97,7 +97,7 @@ impl<'a> Ctx<'a> {
     ///
     /// * `name` - the name of the callback variable
     /// * `value` - the [`Primitive`] value that will be stored in the same slot.
-    pub fn update_callback_variable(&mut self, name: String, value: Primitive) -> Result<()> {
+    pub fn update_callback_variable(&mut self, name: &String, value: Primitive) -> Result<()> {
         let Some(ref mapping) = self.callback_state else {
             bail!("this function is not a callback")
         };
