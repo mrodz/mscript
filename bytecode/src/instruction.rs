@@ -1,3 +1,5 @@
+//! All of the implementations for each bytecode instruction are found here.
+
 use super::context::Ctx;
 use super::function::InstructionExitState;
 use super::instruction_constants;
@@ -9,12 +11,69 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::io::{stdin, stdout, Write};
-use std::sync::Arc;
+use std::rc::Rc;
 
+/// This variable allows instructions to register objects on the fly.
 static mut OBJECT_BUILDER: Lazy<ObjectBuilder> = Lazy::new(ObjectBuilder::new);
 
+/// Used for type declarations in lookup tables.
 pub type InstructionSignature = fn(&mut Ctx, &[String]) -> Result<()>;
 
+/// A macro to help generate the boilerplate around instruction implementations.
+///
+/// ## Note about the return value:
+///
+/// The downside of macros is that the return type of each function is hidden.
+/// Each instruction is expected to return [`anyhow::Result<()>`], and if it
+/// has a special exit state, to pass it through the context ([`Ctx`]).
+///
+/// This macro takes the shape...
+///
+/// ```ignore
+/// instruction! {
+///     name(...) {
+///         // impl
+///     }
+///
+///     ...
+/// }
+/// ```
+///
+/// ...and has multiple valid implementations.
+///
+/// # Examples
+/// * No args:
+/// ```ignore
+/// instruction! {
+///     nop() Ok(InstructionExitState::NoExit)
+/// }
+/// ```
+/// * Only ctx
+/// ```ignore
+/// instruction! {
+///     do_something_without_args(ctx=my_name_for_context) {
+///         // impl
+///
+///         Ok(())
+///     }
+/// }
+/// ```
+/// * Ctx and Args
+/// ```ignore
+/// instruction! {
+///     both_args_and_ctx(ctx=my_name_for_context, args=my_name_for_args) {
+///         // impl
+///
+///         Ok(())
+///     }
+/// }
+/// ```
+///
+/// # Errors
+/// Each instruction can fail spectacularly in its own way. Thus, as an instruction
+/// author, one must ensure that error messages capture the essense of how the program
+/// blew up. If an instruction errors, it is considered a fatal error by the interpreter
+/// and the **entire** program will shut down.
 macro_rules! instruction {
     ($($name:ident $body:expr)*) => {
         $(
@@ -30,13 +89,6 @@ macro_rules! instruction {
             }
         )*
     };
-    ($($name:ident(args=$args:ident) $body:expr)*) => {
-        $(
-            pub(crate) fn $name(_ctx: &mut Ctx, $args: &[String]) -> Result<()> {
-                $body
-            }
-        )*
-    };
     ($($name:ident($ctx:ident, $args:ident) $body:expr)*) => {
         $(
             pub(crate) fn $name($ctx: &mut Ctx, $args: &[String]) -> Result<()> {
@@ -46,6 +98,12 @@ macro_rules! instruction {
     };
 }
 
+/// Shorthand for identical instructions:
+/// * `make_bool`
+/// * `make_int`
+/// * `make_float`
+/// * `make_byte`
+/// * `make_bigint`
 macro_rules! make_type {
     ($name:ident) => {
         instruction! {
@@ -64,15 +122,17 @@ macro_rules! make_type {
     };
 }
 
+/// This submodule contains the implementations for
+/// each instruction, and nothing more.
 #[deny(dead_code)]
 pub mod implementations {
     use super::*;
-    use crate::arc_to_ref;
     use crate::context::SpecialScope;
     use crate::function::{PrimitiveFunction, ReturnValue};
+    use crate::rc_to_ref;
     use crate::{bool, function, int, object, vector};
     use std::collections::HashMap;
-    use std::sync::Arc;
+    use std::rc::Rc;
 
     instruction! {
         constexpr(ctx, args) {
@@ -202,7 +262,7 @@ pub mod implementations {
                             bail!("Cannot perform a vector operation on a non-vector")
                         };
 
-                        let reference = Arc::get_mut(vector).context("could not get reference to vector")?;
+                        let reference = Rc::get_mut(vector).context("could not get reference to vector")?;
                         reference.reverse();
                     },
                     "mut" => {
@@ -219,7 +279,7 @@ pub mod implementations {
                             bail!("Cannot perform a vector operation on a non-vector")
                         };
 
-                        Arc::get_mut(vector).context("could not get reference to vector")?[idx] = new_item;
+                        Rc::get_mut(vector).context("could not get reference to vector")?[idx] = new_item;
 
                     }
                     not_found => bail!("operation not found: `{not_found}`")
@@ -335,7 +395,7 @@ pub mod implementations {
                     arguments.insert(var_name.clone(), var.clone());
                 }
 
-                Some(Arc::new(arguments.into()))
+                Some(Rc::new(arguments.into()))
             } else {
                 None
             };
@@ -350,17 +410,17 @@ pub mod implementations {
                 bail!("`make_object` does not require arguments")
             }
 
-            let object_variables = Arc::new(ctx.get_frame_variables().clone());
+            let object_variables = Rc::new(ctx.get_frame_variables().clone());
 
             let function = ctx.owner();
-            let name = Arc::new(function.name.clone());
+            let name = Rc::new(function.name().clone());
 
             let obj = unsafe {
                 if !OBJECT_BUILDER.has_class_been_registered(&name) {
-                    let location = &function.location;
-                    let object_path = format!("{}#{name}$", location.path);
+                    let location = &function.location();
+                    let object_path = format!("{}#{name}$", location.path());
 
-                    let object_functions = arc_to_ref(location).get_object_functions(&object_path)?;
+                    let object_functions = rc_to_ref(location).get_object_functions(&object_path)?;
 
                     let mut mapping: HashSet<String> = HashSet::new();
 
@@ -368,13 +428,13 @@ pub mod implementations {
                         mapping.insert(func.get_qualified_name());
                     }
 
-                    OBJECT_BUILDER.register_class(Arc::clone(&name), mapping);
+                    OBJECT_BUILDER.register_class(Rc::clone(&name), mapping);
                 }
 
-                OBJECT_BUILDER.name(Arc::clone(&name)).object_variables(object_variables).build()
+                OBJECT_BUILDER.name(Rc::clone(&name)).object_variables(object_variables).build()
             };
 
-            ctx.push(object!(Arc::new(obj)));
+            ctx.push(object!(Rc::new(obj)));
 
             Ok(())
         }
@@ -458,7 +518,7 @@ pub mod implementations {
             ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                 destination: JumpRequestDestination::Standard(path.clone()),
                 callback_state,
-                stack: ctx.arced_call_stack(),
+                stack: ctx.rced_call_stack(),
                 arguments,
             }));
 
@@ -478,15 +538,15 @@ pub mod implementations {
                 bail!("Cannot perform an object mutation on a non-object")
             };
 
-            // this bypass of Arc protections is messy and should be refactored.
-            let var = arc_to_ref(o).has_variable(var_name).context("variable does not exist on object")?;
+            // this bypass of Rc protections is messy and should be refactored.
+            let var = rc_to_ref(o).has_variable(var_name).context("variable does not exist on object")?;
 
             if var.0.ty() != new_item.ty() {
                 bail!("mismatched types in assignment ({:?} & {:?})", var.0.ty(), new_item.ty())
             }
 
-            // let () = arc_to_ref(&var.0);
-            let x = &mut arc_to_ref(&var).0;
+            // let () = rc_to_ref(&var.0);
+            let x = &mut rc_to_ref(&var).0;
             *x = new_item;
             // var.0 = new_item;
 
@@ -507,9 +567,9 @@ pub mod implementations {
                 };
 
                 ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
-                    destination: JumpRequestDestination::Standard(f.location.clone()),
-                    callback_state: f.callback_state.clone(),
-                    stack: ctx.arced_call_stack(),
+                    destination: JumpRequestDestination::Standard(f.location().clone()),
+                    callback_state: f.callback_state().clone(),
+                    stack: ctx.rced_call_stack(),
                     arguments,
                 }));
 
@@ -521,7 +581,7 @@ pub mod implementations {
             ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                 destination: JumpRequestDestination::Standard(first.clone()),
                 callback_state: None,
-                stack: ctx.arced_call_stack(),
+                stack: ctx.rced_call_stack(),
                 arguments,
             }));
 
@@ -600,7 +660,7 @@ pub mod implementations {
 
             let arg = ctx.pop().unwrap();
 
-            ctx.update_callback_variable(name.to_string(), arg)?;
+            ctx.update_callback_variable(name, arg)?;
 
             Ok(())
         }
@@ -756,7 +816,7 @@ pub mod implementations {
                 },
                 // destination_label: JumpRequestDestination::Standard(first.clone()),
                 callback_state: None,
-                stack: ctx.arced_call_stack(),
+                stack: ctx.rced_call_stack(),
                 arguments,
             }));
 
@@ -766,10 +826,12 @@ pub mod implementations {
     }
 }
 
+/// Get a function pointer to the bytecode instruction associated with a byte.
 pub fn query(byte: u8) -> InstructionSignature {
     instruction_constants::FUNCTION_POINTER_LOOKUP[byte as usize]
 }
 
+/// Run an instruction.
 #[inline(always)]
 pub fn run_instruction(ctx: &mut Ctx, instruction: &Instruction) -> Result<()> {
     let instruction_fn = query(instruction.id);
@@ -777,6 +839,37 @@ pub fn run_instruction(ctx: &mut Ctx, instruction: &Instruction) -> Result<()> {
     Ok(())
 }
 
+/// Parse a string into tokens based on preset rules.
+///
+/// Tokens can be space-delimited or comma-delimited. To indicate a token
+/// contains a whitespace (`0x20`), the token must be wrapped with `"..."`.
+///
+/// This function supports encoding:
+/// * `"\\n"` -> `"\n"`
+/// * `"\\r"` -> `"\r"`
+/// * `"\\t"` -> `"\t"`
+///
+/// # Errors
+/// This function will error if its input is invalid.
+/// Such cases arise from tokens that start with a `"` and do not close the quote.
+/// Will also error if given an unknown escape sequence.
+///
+/// # Examples
+///
+/// ```ignore
+/// let single = split_string("Hello".into());
+/// println!("{single:?}"); // Ok(["Hello"])
+///
+/// let with_quotes = split_string("\"Hello\"".into());
+/// assert_eq(single, with_quotes);
+///
+/// let multiple = split_string("Hello World".into());
+/// println!("{multiple:?}"); // Ok(["Hello", "World"])
+///
+/// let combined = split_string("\"Hello World\"".into());
+/// println!("{combined:?}"); // Ok(["Hello World"])
+///
+/// ```
 pub fn split_string(string: Cow<str>) -> Result<Box<[String]>> {
     let mut result = Vec::<String>::new();
     let mut buf = String::new();
@@ -858,27 +951,53 @@ pub fn split_string(string: Cow<str>) -> Result<Box<[String]>> {
     }
 }
 
+/// If the program needs to jump, it must know if it is jumping
+/// to a `.ms` file or a library. This enum represents that
+/// destination.
 #[derive(Clone, Debug)]
 pub enum JumpRequestDestination {
     Standard(String),
     Library { lib_name: String, func_name: String },
 }
 
+/// This struct packs together data that represents the state of an
+/// interpreter jump.
 #[derive(Clone, Debug)]
 pub struct JumpRequest {
+    /// The place to which the request is going.
     pub destination: JumpRequestDestination,
-    pub callback_state: Option<Arc<VariableMapping>>,
-    pub stack: Arc<Stack>,
+    /// If this request is a closure or introduces a unique environment,
+    /// this field will be `Some`.
+    pub callback_state: Option<Rc<VariableMapping>>,
+    /// This is a shared reference to the interpreter call stack.
+    pub stack: Rc<Stack>,
+    /// The arguments to the jump request. If this request is a function
+    /// call (which should be 99% of cases), it will be the arguments passed
+    /// from the caller.
     pub arguments: Vec<Primitive>,
 }
 
+/// A wrapper for a bytecode instruction.
+/// In bytecode format, will look like:
+///
+/// `{BYTE} (SP {ARG})* NUL`
+///
+/// Where:
+/// * BYTE = Instruction#id
+/// * SP = 0x20
+/// * NUL = 0x00
+/// * ARG = "argument" | argument | "with spaces" | {LITERAL}
 #[derive(Debug)]
 pub struct Instruction {
+    /// This instruction's identity. See the [static instruction array](crate::instruction_constants::FUNCTION_POINTER_LOOKUP)
+    /// for valid identities.
     pub id: u8,
+    /// The arguments to the instruction.
     arguments: Box<[String]>,
 }
 
 impl Instruction {
+    /// Simple constructor
     pub fn new(id: u8, arguments: Box<[String]>) -> Self {
         Instruction { id, arguments }
     }

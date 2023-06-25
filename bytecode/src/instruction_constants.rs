@@ -1,3 +1,5 @@
+//! Constants used for instruction parsing.
+
 use std::collections::HashMap;
 
 use once_cell::sync::Lazy;
@@ -5,16 +7,24 @@ use once_cell::sync::Lazy;
 use super::instruction::implementations;
 use super::instruction::InstructionSignature;
 
+/// This constant maps an instruction's string representation to its byte identifier.
+/// ie.
+/// * "printn" -> 0x13
+/// * "equ" -> 0x20
+/// * ...
 pub static REPR_TO_BIN: Lazy<HashMap<&[u8], u8>> = Lazy::new(|| {
     (0..BIN_TO_REPR.len())
         .map(|idx| (BIN_TO_REPR[idx], idx as u8))
         .collect()
 });
 
-/// Makes it harder for the arrays to fall out of sync by requiring
-/// that they both take the same size.
+/// This is the total tally of the instructions that the interpreter supports.
+///
+/// Saving this as a constant makes it harder for the arrays to fall out of sync
+/// by requiring that they both take the same size.
 pub const INSTRUCTION_COUNT: usize = 44;
 
+/// This is an array that provides O(1) lookups of names from bytes.
 pub static BIN_TO_REPR: [&[u8]; INSTRUCTION_COUNT] = [
     /* 0x00 [0]  */ b"nop",
     /* 0x01 [1]  */ b"constexpr",
@@ -62,6 +72,8 @@ pub static BIN_TO_REPR: [&[u8]; INSTRUCTION_COUNT] = [
     /* 0x2B [43] */ b"neg",
 ];
 
+/// Similar to [`BIN_TO_REPR`][crate::instruction_constants::BIN_TO_REPR],
+/// except that this array contains function pointers to the evaluable instructions.
 pub static FUNCTION_POINTER_LOOKUP: [InstructionSignature; INSTRUCTION_COUNT] = [
     implementations::nop,
     implementations::constexpr,

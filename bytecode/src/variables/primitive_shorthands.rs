@@ -1,3 +1,10 @@
+/// Create a bytecode String primitive.
+/// ```
+/// use bytecode::string;
+/// let s1 = string!(String::from("Hello World"));
+/// let s2 = string!(raw "Hello World");
+/// assert_eq!(s1, s2);
+/// ```
 #[macro_export]
 macro_rules! string {
     ($data:expr) => {{
@@ -12,6 +19,11 @@ macro_rules! string {
     }};
 }
 
+/// Create a bytecode BigInt primitive.
+/// ```
+/// use bytecode::bigint;
+/// let b = bigint!(0xFEED_BEEF_FEED_BEEF);
+/// ```
 #[macro_export]
 macro_rules! bigint {
     ($data:expr) => {{
@@ -21,6 +33,11 @@ macro_rules! bigint {
     }};
 }
 
+/// Create a bytecode Int primitive
+/// ```
+/// use bytecode::int;
+/// let i = int!(5);
+/// ```
 #[macro_export]
 macro_rules! int {
     ($data:expr) => {{
@@ -30,6 +47,11 @@ macro_rules! int {
     }};
 }
 
+/// Create a bytecode Float primitive
+/// ```
+/// use bytecode::float;
+/// let pi = float!(3.141592);
+/// ```
 #[macro_export]
 macro_rules! float {
     ($data:expr) => {{
@@ -39,6 +61,11 @@ macro_rules! float {
     }};
 }
 
+/// Create a bytecode Bool primitive
+/// ```
+/// use bytecode::bool;
+/// let truthy = bool!(true);
+/// ```
 #[macro_export]
 macro_rules! bool {
     ($data:expr) => {{
@@ -48,6 +75,11 @@ macro_rules! bool {
     }};
 }
 
+/// Create a bytecode Byte primitive
+/// ```
+/// use bytecode::byte;
+/// let five = byte!(0b101);
+/// ```
 #[macro_export]
 macro_rules! byte {
     ($data:expr) => {{
@@ -62,21 +94,29 @@ macro_rules! function {
     ($data:expr) => {{
         use $crate::BytecodePrimitive;
 
-        BytecodePrimitive::Function(std::sync::Arc::new($data))
+        BytecodePrimitive::Function(std::rc::Rc::new($data))
     }};
 }
 
+/// Create a bytecode Function primitive
+/// ```
+/// use bytecode::*;
+/// let empty = vector!();
+/// let three_fives = vector!(int!(5); 3);
+/// let fun_numbers = vector![string!(raw "hello"), int!(2), float!(20.333)];
+/// let from_vec = vector!(raw vec![int!(100)]);
+/// ```
 #[macro_export]
 macro_rules! vector {
     () => {{
         use $crate::BytecodePrimitive;
 
-        BytecodePrimitive::Vector(std::sync::Arc::new(vec![]))
+        BytecodePrimitive::Vector(std::rc::Rc::new(vec![]))
     }};
     ($elem:expr; $n:expr) => {{
         use $crate::BytecodePrimitive;
 
-        BytecodePrimitive::Vector(std::sync::Arc::new(vec![$elem; $n]))
+        BytecodePrimitive::Vector(std::rc::Rc::new(vec![$elem; $n]))
     }};
     ($($x:expr),+ $(,)?) => {{
         use $crate::BytecodePrimitive;
@@ -85,12 +125,12 @@ macro_rules! vector {
         $(
             vector.push($x);
         )*
-        BytecodePrimitive::Vector(std::sync::Arc::new(vector))
+        BytecodePrimitive::Vector(std::rc::Rc::new(vector))
     }};
     (raw $data:expr) => {{
         use $crate::BytecodePrimitive;
 
-        BytecodePrimitive::Vector(std::sync::Arc::new($data))
+        BytecodePrimitive::Vector(std::rc::Rc::new($data))
     }};
 }
 
@@ -114,10 +154,10 @@ mod test {
 
     #[test]
     pub fn vectors() {
-        let vector = BytecodePrimitive::Vector(std::sync::Arc::new(vec![
+        let vector = BytecodePrimitive::Vector(std::rc::Rc::new(vec![
             BytecodePrimitive::Int(5),
             BytecodePrimitive::Str("Hello".into()),
-            BytecodePrimitive::Vector(std::sync::Arc::new(vec![BytecodePrimitive::Float(3.14159)])),
+            BytecodePrimitive::Vector(std::rc::Rc::new(vec![BytecodePrimitive::Float(3.14159)])),
         ]));
 
         assert_eq!(
