@@ -20,27 +20,27 @@ static mut OBJECT_BUILDER: Lazy<ObjectBuilder> = Lazy::new(ObjectBuilder::new);
 pub type InstructionSignature = fn(&mut Ctx, &[String]) -> Result<()>;
 
 /// A macro to help generate the boilerplate around instruction implementations.
-/// 
+///
 /// ## Note about the return value:
-/// 
+///
 /// The downside of macros is that the return type of each function is hidden.
 /// Each instruction is expected to return [`anyhow::Result<()>`], and if it
 /// has a special exit state, to pass it through the context ([`Ctx`]).
-/// 
+///
 /// This macro takes the shape...
-/// 
+///
 /// ```ignore
 /// instruction! {
 ///     name(...) {
 ///         // impl
 ///     }
-/// 
+///
 ///     ...
 /// }
 /// ```
-/// 
+///
 /// ...and has multiple valid implementations.
-/// 
+///
 /// # Examples
 /// * No args:
 /// ```ignore
@@ -53,7 +53,7 @@ pub type InstructionSignature = fn(&mut Ctx, &[String]) -> Result<()>;
 /// instruction! {
 ///     do_something_without_args(ctx=my_name_for_context) {
 ///         // impl
-/// 
+///
 ///         Ok(())
 ///     }
 /// }
@@ -63,12 +63,12 @@ pub type InstructionSignature = fn(&mut Ctx, &[String]) -> Result<()>;
 /// instruction! {
 ///     both_args_and_ctx(ctx=my_name_for_context, args=my_name_for_args) {
 ///         // impl
-/// 
+///
 ///         Ok(())
 ///     }
 /// }
 /// ```
-/// 
+///
 /// # Errors
 /// Each instruction can fail spectacularly in its own way. Thus, as an instruction
 /// author, one must ensure that error messages capture the essense of how the program
@@ -826,7 +826,7 @@ pub mod implementations {
     }
 }
 
-/// Get a function pointer to the bytecode instruction associated with a byte. 
+/// Get a function pointer to the bytecode instruction associated with a byte.
 pub fn query(byte: u8) -> InstructionSignature {
     instruction_constants::FUNCTION_POINTER_LOOKUP[byte as usize]
 }
@@ -840,35 +840,35 @@ pub fn run_instruction(ctx: &mut Ctx, instruction: &Instruction) -> Result<()> {
 }
 
 /// Parse a string into tokens based on preset rules.
-/// 
+///
 /// Tokens can be space-delimited or comma-delimited. To indicate a token
 /// contains a whitespace (`0x20`), the token must be wrapped with `"..."`.
-/// 
+///
 /// This function supports encoding:
 /// * `"\\n"` -> `"\n"`
 /// * `"\\r"` -> `"\r"`
 /// * `"\\t"` -> `"\t"`
-/// 
+///
 /// # Errors
 /// This function will error if its input is invalid.
 /// Such cases arise from tokens that start with a `"` and do not close the quote.
 /// Will also error if given an unknown escape sequence.
-/// 
+///
 /// # Examples
-/// 
+///
 /// ```ignore
 /// let single = split_string("Hello".into());
 /// println!("{single:?}"); // Ok(["Hello"])
-/// 
+///
 /// let with_quotes = split_string("\"Hello\"".into());
 /// assert_eq(single, with_quotes);
-/// 
+///
 /// let multiple = split_string("Hello World".into());
 /// println!("{multiple:?}"); // Ok(["Hello", "World"])
-/// 
+///
 /// let combined = split_string("\"Hello World\"".into());
 /// println!("{combined:?}"); // Ok(["Hello World"])
-/// 
+///
 /// ```
 pub fn split_string(string: Cow<str>) -> Result<Box<[String]>> {
     let mut result = Vec::<String>::new();
@@ -951,7 +951,7 @@ pub fn split_string(string: Cow<str>) -> Result<Box<[String]>> {
     }
 }
 
-/// If the program needs to jump, it must know if it is jumping 
+/// If the program needs to jump, it must know if it is jumping
 /// to a `.ms` file or a library. This enum represents that
 /// destination.
 #[derive(Clone, Debug)]
@@ -971,7 +971,7 @@ pub struct JumpRequest {
     pub callback_state: Option<Arc<VariableMapping>>,
     /// This is a shared reference to the interpreter call stack.
     pub stack: Arc<Stack>,
-    /// The arguments to the jump request. If this request is a function 
+    /// The arguments to the jump request. If this request is a function
     /// call (which should be 99% of cases), it will be the arguments passed
     /// from the caller.
     pub arguments: Vec<Primitive>,
@@ -979,9 +979,9 @@ pub struct JumpRequest {
 
 /// A wrapper for a bytecode instruction.
 /// In bytecode format, will look like:
-/// 
+///
 /// `{BYTE} (SP {ARG})* NUL`
-/// 
+///
 /// Where:
 /// * BYTE = Instruction#id
 /// * SP = 0x20
