@@ -660,7 +660,7 @@ pub mod implementations {
 
             let arg = ctx.pop().unwrap();
 
-            ctx.update_callback_variable(name.to_string(), arg)?;
+            ctx.update_callback_variable(name, arg)?;
 
             Ok(())
         }
