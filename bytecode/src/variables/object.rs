@@ -1,13 +1,13 @@
 use super::Primitive;
-use crate::arc_to_ref;
 use crate::context::Ctx;
 use crate::function::InstructionExitState;
 use crate::instruction::JumpRequest;
+use crate::rc_to_ref;
 use crate::stack::{VariableFlags, VariableMapping};
 use anyhow::{Context, Result};
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
-use std::sync::Arc;
+use std::rc::Rc;
 
 pub struct MappedObject<'a> {
     name: &'a str,
@@ -15,9 +15,9 @@ pub struct MappedObject<'a> {
 }
 
 pub struct ObjectBuilder {
-    name: Option<Arc<String>>,
-    object_variables: Option<Arc<VariableMapping>>,
-    functions: HashMap<Arc<String>, HashSet<String>>,
+    name: Option<Rc<String>>,
+    object_variables: Option<Rc<VariableMapping>>,
+    functions: HashMap<Rc<String>, HashSet<String>>,
 }
 
 impl ObjectBuilder {
@@ -29,12 +29,12 @@ impl ObjectBuilder {
         }
     }
 
-    pub fn name(&mut self, name: Arc<String>) -> &mut Self {
+    pub fn name(&mut self, name: Rc<String>) -> &mut Self {
         self.name = Some(name);
         self
     }
 
-    pub fn object_variables(&mut self, object_variables: Arc<VariableMapping>) -> &mut Self {
+    pub fn object_variables(&mut self, object_variables: Rc<VariableMapping>) -> &mut Self {
         self.object_variables = Some(object_variables);
         self
     }
@@ -43,7 +43,7 @@ impl ObjectBuilder {
         self.functions.contains_key(name)
     }
 
-    pub fn register_class(&mut self, class_name: Arc<String>, functions: HashSet<String>) {
+    pub fn register_class(&mut self, class_name: Rc<String>, functions: HashSet<String>) {
         self.functions.insert(class_name, functions);
     }
 
@@ -62,8 +62,8 @@ impl ObjectBuilder {
 #[doc(alias = "Class")]
 #[derive(Debug)]
 pub struct Object {
-    pub name: Arc<String>,
-    pub object_variables: Arc<VariableMapping>,
+    pub name: Rc<String>,
+    pub object_variables: Rc<VariableMapping>,
     pub functions: &'static HashSet<String>,
 }
 
@@ -81,9 +81,9 @@ impl PartialEq for Object {
 
 impl Object {
     pub fn new(
-        name: Arc<String>,
+        name: Rc<String>,
         functions: &'static HashSet<String>,
-        object_variables: Arc<VariableMapping>,
+        object_variables: Rc<VariableMapping>,
     ) -> Self {
         Self {
             name,
@@ -95,8 +95,8 @@ impl Object {
     pub fn has_variable(
         &mut self,
         variable_name: &String,
-    ) -> Option<Arc<(Primitive, VariableFlags)>> {
-        arc_to_ref(&self.object_variables).get(variable_name)
+    ) -> Option<Rc<(Primitive, VariableFlags)>> {
+        rc_to_ref(&self.object_variables).get(variable_name)
     }
 
     pub fn has_function(&self, function_name: &String) -> bool {
@@ -121,8 +121,8 @@ impl Object {
 
         ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
             destination: crate::instruction::JumpRequestDestination::Standard(destination),
-            callback_state: Some(Arc::clone(&self.object_variables)),
-            stack: ctx.arced_call_stack(),
+            callback_state: Some(Rc::clone(&self.object_variables)),
+            stack: ctx.rced_call_stack(),
             arguments,
         }));
 

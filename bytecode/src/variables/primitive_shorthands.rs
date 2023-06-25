@@ -62,7 +62,7 @@ macro_rules! function {
     ($data:expr) => {{
         use $crate::BytecodePrimitive;
 
-        BytecodePrimitive::Function(std::sync::Arc::new($data))
+        BytecodePrimitive::Function(std::rc::Rc::new($data))
     }};
 }
 
@@ -71,12 +71,12 @@ macro_rules! vector {
     () => {{
         use $crate::BytecodePrimitive;
 
-        BytecodePrimitive::Vector(std::sync::Arc::new(vec![]))
+        BytecodePrimitive::Vector(std::rc::Rc::new(vec![]))
     }};
     ($elem:expr; $n:expr) => {{
         use $crate::BytecodePrimitive;
 
-        BytecodePrimitive::Vector(std::sync::Arc::new(vec![$elem; $n]))
+        BytecodePrimitive::Vector(std::rc::Rc::new(vec![$elem; $n]))
     }};
     ($($x:expr),+ $(,)?) => {{
         use $crate::BytecodePrimitive;
@@ -85,12 +85,12 @@ macro_rules! vector {
         $(
             vector.push($x);
         )*
-        BytecodePrimitive::Vector(std::sync::Arc::new(vector))
+        BytecodePrimitive::Vector(std::rc::Rc::new(vector))
     }};
     (raw $data:expr) => {{
         use $crate::BytecodePrimitive;
 
-        BytecodePrimitive::Vector(std::sync::Arc::new($data))
+        BytecodePrimitive::Vector(std::rc::Rc::new($data))
     }};
 }
 
@@ -114,10 +114,10 @@ mod test {
 
     #[test]
     pub fn vectors() {
-        let vector = BytecodePrimitive::Vector(std::sync::Arc::new(vec![
+        let vector = BytecodePrimitive::Vector(std::rc::Rc::new(vec![
             BytecodePrimitive::Int(5),
             BytecodePrimitive::Str("Hello".into()),
-            BytecodePrimitive::Vector(std::sync::Arc::new(vec![BytecodePrimitive::Float(3.14159)])),
+            BytecodePrimitive::Vector(std::rc::Rc::new(vec![BytecodePrimitive::Float(3.14159)])),
         ]));
 
         assert_eq!(

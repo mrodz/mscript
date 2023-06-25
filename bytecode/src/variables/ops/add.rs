@@ -18,7 +18,7 @@ impl std::ops::Add for Primitive {
             (Str(x), y) => string!(x + &y.to_string()),
             (x, Str(y)) => string!(x.to_string() + &y),
             (Vector(x), Vector(y)) => {
-                let mut x = arc_to_ref(&x).clone();
+                let mut x = rc_to_ref(&x).clone();
 
                 x.extend_from_slice(&y);
                 vector!(raw x)

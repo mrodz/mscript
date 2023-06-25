@@ -6,15 +6,15 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::path::Path;
-use std::sync::Arc;
+use std::rc::Rc;
 
 use anyhow::{bail, Context, Result};
 
-use crate::arc_to_ref;
 use crate::compilation_lookups::raw_byte_instruction_to_string_representation;
 use crate::context::{Ctx, SpecialScope};
 use crate::file::MScriptFile;
 use crate::instruction::{run_instruction, Instruction};
+use crate::rc_to_ref;
 
 use super::instruction::JumpRequest;
 use super::stack::{Stack, VariableMapping};
@@ -32,16 +32,16 @@ use super::variables::Primitive;
 pub struct PrimitiveFunction {
     /// Used to keep track of where to jump when this function gets called.
     location: String,
-    /// Each callback has an `Arc` to a [`VariableMapping`]. In other words, a shared
+    /// Each callback has an `Rc` to a [`VariableMapping`]. In other words, a shared
     /// reference to a map of shared references to variables. This allows multiple instances
     /// of the same callback to operate on the same data in a thread-safe manner,
     /// but there is a notable hit to performance.
-    callback_state: Option<Arc<VariableMapping>>,
+    callback_state: Option<Rc<VariableMapping>>,
 }
 
 impl PrimitiveFunction {
     /// Initialize a [`PrimitiveFunction`] given its fields.
-    pub(crate) fn new(path: String, callback_state: Option<Arc<VariableMapping>>) -> Self {
+    pub(crate) fn new(path: String, callback_state: Option<Rc<VariableMapping>>) -> Self {
         Self {
             location: path,
             callback_state,
@@ -52,11 +52,11 @@ impl PrimitiveFunction {
     /// validate that the path to the function exists before its creation.
     ///
     /// # Errors
-    /// This function will propagate I/O errors from traversing symlinks in search of
+    /// This function will propagate I/O errors from traversing symlinks in seRch of
     /// the file. It will also error if the file does not exist.
     pub(crate) fn try_new(
         path: String,
-        callback_state: Option<Arc<VariableMapping>>,
+        callback_state: Option<Rc<VariableMapping>>,
     ) -> Result<Self> {
         // get the file system path from an MScript function path.
         // ie. path/to/file.mmm#__fn0
@@ -79,7 +79,7 @@ impl PrimitiveFunction {
     }
 
     /// Get the variables mapped to this closure.
-    pub(crate) fn callback_state(&self) -> &Option<Arc<VariableMapping>> {
+    pub(crate) fn callback_state(&self) -> &Option<Rc<VariableMapping>> {
         &self.callback_state
     }
 }
@@ -197,7 +197,7 @@ pub enum InstructionExitState {
 /// run raw bytecode. (See `Function::run()`)
 pub struct Function {
     /// A shared reference to the file of origin.
-    location: Arc<MScriptFile>,
+    location: Rc<MScriptFile>,
     /// A list of the instructions this subroutine consists of.
     instructions: Box<[Instruction]>,
     /// The name of this function.
@@ -220,7 +220,7 @@ impl Display for Function {
 impl Function {
     /// Initialize a [`Function`] given its fields.
     pub(crate) fn new(
-        location: Arc<MScriptFile>,
+        location: Rc<MScriptFile>,
         name: String,
         instructions: Box<[Instruction]>,
     ) -> Self {
@@ -236,11 +236,11 @@ impl Function {
     ///
     /// # Examples
     /// ```ignore
-    /// use std::sync::Arc;
+    /// use std::sync::Rc;
     ///
     /// let file = MScriptFile::open("path/to/file.mmm")?;
     /// let instructions = ...;
-    /// let function = Function::new(Arc::new(file), "add_numbers".into(), instructions);
+    /// let function = Function::new(Rc::new(file), "add_numbers".into(), instructions);
     ///
     /// assert_eq!(function.get_qualified_name(), "path/to/file.mmm#add_numbers")
     /// ```
@@ -273,11 +273,11 @@ impl Function {
     pub(crate) fn run(
         &mut self,
         args: Cow<Vec<Primitive>>,
-        current_frame: Arc<Stack>,
-        callback_state: Option<Arc<VariableMapping>>,
+        current_frame: Rc<Stack>,
+        callback_state: Option<Rc<VariableMapping>>,
         jump_callback: &mut impl Fn(&JumpRequest) -> Result<ReturnValue>,
     ) -> Result<ReturnValue> {
-        arc_to_ref(&current_frame).extend(self.get_qualified_name());
+        rc_to_ref(&current_frame).extend(self.get_qualified_name());
 
         // Each function needs its own context.
         let mut context = Ctx::new(self, current_frame.clone(), args, callback_state);
@@ -311,7 +311,7 @@ impl Function {
             // process the exit state
             match ret {
                 InstructionExitState::ReturnValue(ret) => {
-                    arc_to_ref(&current_frame).pop();
+                    rc_to_ref(&current_frame).pop();
                     return Ok(ret.clone());
                 }
                 InstructionExitState::JumpRequest(jump_request) => {
@@ -363,7 +363,7 @@ impl Function {
         #[cfg(feature = "developer")]
         eprintln!("Warning: function concludes without `ret` instruction");
 
-        arc_to_ref(&current_frame).pop();
+        rc_to_ref(&current_frame).pop();
 
         Ok(ReturnValue::NoValue)
     }
@@ -374,7 +374,7 @@ impl Function {
     }
 
     /// Get a function's location.
-    pub(crate) fn location(&self) -> &Arc<MScriptFile> {
+    pub(crate) fn location(&self) -> &Rc<MScriptFile> {
         &self.location
     }
 }
@@ -382,12 +382,12 @@ impl Function {
 /// A map of a function's name to the function struct.
 #[derive(Debug)]
 pub(crate) struct Functions {
-    map: HashMap<Arc<String>, Function>,
+    map: HashMap<Rc<String>, Function>,
 }
 
 impl<'a> Functions {
     /// Initialize a [`Functions`] map given its fields.
-    pub(crate) fn new(map: HashMap<Arc<String>, Function>) -> Self {
+    pub(crate) fn new(map: HashMap<Rc<String>, Function>) -> Self {
         Self { map }
     }
 

@@ -3,23 +3,23 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
-use std::sync::Arc;
+use std::rc::Rc;
 
 use anyhow::{bail, Context, Result};
 
 use crate::function::Function;
 use crate::instruction::{split_string, Instruction};
 
-use super::arc_to_ref;
 use super::function::Functions;
+use super::rc_to_ref;
 
 /// Wrapper around a bytecode file.
 #[derive(Debug)]
 pub struct MScriptFile {
     /// A shared reference to the path to the file, used for debug and identification purposes.
-    path: Arc<String>,
+    path: Rc<String>,
     /// A handle to the file that is kept for the duration of the interpreter.
-    handle: Arc<File>,
+    handle: Rc<File>,
     /// The functions in the file. Even though it is an `Option`, by the time an [`MScriptFile`]
     /// is initialized, this field will be propagated.
     functions: Option<Functions>,
@@ -80,23 +80,23 @@ impl MScriptFile {
     /// * `path` - The path to the file. This function _does not_ validate the extension.
     ///
     /// # Errors
-    pub fn open(path: &String) -> Result<Arc<Self>> {
-        let new_uninit = Arc::new(Self {
-            handle: Arc::new(
+    pub fn open(path: &String) -> Result<Rc<Self>> {
+        let new_uninit = Rc::new(Self {
+            handle: Rc::new(
                 File::open(path).with_context(|| format!("failed opening file `{path}`"))?,
             ),
-            path: Arc::new(path.clone()),
+            path: Rc::new(path.clone()),
             functions: None,
         });
 
         let functions = Self::get_functions(&new_uninit)?;
 
-        arc_to_ref(&new_uninit).functions = Some(functions);
+        rc_to_ref(&new_uninit).functions = Some(functions);
 
         Ok(new_uninit)
     }
 
-    /// Searches for a function given its name.
+    /// SeRches for a function given its name.
     pub fn get_function(&mut self, name: &str) -> Option<&mut Function> {
         let name = format!("{}#{name}", self.path);
 
@@ -129,15 +129,15 @@ impl MScriptFile {
     /// variant will be returned. Can also error if a function that
     /// the parser encounters has a name that's non-UTF-8. Errors in
     /// a function's layout are also problematic.
-    fn get_functions(arc_of_self: &Arc<Self>) -> Result<Functions> {
-        let mut reader = BufReader::new(arc_of_self.handle.as_ref());
+    fn get_functions(rc_of_self: &Rc<Self>) -> Result<Functions> {
+        let mut reader = BufReader::new(rc_of_self.handle.as_ref());
         let mut buffer = Vec::new();
 
         let mut in_function = false;
 
         // when the loader reaches a `e\0` symbol, all the current function's
         // instructions and name are pushed to this map.
-        let mut functions: HashMap<Arc<String>, Function> = HashMap::new();
+        let mut functions: HashMap<Rc<String>, Function> = HashMap::new();
 
         // growable list of all the instructions that belong to a function.
         let mut instruction_buffer: Vec<Instruction> = Vec::new();
@@ -168,11 +168,11 @@ impl MScriptFile {
                         .context("found `end` outside of a function")?;
 
                     let function = Function::new(
-                        arc_of_self.clone(),
+                        rc_of_self.clone(),
                         current_function_name,
                         instruction_buffer.into_boxed_slice(),
                     );
-                    functions.insert(Arc::new(function.get_qualified_name()), function);
+                    functions.insert(Rc::new(function.get_qualified_name()), function);
                     instruction_buffer = Vec::new();
                 }
                 // instruction (w. Args) syntax: `{id} arg1 arg2 "multi arg" arg4\0`

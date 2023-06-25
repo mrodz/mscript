@@ -1,9 +1,9 @@
 use anyhow::{bail, Result};
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
-use std::sync::Arc;
+use std::rc::Rc;
 
-use crate::arc_to_ref;
+use crate::rc_to_ref;
 
 use super::variables::Primitive;
 
@@ -65,7 +65,7 @@ impl Debug for VariableFlags {
 }
 
 #[derive(Default, Debug, PartialEq, Clone)]
-pub struct VariableMapping(HashMap<String, Arc<(Primitive, VariableFlags)>>);
+pub struct VariableMapping(HashMap<String, Rc<(Primitive, VariableFlags)>>);
 
 impl Display for VariableMapping {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -95,14 +95,14 @@ impl Display for VariableMapping {
     }
 }
 
-impl From<HashMap<String, Arc<(Primitive, VariableFlags)>>> for VariableMapping {
-    fn from(value: HashMap<String, Arc<(Primitive, VariableFlags)>>) -> Self {
+impl From<HashMap<String, Rc<(Primitive, VariableFlags)>>> for VariableMapping {
+    fn from(value: HashMap<String, Rc<(Primitive, VariableFlags)>>) -> Self {
         Self(value)
     }
 }
 
 impl VariableMapping {
-    pub fn get(&self, key: &String) -> Option<Arc<(Primitive, VariableFlags)>> {
+    pub fn get(&self, key: &String) -> Option<Rc<(Primitive, VariableFlags)>> {
         self.0.get(key).cloned()
     }
 
@@ -111,7 +111,7 @@ impl VariableMapping {
         // and this `update` is invalid.
         if let Some(pair) = self.0.get_mut(&key) {
             if pair.1.can_update() {
-                arc_to_ref(pair).0 = value;
+                rc_to_ref(pair).0 = value;
             } else {
                 bail!("variable is read-only")
             }
@@ -160,7 +160,7 @@ impl Stack {
         self.0.pop();
     }
 
-    pub fn find_name(&self, name: &String) -> Option<Arc<(Primitive, VariableFlags)>> {
+    pub fn find_name(&self, name: &String) -> Option<Rc<(Primitive, VariableFlags)>> {
         for stack_frame in self.0.iter().rev() {
             let tuple = stack_frame.variables.get(name);
             if let Some(ref packed) = tuple {
@@ -183,7 +183,7 @@ impl Stack {
             .expect("nothing in the stack")
             .variables
             .0
-            .insert(name, Arc::new((var, VariableFlags::none())));
+            .insert(name, Rc::new((var, VariableFlags::none())));
     }
 
     pub fn register_variable_flags(&mut self, name: String, var: Primitive, flags: VariableFlags) {
@@ -192,14 +192,14 @@ impl Stack {
             .expect("nothing in the stack")
             .variables
             .0
-            .insert(name, Arc::new((var, flags)));
+            .insert(name, Rc::new((var, flags)));
     }
 
     pub fn update_variable(&mut self, name: String, new_var: Primitive) -> Result<()> {
         for stack_frame in self.0.iter_mut().rev() {
             if let Some(old_var) = stack_frame.variables.0.get_mut(&name) {
                 if old_var.1.can_update() {
-                    arc_to_ref(old_var).0 = new_var;
+                    rc_to_ref(old_var).0 = new_var;
                 }
                 return Ok(());
             }
