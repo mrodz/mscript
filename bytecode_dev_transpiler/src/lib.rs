@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Seek, Write};
 use std::path::Path;
-use std::sync::Arc;
+use std::rc::Rc;
 
 #[derive(Debug)]
 pub struct Instruction {
@@ -37,7 +37,7 @@ impl Instruction {
 #[derive(Debug)]
 struct Function {
     pub(crate) instructions: Box<[Instruction]>,
-    pub(crate) name: Arc<String>,
+    pub(crate) name: Rc<String>,
 }
 
 pub fn is_instruction_deprecated(name: &str) -> bool {
@@ -128,7 +128,7 @@ pub fn transpile_file(path: &str, new_path: &str) -> Result<()> {
                 bail!("found `end` outside of a function")
             }
 
-            let current_function_name = Arc::new(current_function_name.take().unwrap());
+            let current_function_name = Rc::new(current_function_name.take().unwrap());
 
             let function = Function {
                 name: current_function_name.clone(),

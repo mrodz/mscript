@@ -1,15 +1,15 @@
 //! This is the API through which all instructions interact with each other and the program at large.
 //! In other words, all side effects should carried out through this interface.
 
-use super::arc_to_ref;
 use super::function::{Function, InstructionExitState};
+use super::rc_to_ref;
 use super::stack::VariableMapping;
 use super::variables::Primitive;
 use crate::stack::{Stack, VariableFlags};
 use anyhow::{bail, Result};
 use std::borrow::Cow;
 use std::fmt::{Debug, Display};
-use std::sync::Arc;
+use std::rc::Rc;
 
 /// Used to differentiate between different scope types, mostly for debug purposes.
 #[doc(alias = "Scope")]
@@ -48,7 +48,7 @@ pub struct Ctx<'a> {
     /// A reference to the function that this [`Ctx`] belongs to.
     function: &'a Function,
     /// A shared reference to the interpreter's function stack trace.
-    call_stack: Arc<Stack>,
+    call_stack: Rc<Stack>,
     /// This field is checked after executing each instruction. While private, it can
     /// be modified via the [`Ctx::signal`] and [`Ctx::clear_signal`] methods.
     exit_state: InstructionExitState,
@@ -57,7 +57,7 @@ pub struct Ctx<'a> {
     /// A separate variable mapping for closures and objects. If `None`, this function is neither.
     /// Otherwise, contains a reference shared amongst all instances of the callback to point to
     /// shared/global data.
-    callback_state: Option<Arc<VariableMapping>>,
+    callback_state: Option<Rc<VariableMapping>>,
 
     special_scopes: Option<&'a mut Vec<SpecialScope>>,
 }
@@ -73,9 +73,9 @@ impl<'a> Ctx<'a> {
     /// * `callback_state` - Any special variables captured by the function
     pub fn new(
         function: &'a Function,
-        call_stack: Arc<Stack>,
+        call_stack: Rc<Stack>,
         args: Cow<'a, Vec<Primitive>>,
-        callback_state: Option<Arc<VariableMapping>>,
+        callback_state: Option<Rc<VariableMapping>>,
     ) -> Self {
         Self {
             stack: Vec::new(),
@@ -102,7 +102,7 @@ impl<'a> Ctx<'a> {
             bail!("this function is not a callback")
         };
 
-        let mapping = Arc::as_ptr(mapping) as *mut VariableMapping;
+        let mapping = Rc::as_ptr(mapping) as *mut VariableMapping;
 
         unsafe {
             (*mapping).update(name, value)?;
@@ -120,7 +120,7 @@ impl<'a> Ctx<'a> {
     ///
     /// * `name` - the name of the callback variable
     /// * `value` - the [`Primitive`] value that will be stored in the same slot.
-    pub fn load_callback_variable(&self, name: &String) -> Result<Arc<(Primitive, VariableFlags)>> {
+    pub fn load_callback_variable(&self, name: &String) -> Result<Rc<(Primitive, VariableFlags)>> {
         let Some(ref mapping) = self.callback_state else {
             bail!("this function is not a callback")
         };
@@ -137,9 +137,9 @@ impl<'a> Ctx<'a> {
         self.function
     }
 
-    /// Returns the [Call Stack](`Stack`) associated with this [`Ctx`] as an `Arc`.
-    pub fn arced_call_stack(&self) -> Arc<Stack> {
-        Arc::clone(&self.call_stack)
+    /// Returns the [Call Stack](`Stack`) associated with this [`Ctx`] as an `Rc`.
+    pub fn rced_call_stack(&self) -> Rc<Stack> {
+        Rc::clone(&self.call_stack)
     }
 
     /// Returns the length of the arguments to the function that owns this [`Ctx`]
@@ -208,17 +208,17 @@ impl<'a> Ctx<'a> {
 
     /// Add a new stack frame with a given label.
     pub(crate) fn add_frame(&self, label: String) {
-        arc_to_ref(&self.call_stack).extend(label)
+        rc_to_ref(&self.call_stack).extend(label)
     }
 
     /// Pop a frame from the stack.
     pub(crate) fn pop_frame(&self) {
-        arc_to_ref(&self.call_stack).pop()
+        rc_to_ref(&self.call_stack).pop()
     }
 
     /// Get the depth of the call stack.
     pub(crate) fn frames_count(&self) -> usize {
-        unsafe { (*Arc::as_ptr(&self.call_stack)).size() }
+        unsafe { (*Rc::as_ptr(&self.call_stack)).size() }
     }
 
     /// Delete all items in the local operating stack.
@@ -249,18 +249,18 @@ impl<'a> Ctx<'a> {
 
     /// Store a variable to this function. Will get dropped when the function goes out of scope.
     pub(crate) fn register_variable(&self, name: String, var: Primitive) {
-        arc_to_ref(&self.call_stack).register_variable(name, var)
+        rc_to_ref(&self.call_stack).register_variable(name, var)
     }
 
     /// Mutate a variable in this function.
     pub(crate) fn update_variable(&self, name: String, var: Primitive) -> Result<()> {
-        arc_to_ref(&self.call_stack).update_variable(name, var)
+        rc_to_ref(&self.call_stack).update_variable(name, var)
     }
 
     /// Get the [`Primitive`] value and its associated [`VariableFlags`] from a name.
     ///
-    /// Will start the search in the current function and bubble all the way up to the highest stack frame.
-    pub(crate) fn load_variable(&self, name: &String) -> Option<Arc<(Primitive, VariableFlags)>> {
+    /// Will start the seRch in the current function and bubble all the way up to the highest stack frame.
+    pub(crate) fn load_variable(&self, name: &String) -> Option<Rc<(Primitive, VariableFlags)>> {
         self.call_stack.find_name(name)
     }
 
@@ -271,9 +271,9 @@ impl<'a> Ctx<'a> {
 
     /// Get the [`Primitive`] value and its associated [`VariableFlags`] from a name.
     ///
-    /// Will search _exclusively_ in the current stack frame, which makes this function more performant
-    /// when searching for variables that should exist in the same stack frame.
-    pub(crate) fn load_local(&self, name: &String) -> Option<Arc<(Primitive, VariableFlags)>> {
+    /// Will seRch _exclusively_ in the current stack frame, which makes this function more performant
+    /// when seRching for variables that should exist in the same stack frame.
+    pub(crate) fn load_local(&self, name: &String) -> Option<Rc<(Primitive, VariableFlags)>> {
         self.call_stack.get_frame_variables().get(name)
     }
 }

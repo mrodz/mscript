@@ -11,7 +11,7 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::io::{stdin, stdout, Write};
-use std::sync::Arc;
+use std::rc::Rc;
 
 /// This variable allows instructions to register objects on the fly.
 static mut OBJECT_BUILDER: Lazy<ObjectBuilder> = Lazy::new(ObjectBuilder::new);
@@ -127,12 +127,12 @@ macro_rules! make_type {
 #[deny(dead_code)]
 pub mod implementations {
     use super::*;
-    use crate::arc_to_ref;
     use crate::context::SpecialScope;
     use crate::function::{PrimitiveFunction, ReturnValue};
+    use crate::rc_to_ref;
     use crate::{bool, function, int, object, vector};
     use std::collections::HashMap;
-    use std::sync::Arc;
+    use std::rc::Rc;
 
     instruction! {
         constexpr(ctx, args) {
@@ -262,7 +262,7 @@ pub mod implementations {
                             bail!("Cannot perform a vector operation on a non-vector")
                         };
 
-                        let reference = Arc::get_mut(vector).context("could not get reference to vector")?;
+                        let reference = Rc::get_mut(vector).context("could not get reference to vector")?;
                         reference.reverse();
                     },
                     "mut" => {
@@ -279,7 +279,7 @@ pub mod implementations {
                             bail!("Cannot perform a vector operation on a non-vector")
                         };
 
-                        Arc::get_mut(vector).context("could not get reference to vector")?[idx] = new_item;
+                        Rc::get_mut(vector).context("could not get reference to vector")?[idx] = new_item;
 
                     }
                     not_found => bail!("operation not found: `{not_found}`")
@@ -395,7 +395,7 @@ pub mod implementations {
                     arguments.insert(var_name.clone(), var.clone());
                 }
 
-                Some(Arc::new(arguments.into()))
+                Some(Rc::new(arguments.into()))
             } else {
                 None
             };
@@ -410,17 +410,17 @@ pub mod implementations {
                 bail!("`make_object` does not require arguments")
             }
 
-            let object_variables = Arc::new(ctx.get_frame_variables().clone());
+            let object_variables = Rc::new(ctx.get_frame_variables().clone());
 
             let function = ctx.owner();
-            let name = Arc::new(function.name().clone());
+            let name = Rc::new(function.name().clone());
 
             let obj = unsafe {
                 if !OBJECT_BUILDER.has_class_been_registered(&name) {
                     let location = &function.location();
                     let object_path = format!("{}#{name}$", location.path());
 
-                    let object_functions = arc_to_ref(location).get_object_functions(&object_path)?;
+                    let object_functions = rc_to_ref(location).get_object_functions(&object_path)?;
 
                     let mut mapping: HashSet<String> = HashSet::new();
 
@@ -428,13 +428,13 @@ pub mod implementations {
                         mapping.insert(func.get_qualified_name());
                     }
 
-                    OBJECT_BUILDER.register_class(Arc::clone(&name), mapping);
+                    OBJECT_BUILDER.register_class(Rc::clone(&name), mapping);
                 }
 
-                OBJECT_BUILDER.name(Arc::clone(&name)).object_variables(object_variables).build()
+                OBJECT_BUILDER.name(Rc::clone(&name)).object_variables(object_variables).build()
             };
 
-            ctx.push(object!(Arc::new(obj)));
+            ctx.push(object!(Rc::new(obj)));
 
             Ok(())
         }
@@ -518,7 +518,7 @@ pub mod implementations {
             ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                 destination: JumpRequestDestination::Standard(path.clone()),
                 callback_state,
-                stack: ctx.arced_call_stack(),
+                stack: ctx.rced_call_stack(),
                 arguments,
             }));
 
@@ -538,15 +538,15 @@ pub mod implementations {
                 bail!("Cannot perform an object mutation on a non-object")
             };
 
-            // this bypass of Arc protections is messy and should be refactored.
-            let var = arc_to_ref(o).has_variable(var_name).context("variable does not exist on object")?;
+            // this bypass of Rc protections is messy and should be refactored.
+            let var = rc_to_ref(o).has_variable(var_name).context("variable does not exist on object")?;
 
             if var.0.ty() != new_item.ty() {
                 bail!("mismatched types in assignment ({:?} & {:?})", var.0.ty(), new_item.ty())
             }
 
-            // let () = arc_to_ref(&var.0);
-            let x = &mut arc_to_ref(&var).0;
+            // let () = rc_to_ref(&var.0);
+            let x = &mut rc_to_ref(&var).0;
             *x = new_item;
             // var.0 = new_item;
 
@@ -569,7 +569,7 @@ pub mod implementations {
                 ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                     destination: JumpRequestDestination::Standard(f.location().clone()),
                     callback_state: f.callback_state().clone(),
-                    stack: ctx.arced_call_stack(),
+                    stack: ctx.rced_call_stack(),
                     arguments,
                 }));
 
@@ -581,7 +581,7 @@ pub mod implementations {
             ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                 destination: JumpRequestDestination::Standard(first.clone()),
                 callback_state: None,
-                stack: ctx.arced_call_stack(),
+                stack: ctx.rced_call_stack(),
                 arguments,
             }));
 
@@ -816,7 +816,7 @@ pub mod implementations {
                 },
                 // destination_label: JumpRequestDestination::Standard(first.clone()),
                 callback_state: None,
-                stack: ctx.arced_call_stack(),
+                stack: ctx.rced_call_stack(),
                 arguments,
             }));
 
@@ -968,9 +968,9 @@ pub struct JumpRequest {
     pub destination: JumpRequestDestination,
     /// If this request is a closure or introduces a unique environment,
     /// this field will be `Some`.
-    pub callback_state: Option<Arc<VariableMapping>>,
+    pub callback_state: Option<Rc<VariableMapping>>,
     /// This is a shared reference to the interpreter call stack.
-    pub stack: Arc<Stack>,
+    pub stack: Rc<Stack>,
     /// The arguments to the jump request. If this request is a function
     /// call (which should be 99% of cases), it will be the arguments passed
     /// from the caller.
