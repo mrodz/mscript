@@ -19,8 +19,8 @@ pub static REPR_TO_BIN: Lazy<HashMap<&[u8], u8>> = Lazy::new(|| {
 });
 
 /// This is the total tally of the instructions that the interpreter supports.
-/// 
-/// Saving this as a constant makes it harder for the arrays to fall out of sync 
+///
+/// Saving this as a constant makes it harder for the arrays to fall out of sync
 /// by requiring that they both take the same size.
 pub const INSTRUCTION_COUNT: usize = 44;
 

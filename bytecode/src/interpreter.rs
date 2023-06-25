@@ -1,3 +1,7 @@
+//! This is the main API for the bytecode interpreter.
+//! Use the [Program](self::Program) struct to open a `.mmm` file
+//! and spawn the interpreter.
+
 use super::arc_to_ref;
 use super::function::ReturnValue;
 use super::instruction::{JumpRequest, JumpRequestDestination};
@@ -10,12 +14,23 @@ use std::collections::HashMap;
 use std::panic;
 use std::sync::Arc;
 
+/// This struct represents an entire MScript program, from start to finish.
+///
+/// ```
+/// use bytecode::Program;
+///
+/// let program = Program::new("../examples/bytecode/hello_world/hello_world.mmm").unwrap();
+/// program.execute().unwrap();
+/// ```
 pub struct Program {
+    /// Keeps track of from where the program was called.
     entrypoint: Arc<String>,
+    /// Keeps a record of the `.mmm` files in use.
     files_in_use: HashMap<String, Arc<MScriptFile>>,
 }
 
 impl Program {
+    /// Create a new program given a path.
     pub fn new<T>(path: T) -> Result<Self>
     where
         T: Into<String>,
@@ -32,30 +47,51 @@ impl Program {
         })
     }
 
-    pub fn is_file_loaded(&self, path: &String) -> Option<Arc<MScriptFile>> {
+    /// Gives callers the ability to check if a file is in use by the interpreter.
+    fn is_file_loaded(&self, path: &String) -> Option<Arc<MScriptFile>> {
         self.files_in_use.get(path).cloned()
     }
 
-    pub fn add_file(&mut self, path: &String) -> Result<Option<()>> {
+    /// Add a file to the running program. Its instructions will be loaded into memory.
+    ///
+    /// # Returns
+    /// * `Ok(false)` - means that the file has already been registered, and no I/O was performed.
+    /// * `Ok(true)` - means that a new file was registered.
+    ///
+    /// # Errors
+    /// If opening a `.mmm` file fails, the error will be passed up.
+    fn add_file(&mut self, path: &String) -> Result<bool> {
         if self.files_in_use.contains_key(path) {
-            return Ok(None);
+            return Ok(false);
         }
 
         let new_file = MScriptFile::open(path)?;
 
         self.files_in_use.insert(path.to_string(), new_file);
 
-        Ok(Some(()))
+        Ok(true)
     }
 
-    pub fn get_file(self_cell: Arc<Self>, path: &String) -> Result<Arc<MScriptFile>> {
+    /// Get a reference to a [`MScriptFile`]. The file **must** have already been registered.
+    ///
+    /// # Errors
+    /// Will fail if the file has not already been registered.
+    fn get_file(self_cell: Arc<Self>, path: &String) -> Result<Arc<MScriptFile>> {
         let Some(file) = self_cell.is_file_loaded(path) else {
-                bail!("file is not loaded")
-            };
+            bail!("file is not loaded")
+        };
 
         Ok(file)
     }
 
+    /// API through which the rest of the interpreter's components can request to jump around
+    /// to other MScript functions.
+    ///
+    /// [`Program#process_jump_request`] is a drop-in replacement that is more general, and should
+    /// be preferred.
+    /// 
+    /// # Panics
+    /// Will panic if `request` is not [`JumpRequestDestination::Standard`], per this function's name.
     fn process_standard_jump_request(
         arc_of_self: Arc<Self>,
         request: &JumpRequest,
@@ -86,8 +122,6 @@ impl Program {
             bail!("could not find function (missing `{symbol}`)")
         };
 
-
-
         let callback_state = request.callback_state.as_ref().cloned();
 
         let return_value = function.run(
@@ -100,6 +134,8 @@ impl Program {
         Ok(return_value)
     }
 
+    /// API through which the rest of the interpreter's components can request to jump around
+    /// to dynamically loaded libraries using the [`libloading`] crate under the hood.
     fn process_library_jump_request(
         lib_name: &String,
         func_name: &String,
@@ -124,6 +160,21 @@ impl Program {
         }
     }
 
+    /// Public-facing API through which interpreter components can jump around to other points of execution.
+    /// As of now, the interpreter supports functions and native library calls.
+    /// 
+    /// Calling this function represents a change in control-flow. Thus, the caller accepts
+    /// that activities in their scope will freeze until the jump request is completed.
+    /// 
+    /// # Errors
+    /// Any errors propagated during the creation/service of the jump request will be bubbled up.
+    /// 
+    /// Any interpreter errors will also be sent upwards and propagated to the caller as well.
+    /// 
+    /// C++ exceptions are undefined behavior, and no support is planned at the moment.
+    /// If a user wishes to return the control flow back to the interpreter as an error state,
+    /// they should use the [`ReturnValue::FFIError`] variant. Panics in FFI-land will kill the 
+    /// interpreter by design.
     fn process_jump_request(arc_of_self: Arc<Self>, request: &JumpRequest) -> Result<ReturnValue> {
         match &request.destination {
             JumpRequestDestination::Standard(_) => {
@@ -137,6 +188,11 @@ impl Program {
         }
     }
 
+    /// Start the execution of the program. This function is blocking.
+    /// 
+    /// If this function is `Ok()`, the user's program finished execution without crashing.
+    /// 
+    /// Any errors are propagated upwards.
     pub fn execute(self) -> Result<()> {
         let arc_of_self = Arc::new(self);
 
@@ -145,9 +201,6 @@ impl Program {
         let entrypoint = Self::get_file(arc_of_self.clone(), path)?;
         let stack = Arc::new(Stack::new());
 
-        // We have to use pointers to get around a guaranteed dynamic thread panic,
-        // since `entrypoint` will not have been dropped during subsequent calls to
-        // borrow_mut().
         let Some(function) = arc_to_ref(&entrypoint).get_function("main") else {
             bail!("could not find entrypoint (hint: try adding `function main`)")
         };
@@ -159,8 +212,6 @@ impl Program {
         if let Err(e) = main_ret {
             eprintln!("\n******* MSCRIPT INTERPRETER FATAL RUNTIME ERROR *******\nCall stack trace:\n{e:?}\n\nPlease report this at https://github.com/mrodz/mscript-lang/issues/new\n");
             bail!("Interpreter crashed")
-            // main_ret?;
-
         }
 
         Ok(())

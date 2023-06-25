@@ -255,8 +255,8 @@ impl Function {
     ///
     /// # Arguments
     /// * `args` - The arguments to this function, provided by the caller.
-    /// * `current_frame` - A shared reference to the current stack trace. The caller 
-    ///                     **SHOULD NOT** push a stack frame for a bytecode function 
+    /// * `current_frame` - A shared reference to the current stack trace. The caller
+    ///                     **SHOULD NOT** push a stack frame for a bytecode function
     ///                     before calling it; this method will handle that.
     /// * `callback_state` - A shared reference to the [`VariableMapping`] that this
     ///                      function can access. This argument is used for callbacks
@@ -264,10 +264,10 @@ impl Function {
     ///                      added to `current_frame`.
     /// * `jump_callback` - A callback that defines how this function's jumps are handled.
     ///                     The implementation is up to the caller.
-    /// 
+    ///
     /// # Errors
     /// This function can error if an instruction raises an error during execution.
-    /// 
+    ///
     /// # Panics
     /// This function will `panic!` if the instruction byte falls outside of (0..[`INSTRUCTION_COUNT`][crate::instruction_constants::INSTRUCTION_COUNT])
     pub(crate) fn run(
@@ -298,7 +298,7 @@ impl Function {
                     let instruction_as_str =
                         raw_byte_instruction_to_string_representation(instruction.id)
                             .unwrap_or(Cow::Borrowed("Unknown Instruction"));
-                        
+
                     format!(
                         "{instruction_as_str:?} (instruction #{instruction_ptr} of {})",
                         self.name
@@ -368,12 +368,12 @@ impl Function {
         Ok(ReturnValue::NoValue)
     }
 
-    /// Get a function's name. 
+    /// Get a function's name.
     pub(crate) fn name(&self) -> &String {
         &self.name
     }
 
-    /// Get a function's location. 
+    /// Get a function's location.
     pub(crate) fn location(&self) -> &Arc<MScriptFile> {
         &self.location
     }

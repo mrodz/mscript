@@ -41,7 +41,7 @@ pub struct MScriptFile {
 /// variant will be returned. If an error is returned then there is a chance
 /// the file's seek position is not where it was prior to the function call,
 /// and should be checked.
-/// 
+///
 /// # Todo
 /// There is probably a more performant way to get the line number. For now,
 /// this works.
@@ -74,7 +74,7 @@ impl MScriptFile {
     /// Open a bytecode file given its path. This method opens
     /// a handle to the file, parses it and loads functions/instructions,
     /// and maps objects.
-    /// 
+    ///
     /// # Arguments
     ///
     /// * `path` - The path to the file. This function _does not_ validate the extension.
@@ -195,10 +195,7 @@ impl MScriptFile {
                     let pos = reader.stream_position()?;
 
                     // Shows the bytes being read that cause the error.
-                    panic!(
-                        "{} {bytes:?} @ {pos}",
-                        String::from_utf8_lossy(bytes),
-                    )
+                    panic!("{} {bytes:?} @ {pos}", String::from_utf8_lossy(bytes),)
                 }
             }
 
