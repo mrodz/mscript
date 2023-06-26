@@ -2,7 +2,7 @@ use anyhow::{bail, Context, Result};
 
 use crate::{
     instruction,
-    parser::{Node, Parser, Rule},
+    parser::{Node, Parser, Rule}, scope::ScopeReturnStatus,
 };
 
 use super::{new_err, r#type::IntoType, Block, Compile, CompiledItem, Dependencies, Value};
@@ -96,18 +96,31 @@ impl Parser {
             ))
         }
 
-        input.user_data().push_if();
-        let body_as_block = Self::block(body)?;
-        input.user_data().pop_scope();
+        let can_determine_is_if_branch_truthy = false; // TODO
 
-        let else_statement = if let Some(else_statement) = else_statement {
-            input.user_data().push_else();
+        let child_returns_type = input.user_data().return_statement_expected_yield_type()
+            .map_or_else(|| ScopeReturnStatus::No, |ty| ScopeReturnStatus::ParentShould(ty.clone()));
+
+        input.user_data().push_if_typed(child_returns_type);
+        let body_as_block = Self::block(body)?;
+        // get the return type back
+        let child_returns_type = input.user_data().pop_scope();
+
+        let do_all_if_branches_return = child_returns_type.all_branches_return();
+
+        let (else_statement, do_all_else_branches_return) = if let Some(else_statement) = else_statement {
+            input.user_data().push_else_typed(child_returns_type);
             let x = Some(Self::else_statement(else_statement)?);
-            input.user_data().pop_scope();
-            x
+            let child_returns_type = input.user_data().pop_scope();
+
+            (x, child_returns_type.all_branches_return())
         } else {
-            None
+            (None, false)
         };
+
+        if do_all_if_branches_return && (do_all_else_branches_return || can_determine_is_if_branch_truthy) {
+            input.user_data().get_return_type().mark_should_return_as_completed()?;
+        }
 
         Ok(IfStatement {
             else_statement,

@@ -59,6 +59,8 @@ impl Parser {
 
 		let Some(value_node) = value_node else {
 			if let ScopeReturnStatus::Did(expected_return_type) = expected_return_type {
+				dbg!(input.as_span());
+
 				// #0
 				bail!(new_err(
 					input.as_span(),
@@ -90,7 +92,6 @@ impl Parser {
 		};
 
 		if expected_return_type != &Cow::Borrowed(supplied_type) {
-			// #1
 			bail!(new_err(
 				input.as_span(),
 				&input.user_data().get_source_file_name(),
