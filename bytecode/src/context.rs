@@ -271,8 +271,8 @@ impl<'a> Ctx<'a> {
 
     /// Get the [`Primitive`] value and its associated [`VariableFlags`] from a name.
     ///
-    /// Will seRch _exclusively_ in the current stack frame, which makes this function more performant
-    /// when seRching for variables that should exist in the same stack frame.
+    /// Will search _exclusively_ in the current stack frame, which makes this function more performant
+    /// when searching for variables that should exist in the same stack frame.
     pub(crate) fn load_local(&self, name: &String) -> Option<Rc<(Primitive, VariableFlags)>> {
         self.call_stack.get_frame_variables().get(name)
     }
