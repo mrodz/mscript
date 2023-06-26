@@ -1,10 +1,11 @@
+use std::borrow::Cow;
 use std::cell::Ref;
 use std::{cell::RefCell, rc::Rc};
 
 use anyhow::{Error, Result};
 use pest_consume::Parser as ParserDerive;
 
-use crate::ast::{Compile, CompiledFunctionId, CompiledItem, Declaration, Ident};
+use crate::ast::{Compile, CompiledFunctionId, CompiledItem, Declaration, Ident, TypeLayout};
 use crate::instruction;
 use crate::scope::{Scope, ScopeType, ScopeReturnStatus};
 
@@ -71,16 +72,28 @@ impl AssocFileData {
         }
     }
 
-    pub fn push_if(&self) {
-        self.push_scope_typed(ScopeType::IfBlock, ScopeReturnStatus::No)
+    pub fn push_if_typed(&self, yields: ScopeReturnStatus) {
+        self.push_scope_typed(ScopeType::IfBlock, yields)
     }
 
-    pub fn push_else(&self) {
-        self.push_scope_typed(ScopeType::ElseBlock, ScopeReturnStatus::No)
+    pub fn push_else_typed(&self, yields: ScopeReturnStatus) {
+        self.push_scope_typed(ScopeType::ElseBlock, yields)
     }
 
     pub fn push_function(&self, yields: ScopeReturnStatus) {
         self.push_scope_typed(ScopeType::Function, yields)
+    }
+
+    pub fn return_statement_expected_yield_type(&self) -> Option<&Cow<'static, TypeLayout>> {
+        for scope in unsafe { (*self.scopes.as_ptr()).iter().rev() } {
+            let ScopeReturnStatus::Should(result) = scope.peek_yields_value() else {
+                continue;
+            };
+
+            return Some(result);
+        }
+
+        None
     }
 
     pub fn push_scope_typed(&self, ty: ScopeType, yields: ScopeReturnStatus) {

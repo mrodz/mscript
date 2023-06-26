@@ -17,6 +17,7 @@ pub(crate) enum ScopeReturnStatus {
     No,
     Void,
     Should(Cow<'static, TypeLayout>),
+    ParentShould(Cow<'static, TypeLayout>),
     Did(Cow<'static, TypeLayout>),
 }
 
@@ -29,11 +30,17 @@ impl ScopeReturnStatus {
         }
     }
 
+    pub fn all_branches_return(&self) -> bool {
+        matches!(self, Self::Did(..))
+    }
+
     pub fn mark_should_return_as_completed(&mut self) -> Result<&mut Self> {
-        if let Self::Should(expected_return_type) | Self::Did(expected_return_type) = self {
+        if let Self::Should(expected_return_type)
+        | Self::ParentShould(expected_return_type)
+        | Self::Did(expected_return_type) = self
+        {
             let x = expected_return_type.clone();
             *self = ScopeReturnStatus::Did(x);
-
         };
 
         Ok(self)
@@ -53,7 +60,11 @@ impl Scope {
     }
 
     pub fn new_with_ty_yields(ty: ScopeType, yields: ScopeReturnStatus) -> Self {
-        Self { variables: HashSet::new(), ty, yields }
+        Self {
+            variables: HashSet::new(),
+            ty,
+            yields,
+        }
     }
 
     pub fn peek_yields_value(&self) -> &ScopeReturnStatus {
