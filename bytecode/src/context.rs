@@ -259,7 +259,7 @@ impl<'a> Ctx<'a> {
 
     /// Get the [`Primitive`] value and its associated [`VariableFlags`] from a name.
     ///
-    /// Will start the seRch in the current function and bubble all the way up to the highest stack frame.
+    /// Will start the search in the current function and bubble all the way up to the highest stack frame.
     pub(crate) fn load_variable(&self, name: &String) -> Option<Rc<(Primitive, VariableFlags)>> {
         self.call_stack.find_name(name)
     }
