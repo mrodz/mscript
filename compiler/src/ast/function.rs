@@ -40,7 +40,9 @@ impl PartialEq for FunctionType {
             return false;
         }
 
-        if self.return_type != other.return_type {
+        let return_types = self.return_type.eq_for_signature_checking(&other.return_type);
+
+        if let Ok(false) | Err(..) = return_types {
             return false;
         }
 
@@ -208,12 +210,17 @@ impl Parser {
         let mut children = input.children();
         let parameters = children.next().unwrap();
 
-        let parameters = Self::function_parameters(parameters)?;
+        // let parameters = Self::function_parameters(parameters)?;
 
         let next = children.next();
 
         // if there are no more children, there is no return type or body
         let Some(next) = next else {
+            // We are reading parameters without pushing the function frame,
+            // so the parameters MUST never be used. Essentially, we are just
+            // syntax checks.
+            let parameters = Self::function_parameters(parameters, false)?;
+
             return Ok(Function::new(parameters, Block::empty_body(), ScopeReturnStatus::Void, path_str));
         };
 
@@ -233,7 +240,8 @@ impl Parser {
         input
             .user_data()
             .push_function(ScopeReturnStatus::detect_should_return(return_type));
-        // input.user_data().push_scope_typed(ScopeType::Function, return_type);
+
+        let parameters = Self::function_parameters(parameters, true)?;
 
         let body = if let Some(body) = body {
             Self::block(body)?

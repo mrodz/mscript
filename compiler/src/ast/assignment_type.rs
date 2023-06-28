@@ -33,6 +33,7 @@ impl Parser {
                 let message = if value.is_callable() {
                     format!("declaration wanted {ty}, but value is a function that returns {assignment_ty}")
                 } else {
+                    // TODO: special check for function types.
                     format!("declaration wanted {ty}, but value is {assignment_ty}")
                 };
 

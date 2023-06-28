@@ -170,7 +170,7 @@ pub(crate) trait Compile {
 
 pub(crate) trait Optimize {}
 
-// #[derive(PartialEq)]
+#[derive(Clone)]
 pub(crate) struct Dependency<'a> {
     pub ident: Cow<'a, Ident>,
 }
@@ -190,6 +190,14 @@ impl<'a> Dependency<'a> {
     }
     pub fn new(ident: Cow<'a, Ident>) -> Self {
         Self { ident }
+    }
+
+    /// For self = `Dependency(x)` and other = `Dependency(y)`, check if `x == y` or `x == CallbackVariable(y)`
+    /// 
+    /// # Errors
+    /// Will error if either dependency is typeless.
+    pub fn eq_allow_callbacks(&self, other: &Self) -> Result<bool> {
+        self.ident.eq_allow_callbacks(&other.ident)
     }
 }
 
@@ -234,10 +242,20 @@ pub(crate) trait Dependencies {
         let supplies = self.supplies();
         let dependencies = self.dependencies();
 
-        dependencies
-            .into_iter()
-            .filter(|dependency| !supplies.contains(dependency))
-            .collect()
+        let mut result: Vec<Dependency> = Vec::with_capacity(dependencies.len());
+
+        // For now, this is O(n^2) :(
+        'dependency_loop: for dependency in &dependencies {
+            for supplied in &supplies {
+                if supplied.eq_allow_callbacks(dependency).expect("idents do not have types") {
+                    continue 'dependency_loop;
+                }
+            }
+
+            result.push(dependency.clone());
+        }
+
+        result
     }
 }
 

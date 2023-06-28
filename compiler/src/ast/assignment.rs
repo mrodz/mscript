@@ -56,14 +56,17 @@ impl Assignment {
 
 impl Dependencies for Assignment {
     fn supplies(&self) -> Vec<Dependency> {
-        // let value = &self.value as &dyn Dependencies;
-        // println!("\t\tIntroduced {}", self.ident.name());
-        vec![Dependency::new(Cow::Borrowed(&self.ident))]
+        if !self.flags.contains(&AssignmentFlag::Modify) {
+            vec![Dependency::new(Cow::Borrowed(&self.ident))]
+        } else {
+            // We are not introducing a new variable, just pointing to a callback variable.
+            // This means we shouldn't count child dependencies as filled by this assignment. 
+            vec![]
+        }
     }
 
     fn dependencies(&self) -> Vec<Dependency> {
         let value = &self.value as &dyn Dependencies;
-        // println!("\tLooking up the dependencies for {}", self.ident.name());
         value.net_dependencies()
     }
 }
