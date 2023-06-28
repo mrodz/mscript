@@ -40,7 +40,7 @@ impl PartialEq for FunctionType {
             return false;
         }
 
-        let return_types = self.return_type.eq_for_signature_checking(&*other.return_type);
+        let return_types = self.return_type.eq_for_signature_checking(&other.return_type);
 
         if let Ok(false) | Err(..) = return_types {
             return false;
