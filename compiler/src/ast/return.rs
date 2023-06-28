@@ -59,8 +59,6 @@ impl Parser {
 
 		let Some(value_node) = value_node else {
 			if let ScopeReturnStatus::Did(expected_return_type) = expected_return_type {
-				dbg!(input.as_span());
-
 				// #0
 				bail!(new_err(
 					input.as_span(),
