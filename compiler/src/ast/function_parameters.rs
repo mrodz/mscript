@@ -88,7 +88,7 @@ impl Compile for FunctionParameters {
 
 impl Parser {
     /// this is the first thing that gets parsed in a function
-    pub fn function_parameters(input: Node) -> Result<FunctionParameters> {
+    pub fn function_parameters(input: Node, add_to_scope_dependencies: bool) -> Result<FunctionParameters> {
         let mut children = input.children();
 
         let mut result: Vec<Ident> = vec![];
@@ -120,6 +120,10 @@ impl Parser {
             let ty: Cow<'static, TypeLayout> = Self::r#type(ty)?;
 
             ident.link(input.user_data(), Some(ty))?;
+
+            if add_to_scope_dependencies {
+                input.user_data().add_dependency(&ident);
+            }
 
             result.push(ident);
         }

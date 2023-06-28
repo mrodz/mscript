@@ -57,13 +57,13 @@ impl Assignment {
 impl Dependencies for Assignment {
     fn supplies(&self) -> Vec<Dependency> {
         // let value = &self.value as &dyn Dependencies;
-        // println!("\t\tIntroduced {}", self.ident.name());
+        println!("\t\tIntroduced {}", self.ident.name());
         vec![Dependency::new(Cow::Borrowed(&self.ident))]
     }
 
     fn dependencies(&self) -> Vec<Dependency> {
         let value = &self.value as &dyn Dependencies;
-        // println!("\tLooking up the dependencies for {}", self.ident.name());
+        println!("\tLooking up the dependencies for {}", self.ident.name());
         value.net_dependencies()
     }
 }

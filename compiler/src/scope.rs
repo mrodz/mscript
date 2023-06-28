@@ -1,6 +1,6 @@
 use std::{borrow::Cow, collections::HashSet};
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 
 use crate::ast::{Ident, TypeLayout};
 
@@ -22,6 +22,16 @@ pub(crate) enum ScopeReturnStatus {
 }
 
 impl ScopeReturnStatus {
+    pub fn eq_for_signature_checking(&self, rhs: &Self) -> Result<bool> {
+        if let Self::Should(left) | Self::Did(left) = self {
+            if let Self::Should(right) | Self::Did(right) = rhs {
+                return Ok(left == right)
+            }
+        }
+
+        bail!("not applicable")
+    }
+
     pub fn detect_should_return(val: Option<Cow<'static, TypeLayout>>) -> Self {
         if let Some(type_layout) = val {
             Self::Should(type_layout)

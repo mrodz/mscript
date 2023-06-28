@@ -277,7 +277,7 @@ pub(crate) fn parse_expr(pairs: Pairs<Rule>, user_data: Rc<AssocFileData>) -> Re
                                 "use of undeclared variable".into(),
                             )
                         })?;
-
+                    
                     let cloned = if is_callback {
                         ident.clone().wrap_in_callback()?
                     } else {

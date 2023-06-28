@@ -151,8 +151,10 @@ impl AssocFileData {
     {
         let mut is_callback = false;
 
+        // let mut c = 0;
 
         for (count, scope) in scopes.rev().enumerate() {
+            // println!("\t\t{:?}", scope.scope_type());
             if let (true, Some(flags)) = (count >= skip, scope.contains(dependency)) {
                 return Some((flags, is_callback));
             }

@@ -156,7 +156,13 @@ pub fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<()> {
                 main_error = main_error.context(format!("{this_error:?}"));
             }
 
-            main_error = main_error.context(format!("{error_c} errors found"));
+            let maybe_plural = if error_c > 1 {
+                "s"
+            } else {
+                ""
+            };
+
+            main_error = main_error.context(format!("{error_c} compilation problem{maybe_plural} found"));
 
             bail!(main_error)
         }

@@ -41,10 +41,7 @@ impl IntoType for Value {
 impl Dependencies for Value {
     fn dependencies(&self) -> Vec<Dependency> {
         match self {
-            Self::Function(function) => {
-                // println!("\t\t\t\tI depend on a function!!!");
-                function.net_dependencies()
-            }
+            Self::Function(function) => function.net_dependencies(),
             Self::Ident(name) => name.net_dependencies(),
             Self::Number(number) => number.net_dependencies(),
             Self::String(string) => string.net_dependencies(),
@@ -73,10 +70,7 @@ impl Parser {
     pub fn value(input: Node) -> Result<Value> {
         let matched = match input.as_rule() {
             Rule::function => Value::Function(Self::function(input)?),
-            Rule::ident => {
-                let ident = Self::ident(input)?;
-                Value::Ident(ident)
-            }
+            Rule::ident => Value::Ident(Self::ident(input)?),
             Rule::number => Value::Number(Self::number(input)?),
             Rule::string => Value::String(Self::string(input)?),
             Rule::math_expr => Value::MathExpr(Box::new(Self::math_expr(input)?)),
