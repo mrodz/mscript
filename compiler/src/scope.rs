@@ -23,6 +23,10 @@ pub(crate) enum ScopeReturnStatus {
 
 impl ScopeReturnStatus {
     pub fn eq_for_signature_checking(&self, rhs: &Self) -> Result<bool> {
+        if self == rhs {
+            return Ok(true);
+        }
+
         if let Self::Should(left) | Self::Did(left) = self {
             if let Self::Should(right) | Self::Did(right) = rhs {
                 return Ok(left == right)
