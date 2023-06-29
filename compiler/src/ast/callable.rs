@@ -23,7 +23,7 @@ impl IntoType for Callable {
         let ident = self.ident.ty()?;
         let ident = ident.get_type_recursively();
 
-        let (box ScopeReturnStatus::Should(ref return_type) | box ScopeReturnStatus::Did(ref return_type)) = ident.is_function().context("not a function")?.return_type else {
+        let (ScopeReturnStatus::Should(ref return_type) | ScopeReturnStatus::Did(ref return_type)) = ident.is_function().context("not a function")?.return_type.as_ref() else {
             bail!("function returns void")
         };
 

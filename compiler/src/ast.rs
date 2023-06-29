@@ -209,9 +209,9 @@ impl<'a> Dependency<'a> {
         let other_ty: &TypeLayout = other.ident.ty()?.as_ref();
         let self_ty: &TypeLayout = self.ident.ty()?.as_ref();
 
-        if let TypeLayout::CallbackVariable(box ptr_ty) = other_ty {
+        if let TypeLayout::CallbackVariable(ptr_ty) = other_ty {
             if other.cycles_needed > 0 {
-                return Ok(self_ty == ptr_ty) 
+                return Ok(self_ty == ptr_ty.as_ref()) 
             }
         } 
 
