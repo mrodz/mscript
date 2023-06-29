@@ -123,7 +123,7 @@ pub(crate) fn compile_from_str(
     ));
 
     let input = logger.wrap_in_spinner(format!("Parsing ({input_path:?}):"), || {
-        root_node_from_str(&mscript_code, user_data.clone())
+        root_node_from_str(mscript_code, user_data.clone())
     })?;
 
     let file =
