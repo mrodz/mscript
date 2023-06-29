@@ -1,5 +1,3 @@
-#![feature(box_patterns)]
-
 mod cli;
 
 use anyhow::{bail, Context, Result};
