@@ -49,27 +49,6 @@ pub static KEYWORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
 });
 
 impl Ident {
-    /// Allow checking if dependencies match given **ONE** level of depth checking.
-    /// In theory, a callback variable should be satisfied after one indirection
-    /// and does not need to be recursed 2.. times.
-    /// 
-    /// # Errors
-    /// Will error if any either the right or left side do not have types.
-    pub fn eq_allow_callbacks(&self, other: &Self) -> Result<bool> {
-        if self.name != other.name {
-            return Ok(false);
-        }
-
-        let other_ty = other.ty()?.as_ref();
-        let self_ty = self.ty()?.as_ref();
-
-        if let TypeLayout::CallbackVariable(box ptr_ty) = other_ty {
-            Ok(self_ty == ptr_ty)
-        } else {
-            Ok(self_ty == other_ty)
-        }
-    }
-
     pub fn mark_const(&mut self) {
         self.read_only = true;
     }

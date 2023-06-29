@@ -28,6 +28,7 @@ impl Dependencies for Declaration {
             Self::IfStatement(if_statement) => if_statement.supplies(),
         }
     }
+
     fn dependencies(&self) -> Vec<Dependency> {
         match self {
             Self::Assignment(assignment) => {
