@@ -114,17 +114,24 @@ impl IntoType for Function {
 
 impl Dependencies for Function {
     fn supplies(&self) -> Vec<Dependency> {
-        let mut body_supplies = self.body.supplies();
-        let mut param_supplies = self.parameters.supplies();
+        // let mut body_supplies = self.body.supplies();
+        let param_supplies = self.parameters.supplies();
 
-        body_supplies.append(&mut param_supplies);
+        // body_supplies.append(&mut param_supplies);
 
-        body_supplies
+        param_supplies
+
+        // dbg!(body_supplies)
     }
 
     fn dependencies(&self) -> Vec<Dependency> {
         self.body.net_dependencies()
     }
+
+    // fn net_dependencies(&self) -> Vec<Dependency>
+    // {
+        
+    // }
 }
 
 impl Function {

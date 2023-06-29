@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, fmt::Debug};
 
 use anyhow::{bail, Context, Result};
 
@@ -14,7 +14,7 @@ use super::{map_err, new_err, value::Value, Compile, Dependencies, Dependency, I
 pub(crate) struct Assignment {
     pub ident: Ident,
     pub value: Value,
-    pub flags: AssignmentFlags,
+    pub flags: AssignmentFlag,
 }
 
 impl Assignment {
@@ -22,7 +22,7 @@ impl Assignment {
         Self {
             ident,
             value,
-            flags: AssignmentFlags::default(),
+            flags: AssignmentFlag::default(),
         }
     }
 
@@ -34,7 +34,7 @@ impl Assignment {
         // println!("wooooo!!!!");
         let skip = if is_modify { 1 } else { 0 };
 
-        if self.flags.contains(&AssignmentFlag::Modify) {
+        if self.flags.contains(AssignmentFlag::modify()) {
             let (ident, _) = user_data
                 .get_dependency_flags_from_name_skip_n(self.ident.name(), skip)
                 .context(
@@ -49,25 +49,43 @@ impl Assignment {
         Ok(has_been_declared.map_or_else(|| true, |ident| !ident.is_const()))
     }
 
-    pub fn set_flags(&mut self, flags: AssignmentFlags) {
+    pub fn set_flags(&mut self, flags: AssignmentFlag) {
         self.flags = flags;
     }
 }
 
 impl Dependencies for Assignment {
     fn supplies(&self) -> Vec<Dependency> {
-        if !self.flags.contains(&AssignmentFlag::Modify) {
+        if !self.flags.contains(AssignmentFlag::modify()) {
             vec![Dependency::new(Cow::Borrowed(&self.ident))]
         } else {
             // We are not introducing a new variable, just pointing to a callback variable.
-            // This means we shouldn't count child dependencies as filled by this assignment. 
+            // This means we shouldn't count child dependencies as filled by this assignment.
             vec![]
         }
     }
 
     fn dependencies(&self) -> Vec<Dependency> {
-        let value = &self.value as &dyn Dependencies;
-        value.net_dependencies()
+        self.value.net_dependencies()
+    }
+
+    /// custom implementation
+    fn net_dependencies(&self) -> Vec<Dependency> {
+        let dependencies = self.dependencies();
+
+        let Some(supply_name) = self.supplies().pop() else {
+            return dependencies;
+        };
+
+        let mut result = Vec::with_capacity(dependencies.len());
+
+        for dependency in dependencies {
+            if dependency != supply_name {
+                result.push(dependency);
+            }
+        }
+
+        result
     }
 }
 
@@ -87,7 +105,7 @@ impl Compile for Assignment {
             Value::Boolean(boolean) => boolean.compile(function_buffer)?,
         };
 
-        let store_instruction = if self.flags.contains(&AssignmentFlag::Modify) {
+        let store_instruction = if self.flags.contains(AssignmentFlag::modify()) {
             instruction!(store_object name)
         } else {
             instruction!(store name)
@@ -99,49 +117,96 @@ impl Compile for Assignment {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum AssignmentFlag {
-    Modify,
-    Const,
+mod assignment_flag {
+    pub const MODIFY: u8 = 0b00000001;
+    pub const CONST: u8 = 0b00000010;
 }
 
-#[derive(Debug, Default)]
-pub struct AssignmentFlags(Vec<AssignmentFlag>);
+#[derive(Clone, Copy, Default)]
+pub struct AssignmentFlag(u8);
 
-impl AssignmentFlags {
+impl Debug for AssignmentFlag {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut flagc = 0;
+
+        write!(f, "<")?;
+
+        if self.contains(AssignmentFlag::modify()) {
+            write!(f, "modify")?;
+            flagc += 1;
+        }
+
+        if self.contains(AssignmentFlag::constant()) {
+            if flagc > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "const")?;
+            flagc += 1;
+        }
+
+        if flagc == 0 {
+            write!(f, "NONE")?;
+        }
+
+        write!(f, ">")?;
+
+        Ok(())
+    }
+}
+
+impl AssignmentFlag {
+    pub(crate) const fn modify() -> Self {
+        Self(assignment_flag::MODIFY)
+    }
+    pub(crate) const fn constant() -> Self {
+        Self(assignment_flag::CONST)
+    }
+
     pub(crate) fn add_flag(&mut self, flag: AssignmentFlag) -> Result<()> {
-        if self.0.contains(&flag) {
+        if self.0 & flag.0 == flag.0 {
             bail!("duplicate flags")
         } else {
-            self.0.push(flag);
+            self.0 |= flag.0;
             Ok(())
         }
     }
 
-    pub(crate) fn contains(&self, flag: &AssignmentFlag) -> bool {
-        self.0.contains(flag)
+    pub(crate) const fn contains(&self, flag: AssignmentFlag) -> bool {
+        self.0 & flag.0 == flag.0
+    }
+
+    fn validate(&self) -> Result<()> {
+        use self::assignment_flag::*;
+
+        if self.contains(AssignmentFlag(CONST | MODIFY)) {
+            bail!("const is an invalid qualifier when mixed with modify in the same assignment")
+        }
+
+        Ok(())
     }
 }
 
 impl From<&str> for AssignmentFlag {
     fn from(value: &str) -> Self {
         match value {
-            "modify" => Self::Modify,
-            "const" => Self::Const,
+            "modify" => Self::modify(),
+            "const" => Self::constant(),
             other => unimplemented!("{other}"),
         }
     }
 }
 
 impl Parser {
-    pub fn assignment_flags(input: Node) -> Result<AssignmentFlags> {
+    pub fn assignment_flags(input: Node) -> Result<AssignmentFlag> {
         let flags = input.children();
 
-        let mut result = AssignmentFlags::default();
+        let mut result = AssignmentFlag::default();
 
         for flag in flags {
             result.add_flag(flag.as_str().into())?;
         }
+
+        map_err(result.validate(), input.as_span(), &input.user_data().get_source_file_name(), "bad assignment flags".into())?;
 
         Ok(result)
     }
@@ -165,11 +230,11 @@ impl Parser {
 
         let is_const = flags
             .as_ref()
-            .map(|flags| flags.contains(&AssignmentFlag::Const))
+            .map(|flags| flags.contains(AssignmentFlag::constant()))
             .unwrap_or(false);
         let is_modify = flags
             .as_ref()
-            .map(|flags| flags.contains(&AssignmentFlag::Modify))
+            .map(|flags| flags.contains(AssignmentFlag::modify()))
             .unwrap_or(false);
 
         let assignment_span = assignment.as_span();

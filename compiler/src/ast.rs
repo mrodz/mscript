@@ -170,9 +170,10 @@ pub(crate) trait Compile {
 
 pub(crate) trait Optimize {}
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct Dependency<'a> {
     pub ident: Cow<'a, Ident>,
+    pub cycles_needed: usize
 }
 
 impl PartialEq for Dependency<'_> {
@@ -189,7 +190,10 @@ impl<'a> Dependency<'a> {
         self.ident.as_ref().name()
     }
     pub fn new(ident: Cow<'a, Ident>) -> Self {
-        Self { ident }
+        Self { ident, cycles_needed: 0 }
+    }
+    pub fn increment_cycle(&mut self) {
+        self.cycles_needed += 1;
     }
 
     /// For self = `Dependency(x)` and other = `Dependency(y)`, check if `x == y` or `x == CallbackVariable(y)`
@@ -197,13 +201,21 @@ impl<'a> Dependency<'a> {
     /// # Errors
     /// Will error if either dependency is typeless.
     pub fn eq_allow_callbacks(&self, other: &Self) -> Result<bool> {
-        self.ident.eq_allow_callbacks(&other.ident)
-    }
-}
 
-impl Debug for Dependency<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self}")
+        if self.ident.name() != other.ident.name() {
+            return Ok(false);
+        }
+
+        let other_ty: &TypeLayout = other.ident.ty()?.as_ref();
+        let self_ty: &TypeLayout = self.ident.ty()?.as_ref();
+
+        if let TypeLayout::CallbackVariable(box ptr_ty) = other_ty {
+            if other.cycles_needed > 0 {
+                return Ok(self_ty == ptr_ty) 
+            }
+        } 
+
+        Ok(self_ty == other_ty)
     }
 }
 
@@ -215,47 +227,81 @@ impl Display for Dependency<'_> {
 
 impl<'a> From<&'a Ident> for Dependency<'a> {
     fn from(value: &'a Ident) -> Self {
-        Self {
-            ident: Cow::Borrowed(value),
-        }
+        Self::new(Cow::Borrowed(value))
     }
 }
 
-impl<'a> From<Ident> for Dependency<'a> {
-    fn from(value: Ident) -> Self {
-        Self {
-            ident: Cow::Owned(value),
+/// Default behavior for [`Dependencies::net_dependencies`]. This function is only
+/// separate for public visibility, which allows implementations to call it.
+/// 
+/// Formula:
+/// `[dependencies] - [supplies] = [net]`
+/// 
+/// The algorithm for "satisfying" dependencies is as follows:
+/// * If dependency.name != supplied.name, continue
+/// * If dependency is a variable from a child scope, succeed if supplied.type == dependency.type
+/// * If dependency is not a variable from a child scope, it will be propagated regardless of whether the types 
+///   match (required for cases where a variable from a parent scope is copied to a separate local variable with the same name).
+/// * Succeed if supplied.type == dependency.type
+pub(crate) fn get_net_dependencies(ast_item: &dyn Dependencies, is_scope: bool) -> Vec<Dependency> {
+    let supplies = ast_item.supplies();
+    let dependencies = ast_item.dependencies();
+
+    let mut result: Vec<Dependency> = Vec::with_capacity(dependencies.len());
+
+    // For now, this is O(n^2) :(
+    'dependency_loop: for mut dependency in dependencies {
+        for supplied in &supplies {
+            if supplied.eq_allow_callbacks(&dependency).expect("idents do not have types") {
+                continue 'dependency_loop;
+            }
         }
+
+        if is_scope {
+            dependency.increment_cycle();
+        }
+
+        result.push(dependency);
     }
+
+    result
 }
 
 pub(crate) trait Dependencies {
+    /// This method expresses all new variables and identities created by an AST node.
+    /// Identities supplied by a parent can be consumed by child AST nodes, but not the
+    /// other way around.
+    /// 
+    /// # Example
+    /// A function might have a parameter `input`, and define variables `sum` and `product`.
+    /// Thus, a function's [`Dependencies::supplies`] implementation should return `vec![input, sum, product]`. 
     fn supplies(&self) -> Vec<Dependency> {
         vec![]
     }
 
+    /// This method expresses all outstanding variables needed by this function. Generally, 
+    /// if an AST node comes across an identity, it should add it as a dependency. This even
+    /// applies to variables defined inside a scope--If you see it, add it as a dependency.
+    /// 
+    /// # Example
+    /// A function might have a parameter `input`, define variables `sum` and `product`, and
+    /// returns `input * product + sum`. Thus, a function's [`Dependencies::dependencies`] implementation
+    /// should return `vec![input, sum, product]`.
     fn dependencies(&self) -> Vec<Dependency> {
         vec![]
     }
 
-    fn net_dependencies(&self) -> Vec<Dependency> {
-        let supplies = self.supplies();
-        let dependencies = self.dependencies();
-
-        let mut result: Vec<Dependency> = Vec::with_capacity(dependencies.len());
-
-        // For now, this is O(n^2) :(
-        'dependency_loop: for dependency in &dependencies {
-            for supplied in &supplies {
-                if supplied.eq_allow_callbacks(dependency).expect("idents do not have types") {
-                    continue 'dependency_loop;
-                }
-            }
-
-            result.push(dependency.clone());
-        }
-
-        result
+    /// This function is used to calculate the outstanding dependencies by filtering out identities
+    /// _needed_ from the identities _supplied_ by an AST node. If implementing an AST node that
+    /// **DIRECTLY** creates a scope (For example, a block of code), this method should be overriden. 
+    /// 
+    /// [`get_net_dependencies(self, false)`](get_net_dependencies) is the default implementation.
+    /// Override this function and pass `true` if dealing with an AST node that creates a scope.
+    fn net_dependencies(&self) -> Vec<Dependency>
+    where
+        Self: Sized
+    {
+        get_net_dependencies(self, false)
     }
 }
 

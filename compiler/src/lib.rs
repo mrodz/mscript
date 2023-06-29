@@ -4,7 +4,7 @@
 #![feature(try_blocks)]
 
 /// for #[derive()] macro in `parser.rs`
-extern crate alloc; 
+extern crate alloc;
 
 mod ast;
 mod parser;
@@ -100,44 +100,37 @@ impl<T> Maybe<T> for Option<T> {
     }
 }
 
-pub fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<()> {
-    let start_time = Instant::now();
-    let path = Path::new(path_str);
+/// # Todo
+/// Unit tests can use this function
+#[allow(unused)]
+pub(crate) fn compile_str(mscript_code: &str, unit_name: &str) -> Result<Vec<CompiledItem>> {
+    let logger = VerboseLogger::new(false);
 
-    let Some(ext) = path.extension() else {
-        bail!("no file extension")
-    };
+    let input_path = format!("{unit_name}.ms");
+    let output_path = format!("{unit_name}.mmm");
 
-    if !ext.eq_ignore_ascii_case("ms") {
-        bail!("MScript uses `.ms` file extensions. Please check your file extensions.")
-    }
+    compile_from_str(&logger, Path::new(&input_path), Path::new(&output_path), mscript_code)
+}
 
-    let output_path = path.with_extension("mmm");
-
-    let file = File::open(path)?;
-
-    let mut reader = BufReader::new(file);
-
-    let mut buffer = String::new();
-
-    reader.read_to_string(&mut buffer)?;
-
-    let logger = VerboseLogger::new(verbose);
-
+pub(crate) fn compile_from_str(
+    logger: &VerboseLogger,
+    input_path: &Path,
+    output_path: &Path,
+    mscript_code: &str,
+) -> Result<Vec<CompiledItem>> {
     let user_data = Rc::new(AssocFileData::new(
         output_path.to_string_lossy().to_string(),
     ));
 
-    let input = logger.wrap_in_spinner(format!("Parsing ({path_str}):"), || {
-        root_node_from_str(&buffer, user_data.clone())
+    let input = logger.wrap_in_spinner(format!("Parsing ({input_path:?}):"), || {
+        root_node_from_str(mscript_code, user_data.clone())
     })?;
 
-    let file = logger.wrap_in_spinner(format!("Creating AST ({path_str}):"), || {
-        Parser::file(input)
-    })?;
+    let file =
+        logger.wrap_in_spinner(format!("Creating AST ({input_path:?}):"), || Parser::file(input))?;
 
     let mut function_buffer = vec![];
-    logger.wrap_in_spinner(format!("Validating AST ({path_str}):"), || {
+    logger.wrap_in_spinner(format!("Validating AST ({input_path:?}):"), || {
         let _ = file.compile(&mut function_buffer);
 
         let errors = user_data.get_errors();
@@ -156,13 +149,10 @@ pub fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<()> {
                 main_error = main_error.context(format!("{this_error:?}"));
             }
 
-            let maybe_plural = if error_c > 1 {
-                "s"
-            } else {
-                ""
-            };
+            let maybe_plural = if error_c > 1 { "s" } else { "" };
 
-            main_error = main_error.context(format!("{error_c} compilation problem{maybe_plural} found"));
+            main_error =
+                main_error.context(format!("{error_c} compilation problem{maybe_plural} found"));
 
             bail!(main_error)
         }
@@ -170,9 +160,36 @@ pub fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<()> {
         Ok(())
     })?;
 
-    // function_buffer is initialized now.
+    Ok(function_buffer)
+}
 
-    // TODO:
+pub fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<()> {
+    let start_time = Instant::now();
+    
+    let input_path = Path::new(path_str);
+
+    let Some(ext) = input_path.extension() else {
+        bail!("no file extension")
+    };
+
+    if !ext.eq_ignore_ascii_case("ms") {
+        bail!("MScript uses `.ms` file extensions. Please check your file extensions.")
+    }
+
+    let output_path = input_path.with_extension("mmm");
+
+    let file = File::open(input_path)?;
+
+    let mut reader = BufReader::new(file);
+
+    let mut buffer = String::new();
+
+    reader.read_to_string(&mut buffer)?;
+
+    let logger = VerboseLogger::new(verbose);
+
+    let function_buffer = compile_from_str(&logger, input_path, &output_path, &buffer)?;
+
     logger.wrap_in_spinner(format!("Optimizing ({path_str}):"), || Ok(()))?;
 
     let mut new_file = File::options()

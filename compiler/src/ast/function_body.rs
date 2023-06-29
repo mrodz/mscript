@@ -1,8 +1,8 @@
 use anyhow::Result;
 
-use crate::parser::{Node, Parser};
+use crate::{parser::{Node, Parser}};
 
-use super::{Compile, CompiledItem, Declaration, Dependencies, Dependency};
+use super::{Compile, CompiledItem, Declaration, Dependencies, Dependency, get_net_dependencies};
 
 #[derive(Debug)]
 pub struct Block(Vec<Declaration>);
@@ -19,11 +19,16 @@ impl Dependencies for Block {
     }
 
     fn dependencies(&self) -> Vec<Dependency> {
-        self.0
+        let block_dependencies = self.0
             .iter()
-            // .filter_map(|x| )
             .flat_map(|x| x.net_dependencies())
-            .collect()
+            .collect();
+
+        block_dependencies
+    }
+
+    fn net_dependencies(&self) -> Vec<Dependency> {
+        get_net_dependencies(self, true)
     }
 }
 
