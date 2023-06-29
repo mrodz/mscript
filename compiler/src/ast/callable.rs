@@ -33,13 +33,59 @@ impl IntoType for Callable {
     }
 }
 
+static mut ARGUMENT_REGISTER: usize = 0;
+
+struct ArgumentRegisterHandle(usize);
+
+impl ArgumentRegisterHandle {
+    pub fn new() -> Self {
+        unsafe {
+            ARGUMENT_REGISTER += 1;
+            Self(ARGUMENT_REGISTER)
+        }
+    }
+
+    pub fn repr_from_raw(raw: usize) -> String {
+        format!("a#{raw}")
+    }
+
+    pub fn free(tally: usize) {
+        unsafe {
+            ARGUMENT_REGISTER = ARGUMENT_REGISTER.checked_sub(tally).expect("freeing too many registers");
+        }
+    }
+
+    pub fn repr(&self) -> String {
+        unsafe {
+            assert!(self.0 <= ARGUMENT_REGISTER);
+        }
+
+        Self::repr_from_raw(self.0)
+    }
+}
+
 impl Compile for Callable {
     fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>> {
-        let mut args: Vec<CompiledItem> = self
+        let mut register_start = None;
+        let mut register_count = 0;
+
+        let mut args_init: Vec<CompiledItem> = self
             .function_arguments
             .iter()
-            .flat_map(|x| x.compile(function_buffer).unwrap())
-            // .flatten()
+            .flat_map(|x| {
+                let mut value_init = x.compile(function_buffer).unwrap();
+
+                let argument_register = ArgumentRegisterHandle::new();
+                value_init.push(instruction!(store (argument_register.repr())));
+
+                if register_start.is_none() {
+                    register_start = Some(argument_register.0);
+                }
+
+                register_count += 1;
+
+                value_init
+            })
             .collect();
 
         let func_name = self.ident.name();
@@ -53,10 +99,19 @@ impl Compile for Callable {
             _ => instruction!(load func_name),
         };
 
-        args.push(load_instruction);
-        args.push(instruction!(call));
+        if let Some(register_start) = register_start {
+            for register_idx in register_start..register_start+register_count {
+                let name = ArgumentRegisterHandle::repr_from_raw(register_idx);
+                args_init.push(instruction!(load_local name));
+            }
+        }
 
-        Ok(args)
+        args_init.push(load_instruction);
+        args_init.push(instruction!(call));
+
+        ArgumentRegisterHandle::free(register_count);
+
+        Ok(args_init)
     }
 }
 
