@@ -66,9 +66,9 @@ impl FunctionType {
 
 impl Display for FunctionType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let return_type: Cow<'static, str> = if let box ScopeReturnStatus::Should(return_type)
-        | box ScopeReturnStatus::Did(return_type) =
-            &self.return_type
+        let return_type: Cow<'static, str> = if let ScopeReturnStatus::Should(return_type)
+        | ScopeReturnStatus::Did(return_type) =
+            &self.return_type.as_ref()
         {
             let actual_type = match return_type.as_ref() {
                 TypeLayout::Function(..) => {
@@ -154,10 +154,9 @@ impl Function {
 
         arguments.push(format!("{x}#{id}"));
 
-        dependencies
-            .iter()
-            .map(|ident| ident.name().clone())
-            .collect_into(&mut arguments);
+        for dependency in dependencies {
+            arguments.push(dependency.name().clone());
+        }
 
         let arguments = arguments.into_boxed_slice();
 

@@ -188,7 +188,7 @@ fn compile_depth(
     match expr {
         Expr::Value(val) => val.compile(function_buffer),
         Expr::UnaryMinus(expr) => {
-            if let box Expr::Value(value) = expr {
+            if let Expr::Value(value) = expr.as_ref() {
                 match value {
                     Value::Ident(ident) => {
                         let x = ident.ty().context("no type data")?;

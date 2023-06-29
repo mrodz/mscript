@@ -1,6 +1,5 @@
 //! This is the API for all-things-bytecode.
 
-#![feature(box_patterns)]
 #![allow(dead_code)]
 
 pub(crate) mod context;

@@ -1,10 +1,12 @@
+use std::{borrow::Cow, ops::Deref};
+
 use anyhow::Result;
 
-use crate::parser::{Node, Parser, Rule};
+use crate::parser::{AssocFileData, Node, Parser, Rule};
 
 use super::{
-    math_expr::Expr, r#type::IntoType, string::AstString, Compile, CompiledItem, Dependencies,
-    Dependency, Function, Ident, Number, TypeLayout, Callable,
+    math_expr::Expr, r#type::IntoType, string::AstString, Callable, Compile, CompiledItem,
+    Dependencies, Dependency, Function, Ident, Number, TypeLayout,
 };
 
 #[derive(Debug)]
@@ -15,12 +17,54 @@ pub(crate) enum Value {
     String(AstString),
     MathExpr(Box<Expr>),
     Callable(Callable),
-    Boolean(bool)
+    Boolean(bool),
 }
 
 impl Value {
     pub fn is_callable(&self) -> bool {
-        matches!(self, Value::Callable(..) | Value::MathExpr(box Expr::Value(Value::Callable(..))))
+        match self {
+            Value::Callable(..) => true,
+            Value::MathExpr(maybe_value)
+                if matches!(maybe_value.deref(), Expr::Value(Value::Callable(..))) =>
+            {
+                true
+            }
+            _ => false,
+        }
+    }
+
+    pub fn associate_with_ident(&self, ident: &mut Ident, user_data: &AssocFileData) -> Result<()> {
+        match self {
+            Self::Function(ref f) => {
+                let ty = f.for_type()?;
+                ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
+            }
+            Self::Ident(..) => {
+                ident.link_from_pointed_type_with_lookup(user_data)?;
+            }
+            Self::Number(ref number) => {
+                let ty = number.for_type()?;
+                ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
+            }
+            Self::String(ref string) => {
+                let ty = string.for_type()?;
+                ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
+            }
+            Self::MathExpr(ref math_expr) => {
+                let ty = math_expr.for_type()?;
+                ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
+            }
+            Self::Callable(ref callback) => {
+                let ty = callback.for_type()?;
+                ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
+            }
+            Self::Boolean(ref boolean) => {
+                let ty = boolean.for_type()?;
+                ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
+            }
+        }
+
+        Ok(())
     }
 }
 
