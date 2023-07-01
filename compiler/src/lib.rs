@@ -12,7 +12,7 @@ use std::path::Path;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, Context, Result};
 use ast::Compile;
 use indicatif::{MultiProgress, ProgressBar, ProgressFinish, ProgressStyle};
 
@@ -57,8 +57,9 @@ impl VerboseLogger {
     fn wrap_in_spinner<R>(
         &self,
         message: impl Into<Cow<'static, str>>,
-        action: impl FnOnce() -> Result<R>,
-    ) -> Result<R> {
+        action: impl FnOnce() -> Result<R, Vec<anyhow::Error>>,
+    ) -> Result<R, Vec<anyhow::Error>>
+    {
         let Some(ref progress_bars) = self.progress_bars else {
             return action();
         };
@@ -95,10 +96,20 @@ impl<T> Maybe<T> for Option<T> {
     }
 }
 
+pub trait VecErr<T> {
+    fn to_err_vec(self) -> Result<T, Vec<anyhow::Error>>;
+}
+
+impl <T>VecErr<T> for Result<T> {
+    fn to_err_vec(self) -> Result<T, Vec<anyhow::Error>> {
+        self.map_err(|e| vec![e])
+    }
+}
+
 /// # Todo
 /// Unit tests can use this function
 #[allow(unused)]
-pub(crate) fn compile_str(mscript_code: &str, unit_name: &str) -> Result<Vec<CompiledItem>> {
+pub(crate) fn compile_str(mscript_code: &str, unit_name: &str) -> Result<Vec<CompiledItem>, Vec<anyhow::Error>> {
     let logger = VerboseLogger::new(false);
 
     let input_path = format!("{unit_name}.ms");
@@ -112,7 +123,7 @@ pub(crate) fn compile_from_str(
     input_path: &Path,
     output_path: &Path,
     mscript_code: &str,
-) -> Result<Vec<CompiledItem>> {
+) -> Result<Vec<CompiledItem>, Vec<anyhow::Error>> {
     let user_data = Rc::new(AssocFileData::new(
         output_path.to_string_lossy().to_string(),
     ));
@@ -126,31 +137,7 @@ pub(crate) fn compile_from_str(
 
     let mut function_buffer = vec![];
     logger.wrap_in_spinner(format!("Validating AST ({input_path:?}):"), || {
-        let _ = file.compile(&mut function_buffer);
-
-        let errors = user_data.get_errors();
-
-        let error_c = errors.len();
-
-        if error_c != 0 {
-            // let mut main_error = anyhow!("Did not compile successfully");
-
-            let first_error = user_data.get_nth_error(error_c - 1).unwrap();
-
-            let mut main_error = anyhow!(format!("{first_error:?}"));
-
-            for error_idx in (0..error_c - 1).rev() {
-                let this_error = user_data.get_nth_error(error_idx).unwrap();
-                main_error = main_error.context(format!("{this_error:?}"));
-            }
-
-            let maybe_plural = if error_c > 1 { "s" } else { "" };
-
-            main_error =
-                main_error.context(format!("{error_c} compilation problem{maybe_plural} found"));
-
-            bail!(main_error)
-        }
+        file.compile(&mut function_buffer)?;
 
         Ok(())
     })?;
@@ -158,28 +145,28 @@ pub(crate) fn compile_from_str(
     Ok(function_buffer)
 }
 
-pub fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<()> {
+pub fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<(), Vec<anyhow::Error>> {
     let start_time = Instant::now();
     
     let input_path = Path::new(path_str);
 
     let Some(ext) = input_path.extension() else {
-        bail!("no file extension")
+        return Err(anyhow!("no file extension")).to_err_vec();
     };
 
     if !ext.eq_ignore_ascii_case("ms") {
-        bail!("MScript uses `.ms` file extensions. Please check your file extensions.")
+        return Err(anyhow!("MScript uses `.ms` file extensions. Please check your file extensions.")).to_err_vec();
     }
 
     let output_path = input_path.with_extension("mmm");
 
-    let file = File::open(input_path)?;
+    let file = File::open(input_path).map_err(|e| vec![anyhow!(e)])?;
 
     let mut reader = BufReader::new(file);
 
     let mut buffer = String::new();
 
-    reader.read_to_string(&mut buffer)?;
+    reader.read_to_string(&mut buffer).map_err(|e| vec![anyhow!(e)])?;
 
     let logger = VerboseLogger::new(verbose);
 
@@ -192,7 +179,7 @@ pub fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<()> {
         .read(true)
         .write(true)
         .truncate(true)
-        .open(output_path)?;
+        .open(output_path).map_err(|e| vec![anyhow!(e)])?;
 
     let writing_pb = logger.add(|| {
         let template =
@@ -228,11 +215,11 @@ pub fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<()> {
 
     if let Some(ref writing_pb) = writing_pb {
         for x in writing_pb.wrap_iter(iter) {
-            for_each(x).with_context(|| format!("{function_buffer:#?}"))?;
+            for_each(x).with_context(|| format!("{function_buffer:#?}")).to_err_vec()?;
         }
     } else {
         for x in iter {
-            for_each(x).with_context(|| format!("{function_buffer:#?}"))?;
+            for_each(x).with_context(|| format!("{function_buffer:#?}")).to_err_vec()?;
         }
     }
 

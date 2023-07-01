@@ -2,7 +2,7 @@ use std::{borrow::Cow, ops::Deref};
 
 use anyhow::Result;
 
-use crate::parser::{AssocFileData, Node, Parser, Rule};
+use crate::{parser::{AssocFileData, Node, Parser, Rule}, VecErr};
 
 use super::{
     math_expr::Expr, r#type::IntoType, string::AstString, Callable, Compile, CompiledItem,
@@ -111,12 +111,12 @@ impl Compile for Value {
 }
 
 impl Parser {
-    pub fn value(input: Node) -> Result<Value> {
+    pub fn value(input: Node) -> Result<Value, Vec<anyhow::Error>> {
         let matched = match input.as_rule() {
             Rule::function => Value::Function(Self::function(input)?),
-            Rule::ident => Value::Ident(Self::ident(input)?),
-            Rule::number => Value::Number(Self::number(input)?),
-            Rule::string => Value::String(Self::string(input)?),
+            Rule::ident => Value::Ident(Self::ident(input).to_err_vec()?),
+            Rule::number => Value::Number(Self::number(input).to_err_vec()?),
+            Rule::string => Value::String(Self::string(input).to_err_vec()?),
             Rule::math_expr => Value::MathExpr(Box::new(Self::math_expr(input)?)),
             Rule::callable => Value::Callable(Self::callable(input)?),
             Rule::WHITESPACE => unreachable!("{:?}", input.as_span()),

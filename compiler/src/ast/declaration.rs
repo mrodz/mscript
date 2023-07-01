@@ -1,8 +1,8 @@
-use std::rc::Rc;
+use std::fmt::Debug;
 
 use anyhow::Result;
 
-use crate::{parser::{Node, Parser, Rule, AssocFileData}, instruction};
+use crate::{parser::{Node, Parser, Rule}, instruction};
 
 use super::{
     assignment::Assignment, Callable, Compile, CompiledItem, Dependencies, Dependency,
@@ -69,42 +69,27 @@ impl Compile for Declaration {
     }
 }
 
-trait AddToErr<T> {
-    fn add_to_errors(self, user_data: Rc<AssocFileData>) -> Option<T>;
-}
-
-impl <T>AddToErr<T> for Result<T, anyhow::Error> {
-    fn add_to_errors(self, user_data: Rc<AssocFileData>) -> Option<T> {
-        if let Err(e) = self {
-            user_data.add_error(e);
-            None
-        } else {
-            self.ok()
-        }
-    }
-}
-
 impl Parser {
-    pub fn declaration(input: Node) -> Option<Declaration> {
+    pub fn declaration(input: Node) -> Result<Declaration, Vec<anyhow::Error>> {
         let declaration = input.children().next().unwrap();
-        let user_data = input.user_data().clone();
 
         let matched = match declaration.as_rule() {
-            Rule::assignment => Declaration::Assignment(Self::assignment(declaration).add_to_errors(user_data)?),
-            Rule::callable => Declaration::Callable(Self::callable(declaration).add_to_errors(user_data)?),
+            Rule::assignment => Declaration::Assignment(Self::assignment(declaration)?),
+            Rule::callable => Declaration::Callable(Self::callable(declaration)?),
             Rule::print_statement => {
-                Declaration::PrintStatement(Self::print_statement(declaration).add_to_errors(user_data)?)
+                let print_stmt = Self::print_statement(declaration);
+                Declaration::PrintStatement(print_stmt?)
             }
             Rule::return_statement => {
-                Declaration::ReturnStatement(Self::return_statement(declaration).add_to_errors(user_data)?)
+                Declaration::ReturnStatement(Self::return_statement(declaration)?)
             }
             Rule::if_statement => {
-                Declaration::IfStatement(Self::if_statement(declaration).add_to_errors(user_data)?)
+                Declaration::IfStatement(Self::if_statement(declaration)?)
             }
             _ => unreachable!(),
         };
 
-        Some(matched)
+        Ok(matched)
 
         // Ok(result)
     }

@@ -1,8 +1,8 @@
-use anyhow::{bail, Context, Result};
+use anyhow::Result;
 
 use crate::{
     instruction,
-    parser::{Node, Parser, Rule}, scope::ScopeReturnStatus,
+    parser::{Node, Parser, Rule}, scope::ScopeReturnStatus, VecErr,
 };
 
 use super::{new_err, r#type::IntoType, Block, Compile, CompiledItem, Dependencies, Value};
@@ -65,7 +65,7 @@ impl Compile for ElseStatement {
 }
 
 impl Parser {
-    pub fn else_statement(input: Node) -> Result<ElseStatement> {
+    pub fn else_statement(input: Node) -> Result<ElseStatement, Vec<anyhow::Error>> {
         let child = input.children().next().unwrap();
 
         let matched = match child.as_rule() {
@@ -77,23 +77,23 @@ impl Parser {
         Ok(matched)
     }
 
-    pub fn if_statement(input: Node) -> Result<IfStatement> {
+    pub fn if_statement(input: Node) -> Result<IfStatement, Vec<anyhow::Error>> {
         let mut children = input.children();
 
-        let condition = children.next().context("no condition")?;
-        let body = children.next().context("no body")?;
+        let condition = children.next().expect("no condition");
+        let body = children.next().expect("no body");
         let else_statement = children.next();
 
         let condition_as_value = Self::value(condition)?;
 
-        let condition_type = condition_as_value.for_type()?;
+        let condition_type = condition_as_value.for_type().to_err_vec()?;
 
         if !condition_type.is_boolean() {
-            bail!(new_err(
+            return Err(vec![new_err(
                 input.as_span(),
                 &input.user_data().get_source_file_name(),
                 "this value is not boolean, and cannot be used to evaluate an \"if\" statement".to_owned()
-            ))
+            )])
         }
 
         let can_determine_is_if_branch_truthy = false; // TODO
@@ -119,7 +119,7 @@ impl Parser {
         };
 
         if do_all_if_branches_return && (do_all_else_branches_return || can_determine_is_if_branch_truthy) {
-            input.user_data().get_return_type().mark_should_return_as_completed()?;
+            input.user_data().get_return_type().mark_should_return_as_completed().to_err_vec()?;
         }
 
         Ok(IfStatement {

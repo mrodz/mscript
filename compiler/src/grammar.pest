@@ -31,12 +31,30 @@ allow_bin_op = _{ callable | boolean | ident | number | string }
 math_primary = _{ allow_bin_op | "(" ~ math_expr ~ ")" }
 math_atom = _{ unary_minus? ~ math_primary }
 
-bin_op = _{ add | subtract | multiply | divide | modulo }
+bin_op = _{ add | subtract | multiply | divide | modulo | lte | gte | lt | gt | eq | neq }
 add = { "+" }
 subtract = { "-" }
 multiply = { "*" }
 divide = { "/" }
 modulo = { "%" }
+
+lt = { "<" }
+gt = { ">" }
+lte = { "<=" }
+gte = { ">=" }
+eq = { "==" }
+neq = { "!=" }
+
+/*
+thread 'main' panicked at 'Expected operator, found lt(6, 7)', C:\Users\mateo\.cargo\registry\src\github.com-1ecc6299db9ec823\pest-2.6.0\src\pratt_parser.rs:382:25
+lt = { "<" }
+gt = { ">" }
+lte = { "<=" }
+gte = { ">=" }
+eq = { "==" }
+neq = { "!=" }
+*/
+
 
 math_expr = { math_atom ~ (bin_op ~ math_atom)* }
 

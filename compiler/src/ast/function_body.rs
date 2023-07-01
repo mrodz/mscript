@@ -46,17 +46,24 @@ impl Compile for Block {
 }
 
 impl Parser {
-    pub fn block(input: Node) -> Result<Block> {
+    pub fn block(input: Node) -> Result<Block, Vec<anyhow::Error>> {
         let children = input.children();
 
         let mut result = vec![];
 
+        let mut errors = vec![];
+
         for child in children {
-            if let Some(declaration) = Self::declaration(child) {
-                result.push(declaration);
+            match Self::declaration(child) {
+                Ok(declaration) => result.push(declaration),
+                Err(mut e) => errors.append(&mut e),
             }
         }
 
-        Ok(Block(result))
+        if errors.len() != 0 {
+            Err(errors)
+        } else {
+            Ok(Block(result))
+        }
     }
 }

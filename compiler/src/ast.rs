@@ -164,8 +164,8 @@ macro_rules! instruction {
     }};
 }
 
-pub(crate) trait Compile {
-    fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>>;
+pub(crate) trait Compile<E = anyhow::Error> {
+    fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>, E>;
 }
 
 pub(crate) trait Optimize {}
@@ -173,7 +173,7 @@ pub(crate) trait Optimize {}
 #[derive(Clone, Debug)]
 pub(crate) struct Dependency<'a> {
     pub ident: Cow<'a, Ident>,
-    pub cycles_needed: usize
+    pub cycles_needed: usize,
 }
 
 impl PartialEq for Dependency<'_> {
@@ -181,7 +181,7 @@ impl PartialEq for Dependency<'_> {
         let same_names: bool = self.ident.name() == other.ident.name();
         let same_types: bool = self.ident.ty().unwrap() == other.ident.ty().unwrap();
 
-        same_names && same_types 
+        same_names && same_types
     }
 }
 
@@ -190,18 +190,20 @@ impl<'a> Dependency<'a> {
         self.ident.as_ref().name()
     }
     pub fn new(ident: Cow<'a, Ident>) -> Self {
-        Self { ident, cycles_needed: 0 }
+        Self {
+            ident,
+            cycles_needed: 0,
+        }
     }
     pub fn increment_cycle(&mut self) {
         self.cycles_needed += 1;
     }
 
     /// For self = `Dependency(x)` and other = `Dependency(y)`, check if `x == y` or `x == CallbackVariable(y)`
-    /// 
+    ///
     /// # Errors
     /// Will error if either dependency is typeless.
     pub fn eq_allow_callbacks(&self, other: &Self) -> Result<bool> {
-
         if self.ident.name() != other.ident.name() {
             return Ok(false);
         }
@@ -211,9 +213,9 @@ impl<'a> Dependency<'a> {
 
         if let TypeLayout::CallbackVariable(ptr_ty) = other_ty {
             if other.cycles_needed > 0 {
-                return Ok(self_ty == ptr_ty.as_ref()) 
+                return Ok(self_ty == ptr_ty.as_ref());
             }
-        } 
+        }
 
         Ok(self_ty == other_ty)
     }
@@ -233,14 +235,14 @@ impl<'a> From<&'a Ident> for Dependency<'a> {
 
 /// Default behavior for [`Dependencies::net_dependencies`]. This function is only
 /// separate for public visibility, which allows implementations to call it.
-/// 
+///
 /// Formula:
 /// `[dependencies] - [supplies] = [net]`
-/// 
+///
 /// The algorithm for "satisfying" dependencies is as follows:
 /// * If dependency.name != supplied.name, continue
 /// * If dependency is a variable from a child scope, succeed if supplied.type == dependency.type
-/// * If dependency is not a variable from a child scope, it will be propagated regardless of whether the types 
+/// * If dependency is not a variable from a child scope, it will be propagated regardless of whether the types
 ///   match (required for cases where a variable from a parent scope is copied to a separate local variable with the same name).
 /// * Succeed if supplied.type == dependency.type
 pub(crate) fn get_net_dependencies(ast_item: &dyn Dependencies, is_scope: bool) -> Vec<Dependency> {
@@ -252,7 +254,10 @@ pub(crate) fn get_net_dependencies(ast_item: &dyn Dependencies, is_scope: bool) 
     // For now, this is O(n^2) :(
     'dependency_loop: for mut dependency in dependencies {
         for supplied in &supplies {
-            if supplied.eq_allow_callbacks(&dependency).expect("idents do not have types") {
+            if supplied
+                .eq_allow_callbacks(&dependency)
+                .expect("idents do not have types")
+            {
                 continue 'dependency_loop;
             }
         }
@@ -271,18 +276,18 @@ pub(crate) trait Dependencies {
     /// This method expresses all new variables and identities created by an AST node.
     /// Identities supplied by a parent can be consumed by child AST nodes, but not the
     /// other way around.
-    /// 
+    ///
     /// # Example
     /// A function might have a parameter `input`, and define variables `sum` and `product`.
-    /// Thus, a function's [`Dependencies::supplies`] implementation should return `vec![input, sum, product]`. 
+    /// Thus, a function's [`Dependencies::supplies`] implementation should return `vec![input, sum, product]`.
     fn supplies(&self) -> Vec<Dependency> {
         vec![]
     }
 
-    /// This method expresses all outstanding variables needed by this function. Generally, 
+    /// This method expresses all outstanding variables needed by this function. Generally,
     /// if an AST node comes across an identity, it should add it as a dependency. This even
     /// applies to variables defined inside a scope--If you see it, add it as a dependency.
-    /// 
+    ///
     /// # Example
     /// A function might have a parameter `input`, define variables `sum` and `product`, and
     /// returns `input * product + sum`. Thus, a function's [`Dependencies::dependencies`] implementation
@@ -293,13 +298,13 @@ pub(crate) trait Dependencies {
 
     /// This function is used to calculate the outstanding dependencies by filtering out identities
     /// _needed_ from the identities _supplied_ by an AST node. If implementing an AST node that
-    /// **DIRECTLY** creates a scope (For example, a block of code), this method should be overriden. 
-    /// 
+    /// **DIRECTLY** creates a scope (For example, a block of code), this method should be overriden.
+    ///
     /// [`get_net_dependencies(self, false)`](get_net_dependencies) is the default implementation.
     /// Override this function and pass `true` if dealing with an AST node that creates a scope.
     fn net_dependencies(&self) -> Vec<Dependency>
     where
-        Self: Sized
+        Self: Sized,
     {
         get_net_dependencies(self, false)
     }
@@ -313,13 +318,23 @@ pub fn new_err(span: Span, file_name: &str, message: String) -> Error {
     anyhow!(custom_error)
 }
 
-pub fn map_err<R>(
-    value: impl Into<Result<R>>,
+pub fn map_err<R, E>(
+    value: impl Into<Result<R, E>>,
     span: Span,
     file_name: &str,
     message: String,
 ) -> Result<R> {
-    map_err_messages(value.into(), span, file_name, message, Vec::<u8>::new)
+    let x: Result<R, E> = value.into();
+
+    if let Ok(x) = x {
+        return Ok(x);
+    }
+
+    use pest::error::ErrorVariant::CustomError;
+    use pest_consume::Error as PE;
+    let custom_error = PE::<()>::new_from_span(CustomError { message }, span).with_path(file_name);
+
+    bail!(custom_error)
 }
 
 pub fn map_err_messages<R, C>(
