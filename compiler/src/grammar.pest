@@ -10,7 +10,8 @@ keywords = _{
     "true" |
     "false" |
     "modify" |
-    "const"
+    "const" |
+    "self"
 }
 
 integer = @{ '0'..'9' ~ ('0'..'9' | ("_" ~ ('0'..'9')))* }
@@ -80,7 +81,7 @@ callable = { ident ~ "(" ~ function_arguments ~ ")" }
 
 block = { "{" ~ declaration* ~ "}" }
 
-function_parameters = { ((ident ~ (":" ~ type)?))? ~ ("," ~ ((ident ~ (":" ~ type)?))*)? }
+function_parameters = { ((ident ~ (":" ~ type)?))? ~ ("," ~ ((ident ~ (":" ~ type)?)))* }
 
 function_type = { "fn" ~ "(" ~ (type ~ ("," ~ type)*)? ~ ")" ~ function_return_type?  }
 // allow braces around the return type in case it is long

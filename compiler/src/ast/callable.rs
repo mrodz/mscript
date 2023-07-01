@@ -15,18 +15,37 @@ use super::{
 };
 
 #[derive(Debug)]
+pub(crate) enum CallableDestination {
+    Named {
+        ident: Ident,
+    },
+    ToSelf {
+        return_type: Option<TypeLayout>
+    }
+}
+
+#[derive(Debug)]
 pub(crate) struct Callable {
-    pub ident: Ident,
+    pub destination: CallableDestination,
     pub function_arguments: FunctionArguments,
 }
 
 impl IntoType for Callable {
+    /// return the return type
     fn for_type(&self) -> Result<TypeLayout> {
-        let ident = self.ident.ty()?;
-        let ident = ident.get_type_recursively();
+        static VOID_MSG: &str = "function returns void";
+        let CallableDestination::Named { ident } = &self.destination else {
+            let CallableDestination::ToSelf { return_type } = &self.destination else {
+                unreachable!()
+            };
 
-        let (ScopeReturnStatus::Should(ref return_type) | ScopeReturnStatus::Did(ref return_type)) = ident.is_function().context("not a function")?.return_type.as_ref() else {
-            bail!("function returns void")
+            return return_type.clone().context(VOID_MSG);
+        };
+
+        let ty = ident.ty()?.get_type_recursively();
+
+        let (ScopeReturnStatus::Should(ref return_type) | ScopeReturnStatus::Did(ref return_type)) = ty.is_function().context("not a function")?.return_type.as_ref() else {
+            bail!(VOID_MSG)
         };
 
         let return_type_cloned: TypeLayout = return_type.as_ref().clone();
@@ -92,8 +111,24 @@ impl Compile for Callable {
             })
             .collect();
 
-        let func_name = self.ident.name();
-        let ident = &self.ident;
+
+        if let Some(register_start) = register_start {
+            for register_idx in register_start..register_start + register_count {
+                let name = ArgumentRegisterHandle::repr_from_raw(register_idx);
+                args_init.push(instruction!(load_local name));
+            }
+        }
+
+        ArgumentRegisterHandle::free(register_count);
+
+        let CallableDestination::Named { ident } = &self.destination else {
+            // let CallableDestination::ToSelf { return_type }
+            args_init.push(instruction!(call_self));
+
+            return Ok(args_init);
+        };
+
+        let func_name = ident.name();
 
         let load_instruction = match ident.ty()? {
             Cow::Owned(TypeLayout::CallbackVariable(..))
@@ -103,17 +138,8 @@ impl Compile for Callable {
             _ => instruction!(load func_name),
         };
 
-        if let Some(register_start) = register_start {
-            for register_idx in register_start..register_start + register_count {
-                let name = ArgumentRegisterHandle::repr_from_raw(register_idx);
-                args_init.push(instruction!(load_local name));
-            }
-        }
-
         args_init.push(load_instruction);
         args_init.push(instruction!(call));
-
-        ArgumentRegisterHandle::free(register_count);
 
         Ok(args_init)
     }
@@ -125,7 +151,9 @@ impl Dependencies for Callable {
         // println!("Function Call");
         let mut maybe_arg_dependencies = self.function_arguments.net_dependencies();
 
-        maybe_arg_dependencies.push(Dependency::new(Cow::Borrowed(&self.ident)));
+        if let CallableDestination::Named { ident } = &self.destination {
+            maybe_arg_dependencies.push(Dependency::new(Cow::Borrowed(ident)));
+        }
 
         maybe_arg_dependencies
     }
@@ -139,24 +167,33 @@ impl Parser {
 
         let user_data = input.user_data();
 
-        let mut ident = Self::ident(ident).to_err_vec()?;
+        let destination: CallableDestination = if ident.as_str() != "self" {
+            let mut ident = Self::ident(ident).to_err_vec()?;
 
-        if let Err(e) = ident.link_from_pointed_type_with_lookup(user_data) {
-            return map_err_messages(
-                Err(e),
-                input.as_span(),
-                &input.user_data().get_source_file_name(),
-                "unknown function".into(),
-                || vec!["Attempting to call a function whose type is not known"],
-            )
-            .to_err_vec();
-        }
+            if let Err(e) = ident.link_from_pointed_type_with_lookup(user_data) {
+                return map_err_messages(
+                    Err(e),
+                    input.as_span(),
+                    &input.user_data().get_source_file_name(),
+                    "unknown function".into(),
+                    || vec!["Attempting to call a function whose type is not known"],
+                )
+                .to_err_vec();
+            }
+
+            CallableDestination::Named { ident }
+        } else {
+            let return_type: Option<&Cow<'_, TypeLayout>> = user_data.return_statement_expected_yield_type();
+            let return_type: Option<TypeLayout> = return_type.cloned().map(Cow::into_owned);
+
+            CallableDestination::ToSelf { return_type }
+        };
 
         let function_arguments = children.next().unwrap();
         let function_arguments = Self::function_arguments(function_arguments)?;
 
         Ok(Callable {
-            ident,
+            destination,
             function_arguments,
         })
     }

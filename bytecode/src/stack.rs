@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::rc::Rc;
 
+use crate::context::SpecialScope;
 use crate::rc_to_ref;
 
 use super::variables::Primitive;
@@ -155,6 +156,16 @@ impl Stack {
         &self.0.last().expect("nothing in the stack").label
     }
 
+    pub fn get_executing_function_label(&self) -> Option<&String> {
+        for frame in self.0.iter().rev() {
+            if !SpecialScope::is_label_special_scope(&frame.label) {
+                return Some(&frame.label);
+            }
+        }
+
+        None
+    }
+
     /// Get the variables of the current frame.
     pub fn get_frame_variables(&self) -> &VariableMapping {
         &self.0.last().expect("nothing in the stack").variables
@@ -176,6 +187,22 @@ impl Stack {
     /// Pop the top of the stack frame, releasing all of its resources.
     pub fn pop(&mut self) {
         self.0.pop();
+    }
+
+    pub fn pop_until_function(&mut self) {
+        let mut c = 0;
+        for frame in self.0.iter().rev() {
+            if SpecialScope::is_label_special_scope(&frame.label) {
+                c += 1;
+            } else {
+                break;
+            }
+        }
+
+
+        let size = self.size();
+
+        self.0.drain(size-c..);
     }
 
     /// Search the call stack for a frame with a variable with a matching `name`. Will start at the top (most recent)
