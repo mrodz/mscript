@@ -127,6 +127,7 @@ impl TypeLayout {
             (Int | BigInt, Str, Multiply) => Str,
             //======================
             (x, y, Eq | Neq) if x == y => *x,
+            (Bool, Bool, And | Or | Xor) => Bool,
             _ => return None,
         };
 

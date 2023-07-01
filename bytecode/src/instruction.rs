@@ -197,6 +197,20 @@ pub mod implementations {
             Ok(())
         }
 
+        not(ctx, _args) {
+            let Some(val) = ctx.get_last_op_item_mut() else {
+                bail!("not requires one item on the local operating stack")
+            };
+
+            let Primitive::Bool(val) = val else {
+                bail!("not can only negate booleans")
+            };
+
+            *val = !*val;
+
+            Ok(())
+        }
+
         bin_op(ctx, args) {
             use Primitive::*;
             let symbols = args.first().context("Expected an operation [+,-,*,/,%,>,>=,<,<=]")?;
@@ -216,9 +230,9 @@ pub mod implementations {
                 (">=", ..) => Ok(bool!(left >= right)),
                 ("<=", ..) => Ok(bool!(left <= right)),
                 ("=", ..) => Ok(bool!(left.equals(&right)?)),
-                ("and", Bool(x), Bool(y)) => Ok(bool!(*x && *y)),
-                ("or", Bool(x), Bool(y)) => Ok(bool!(*x || *y)),
-                ("xor", Bool(x), Bool(y)) => Ok(bool!(*x ^ *y)),
+                ("&&", Bool(x), Bool(y)) => Ok(bool!(*x && *y)),
+                ("||", Bool(x), Bool(y)) => Ok(bool!(*x || *y)),
+                ("^", Bool(x), Bool(y)) => Ok(bool!(*x ^ *y)),
                 _ => bail!("unknown operation: {symbols}")
             }.context("invalid binary operation")?;
 
