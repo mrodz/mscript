@@ -21,3 +21,21 @@ print false ^ false
 print !false
 print !true
 print !(true && false)
+
+print "\n" * 3 + "Lazy + Eager Comparisons:"
+
+a = fn() -> bool {
+	print "a"
+	return true
+}
+
+b = fn() -> bool {
+	print "b"
+	return false
+}
+
+print a() && b()
+print b() && a()
+print a() || b()
+print b() || a()
+print a() ^ b()

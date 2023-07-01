@@ -43,7 +43,6 @@ impl Dependencies for Declaration {
                 callable.net_dependencies()
             }
             Self::PrintStatement(print_statement) => {
-                println!("Print Statement");
                 print_statement.net_dependencies()
             }
             Self::ReturnStatement(return_statement) => return_statement.net_dependencies(),

@@ -699,6 +699,44 @@ pub mod implementations {
             Ok(())
         }
 
+        store_skip(ctx, args) {
+            let Some([name, predicate, lines_to_jump]) = args.get(0..=2) else {
+                bail!("store_skip: name:str predicate:u8(1/0) lines_to_jump:usize")
+            };
+
+            let predicate = predicate.parse::<u8>().context("store_skip needs predicate: u8")?;
+            let lines_to_jump = lines_to_jump.parse::<usize>().context("store_skip needs lines_to_jump: usize")?;
+
+            if ctx.stack_size() != 1 {
+                bail!("store_skip can only store a single item");
+            }
+
+            let arg = ctx.pop().unwrap();
+
+            let Primitive::Bool(val) = arg else {
+                bail!("store_skip can only operate on bool (found {arg})");
+            };
+
+            if predicate == 1 {
+                // skip if true
+                if val {
+                    ctx.push(bool!(true));
+                    ctx.signal(InstructionExitState::Goto(lines_to_jump));
+                }
+
+            } else {
+                // skip if false
+                if !val {
+                    ctx.push(bool!(false));
+                    ctx.signal(InstructionExitState::Goto(lines_to_jump));
+                }
+            }
+
+            ctx.register_variable(name.clone(), arg);
+
+            Ok(())
+        }
+
         load(ctx, args) {
             let Some(name) = args.first() else {
                 bail!("load requires a name")
