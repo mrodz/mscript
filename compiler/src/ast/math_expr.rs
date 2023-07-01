@@ -33,7 +33,7 @@
 //!
 //! END LICENSE
 
-use std::{borrow::Cow, rc::Rc};
+use std::rc::Rc;
 
 use anyhow::{anyhow, bail, Context, Result};
 use once_cell::sync::Lazy;

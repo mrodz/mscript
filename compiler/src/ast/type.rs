@@ -120,7 +120,7 @@ impl TypeLayout {
             (BigInt, Int, ..) => BigInt,
             (BigInt, Float, ..) => Float,
             //======================
-            (x, Byte, ..) => x.clone(), // byte will always get overshadowed.
+            (x, Byte, ..) => *x, // byte will always get overshadowed.
             //======================
             (Str, Str | Int | BigInt | Float | Bool, Add) => Str,
             (Str, Int | BigInt, Multiply) => Str,
