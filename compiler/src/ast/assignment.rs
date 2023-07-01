@@ -5,7 +5,8 @@ use anyhow::{bail, Context, Result};
 use crate::{
     ast::CompiledItem,
     instruction,
-    parser::{AssocFileData, Node, Parser, Rule}, VecErr,
+    parser::{AssocFileData, Node, Parser, Rule},
+    VecErr,
 };
 
 use super::{map_err, new_err, value::Value, Compile, Dependencies, Dependency, Ident};
@@ -206,7 +207,12 @@ impl Parser {
             result.add_flag(flag.as_str().into())?;
         }
 
-        map_err(result.validate(), input.as_span(), &input.user_data().get_source_file_name(), "bad assignment flags".into())?;
+        map_err(
+            result.validate(),
+            input.as_span(),
+            &input.user_data().get_source_file_name(),
+            "bad assignment flags".into(),
+        )?;
 
         Ok(result)
     }
@@ -267,7 +273,7 @@ impl Parser {
                 format!(
                     "cannot mutate \"{}\", which is a const variable",
                     x.ident.name()
-                )
+                ),
             )]);
         }
 

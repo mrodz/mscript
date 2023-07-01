@@ -266,69 +266,70 @@ pub(crate) fn parse_expr(
     user_data: Rc<AssocFileData>,
 ) -> Result<Expr, Vec<anyhow::Error>> {
     let maybe_expr = PRATT_PARSER
-        .map_primary(|primary| -> Result<(Expr, Option<Span>), Vec<anyhow::Error>> {
-            let primary_span = primary.as_span();
-            let expr: Expr = match primary.as_rule() {
-                Rule::number => {
-                    let raw_string = primary.as_str();
-                    let child = primary.into_inner().next().unwrap();
-                    let number = number::number_from_string(raw_string, child.as_rule()).unwrap();
+        .map_primary(
+            |primary| -> Result<(Expr, Option<Span>), Vec<anyhow::Error>> {
+                let primary_span = primary.as_span();
+                let expr: Expr = match primary.as_rule() {
+                    Rule::number => {
+                        let raw_string = primary.as_str();
+                        let child = primary.into_inner().next().unwrap();
+                        let number =
+                            number::number_from_string(raw_string, child.as_rule()).unwrap();
 
-                    Expr::Value(Value::Number(number))
-                }
-                Rule::string => {
-                    let raw_string = primary.as_str();
-                    Expr::Value(Value::String(AstString::Plain(
-                        raw_string.to_owned(),
-                    )))
-                }
-                Rule::ident => {
-                    let raw_string = primary.as_str();
+                        Expr::Value(Value::Number(number))
+                    }
+                    Rule::string => {
+                        let raw_string = primary.as_str();
+                        Expr::Value(Value::String(AstString::Plain(raw_string.to_owned())))
+                    }
+                    Rule::ident => {
+                        let raw_string = primary.as_str();
 
-                    let file_name = user_data.get_file_name();
+                        let file_name = user_data.get_file_name();
 
-                    let (ident, is_callback) = user_data
-                        .get_dependency_flags_from_name(&raw_string.to_string())
-                        .with_context(|| {
-                            new_err(
-                                primary.as_span(),
-                                &file_name,
-                                "use of undeclared variable".into(),
-                            )
-                        })
-                        .to_err_vec()?;
+                        let (ident, is_callback) = user_data
+                            .get_dependency_flags_from_name(&raw_string.to_string())
+                            .with_context(|| {
+                                new_err(
+                                    primary.as_span(),
+                                    &file_name,
+                                    "use of undeclared variable".into(),
+                                )
+                            })
+                            .to_err_vec()?;
 
-                    let cloned = if is_callback {
-                        ident.clone().wrap_in_callback().to_err_vec()?
-                    } else {
-                        ident.clone()
-                    };
+                        let cloned = if is_callback {
+                            ident.clone().wrap_in_callback().to_err_vec()?
+                        } else {
+                            ident.clone()
+                        };
 
-                    Expr::Value(Value::Ident(cloned))
-                }
-                Rule::math_expr => parse_expr(primary.into_inner(), user_data.clone())?,
-                Rule::callable => {
-                    let x = util::parse_with_userdata(
-                        Rule::callable,
-                        primary.as_str(),
-                        user_data.clone(),
-                    )
-                    .map_err(|e| vec![anyhow!(e)])?;
+                        Expr::Value(Value::Ident(cloned))
+                    }
+                    Rule::math_expr => parse_expr(primary.into_inner(), user_data.clone())?,
+                    Rule::callable => {
+                        let x = util::parse_with_userdata(
+                            Rule::callable,
+                            primary.as_str(),
+                            user_data.clone(),
+                        )
+                        .map_err(|e| vec![anyhow!(e)])?;
 
-                    let single = x.single().map_err(|e| vec![anyhow!(e)])?;
+                        let single = x.single().map_err(|e| vec![anyhow!(e)])?;
 
-                    let callable = Parser::callable(single)?;
+                        let callable = Parser::callable(single)?;
 
-                    Expr::Value(Value::Callable(callable))
-                }
-                Rule::boolean => Expr::Value(Value::Boolean(boolean_from_str(
-                    primary.as_str(),
-                ))),
-                rule => unreachable!("Expr::parse expected atom, found {:?}", rule),
-            };
+                        Expr::Value(Value::Callable(callable))
+                    }
+                    Rule::boolean => {
+                        Expr::Value(Value::Boolean(boolean_from_str(primary.as_str())))
+                    }
+                    rule => unreachable!("Expr::parse expected atom, found {:?}", rule),
+                };
 
-            Ok((expr, Some(primary_span)))
-        })
+                Ok((expr, Some(primary_span)))
+            },
+        )
         .map_infix(|lhs, op, rhs| {
             let (lhs, l_span) = lhs?;
             let (rhs, _) = rhs?;
@@ -355,9 +356,12 @@ pub(crate) fn parse_expr(
             };
 
             if let Err(e) = bin_op.validate() {
-                return Err(vec![new_err(l_span.unwrap(), &user_data.get_source_file_name(), e.to_string())])
+                return Err(vec![new_err(
+                    l_span.unwrap(),
+                    &user_data.get_source_file_name(),
+                    e.to_string(),
+                )]);
             }
-
 
             Ok((bin_op, None))
         })

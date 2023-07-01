@@ -88,7 +88,10 @@ impl Compile for FunctionParameters {
 
 impl Parser {
     /// this is the first thing that gets parsed in a function
-    pub fn function_parameters(input: Node, add_to_scope_dependencies: bool) -> Result<FunctionParameters> {
+    pub fn function_parameters(
+        input: Node,
+        add_to_scope_dependencies: bool,
+    ) -> Result<FunctionParameters> {
         let mut children = input.children();
 
         let mut result: Vec<Ident> = vec![];

@@ -2,7 +2,9 @@ use anyhow::Result;
 
 use crate::{
     instruction,
-    parser::{Node, Parser, Rule}, scope::ScopeReturnStatus, VecErr,
+    parser::{Node, Parser, Rule},
+    scope::ScopeReturnStatus,
+    VecErr,
 };
 
 use super::{new_err, r#type::IntoType, Block, Compile, CompiledItem, Dependencies, Value};
@@ -92,14 +94,20 @@ impl Parser {
             return Err(vec![new_err(
                 input.as_span(),
                 &input.user_data().get_source_file_name(),
-                "this value is not boolean, and cannot be used to evaluate an \"if\" statement".to_owned()
-            )])
+                "this value is not boolean, and cannot be used to evaluate an \"if\" statement"
+                    .to_owned(),
+            )]);
         }
 
         let can_determine_is_if_branch_truthy = false; // TODO
 
-        let child_returns_type = input.user_data().return_statement_expected_yield_type()
-            .map_or_else(|| ScopeReturnStatus::No, |ty| ScopeReturnStatus::ParentShould(ty.clone()));
+        let child_returns_type = input
+            .user_data()
+            .return_statement_expected_yield_type()
+            .map_or_else(
+                || ScopeReturnStatus::No,
+                |ty| ScopeReturnStatus::ParentShould(ty.clone()),
+            );
 
         input.user_data().push_if_typed(child_returns_type);
         let body_as_block = Self::block(body)?;
@@ -108,18 +116,25 @@ impl Parser {
 
         let do_all_if_branches_return = child_returns_type.all_branches_return();
 
-        let (else_statement, do_all_else_branches_return) = if let Some(else_statement) = else_statement {
-            input.user_data().push_else_typed(child_returns_type);
-            let x = Some(Self::else_statement(else_statement)?);
-            let child_returns_type = input.user_data().pop_scope();
+        let (else_statement, do_all_else_branches_return) =
+            if let Some(else_statement) = else_statement {
+                input.user_data().push_else_typed(child_returns_type);
+                let x = Some(Self::else_statement(else_statement)?);
+                let child_returns_type = input.user_data().pop_scope();
 
-            (x, child_returns_type.all_branches_return())
-        } else {
-            (None, false)
-        };
+                (x, child_returns_type.all_branches_return())
+            } else {
+                (None, false)
+            };
 
-        if do_all_if_branches_return && (do_all_else_branches_return || can_determine_is_if_branch_truthy) {
-            input.user_data().get_return_type().mark_should_return_as_completed().to_err_vec()?;
+        if do_all_if_branches_return
+            && (do_all_else_branches_return || can_determine_is_if_branch_truthy)
+        {
+            input
+                .user_data()
+                .get_return_type()
+                .mark_should_return_as_completed()
+                .to_err_vec()?;
         }
 
         Ok(IfStatement {

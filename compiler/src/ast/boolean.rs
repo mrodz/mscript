@@ -27,7 +27,7 @@ pub fn boolean_from_str(str: &str) -> bool {
 }
 
 impl Parser {
-	#[allow(dead_code)]
+    #[allow(dead_code)]
     pub fn boolean(input: Node) -> bool {
         boolean_from_str(input.as_str())
     }

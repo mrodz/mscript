@@ -8,7 +8,7 @@ use std::fmt::Display;
 /// This macro allows easy recursion over variants.
 macro_rules! primitive {
     ($($variant:ident($type:ty)),+ $(,)?) => {
-        /// Every possible form of variable data used in the interpreter. 
+        /// Every possible form of variable data used in the interpreter.
         #[derive(PartialEq, Debug, Clone)]
         pub enum Primitive {
             $(
@@ -57,7 +57,7 @@ primitive! {
 
 impl Primitive {
     /// Compare two [`Primitive`] values.
-    /// 
+    ///
     /// # Errors
     /// Will error if the primitive values cannot be compared.
     pub fn equals(&self, rhs: &Self) -> Result<bool> {
@@ -66,7 +66,7 @@ impl Primitive {
         /// ```ignore
         /// impl_eq!(VariantBase with Variant1(r=CoerseTo), Variant2(r=CoerseTo), Variant3(r=CoerseTo));
         /// ```
-        /// 
+        ///
         /// ## Allows Variant4 == Variant4, Variant5 == Variant5        
         /// ```ignore
         /// impl_eq!(each Variant4, Variant5 with itself);
@@ -180,7 +180,7 @@ impl Primitive {
     }
 
     /// Attempt to negate a bytecode primitive.
-    /// 
+    ///
     /// # Errors
     /// Will error if the primitive is not a number.
     pub fn negate(&mut self) -> Result<()> {
@@ -251,8 +251,8 @@ impl From<&str> for Primitive {
 
 #[cfg(test)]
 mod tests {
-    use crate::{bigint, bool, byte, float, int, string};
     use super::Primitive;
+    use crate::{bigint, bool, byte, float, int, string};
     use std::f64::consts::PI;
 
     #[test]

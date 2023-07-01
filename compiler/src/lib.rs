@@ -58,8 +58,7 @@ impl VerboseLogger {
         &self,
         message: impl Into<Cow<'static, str>>,
         action: impl FnOnce() -> Result<R, Vec<anyhow::Error>>,
-    ) -> Result<R, Vec<anyhow::Error>>
-    {
+    ) -> Result<R, Vec<anyhow::Error>> {
         let Some(ref progress_bars) = self.progress_bars else {
             return action();
         };
@@ -100,7 +99,7 @@ pub trait VecErr<T> {
     fn to_err_vec(self) -> Result<T, Vec<anyhow::Error>>;
 }
 
-impl <T>VecErr<T> for Result<T> {
+impl<T> VecErr<T> for Result<T> {
     fn to_err_vec(self) -> Result<T, Vec<anyhow::Error>> {
         self.map_err(|e| vec![e])
     }
@@ -109,13 +108,21 @@ impl <T>VecErr<T> for Result<T> {
 /// # Todo
 /// Unit tests can use this function
 #[allow(unused)]
-pub(crate) fn compile_str(mscript_code: &str, unit_name: &str) -> Result<Vec<CompiledItem>, Vec<anyhow::Error>> {
+pub(crate) fn compile_str(
+    mscript_code: &str,
+    unit_name: &str,
+) -> Result<Vec<CompiledItem>, Vec<anyhow::Error>> {
     let logger = VerboseLogger::new(false);
 
     let input_path = format!("{unit_name}.ms");
     let output_path = format!("{unit_name}.mmm");
 
-    compile_from_str(&logger, Path::new(&input_path), Path::new(&output_path), mscript_code)
+    compile_from_str(
+        &logger,
+        Path::new(&input_path),
+        Path::new(&output_path),
+        mscript_code,
+    )
 }
 
 pub(crate) fn compile_from_str(
@@ -132,8 +139,9 @@ pub(crate) fn compile_from_str(
         root_node_from_str(mscript_code, user_data.clone())
     })?;
 
-    let file =
-        logger.wrap_in_spinner(format!("Creating AST ({input_path:?}):"), || Parser::file(input))?;
+    let file = logger.wrap_in_spinner(format!("Creating AST ({input_path:?}):"), || {
+        Parser::file(input)
+    })?;
 
     let mut function_buffer = vec![];
     logger.wrap_in_spinner(format!("Validating AST ({input_path:?}):"), || {
@@ -147,7 +155,7 @@ pub(crate) fn compile_from_str(
 
 pub fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<(), Vec<anyhow::Error>> {
     let start_time = Instant::now();
-    
+
     let input_path = Path::new(path_str);
 
     let Some(ext) = input_path.extension() else {
@@ -155,7 +163,10 @@ pub fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<(), Ve
     };
 
     if !ext.eq_ignore_ascii_case("ms") {
-        return Err(anyhow!("MScript uses `.ms` file extensions. Please check your file extensions.")).to_err_vec();
+        return Err(anyhow!(
+            "MScript uses `.ms` file extensions. Please check your file extensions."
+        ))
+        .to_err_vec();
     }
 
     let output_path = input_path.with_extension("mmm");
@@ -166,7 +177,9 @@ pub fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<(), Ve
 
     let mut buffer = String::new();
 
-    reader.read_to_string(&mut buffer).map_err(|e| vec![anyhow!(e)])?;
+    reader
+        .read_to_string(&mut buffer)
+        .map_err(|e| vec![anyhow!(e)])?;
 
     let logger = VerboseLogger::new(verbose);
 
@@ -179,7 +192,8 @@ pub fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<(), Ve
         .read(true)
         .write(true)
         .truncate(true)
-        .open(output_path).map_err(|e| vec![anyhow!(e)])?;
+        .open(output_path)
+        .map_err(|e| vec![anyhow!(e)])?;
 
     let writing_pb = logger.add(|| {
         let template =
@@ -215,11 +229,15 @@ pub fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<(), Ve
 
     if let Some(ref writing_pb) = writing_pb {
         for x in writing_pb.wrap_iter(iter) {
-            for_each(x).with_context(|| format!("{function_buffer:#?}")).to_err_vec()?;
+            for_each(x)
+                .with_context(|| format!("{function_buffer:#?}"))
+                .to_err_vec()?;
         }
     } else {
         for x in iter {
-            for_each(x).with_context(|| format!("{function_buffer:#?}")).to_err_vec()?;
+            for_each(x)
+                .with_context(|| format!("{function_buffer:#?}"))
+                .to_err_vec()?;
         }
     }
 

@@ -1,12 +1,13 @@
 use std::{borrow::Cow, fmt::Display, rc::Rc};
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 
 use crate::{
-    ast::{CompiledFunctionId, new_err},
+    ast::{new_err, CompiledFunctionId},
     instruction,
     parser::{Node, Parser, Rule},
-    scope::ScopeReturnStatus, VecErr,
+    scope::ScopeReturnStatus,
+    VecErr,
 };
 
 use super::{
@@ -40,7 +41,9 @@ impl PartialEq for FunctionType {
             return false;
         }
 
-        let return_types = self.return_type.eq_for_signature_checking(&other.return_type);
+        let return_types = self
+            .return_type
+            .eq_for_signature_checking(&other.return_type);
 
         if let Ok(false) | Err(..) = return_types {
             return false;
@@ -244,11 +247,13 @@ impl Parser {
             Block::empty_body()
         };
 
-
         if !input.user_data().did_scope_exit_with_value_if_required() {
-            return Err(vec![
-                new_err(input.as_span(), &input.user_data().get_source_file_name(), "this function reached its end without a return, when it expected a value".to_owned())
-            ])
+            return Err(vec![new_err(
+                input.as_span(),
+                &input.user_data().get_source_file_name(),
+                "this function reached its end without a return, when it expected a value"
+                    .to_owned(),
+            )]);
         }
 
         let return_type = input.user_data().pop_scope();

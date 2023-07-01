@@ -1,10 +1,12 @@
 use std::borrow::Cow;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 
 use crate::{
     instruction,
-    parser::{Node, Parser}, scope::ScopeReturnStatus, VecErr,
+    parser::{Node, Parser},
+    scope::ScopeReturnStatus,
+    VecErr,
 };
 
 use super::{
@@ -51,7 +53,9 @@ impl ArgumentRegisterHandle {
 
     pub fn free(tally: usize) {
         unsafe {
-            ARGUMENT_REGISTER = ARGUMENT_REGISTER.checked_sub(tally).expect("freeing too many registers");
+            ARGUMENT_REGISTER = ARGUMENT_REGISTER
+                .checked_sub(tally)
+                .expect("freeing too many registers");
         }
     }
 
@@ -76,7 +80,7 @@ impl Compile for Callable {
                 let mut value_init = x.compile(function_buffer).unwrap();
 
                 let argument_register = ArgumentRegisterHandle::new();
-                value_init.push(instruction!(store (argument_register.repr())));
+                value_init.push(instruction!(store(argument_register.repr())));
 
                 if register_start.is_none() {
                     register_start = Some(argument_register.0);
@@ -100,7 +104,7 @@ impl Compile for Callable {
         };
 
         if let Some(register_start) = register_start {
-            for register_idx in register_start..register_start+register_count {
+            for register_idx in register_start..register_start + register_count {
                 let name = ArgumentRegisterHandle::repr_from_raw(register_idx);
                 args_init.push(instruction!(load_local name));
             }
@@ -144,7 +148,8 @@ impl Parser {
                 &input.user_data().get_source_file_name(),
                 "unknown function".into(),
                 || vec!["Attempting to call a function whose type is not known"],
-            ).to_err_vec()
+            )
+            .to_err_vec();
         }
 
         let function_arguments = children.next().unwrap();

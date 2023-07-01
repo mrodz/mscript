@@ -5,7 +5,8 @@ use anyhow::Result;
 use crate::{
     ast::TypeLayout,
     instruction,
-    parser::{Node, Parser}, VecErr,
+    parser::{Node, Parser},
+    VecErr,
 };
 
 use super::{map_err, Compile, CompiledItem, Dependencies, Dependency, Value};
@@ -70,14 +71,14 @@ impl Compile for PrintStatement {
             }
             Value::Callable(callable) => {
                 let mut callable_init = callable.compile(function_buffer)?;
-                
+
                 callable_init.append(&mut vec![instruction!(printn '*'), instruction!(void)]);
 
                 callable_init
             }
             Value::Boolean(boolean) => {
                 let mut boolean_init = boolean.compile(function_buffer)?;
-                
+
                 boolean_init.append(&mut vec![instruction!(printn '*'), instruction!(void)]);
 
                 boolean_init
@@ -101,9 +102,9 @@ impl Parser {
                     input.as_span(),
                     &input.user_data().get_file_name(),
                     "Name is not mapped".into(),
-                ).to_err_vec()
+                )
+                .to_err_vec();
             }
-            
         }
 
         Ok(PrintStatement(value))

@@ -216,6 +216,10 @@ impl Parser {
 
         // println!("\n******\n{name} referenced\n******\n");
 
-        Ok(Ident { name, ty: None, read_only: false })
+        Ok(Ident {
+            name,
+            ty: None,
+            read_only: false,
+        })
     }
 }

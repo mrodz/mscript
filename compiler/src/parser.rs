@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::{cell::RefCell, rc::Rc};
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use pest_consume::Parser as ParserDerive;
 
 use crate::ast::{Compile, CompiledFunctionId, CompiledItem, Declaration, Ident, TypeLayout};
@@ -186,7 +186,10 @@ pub mod util {
     }
 }
 
-pub(crate) fn root_node_from_str(input_str: &str, user_data: Rc<AssocFileData>) -> Result<Node, Vec<anyhow::Error>> {
+pub(crate) fn root_node_from_str(
+    input_str: &str,
+    user_data: Rc<AssocFileData>,
+) -> Result<Node, Vec<anyhow::Error>> {
     let source_name = &*user_data.get_source_file_name();
     let x = util::parse_with_userdata(Rule::file, input_str, user_data).map_err(|err| {
         err.with_path(source_name).renamed_rules(|rule| match rule {
@@ -217,7 +220,10 @@ impl File {
 }
 
 impl Compile<Vec<anyhow::Error>> for File {
-    fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>, Vec<anyhow::Error>> {
+    fn compile(
+        &self,
+        function_buffer: &mut Vec<CompiledItem>,
+    ) -> Result<Vec<CompiledItem>, Vec<anyhow::Error>> {
         let mut global_scope_code = vec![];
 
         let mut errors = vec![];
@@ -230,7 +236,7 @@ impl Compile<Vec<anyhow::Error>> for File {
         }
 
         if !errors.is_empty() {
-            return Err(errors)
+            return Err(errors);
         }
 
         global_scope_code.push(instruction!(ret));

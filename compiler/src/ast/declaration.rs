@@ -2,11 +2,14 @@ use std::fmt::Debug;
 
 use anyhow::Result;
 
-use crate::{parser::{Node, Parser, Rule}, instruction};
+use crate::{
+    instruction,
+    parser::{Node, Parser, Rule},
+};
 
 use super::{
-    assignment::Assignment, Callable, Compile, CompiledItem, Dependencies, Dependency,
-    PrintStatement, r#return::ReturnStatement, if_statement::IfStatement,
+    assignment::Assignment, if_statement::IfStatement, r#return::ReturnStatement, Callable,
+    Compile, CompiledItem, Dependencies, Dependency, PrintStatement,
 };
 
 #[derive(Debug)]
@@ -15,7 +18,7 @@ pub(crate) enum Declaration {
     Callable(Callable),
     PrintStatement(PrintStatement),
     ReturnStatement(ReturnStatement),
-    IfStatement(IfStatement)
+    IfStatement(IfStatement),
 }
 
 impl Dependencies for Declaration {
@@ -43,12 +46,8 @@ impl Dependencies for Declaration {
                 println!("Print Statement");
                 print_statement.net_dependencies()
             }
-            Self::ReturnStatement(return_statement) => {
-                return_statement.net_dependencies()
-            }
-            Self::IfStatement(if_statement) => {
-                if_statement.net_dependencies()
-            }
+            Self::ReturnStatement(return_statement) => return_statement.net_dependencies(),
+            Self::IfStatement(if_statement) => if_statement.net_dependencies(),
         }
     }
 }
@@ -83,9 +82,7 @@ impl Parser {
             Rule::return_statement => {
                 Declaration::ReturnStatement(Self::return_statement(declaration)?)
             }
-            Rule::if_statement => {
-                Declaration::IfStatement(Self::if_statement(declaration)?)
-            }
+            Rule::if_statement => Declaration::IfStatement(Self::if_statement(declaration)?),
             _ => unreachable!(),
         };
 

@@ -2,7 +2,10 @@ use std::{borrow::Cow, ops::Deref};
 
 use anyhow::Result;
 
-use crate::{parser::{AssocFileData, Node, Parser, Rule}, VecErr};
+use crate::{
+    parser::{AssocFileData, Node, Parser, Rule},
+    VecErr,
+};
 
 use super::{
     math_expr::Expr, r#type::IntoType, string::AstString, Callable, Compile, CompiledItem,

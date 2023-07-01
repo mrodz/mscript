@@ -8,7 +8,7 @@ mod rem;
 mod sub;
 
 /// Common math operation checks.
-/// 
+///
 /// | Input x | Input y | Output |
 /// | ------- | ------- | ------ |
 /// | Int     | Int     | Int    |

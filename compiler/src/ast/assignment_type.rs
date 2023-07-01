@@ -3,13 +3,16 @@ use std::borrow::Cow;
 use anyhow::Result;
 
 use super::r#type::IntoType;
-use super::{Assignment, Value, new_err};
-use crate::VecErr;
+use super::{new_err, Assignment, Value};
 use crate::ast::{Ident, TypeLayout};
 use crate::parser::{Node, Parser};
+use crate::VecErr;
 
 impl Parser {
-    pub fn assignment_type(input: Node, is_const: bool) -> Result<(Assignment, bool), Vec<anyhow::Error>> {
+    pub fn assignment_type(
+        input: Node,
+        is_const: bool,
+    ) -> Result<(Assignment, bool), Vec<anyhow::Error>> {
         let mut children = input.children();
 
         let ident: Node = children.next().unwrap();
@@ -42,11 +45,13 @@ impl Parser {
                     ty_span,
                     &input.user_data().get_source_file_name(),
                     message,
-                )])
+                )]);
             }
         }
 
-        ident.link_force_no_inherit(input.user_data(), ty).to_err_vec()?;
+        ident
+            .link_force_no_inherit(input.user_data(), ty)
+            .to_err_vec()?;
 
         let assignment = Assignment::new(ident, value);
 

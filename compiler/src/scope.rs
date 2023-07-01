@@ -1,6 +1,6 @@
 use std::{borrow::Cow, collections::HashSet};
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 
 use crate::ast::{Ident, TypeLayout};
 
@@ -29,7 +29,7 @@ impl ScopeReturnStatus {
 
         if let Self::Should(left) | Self::Did(left) = self {
             if let Self::Should(right) | Self::Did(right) = rhs {
-                return Ok(left == right)
+                return Ok(left == right);
             }
         }
 

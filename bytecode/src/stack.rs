@@ -14,7 +14,7 @@ pub(crate) mod flag_constants {
     pub const READ_ONLY: u8 = 0b00000001;
     pub const PUBLIC: u8 = 0b00000010;
     pub const LOCAL_FRAME_ONLY: u8 = 0b00000100;
-    pub const LOOP_VARIABLE: u8 = 0b00001000;    
+    pub const LOOP_VARIABLE: u8 = 0b00001000;
 }
 
 #[derive(PartialEq, Clone)]
@@ -110,9 +110,9 @@ impl VariableMapping {
         self.0.get(key).cloned()
     }
 
-    /// Update the value of a variable that has already been registered. 
+    /// Update the value of a variable that has already been registered.
     /// The variable will keep **ALL** of the flags from its previous mapping.
-    /// 
+    ///
     /// # Errors
     /// This function can error if the variable has not been mapped, or if the name is read-only.
     pub fn update(&mut self, name: &String, value: Primitive) -> Result<()> {

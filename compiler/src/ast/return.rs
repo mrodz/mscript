@@ -94,13 +94,13 @@ impl Parser {
 		};
 
         if expected_return_type != &Cow::Borrowed(supplied_type) {
-			return Err(vec![new_err(
+            return Err(vec![new_err(
                 input.as_span(),
                 &input.user_data().get_source_file_name(),
                 format!(
 					"this function was expected to return {expected_return_type}, but {supplied_type} was supplied"
-				)
-            )])
+				),
+            )]);
         }
 
         // #2
