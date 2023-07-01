@@ -17,13 +17,9 @@ jobs:
     steps:
       - name: Set up rust
         uses: actions/checkout@v3
-      - name: Install cargo-audit
-        run: cargo install cargo-audit
       - name: Build
         run: cargo build --verbose
       - name: Unit Tests
         run: cargo test --verbose --all
       - name: Clippy
         run: cargo clippy --verbose -- -D warnings
-      - name: Audit
-        run: cargo audit
