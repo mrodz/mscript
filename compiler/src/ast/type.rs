@@ -108,6 +108,22 @@ impl TypeLayout {
         use Op::*;
 
         let matched = match (me, other, op) {
+            (lhs, rhs, Gt | Lt | Gte | Lte | Eq | Neq) => {
+                if lhs == rhs {
+                    Bool
+                } else {
+                    match (lhs, rhs) {
+                        (Int,  BigInt | Float | Byte) => Bool,
+                        //======================
+                        (Float, Int | BigInt | Byte) => Bool,
+                        //======================
+                        (BigInt, Int | Float | Byte) => Bool,
+                        //======================
+                        (Byte, Int | BigInt | Float) => Bool,
+                        _ => return None,
+                    }
+                }
+            }
             (Int, Int, ..) => Int,
             (Int, BigInt, ..) => BigInt,
             (Int, Float, ..) => Float,
@@ -126,7 +142,6 @@ impl TypeLayout {
             (Str, Int | BigInt, Multiply) => Str,
             (Int | BigInt, Str, Multiply) => Str,
             //======================
-            (x, y, Eq | Neq) if x == y => *x,
             (Bool, Bool, And | Or | Xor) => Bool,
             _ => return None,
         };

@@ -604,6 +604,26 @@ pub mod implementations {
             Ok(())
         }
 
+        call_self(ctx, _args) {
+            let arguments = ctx.get_local_operating_stack();
+
+            let callback_state = ctx.get_callback_variables();
+
+            let stack = ctx.rced_call_stack();
+            let name = stack.get_executing_function_label().context("not run in a function")?;
+
+            ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
+                destination: JumpRequestDestination::Standard(name.clone()),
+                callback_state,
+                stack,
+                arguments
+            }));
+
+            ctx.clear_stack();
+
+            Ok(())
+        }
+
         arg(ctx, args) {
             let Some(first) = args.first() else {
                 bail!("expected one argument")

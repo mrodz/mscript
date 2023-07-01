@@ -135,16 +135,19 @@ pub(crate) fn compile_from_str(
         output_path.to_string_lossy().to_string(),
     ));
 
-    let input = logger.wrap_in_spinner(format!("Parsing ({input_path:?}):"), || {
+    let input_path_str = input_path.to_string_lossy();
+
+    let input = logger.wrap_in_spinner(format!("Parsing ({input_path_str}):"), || {
         root_node_from_str(mscript_code, user_data.clone())
     })?;
 
-    let file = logger.wrap_in_spinner(format!("Creating AST ({input_path:?}):"), || {
+
+    let file = logger.wrap_in_spinner(format!("Creating AST ({input_path_str}):"), || {
         Parser::file(input)
     })?;
 
     let mut function_buffer = vec![];
-    logger.wrap_in_spinner(format!("Validating AST ({input_path:?}):"), || {
+    logger.wrap_in_spinner(format!("Validating AST ({input_path_str}):"), || {
         file.compile(&mut function_buffer)?;
 
         Ok(())

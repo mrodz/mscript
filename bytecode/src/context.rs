@@ -21,14 +21,24 @@ pub enum SpecialScope {
     Else,
 }
 
+
+static DISPLAY_NAME_IF_SCOPE: &'static str = "<if>";
+static DISPLAY_NAME_ELSE_SCOPE: &'static str = "<else>";
+
+impl SpecialScope {
+    pub fn is_label_special_scope(label: &str) -> bool {
+        label == DISPLAY_NAME_IF_SCOPE || label == DISPLAY_NAME_ELSE_SCOPE
+    }
+}
+
 impl Display for SpecialScope {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "{}",
             match self {
-                Self::If => "<if>",
-                Self::Else => "<else>",
+                Self::If => DISPLAY_NAME_IF_SCOPE,
+                Self::Else => DISPLAY_NAME_ELSE_SCOPE,
             }
         )
     }
@@ -275,5 +285,9 @@ impl<'a> Ctx<'a> {
     /// when searching for variables that should exist in the same stack frame.
     pub(crate) fn load_local(&self, name: &String) -> Option<Rc<(Primitive, VariableFlags)>> {
         self.call_stack.get_frame_variables().get(name)
+    }
+
+    pub(crate) fn get_callback_variables(&self) -> Option<Rc<VariableMapping>> {
+        self.callback_state.as_ref().cloned()
     }
 }

@@ -311,7 +311,7 @@ impl Function {
             // process the exit state
             match ret {
                 InstructionExitState::ReturnValue(ret) => {
-                    rc_to_ref(&current_frame).pop();
+                    rc_to_ref(&current_frame).pop_until_function();
                     return Ok(ret.clone());
                 }
                 InstructionExitState::JumpRequest(jump_request) => {
