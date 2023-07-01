@@ -65,6 +65,9 @@ pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
             | Op::infix(gte, Left)
             | Op::infix(eq, Left)
             | Op::infix(neq, Left))
+        .op(Op::infix(or, Left) | Op::infix(xor, Left))
+        .op(Op::infix(and, Left))
+        .op(Op::prefix(not))
 });
 
 #[derive(Debug, Clone)]
@@ -80,6 +83,9 @@ pub enum Op {
     Gte,
     Eq,
     Neq,
+    And,
+    Or,
+    Xor,
 }
 
 impl Op {
@@ -97,6 +103,9 @@ impl Op {
             Gte => ">=",
             Eq => "==",
             Neq => "!=",
+            And => "&&",
+            Or => "||",
+            Xor => "^"
         }
     }
 }
@@ -106,6 +115,7 @@ pub(crate) enum Expr {
     // Number(Number),
     Value(Value),
     UnaryMinus(Box<Expr>),
+    UnaryNot(Box<Expr>),
     BinOp {
         lhs: Box<Expr>,
         op: Op,
@@ -135,7 +145,7 @@ impl IntoType for Expr {
                     )
                 })
             }
-            Expr::UnaryMinus(val) => val.for_type(),
+            Expr::UnaryMinus(val) | Expr::UnaryNot(val) => val.for_type(),
         }
     }
 }
@@ -144,7 +154,7 @@ impl Dependencies for Expr {
     fn dependencies(&self) -> Vec<Dependency> {
         match self {
             Self::Value(val) => val.net_dependencies(),
-            Self::UnaryMinus(expr) => expr.net_dependencies(),
+            Self::UnaryMinus(expr) | Self::UnaryNot(expr) => expr.net_dependencies(),
             Self::BinOp { lhs, rhs, .. } => {
                 let mut lhs_dep = lhs.net_dependencies();
                 let mut rhs_dep = rhs.net_dependencies();
@@ -206,6 +216,26 @@ fn compile_depth(
 ) -> Result<Vec<CompiledItem>> {
     match expr {
         Expr::Value(val) => val.compile(function_buffer),
+        Expr::UnaryNot(expr) => {
+            if let Expr::Value(value) = expr.as_ref() {
+                match value {
+                    Value::Ident(ident) => {
+                        let x = ident.ty().context("no type data")?;
+                        if !x.is_boolean() {
+                            bail!("not can only be performed on a boolean value");
+                        }
+                    }
+                    Value::Boolean(..) => (),
+                    _ => bail!("cannot apply binary not"),
+                }
+            }
+
+            let mut eval = expr.compile(function_buffer)?;
+
+            eval.push(instruction!(not));
+
+            Ok(eval)
+        }
         Expr::UnaryMinus(expr) => {
             if let Expr::Value(value) = expr.as_ref() {
                 match value {
@@ -346,6 +376,9 @@ pub(crate) fn parse_expr(
                 Rule::gte => Op::Gte,
                 Rule::eq => Op::Eq,
                 Rule::neq => Op::Neq,
+                Rule::and => Op::And,
+                Rule::or => Op::Or,
+                Rule::xor => Op::Xor,
                 rule => unreachable!("Expr::parse expected infix operation, found {:?}", rule),
             };
 
@@ -369,6 +402,7 @@ pub(crate) fn parse_expr(
             // Rule::unary_minus if op.as_str().len() % 2 != 0 => Expr::UnaryMinus(Box::new(rhs)),
             // Rule::unary_minus => rhs,
             Rule::unary_minus => Ok((Expr::UnaryMinus(Box::new(rhs?.0)), None)),
+            Rule::not => Ok((Expr::UnaryNot(Box::new(rhs?.0)), None)),
             _ => unreachable!(),
         })
         .parse(pairs);
