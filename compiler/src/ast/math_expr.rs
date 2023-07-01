@@ -70,7 +70,7 @@ pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
         .op(Op::prefix(not))
 });
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Op {
     Add,
     Subtract,
@@ -263,13 +263,42 @@ fn compile_depth(
             let temp_name = depth.repr();
 
             // store the initialization to the "second part"
+            if op == &Op::And {
+                let rhs_len = rhs.len() + 1;
+                lhs.push(instruction!(store_skip temp_name "0" rhs_len));
+                lhs.append(&mut rhs);
+                lhs.push(instruction!(load_local temp_name));
+                lhs.push(instruction!(bin_op "&&"));
+
+                return Ok(lhs);
+            }
+
+            if op == &Op::Or { 
+                let rhs_len = rhs.len() + 1;
+                lhs.push(instruction!(store_skip temp_name "1" rhs_len));
+                lhs.append(&mut rhs);
+                lhs.push(instruction!(load_local temp_name));
+                lhs.push(instruction!(bin_op "||"));
+
+                return Ok(lhs);
+            }
+
             rhs.push(instruction!(store temp_name));
+
+            /*
+            true || false
+            store_skip temp_name 1 rhs.len()
+
+            false && true
+            store_skip temp_name 0 rhs.len()
+
+            */
 
             // init "first part" of the bin_op
             rhs.append(&mut lhs);
 
             // load the "second part" of the bin_op, even though we already calculated it
-            rhs.push(instruction!(load temp_name));
+            rhs.push(instruction!(load_local temp_name));
 
             match op {
                 Op::Eq => rhs.push(instruction!(equ)),

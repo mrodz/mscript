@@ -190,7 +190,7 @@ impl Stack {
     }
 
     pub fn pop_until_function(&mut self) {
-        let mut c = 0;
+        let mut c = 1;
         for frame in self.0.iter().rev() {
             if SpecialScope::is_label_special_scope(&frame.label) {
                 c += 1;
