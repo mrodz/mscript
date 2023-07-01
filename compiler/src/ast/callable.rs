@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 
 use crate::{
     instruction,
-    parser::{Node, Parser}, scope::ScopeReturnStatus,
+    parser::{Node, Parser}, scope::ScopeReturnStatus, VecErr,
 };
 
 use super::{
@@ -128,24 +128,24 @@ impl Dependencies for Callable {
 }
 
 impl Parser {
-    pub fn callable(input: Node) -> Result<Callable> {
+    pub fn callable(input: Node) -> Result<Callable, Vec<anyhow::Error>> {
         let mut children = input.children();
 
         let ident = children.next().unwrap();
 
         let user_data = input.user_data();
 
-        let mut ident = Self::ident(ident)?;
+        let mut ident = Self::ident(ident).to_err_vec()?;
 
-        let maybe = ident.link_from_pointed_type_with_lookup(user_data);
-
-        map_err_messages(
-            maybe,
-            input.as_span(),
-            &input.user_data().get_source_file_name(),
-            "unknown function".into(),
-            || vec!["Attempting to call a function whose type is not known"],
-        )?;
+        if let Err(e) = ident.link_from_pointed_type_with_lookup(user_data) {
+            return map_err_messages(
+                Err(e),
+                input.as_span(),
+                &input.user_data().get_source_file_name(),
+                "unknown function".into(),
+                || vec!["Attempting to call a function whose type is not known"],
+            ).to_err_vec()
+        }
 
         let function_arguments = children.next().unwrap();
         let function_arguments = Self::function_arguments(function_arguments)?;

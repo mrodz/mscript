@@ -22,7 +22,7 @@ impl Dependencies for FunctionArguments {
 }
 
 impl Parser {
-    pub fn function_arguments(input: Node) -> Result<FunctionArguments> {
+    pub fn function_arguments(input: Node) -> Result<FunctionArguments, Vec<anyhow::Error>> {
         let children = input.children();
 
         let mut result = vec![];

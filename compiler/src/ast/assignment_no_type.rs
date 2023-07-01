@@ -1,17 +1,17 @@
 use anyhow::Result;
 
-use crate::parser::{Node, Parser};
+use crate::{parser::{Node, Parser}, VecErr};
 
 use super::{map_err_messages, Assignment};
 
 impl Parser {
-    pub fn assignment_no_type(input: Node, is_const: bool) -> Result<(Assignment, bool)> {
+    pub fn assignment_no_type(input: Node, is_const: bool) -> Result<(Assignment, bool), Vec<anyhow::Error>> {
         let mut children = input.children();
 
         let ident = children.next().unwrap();
         let rhs = children.next().unwrap();
 
-        let mut ident = Self::ident(ident)?;
+        let mut ident = Self::ident(ident).to_err_vec()?;
 
         let did_exist_before = input.user_data().has_name_been_mapped_local(ident.name());
 
@@ -31,7 +31,7 @@ impl Parser {
             &input.user_data().get_source_file_name(),
             "could not get the type".into(),
             || vec!["could not understand the type of the input"],
-        )?;
+        ).to_err_vec()?;
 
         Ok((Assignment::new(ident, value), did_exist_before))
     }

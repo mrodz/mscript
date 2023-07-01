@@ -5,7 +5,7 @@ use anyhow::Result;
 use crate::{
     ast::TypeLayout,
     instruction,
-    parser::{Node, Parser},
+    parser::{Node, Parser}, VecErr,
 };
 
 use super::{map_err, Compile, CompiledItem, Dependencies, Dependency, Value};
@@ -89,20 +89,21 @@ impl Compile for PrintStatement {
 }
 
 impl Parser {
-    pub fn print_statement(input: Node) -> Result<PrintStatement> {
+    pub fn print_statement(input: Node) -> Result<PrintStatement, Vec<anyhow::Error>> {
         let item = input.children().next().unwrap();
 
         let mut value = Self::value(item)?;
 
         if let Value::Ident(ref mut ident) = value {
-            let maybe = ident.lookup(input.user_data());
-
-            map_err(
-                maybe,
-                input.as_span(),
-                &input.user_data().get_file_name(),
-                "Name is not mapped".into(),
-            )?;
+            if let Err(e) = ident.lookup(input.user_data()) {
+                return map_err(
+                    Err(e),
+                    input.as_span(),
+                    &input.user_data().get_file_name(),
+                    "Name is not mapped".into(),
+                ).to_err_vec()
+            }
+            
         }
 
         Ok(PrintStatement(value))

@@ -1,12 +1,12 @@
 use std::{borrow::Cow, fmt::Display, rc::Rc};
 
-use anyhow::{Result, bail};
+use anyhow::{Result, anyhow};
 
 use crate::{
     ast::{CompiledFunctionId, new_err},
     instruction,
     parser::{Node, Parser, Rule},
-    scope::ScopeReturnStatus,
+    scope::ScopeReturnStatus, VecErr,
 };
 
 use super::{
@@ -114,24 +114,13 @@ impl IntoType for Function {
 
 impl Dependencies for Function {
     fn supplies(&self) -> Vec<Dependency> {
-        // let mut body_supplies = self.body.supplies();
         let param_supplies = self.parameters.supplies();
-
-        // body_supplies.append(&mut param_supplies);
-
         param_supplies
-
-        // dbg!(body_supplies)
     }
 
     fn dependencies(&self) -> Vec<Dependency> {
         self.body.net_dependencies()
     }
-
-    // fn net_dependencies(&self) -> Vec<Dependency>
-    // {
-        
-    // }
 }
 
 impl Function {
@@ -211,7 +200,7 @@ impl Compile for Function {
 }
 
 impl Parser {
-    pub fn function(input: Node) -> Result<Function> {
+    pub fn function(input: Node) -> Result<Function, Vec<anyhow::Error>> {
         let path_str = input.user_data().get_file_name();
         let mut children = input.children();
         let parameters = children.next().unwrap();
@@ -225,7 +214,7 @@ impl Parser {
             // We are reading parameters without pushing the function frame,
             // so the parameters MUST never be used. Essentially, we are just
             // syntax checks.
-            let parameters = Self::function_parameters(parameters, false)?;
+            let parameters = Self::function_parameters(parameters, false).map_err(|e| vec![anyhow!(e)])?;
 
             return Ok(Function::new(parameters, Block::empty_body(), ScopeReturnStatus::Void, path_str));
         };
@@ -238,7 +227,7 @@ impl Parser {
         };
 
         let return_type = if let Some(return_type) = return_type {
-            Some(Self::function_return_type(return_type)?)
+            Some(Self::function_return_type(return_type).to_err_vec()?)
         } else {
             None
         };
@@ -247,7 +236,7 @@ impl Parser {
             .user_data()
             .push_function(ScopeReturnStatus::detect_should_return(return_type));
 
-        let parameters = Self::function_parameters(parameters, true)?;
+        let parameters = Self::function_parameters(parameters, true).to_err_vec()?;
 
         let body = if let Some(body) = body {
             Self::block(body)?
@@ -257,7 +246,9 @@ impl Parser {
 
 
         if !input.user_data().did_scope_exit_with_value_if_required() {
-            bail!(new_err(input.as_span(), &input.user_data().get_source_file_name(), "this function reached its end without a return, when it expected a value".to_owned()));
+            return Err(vec![
+                new_err(input.as_span(), &input.user_data().get_source_file_name(), "this function reached its end without a return, when it expected a value".to_owned())
+            ])
         }
 
         let return_type = input.user_data().pop_scope();

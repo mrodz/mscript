@@ -5,7 +5,7 @@ use anyhow::{bail, Context, Result};
 use crate::{
     ast::CompiledItem,
     instruction,
-    parser::{AssocFileData, Node, Parser, Rule},
+    parser::{AssocFileData, Node, Parser, Rule}, VecErr,
 };
 
 use super::{map_err, new_err, value::Value, Compile, Dependencies, Dependency, Ident};
@@ -211,7 +211,7 @@ impl Parser {
         Ok(result)
     }
 
-    pub fn assignment(input: Node) -> Result<Assignment> {
+    pub fn assignment(input: Node) -> Result<Assignment, Vec<anyhow::Error>> {
         let mut children = input.children();
 
         let maybe_flags_or_assignment = children.next().unwrap();
@@ -221,7 +221,7 @@ impl Parser {
 
         let (flags, assignment) = if maybe_flags_or_assignment.as_rule() == Rule::assignment_flags {
             (
-                Some(Self::assignment_flags(maybe_flags_or_assignment)?),
+                Some(Self::assignment_flags(maybe_flags_or_assignment).to_err_vec()?),
                 children.next().unwrap(),
             )
         } else {
@@ -258,17 +258,17 @@ impl Parser {
             flags_span,
             &user_data.get_source_file_name(),
             "this assignment contains the \"modify\" attribute, which is used to mutate a variable from a higher scope".to_owned(),
-        )?;
+        ).to_err_vec()?;
 
         if requires_check && !can_modify_if_applicable {
-            bail!(new_err(
+            return Err(vec![new_err(
                 assignment_span,
                 &input.user_data().get_source_file_name(),
                 format!(
                     "cannot mutate \"{}\", which is a const variable",
                     x.ident.name()
                 )
-            ));
+            )]);
         }
 
         Ok(x)

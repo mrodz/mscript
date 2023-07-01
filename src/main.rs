@@ -4,13 +4,25 @@ use anyhow::{bail, Context, Result};
 use bytecode::Program;
 use clap::Parser;
 use cli::{Args, Commands};
-use compiler::compile;
+use compiler::compile as compile_file;
 use std::{
     path::{Path, PathBuf},
     thread,
 };
 
 use crate::cli::CompilationTargets;
+
+fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<()> {
+    if let Err(errors) = compile_file(path_str, output_bin, verbose) {
+        for error in errors {
+            println!("{error:?}")
+        }
+
+        bail!("Did not compile successfully")
+    }
+
+    Ok(())
+}
 
 fn transpile_command(path: &String) -> Result<Box<str>> {
     if !bytecode_dev_transpiler::is_path_a_transpiled_source(path) {

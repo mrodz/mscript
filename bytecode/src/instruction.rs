@@ -751,6 +751,21 @@ pub mod implementations {
 
             Ok(())
         }
+
+        neq(ctx=ctx) {
+            if ctx.stack_size() != 2 {
+                bail!("equ requires only 2 items in the local stack")
+            }
+
+            let first = ctx.pop().unwrap();
+            let second = ctx.pop().unwrap();
+
+            let result = !first.equals(&second)?;
+
+            ctx.push(bool!(result));
+
+            Ok(())
+        }
     }
 
     instruction! {

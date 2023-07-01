@@ -33,21 +33,22 @@
 //!
 //! END LICENSE
 
-use std::{borrow::Cow, rc::Rc};
+use std::rc::Rc;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use once_cell::sync::Lazy;
-use pest::{iterators::Pairs, pratt_parser::PrattParser};
+use pest::{iterators::Pairs, pratt_parser::PrattParser, Span};
 
 use crate::{
     ast::number,
     instruction,
-    parser::{AssocFileData, Node, Parser, Rule, util},
+    parser::{util, AssocFileData, Node, Parser, Rule},
+    VecErr,
 };
 
 use super::{
-    new_err, r#type::IntoType, string::AstString, Compile, CompiledItem, Dependencies,
-    Dependency, Value, boolean::boolean_from_str,
+    boolean::boolean_from_str, new_err, r#type::IntoType, string::AstString, Compile, CompiledItem,
+    Dependencies, Dependency, Value,
 };
 
 pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
@@ -58,6 +59,12 @@ pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
         .op(Op::infix(add, Left) | Op::infix(subtract, Left))
         .op(Op::infix(multiply, Left) | Op::infix(divide, Left) | Op::infix(modulo, Left))
         .op(Op::prefix(unary_minus))
+        .op(Op::infix(lt, Left)
+            | Op::infix(lte, Left)
+            | Op::infix(gt, Left)
+            | Op::infix(gte, Left)
+            | Op::infix(eq, Left)
+            | Op::infix(neq, Left))
 });
 
 #[derive(Debug, Clone)]
@@ -67,17 +74,29 @@ pub enum Op {
     Multiply,
     Divide,
     Modulo,
+    Lt,
+    Gt,
+    Lte,
+    Gte,
+    Eq,
+    Neq,
 }
 
 impl Op {
-    pub fn symbol(&self) -> char {
+    pub fn symbol(&self) -> &'static str {
         use Op::*;
         match self {
-            Add => '+',
-            Subtract => '-',
-            Multiply => '*',
-            Divide => '/',
-            Modulo => '%',
+            Add => "+",
+            Subtract => "-",
+            Multiply => "*",
+            Divide => "/",
+            Modulo => "%",
+            Lt => "<",
+            Lte => "<=",
+            Gt => ">",
+            Gte => ">=",
+            Eq => "==",
+            Neq => "!=",
         }
     }
 }
@@ -222,9 +241,14 @@ fn compile_depth(
             // load the "second part" of the bin_op, even though we already calculated it
             rhs.push(instruction!(load temp_name));
 
-            let symbol = op.symbol();
-
-            rhs.push(instruction!(bin_op symbol));
+            match op {
+                Op::Eq => rhs.push(instruction!(equ)),
+                Op::Neq => rhs.push(instruction!(neq)),
+                _ => {
+                    let symbol = op.symbol();
+                    rhs.push(instruction!(bin_op symbol))
+                }
+            }
 
             Ok(rhs)
         }
@@ -237,36 +261,31 @@ impl Compile for Expr {
     }
 }
 
-pub(crate) fn parse_expr(pairs: Pairs<Rule>, user_data: Rc<AssocFileData>) -> Result<Expr> {
-    PRATT_PARSER
-        .map_primary(|primary| -> Result<Expr> {
-            match primary.as_rule() {
+pub(crate) fn parse_expr(
+    pairs: Pairs<Rule>,
+    user_data: Rc<AssocFileData>,
+) -> Result<Expr, Vec<anyhow::Error>> {
+    let maybe_expr = PRATT_PARSER
+        .map_primary(|primary| -> Result<(Expr, Option<Span>), Vec<anyhow::Error>> {
+            let primary_span = primary.as_span();
+            let expr: Expr = match primary.as_rule() {
                 Rule::number => {
                     let raw_string = primary.as_str();
                     let child = primary.into_inner().next().unwrap();
                     let number = number::number_from_string(raw_string, child.as_rule()).unwrap();
 
-                    Ok(Expr::Value(Value::Number(number)))
+                    Expr::Value(Value::Number(number))
                 }
                 Rule::string => {
                     let raw_string = primary.as_str();
-                    Ok(Expr::Value(Value::String(AstString::Plain(
+                    Expr::Value(Value::String(AstString::Plain(
                         raw_string.to_owned(),
-                    ))))
+                    )))
                 }
                 Rule::ident => {
                     let raw_string = primary.as_str();
 
-                    let file_name = user_data.get_source_file_name();
-
-                    // todo: see if this check is necessary.
-                    let file_name: Cow<String> = if file_name.ends_with(".mmm") {
-                        let mut owned = file_name[..file_name.len() - 3].to_owned();
-                        owned.push_str("ms");
-                        Cow::Owned(owned)
-                    } else {
-                        Cow::Borrowed(&*file_name)
-                    };
+                    let file_name = user_data.get_file_name();
 
                     let (ident, is_callback) = user_data
                         .get_dependency_flags_from_name(&raw_string.to_string())
@@ -276,63 +295,88 @@ pub(crate) fn parse_expr(pairs: Pairs<Rule>, user_data: Rc<AssocFileData>) -> Re
                                 &file_name,
                                 "use of undeclared variable".into(),
                             )
-                        })?;
-                    
+                        })
+                        .to_err_vec()?;
+
                     let cloned = if is_callback {
-                        ident.clone().wrap_in_callback()?
+                        ident.clone().wrap_in_callback().to_err_vec()?
                     } else {
                         ident.clone()
                     };
 
-                    Ok(Expr::Value(Value::Ident(cloned)))
+                    Expr::Value(Value::Ident(cloned))
                 }
-                Rule::math_expr => parse_expr(primary.into_inner(), user_data.clone()),
+                Rule::math_expr => parse_expr(primary.into_inner(), user_data.clone())?,
                 Rule::callable => {
-                    let x = util::parse_with_userdata(Rule::callable, primary.as_str(), user_data.clone())?;
+                    let x = util::parse_with_userdata(
+                        Rule::callable,
+                        primary.as_str(),
+                        user_data.clone(),
+                    )
+                    .map_err(|e| vec![anyhow!(e)])?;
 
-                    let single = x.single()?;
+                    let single = x.single().map_err(|e| vec![anyhow!(e)])?;
 
                     let callable = Parser::callable(single)?;
 
-                    Ok(Expr::Value(Value::Callable(callable)))
+                    Expr::Value(Value::Callable(callable))
                 }
-                Rule::boolean => {
-                    Ok(Expr::Value(Value::Boolean(boolean_from_str(primary.as_str()))))
-                }
+                Rule::boolean => Expr::Value(Value::Boolean(boolean_from_str(
+                    primary.as_str(),
+                ))),
                 rule => unreachable!("Expr::parse expected atom, found {:?}", rule),
-            }
+            };
+
+            Ok((expr, Some(primary_span)))
         })
         .map_infix(|lhs, op, rhs| {
+            let (lhs, l_span) = lhs?;
+            let (rhs, _) = rhs?;
+
             let op = match op.as_rule() {
                 Rule::add => Op::Add,
                 Rule::subtract => Op::Subtract,
                 Rule::multiply => Op::Multiply,
                 Rule::divide => Op::Divide,
                 Rule::modulo => Op::Modulo,
+                Rule::lt => Op::Lt,
+                Rule::lte => Op::Lte,
+                Rule::gt => Op::Gt,
+                Rule::gte => Op::Gte,
+                Rule::eq => Op::Eq,
+                Rule::neq => Op::Neq,
                 rule => unreachable!("Expr::parse expected infix operation, found {:?}", rule),
             };
-            Ok(Expr::BinOp {
-                lhs: Box::new(lhs?),
+
+            let bin_op = Expr::BinOp {
+                lhs: Box::new(lhs),
                 op,
-                rhs: Box::new(rhs?),
-            })
+                rhs: Box::new(rhs),
+            };
+
+            if let Err(e) = bin_op.validate() {
+                return Err(vec![new_err(l_span.unwrap(), &user_data.get_source_file_name(), e.to_string())])
+            }
+
+
+            Ok((bin_op, None))
         })
         .map_prefix(|op, rhs| match op.as_rule() {
             // Rule::unary_minus if op.as_str().len() % 2 != 0 => Expr::UnaryMinus(Box::new(rhs)),
             // Rule::unary_minus => rhs,
-            Rule::unary_minus => Ok(Expr::UnaryMinus(Box::new(rhs?))),
+            Rule::unary_minus => Ok((Expr::UnaryMinus(Box::new(rhs?.0)), None)),
             _ => unreachable!(),
         })
-        .parse(pairs)
+        .parse(pairs);
+
+    maybe_expr.map(|(expr, ..)| expr)
 }
 
 impl Parser {
-    // pub fn math_expr(l: )
-    pub fn math_expr(input: Node) -> Result<Expr> {
+    pub fn math_expr(input: Node) -> Result<Expr, Vec<anyhow::Error>> {
         let children_as_pairs = input.children().into_pairs();
+        let parsed = parse_expr(children_as_pairs, input.user_data().clone());
 
-        let token_tree = parse_expr(children_as_pairs, input.user_data().clone());
-
-        token_tree
+        parsed
     }
 }

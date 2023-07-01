@@ -1,13 +1,12 @@
 use std::borrow::Cow;
-use std::cell::Ref;
 use std::{cell::RefCell, rc::Rc};
 
-use anyhow::{Error, Result};
+use anyhow::{Result, anyhow};
 use pest_consume::Parser as ParserDerive;
 
 use crate::ast::{Compile, CompiledFunctionId, CompiledItem, Declaration, Ident, TypeLayout};
 use crate::instruction;
-use crate::scope::{Scope, ScopeType, ScopeReturnStatus};
+use crate::scope::{Scope, ScopeReturnStatus, ScopeType};
 
 #[allow(unused)]
 pub(crate) type Node<'i> = pest_consume::Node<'i, Rule, Rc<AssocFileData>>;
@@ -21,7 +20,6 @@ pub(crate) struct AssocFileData {
     scopes: RefCell<Vec<Scope>>,
     file_name: Rc<String>, // last_arg_type: Rc<RefCell<Vec<IdentType>>>
     source_name: Rc<String>,
-    errors: RefCell<Vec<Error>>,
 }
 
 impl AssocFileData {
@@ -38,20 +36,7 @@ impl AssocFileData {
             scopes: RefCell::new(vec![Scope::new_file()]),
             file_name: Rc::new(destination_name), // last_arg_type: Rc::new(RefCell::new(vec![]))
             source_name: Rc::new(source_name),
-            errors: RefCell::new(vec![]),
         }
-    }
-
-    pub fn get_errors(&self) -> Ref<Vec<Error>> {
-        self.errors.borrow()
-    }
-
-    pub fn get_nth_error(&self, idx: usize) -> Option<&Error> {
-        unsafe { (*self.errors.as_ptr()).get(idx) }
-    }
-
-    pub fn add_error(&self, error: Error) {
-        self.errors.borrow_mut().push(error);
     }
 
     pub fn get_source_file_name(&self) -> Rc<String> {
@@ -136,18 +121,27 @@ impl AssocFileData {
     }
 
     pub fn get_dependency_flags_from_name(&self, dependency: &String) -> Option<(&Ident, bool)> {
-        let scopes = unsafe { (*self.scopes.as_ptr()).iter() }; 
+        let scopes = unsafe { (*self.scopes.as_ptr()).iter() };
         self.get_dependency_flags_from_name_and_scopes_plus_skip(dependency, scopes, 0)
     }
 
-    pub fn get_dependency_flags_from_name_skip_n(&self, dependency: &String, skip: usize) -> Option<(&Ident, bool)> {
-        let scopes = unsafe { (*self.scopes.as_ptr()).iter() }; 
+    pub fn get_dependency_flags_from_name_skip_n(
+        &self,
+        dependency: &String,
+        skip: usize,
+    ) -> Option<(&Ident, bool)> {
+        let scopes = unsafe { (*self.scopes.as_ptr()).iter() };
         self.get_dependency_flags_from_name_and_scopes_plus_skip(dependency, scopes, skip)
     }
 
-    fn get_dependency_flags_from_name_and_scopes_plus_skip<'a, S>(&'a self, dependency: &String, scopes: S, skip: usize) -> Option<(&Ident, bool)>
+    fn get_dependency_flags_from_name_and_scopes_plus_skip<'a, S>(
+        &'a self,
+        dependency: &String,
+        scopes: S,
+        skip: usize,
+    ) -> Option<(&Ident, bool)>
     where
-        S: Iterator<Item = &'a Scope> + DoubleEndedIterator
+        S: Iterator<Item = &'a Scope> + DoubleEndedIterator,
     {
         let mut is_callback = false;
 
@@ -180,7 +174,8 @@ pub mod util {
         input_str: &str,
         user_data: D,
     ) -> Result<Nodes<Rule, D>, Box<pest_consume::Error<Rule>>> {
-        <Parser as pest_consume::Parser>::parse_with_userdata(rule, input_str, user_data).map_err(Box::new)
+        <Parser as pest_consume::Parser>::parse_with_userdata(rule, input_str, user_data)
+            .map_err(Box::new)
     }
 
     pub fn parse(
@@ -191,7 +186,7 @@ pub mod util {
     }
 }
 
-pub(crate) fn root_node_from_str(input_str: &str, user_data: Rc<AssocFileData>) -> Result<Node> {
+pub(crate) fn root_node_from_str(input_str: &str, user_data: Rc<AssocFileData>) -> Result<Node, Vec<anyhow::Error>> {
     let source_name = &*user_data.get_source_file_name();
     let x = util::parse_with_userdata(Rule::file, input_str, user_data).map_err(|err| {
         err.with_path(source_name).renamed_rules(|rule| match rule {
@@ -201,7 +196,11 @@ pub(crate) fn root_node_from_str(input_str: &str, user_data: Rc<AssocFileData>) 
         })
     });
 
-    let x = x?.single()?;
+    let x = x
+        .map_err(|e| vec![anyhow!(e)])?
+        .single()
+        .map_err(|e| vec![anyhow!(e)])?;
+
     Ok(x)
 }
 
@@ -217,13 +216,22 @@ impl File {
     }
 }
 
-impl Compile for File {
-    fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>> {
-        let mut global_scope_code: Vec<CompiledItem> = self
-            .declarations
-            .iter()
-            .flat_map(|x| x.compile(function_buffer).unwrap())
-            .collect();
+impl Compile<Vec<anyhow::Error>> for File {
+    fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>, Vec<anyhow::Error>> {
+        let mut global_scope_code = vec![];
+
+        let mut errors = vec![];
+
+        for declaration in &self.declarations {
+            match declaration.compile(function_buffer) {
+                Ok(mut compiled) => global_scope_code.append(&mut compiled),
+                Err(e) => errors.push(e),
+            }
+        }
+
+        if !errors.is_empty() {
+            return Err(errors)
+        }
 
         global_scope_code.push(instruction!(ret));
 
@@ -241,21 +249,26 @@ impl Compile for File {
 
 #[pest_consume::parser]
 impl Parser {
-    pub fn file<'a>(input: Node) -> Result<File> {
+    pub fn file<'a>(input: Node) -> Result<File, Vec<anyhow::Error>> {
         let mut result = File::default();
+
+        let mut errors = vec![];
 
         for child in input.children() {
             match child.as_rule() {
-                Rule::declaration => {
-                    if let Some(d) = Self::declaration(child) {
-                        result.add_declaration(d);
-                    }
-                }
+                Rule::declaration => match Self::declaration(child) {
+                    Ok(d) => result.add_declaration(d),
+                    Err(mut e) => errors.append(&mut e),
+                },
                 Rule::EOI => (),
                 _ => unreachable!("{child:?}"),
             }
         }
 
-        Ok(result)
+        if !errors.is_empty() {
+            Err(errors)
+        } else {
+            Ok(result)
+        }
     }
 }
