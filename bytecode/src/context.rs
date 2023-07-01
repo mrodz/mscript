@@ -22,8 +22,8 @@ pub enum SpecialScope {
 }
 
 
-static DISPLAY_NAME_IF_SCOPE: &'static str = "<if>";
-static DISPLAY_NAME_ELSE_SCOPE: &'static str = "<else>";
+static DISPLAY_NAME_IF_SCOPE: &str = "<if>";
+static DISPLAY_NAME_ELSE_SCOPE: &str = "<else>";
 
 impl SpecialScope {
     pub fn is_label_special_scope(label: &str) -> bool {

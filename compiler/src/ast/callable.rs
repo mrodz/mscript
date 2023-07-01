@@ -33,13 +33,13 @@ pub(crate) struct Callable {
 impl IntoType for Callable {
     /// return the return type
     fn for_type(&self) -> Result<TypeLayout> {
-        static VOID_MSG: &'static str = "function returns void";
+        static VOID_MSG: &str = "function returns void";
         let CallableDestination::Named { ident } = &self.destination else {
             let CallableDestination::ToSelf { return_type } = &self.destination else {
                 unreachable!()
             };
 
-            return Ok(return_type.clone().context(VOID_MSG)?);
+            return return_type.clone().context(VOID_MSG);
         };
 
         let ty = ident.ty()?.get_type_recursively();
