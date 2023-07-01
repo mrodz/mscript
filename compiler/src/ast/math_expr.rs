@@ -117,27 +117,6 @@ impl Expr {
     pub fn validate(&self) -> Result<()> {
         self.for_type().map(|_| ())
     }
-
-    pub fn bin_op_lhs_ty(&self) -> Result<super::TypeLayout> {
-        match self {
-            Self::BinOp { lhs, .. } => lhs.for_type(),
-            _ => bail!("not a bin_op")
-        }
-    }
-
-    pub fn bin_op_rhs_ty(&self) -> Result<super::TypeLayout> {
-        match self {
-            Self::BinOp { rhs, .. } => rhs.for_type(),
-            _ => bail!("not a bin_op")
-        }
-    }
-
-    pub fn bin_op_symbol(&self) -> Result<&'static str> {
-        match self {
-            Self::BinOp {op, .. } => Ok(op.symbol()),
-            _ => bail!("not a bin_op")
-        }
-    } 
 }
 
 impl IntoType for Expr {
@@ -306,16 +285,7 @@ pub(crate) fn parse_expr(
                 Rule::ident => {
                     let raw_string = primary.as_str();
 
-                    let file_name = user_data.get_source_file_name();
-
-                    // todo: see if this check is necessary.
-                    let file_name: Cow<String> = if file_name.ends_with(".mmm") {
-                        let mut owned = file_name[..file_name.len() - 3].to_owned();
-                        owned.push_str("ms");
-                        Cow::Owned(owned)
-                    } else {
-                        Cow::Borrowed(&*file_name)
-                    };
+                    let file_name = user_data.get_file_name();
 
                     let (ident, is_callback) = user_data
                         .get_dependency_flags_from_name(&raw_string.to_string())
@@ -384,15 +354,8 @@ pub(crate) fn parse_expr(
                 rhs: Box::new(rhs),
             };
 
-            if bin_op.validate().is_err() {
-                let rhs_ty = bin_op.bin_op_rhs_ty().to_err_vec()?;
-                let lhs_ty = bin_op.bin_op_lhs_ty().to_err_vec()?;
-
-                let op_symbol = bin_op.bin_op_symbol().unwrap();
-
-                let msg = format!("invalid operation: {lhs_ty} {op_symbol} {rhs_ty}");
-
-                return Err(vec![new_err(l_span.unwrap(), &user_data.get_source_file_name(), msg)])
+            if let Err(e) = bin_op.validate() {
+                return Err(vec![new_err(l_span.unwrap(), &user_data.get_source_file_name(), e.to_string())])
             }
 
 

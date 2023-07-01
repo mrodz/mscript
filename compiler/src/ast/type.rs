@@ -1,6 +1,9 @@
 use std::{borrow::Cow, collections::HashMap, fmt::Display, rc::Rc};
 
-use crate::{parser::{util::parse_with_userdata, AssocFileData, Node, Parser, Rule}, scope::ScopeReturnStatus};
+use crate::{
+    parser::{util::parse_with_userdata, AssocFileData, Node, Parser, Rule},
+    scope::ScopeReturnStatus,
+};
 use anyhow::{bail, Result};
 use once_cell::sync::Lazy;
 
@@ -19,7 +22,7 @@ pub(crate) static mut TYPES: Lazy<HashMap<&str, TypeLayout>> = Lazy::new(|| {
     x
 });
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeType {
     Bool,
     Str,
@@ -123,6 +126,7 @@ impl TypeLayout {
             (Str, Int | BigInt, Multiply) => Str,
             (Int | BigInt, Str, Multiply) => Str,
             //======================
+            (x, y, Eq | Neq) if x == y => *x,
             _ => return None,
         };
 
@@ -217,7 +221,10 @@ impl Parser {
 
         let types = FunctionParameters::TypesOnly(types);
 
-        Ok(FunctionType::new(types, ScopeReturnStatus::detect_should_return(return_type)))
+        Ok(FunctionType::new(
+            types,
+            ScopeReturnStatus::detect_should_return(return_type),
+        ))
     }
 
     pub fn r#type(input: Node) -> Result<Cow<'static, TypeLayout>> {
