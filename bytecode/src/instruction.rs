@@ -711,7 +711,7 @@ pub mod implementations {
                 bail!("store_skip can only store a single item");
             }
 
-            let arg = ctx.pop().unwrap();
+            let arg = ctx.get_last_op_item().unwrap();
 
             let Primitive::Bool(val) = arg else {
                 bail!("store_skip can only operate on bool (found {arg})");
@@ -719,23 +719,40 @@ pub mod implementations {
 
             if predicate == 1 {
                 // skip if true
-                if val {
-                    ctx.push(bool!(true));
+                if *val {
                     ctx.signal(InstructionExitState::Goto(lines_to_jump));
+                    return Ok(())
                 }
 
             } else {
                 // skip if false
                 if !val {
-                    ctx.push(bool!(false));
                     ctx.signal(InstructionExitState::Goto(lines_to_jump));
+                    return Ok(())
                 }
             }
 
+            let arg = ctx.pop().unwrap();
             ctx.register_variable(name.clone(), arg);
 
             Ok(())
         }
+
+        fast_rev2(ctx, _args) {
+            if ctx.stack_size() != 2 {
+                bail!("fast_rev2 requires a stack size of 2");
+            }
+
+            let Some([first, second]) = ctx.get_many_op_items_mut(0..2) else {
+                bail!("could not get op items");
+            };
+
+            let first_cloned = first.clone();
+            *first = second.clone();
+            *second = first_cloned;
+
+            Ok(())
+        } 
 
         load(ctx, args) {
             let Some(name) = args.first() else {
