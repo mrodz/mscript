@@ -10,6 +10,7 @@ use anyhow::{bail, Result};
 use std::borrow::Cow;
 use std::fmt::{Debug, Display};
 use std::rc::Rc;
+use std::slice::SliceIndex;
 
 /// Used to differentiate between different scope types, mostly for debug purposes.
 #[doc(alias = "Scope")]
@@ -172,6 +173,14 @@ impl<'a> Ctx<'a> {
         self.stack.get_mut(n)
     }
 
+    /// Return many mutable references to items on the local operating stack.
+    pub fn get_many_op_items_mut<I>(&mut self, range: I) -> Option<&mut I::Output>
+    where
+        I: SliceIndex<[Primitive]>
+     {
+        self.stack.get_mut(range)
+    }
+
     /// Returns a reference to the last item on the local operating stack of the function that owns this [`Ctx`]
     pub fn get_last_op_item(&mut self) -> Option<&Primitive> {
         self.stack.get(self.stack_size() - 1)
@@ -287,6 +296,7 @@ impl<'a> Ctx<'a> {
         self.call_stack.get_frame_variables().get(name)
     }
 
+    /// Return the callback variables associated to this function, if they exist.
     pub(crate) fn get_callback_variables(&self) -> Option<Rc<VariableMapping>> {
         self.callback_state.as_ref().cloned()
     }
