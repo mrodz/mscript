@@ -662,23 +662,7 @@ pub mod implementations {
 
             let arg = ctx.pop().unwrap();
 
-            ctx.register_variable(name.clone(), arg);
-
-            Ok(())
-        }
-
-        update(ctx, args) {
-            let Some(name) = args.first() else {
-                bail!("store requires a name")
-            };
-
-            if ctx.stack_size() != 1 {
-                bail!("store can only store a single item");
-            }
-
-            let arg = ctx.pop().unwrap();
-
-            ctx.update_variable(name.clone(), arg)?;
+            ctx.register_variable(name.clone(), arg)?;
 
             Ok(())
         }
@@ -737,7 +721,7 @@ pub mod implementations {
             }
 
             let arg = ctx.pop().unwrap();
-            ctx.register_variable(name.clone(), arg);
+            ctx.register_variable(name.clone(), arg)?;
 
             Ok(())
         }

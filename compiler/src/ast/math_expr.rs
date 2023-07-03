@@ -218,15 +218,10 @@ fn compile_depth(
         Expr::Value(val) => val.compile(function_buffer),
         Expr::UnaryNot(expr) => {
             if let Expr::Value(value) = expr.as_ref() {
-                match value {
-                    Value::Ident(ident) => {
-                        let x = ident.ty().context("no type data")?;
-                        if !x.is_boolean() {
-                            bail!("not can only be performed on a boolean value");
-                        }
-                    }
-                    Value::Boolean(..) => (),
-                    ty => bail!("cannot apply binary not to {:?}", ty), // does not allow function calls! PLEASE FIX!!!!!!
+                let ty = value.for_type()?;
+
+                if !ty.is_boolean() {
+                    bail!("cannot apply binary not to {:?}", ty)
                 }
             }
 

@@ -4,12 +4,12 @@ use anyhow::Result;
 
 use crate::{
     instruction,
-    parser::{Node, Parser, Rule},
+    parser::{Node, Parser, Rule}, VecErr,
 };
 
 use super::{
     Assignment, IfStatement, ReturnStatement, Callable,
-    Compile, CompiledItem, Dependencies, Dependency, PrintStatement, WhileLoop,
+    Compile, CompiledItem, Dependencies, Dependency, PrintStatement, WhileLoop, Continue,
 };
 
 #[derive(Debug)]
@@ -20,6 +20,7 @@ pub(crate) enum Declaration {
     ReturnStatement(ReturnStatement),
     IfStatement(IfStatement),
     WhileLoop(WhileLoop),
+    Continue(Continue),
 }
 
 impl Dependencies for Declaration {
@@ -31,6 +32,7 @@ impl Dependencies for Declaration {
             Self::ReturnStatement(return_statement) => return_statement.supplies(),
             Self::IfStatement(if_statement) => if_statement.supplies(),
             Self::WhileLoop(while_loop) => while_loop.supplies(),
+            Self::Continue(_) => vec![]
         }
     }
 
@@ -50,6 +52,7 @@ impl Dependencies for Declaration {
             Self::ReturnStatement(return_statement) => return_statement.net_dependencies(),
             Self::IfStatement(if_statement) => if_statement.net_dependencies(),
             Self::WhileLoop(while_loop) => while_loop.net_dependencies(),
+            Self::Continue(_) => vec![],
         }
     }
 }
@@ -67,6 +70,7 @@ impl Compile for Declaration {
             Self::ReturnStatement(x) => x.compile(function_buffer),
             Self::IfStatement(x) => x.compile(function_buffer),
             Self::WhileLoop(x) => x.compile(function_buffer),
+            Self::Continue(x) => x.compile(function_buffer),
         }
     }
 }
@@ -87,6 +91,7 @@ impl Parser {
             }
             Rule::if_statement => Declaration::IfStatement(Self::if_statement(declaration)?),
             Rule::while_loop => Declaration::WhileLoop(Self::while_loop(declaration)?),
+            Rule::continue_statement => Declaration::Continue(Self::continue_statement(declaration).to_err_vec()?),
             _ => unreachable!(),
         };
 

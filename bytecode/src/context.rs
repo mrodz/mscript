@@ -271,14 +271,16 @@ impl<'a> Ctx<'a> {
     }
 
     /// Store a variable to this function. Will get dropped when the function goes out of scope.
-    pub(crate) fn register_variable(&self, name: String, var: Primitive) {
-        rc_to_ref(&self.call_stack).register_variable(name, var)
+    pub(crate) fn register_variable(&self, name: String, var: Primitive) -> Result<()> {
+        let call_stack = rc_to_ref(&self.call_stack);
+
+        call_stack.register_variable(name, var)
     }
 
-    /// Mutate a variable in this function.
-    pub(crate) fn update_variable(&self, name: String, var: Primitive) -> Result<()> {
-        rc_to_ref(&self.call_stack).update_variable(name, var)
-    }
+    // /// Mutate a variable in this function.
+    // pub(crate) fn update_variable(&self, name: String, var: Primitive) -> Result<()> {
+    //     rc_to_ref(&self.call_stack).update_variable(name, var)
+    // }
 
     /// Get the [`Primitive`] value and its associated [`VariableFlags`] from a name.
     ///

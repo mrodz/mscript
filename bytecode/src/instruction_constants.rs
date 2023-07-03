@@ -66,7 +66,7 @@ pub static BIN_TO_REPR: [&[u8]; INSTRUCTION_COUNT] = [
     /* 0x25 [37] */ b"call_lib",
     /* 0x26 [38] */ b"len",
     /* 0x27 [39] */ b"done",
-    /* 0x28 [40] */ b"update",
+    /* 0x28 [40] */ b"update", // @DEPRECATED
     /* 0x29 [41] */ b"scope", // Same as `else`
     /* 0x2A [42] */ b"else", // Same as `scope`
     /* 0x2B [43] */ b"neg",
@@ -121,7 +121,7 @@ pub static FUNCTION_POINTER_LOOKUP: [InstructionSignature; INSTRUCTION_COUNT] = 
     implementations::call_lib,
     implementations::len,
     implementations::done,
-    implementations::update,
+    implementations::nop, // @ DEPRECATED
     implementations::else_stmt, // Same as `else`
     implementations::else_stmt, // Same as `scope`
     implementations::neg,

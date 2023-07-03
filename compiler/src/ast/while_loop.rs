@@ -1,4 +1,4 @@
-use crate::{parser::{Parser, Node}, instruction};
+use crate::{parser::{Parser, Node}, instruction, scope::ScopeReturnStatus};
 
 use super::{Value, Block, Dependencies, Compile};
 
@@ -49,7 +49,20 @@ impl Parser {
 		let block = children.next().unwrap();
 
 		let condition = Self::value(condition)?;
+
+		let child_returns_type = input
+            .user_data()
+            .return_statement_expected_yield_type()
+            .map_or_else(
+                || ScopeReturnStatus::No,
+                |ty| ScopeReturnStatus::ParentShould(ty.clone()),
+            );
+
+		input.user_data().push_while_loop(child_returns_type);
+
 		let body = Self::block(block)?;
+
+		input.user_data().pop_scope();
 
 		Ok(WhileLoop { condition, body })
 	}

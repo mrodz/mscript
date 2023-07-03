@@ -1,6 +1,6 @@
 //! Program call stack
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Result, Context};
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::rc::Rc;
@@ -225,33 +225,38 @@ impl Stack {
     }
 
     /// Add a `name -> variable` mapping to the current stack frame, with default flags.
-    pub fn register_variable(&mut self, name: String, var: Primitive) {
-        self.register_variable_flags(name, var, VariableFlags::none());
+    pub fn register_variable(&mut self, name: String, var: Primitive) -> Result<()> {
+        self.register_variable_flags(name, var, VariableFlags::none())
     }
 
     /// Add a `name -> variable` mapping to the current stack frame, with special flags.
-    pub fn register_variable_flags(&mut self, name: String, var: Primitive, flags: VariableFlags) {
-        self.0
-            .last_mut()
-            .expect("nothing in the stack")
-            .variables
-            .0
-            .insert(name, Rc::new((var, flags)));
-    }
+    pub fn register_variable_flags(&mut self, name: String, var: Primitive, flags: VariableFlags) -> Result<()> {
+        let stack_frame = self.0.last_mut().context("nothing in the stack")?;
 
-    /// Update the value of a variable, given its name. This function will search the entire
-    /// call stack.
-    pub fn update_variable(&mut self, name: String, new_var: Primitive) -> Result<()> {
-        for stack_frame in self.0.iter_mut().rev() {
-            if let Some(old_var) = stack_frame.variables.0.get_mut(&name) {
-                if old_var.1.can_update() {
-                    rc_to_ref(old_var).0 = new_var;
-                }
-                return Ok(());
+        let variables = &mut stack_frame.variables.0;
+
+        if let Some(mapping) = variables.get(&name) {
+            let mut_mapping_ref = rc_to_ref(mapping);
+            if mut_mapping_ref.1.is_read_only() {
+                bail!("cannot reassign to read-only variable {name}");
             }
+
+            let new_flags_bitfield = flags.0;
+            let previos_flags_bitfield = mut_mapping_ref.1.0;
+
+            // if a new flag was introduced that the original did not have
+            if new_flags_bitfield | previos_flags_bitfield != previos_flags_bitfield {
+                bail!("cannot assign bitfield {new_flags_bitfield:8b} to variable {name}, which has bitfield {previos_flags_bitfield:8b}");
+            }
+
+            let primitive_part = &mut mut_mapping_ref.0;
+            *primitive_part = var;
+            // this means it has already been mapped.
+        } else {
+            variables.insert(name, Rc::new((var, flags)));
         }
 
-        bail!("could not find variable {name} in the call stack.")
+        Ok(())
     }
 }
 

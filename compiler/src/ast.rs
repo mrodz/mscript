@@ -19,6 +19,7 @@ mod string;
 mod r#type;
 mod value;
 mod while_loop;
+mod loop_control_flow;
 
 pub(crate) use assignment::Assignment;
 pub(crate) use callable::Callable;
@@ -35,6 +36,7 @@ pub(crate) use r#return::ReturnStatement;
 pub(crate) use r#type::TypeLayout;
 pub(crate) use value::Value;
 pub(crate) use while_loop::WhileLoop;
+pub(crate) use loop_control_flow::Continue;
 
 use anyhow::{anyhow, bail, Context, Error, Result};
 use bytecode::compilation_lookups::raw_byte_instruction_to_string_representation;
