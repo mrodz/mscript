@@ -8,8 +8,8 @@ use crate::{
 };
 
 use super::{
-    assignment::Assignment, if_statement::IfStatement, r#return::ReturnStatement, Callable,
-    Compile, CompiledItem, Dependencies, Dependency, PrintStatement,
+    Assignment, IfStatement, ReturnStatement, Callable,
+    Compile, CompiledItem, Dependencies, Dependency, PrintStatement, WhileLoop,
 };
 
 #[derive(Debug)]
@@ -19,6 +19,7 @@ pub(crate) enum Declaration {
     PrintStatement(PrintStatement),
     ReturnStatement(ReturnStatement),
     IfStatement(IfStatement),
+    WhileLoop(WhileLoop),
 }
 
 impl Dependencies for Declaration {
@@ -29,6 +30,7 @@ impl Dependencies for Declaration {
             Self::PrintStatement(print_statement) => print_statement.supplies(),
             Self::ReturnStatement(return_statement) => return_statement.supplies(),
             Self::IfStatement(if_statement) => if_statement.supplies(),
+            Self::WhileLoop(while_loop) => while_loop.supplies(),
         }
     }
 
@@ -47,6 +49,7 @@ impl Dependencies for Declaration {
             }
             Self::ReturnStatement(return_statement) => return_statement.net_dependencies(),
             Self::IfStatement(if_statement) => if_statement.net_dependencies(),
+            Self::WhileLoop(while_loop) => while_loop.net_dependencies(),
         }
     }
 }
@@ -63,6 +66,7 @@ impl Compile for Declaration {
             Self::Assignment(x) => x.compile(function_buffer),
             Self::ReturnStatement(x) => x.compile(function_buffer),
             Self::IfStatement(x) => x.compile(function_buffer),
+            Self::WhileLoop(x) => x.compile(function_buffer),
         }
     }
 }
@@ -82,6 +86,7 @@ impl Parser {
                 Declaration::ReturnStatement(Self::return_statement(declaration)?)
             }
             Rule::if_statement => Declaration::IfStatement(Self::if_statement(declaration)?),
+            Rule::while_loop => Declaration::WhileLoop(Self::while_loop(declaration)?),
             _ => unreachable!(),
         };
 

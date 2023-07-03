@@ -18,6 +18,7 @@ mod r#return;
 mod string;
 mod r#type;
 mod value;
+mod while_loop;
 
 pub(crate) use assignment::Assignment;
 pub(crate) use callable::Callable;
@@ -27,10 +28,13 @@ pub(crate) use function_arguments::FunctionArguments;
 pub(crate) use function_body::Block;
 pub(crate) use function_parameters::FunctionParameters;
 pub(crate) use ident::Ident;
+pub(crate) use if_statement::IfStatement;
 pub(crate) use number::Number;
 pub(crate) use print_statement::PrintStatement;
+pub(crate) use r#return::ReturnStatement;
 pub(crate) use r#type::TypeLayout;
 pub(crate) use value::Value;
+pub(crate) use while_loop::WhileLoop;
 
 use anyhow::{anyhow, bail, Context, Error, Result};
 use bytecode::compilation_lookups::raw_byte_instruction_to_string_representation;

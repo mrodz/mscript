@@ -11,7 +11,8 @@ keywords = _{
     "false" |
     "modify" |
     "const" |
-    "self"
+    "self" | 
+    "while"
 }
 
 integer = @{ '0'..'9' ~ ('0'..'9' | ("_" ~ ('0'..'9')))* }
@@ -101,11 +102,13 @@ else_statement = { "else" ~ (block | if_statement) }
 
 if_statement = { "if" ~ value ~ block ~ else_statement? }
 
+while_loop = { "while" ~ value ~ block }
+
 print_statement = { "print" ~ value }
 
 return_statement = { "return" ~ value? }
 
-declaration = { assignment | callable | print_statement | return_statement | if_statement }
+declaration = { assignment | callable | print_statement | return_statement | if_statement | while_loop }
 
 file = {
     SOI ~

@@ -20,15 +20,18 @@ pub enum SpecialScope {
     If,
     /// The scope of an `Else` statement
     Else,
+    WhileLoop,
 }
-
 
 static DISPLAY_NAME_IF_SCOPE: &str = "<if>";
 static DISPLAY_NAME_ELSE_SCOPE: &str = "<else>";
+static DISPLAY_NAME_WHILE_LOOP_SCOPE: &str = "<else>";
 
 impl SpecialScope {
     pub fn is_label_special_scope(label: &str) -> bool {
-        label == DISPLAY_NAME_IF_SCOPE || label == DISPLAY_NAME_ELSE_SCOPE
+        label == DISPLAY_NAME_IF_SCOPE
+            || label == DISPLAY_NAME_ELSE_SCOPE
+            || label == DISPLAY_NAME_WHILE_LOOP_SCOPE
     }
 }
 
@@ -40,6 +43,7 @@ impl Display for SpecialScope {
             match self {
                 Self::If => DISPLAY_NAME_IF_SCOPE,
                 Self::Else => DISPLAY_NAME_ELSE_SCOPE,
+                Self::WhileLoop => DISPLAY_NAME_WHILE_LOOP_SCOPE,
             }
         )
     }
@@ -176,8 +180,8 @@ impl<'a> Ctx<'a> {
     /// Return many mutable references to items on the local operating stack.
     pub fn get_many_op_items_mut<I>(&mut self, range: I) -> Option<&mut I::Output>
     where
-        I: SliceIndex<[Primitive]>
-     {
+        I: SliceIndex<[Primitive]>,
+    {
         self.stack.get_mut(range)
     }
 

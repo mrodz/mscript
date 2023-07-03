@@ -56,6 +56,9 @@ pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
     use Rule::*;
 
     PrattParser::new()
+        .op(Op::infix(or, Left) | Op::infix(xor, Left))
+        .op(Op::infix(and, Left))
+        .op(Op::prefix(not))
         .op(Op::infix(add, Left) | Op::infix(subtract, Left))
         .op(Op::infix(multiply, Left) | Op::infix(divide, Left) | Op::infix(modulo, Left))
         .op(Op::prefix(unary_minus))
@@ -65,9 +68,6 @@ pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
             | Op::infix(gte, Left)
             | Op::infix(eq, Left)
             | Op::infix(neq, Left))
-        .op(Op::infix(or, Left) | Op::infix(xor, Left))
-        .op(Op::infix(and, Left))
-        .op(Op::prefix(not))
 });
 
 #[derive(Debug, Clone, PartialEq)]
@@ -226,7 +226,7 @@ fn compile_depth(
                         }
                     }
                     Value::Boolean(..) => (),
-                    _ => bail!("cannot apply binary not"),
+                    ty => bail!("cannot apply binary not to {:?}", ty), // does not allow function calls! PLEASE FIX!!!!!!
                 }
             }
 

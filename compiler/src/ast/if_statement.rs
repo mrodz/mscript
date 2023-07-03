@@ -16,7 +16,18 @@ pub struct IfStatement {
     else_statement: Option<ElseStatement>,
 }
 
-impl Dependencies for IfStatement {}
+impl Dependencies for IfStatement {
+    fn dependencies(&self) -> Vec<super::Dependency> {
+        let mut value_deps = self.value.net_dependencies();
+        value_deps.append(&mut self.body.net_dependencies());
+        
+        if let Some(ref else_statement) = self.else_statement {
+            value_deps.append(&mut else_statement.net_dependencies());
+        }
+
+        value_deps
+    }
+}
 
 impl Compile for IfStatement {
     fn compile(&self, function_buffer: &mut Vec<super::CompiledItem>) -> Result<Vec<CompiledItem>> {
@@ -50,6 +61,15 @@ impl Compile for IfStatement {
 pub enum ElseStatement {
     Block(Block),
     IfStatement(Box<IfStatement>),
+}
+
+impl Dependencies for ElseStatement {
+    fn dependencies(&self) -> Vec<super::Dependency> {
+        match self {
+            Self::Block(block) => block.net_dependencies(),
+            Self::IfStatement(if_statement) => if_statement.net_dependencies(),
+        }
+    }
 }
 
 impl Compile for ElseStatement {

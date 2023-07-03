@@ -158,12 +158,12 @@ pub enum InstructionExitState {
     /// like the function to deal with.
     JumpRequest(JumpRequest),
     /// This variant signals that an instruction would like the interpreter to jump forward
-    /// `+usize` instructions.
+    /// `+isize` instructions.
     ///
     /// # Errors
     /// This request will fail if the requested interpreter cursor
     /// position would fall out of bounds.
-    Goto(usize),
+    Goto(isize),
     /// This variant requests to push a [`SpecialScope`] to the interpreter process. This scope
     /// can be used for identification.
     PushScope(SpecialScope),
@@ -327,7 +327,15 @@ impl Function {
                     }
                 }
                 InstructionExitState::Goto(offset) => {
-                    instruction_ptr += *offset;
+                    let new_val = instruction_ptr.checked_add_signed(*offset).with_context(|| format!("numeric overflow ({instruction_ptr} + {offset})"))?;
+
+                    let instruction_len = self.instructions.len();
+
+                    if new_val >= instruction_len {
+                        bail!("goto position index {new_val} is too big, instruction length is {instruction_len}.");
+                    }
+ 
+                    instruction_ptr = new_val;
                     context.clear_signal();
                     continue;
                 }
@@ -336,7 +344,15 @@ impl Function {
                     context.add_frame(ty.to_string());
                 }
                 InstructionExitState::GotoPushScope(offset, ty) => {
-                    instruction_ptr += *offset;
+                    let new_val = instruction_ptr.checked_add(*offset).with_context(|| format!("numeric overflow ({instruction_ptr} + {offset})"))?;
+
+                    let instruction_len = self.instructions.len();
+
+                    if new_val >= instruction_len {
+                        bail!("goto position index {new_val} is too big, instruction length is {instruction_len}.");
+                    }
+
+                    instruction_ptr = new_val;
                     special_scopes.push(*ty);
 
                     let string = ty.to_string();

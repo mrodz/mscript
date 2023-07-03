@@ -701,11 +701,15 @@ pub mod implementations {
 
         store_skip(ctx, args) {
             let Some([name, predicate, lines_to_jump]) = args.get(0..=2) else {
-                bail!("store_skip: name:str predicate:u8(1/0) lines_to_jump:usize")
+                bail!("store_skip: name:str predicate:u8(1/0) lines_to_jump:isize")
             };
 
             let predicate = predicate.parse::<u8>().context("store_skip needs predicate: u8")?;
-            let lines_to_jump = lines_to_jump.parse::<usize>().context("store_skip needs lines_to_jump: usize")?;
+            let lines_to_jump = lines_to_jump.parse::<isize>().context("store_skip needs lines_to_jump: isize")?;
+
+            if lines_to_jump.is_negative() {
+                bail!("store_skip can only skip forwards");
+            }
 
             if ctx.stack_size() != 1 {
                 bail!("store_skip can only store a single item");
@@ -878,6 +882,28 @@ pub mod implementations {
                 ctx.signal(InstructionExitState::GotoPushScope(offset.parse::<usize>()?, SpecialScope::If));
             }
 
+            Ok(())
+        }
+
+        while_loop(ctx, args) {
+            if ctx.stack_size() == 0 {
+                bail!("while statements require at least one entry in the local stack")
+            }
+
+            let item = ctx.pop().unwrap();
+            ctx.clear_stack();
+
+            let Primitive::Bool(b) = item else {
+                bail!("while statement can only test booleans")
+            };
+
+            let Some(offset) = args.first() else {
+                bail!("while statements require an argument to instruct where to jump if falsey")
+            };
+
+            if !b {
+                ctx.signal(InstructionExitState::GotoPushScope(offset.parse::<usize>()?, SpecialScope::WhileLoop));
+            }
 
             Ok(())
         }
@@ -887,7 +913,7 @@ pub mod implementations {
                 bail!("jmp statements require an argument to instruct where to jump")
             };
 
-            ctx.signal(InstructionExitState::Goto(offset.parse::<usize>()?));
+            ctx.signal(InstructionExitState::Goto(offset.parse::<isize>()?));
 
             Ok(())
         }
