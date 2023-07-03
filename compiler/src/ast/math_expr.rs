@@ -58,16 +58,17 @@ pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
     PrattParser::new()
         .op(Op::infix(or, Left) | Op::infix(xor, Left))
         .op(Op::infix(and, Left))
-        .op(Op::prefix(not))
-        .op(Op::infix(add, Left) | Op::infix(subtract, Left))
-        .op(Op::infix(multiply, Left) | Op::infix(divide, Left) | Op::infix(modulo, Left))
-        .op(Op::prefix(unary_minus))
         .op(Op::infix(lt, Left)
             | Op::infix(lte, Left)
             | Op::infix(gt, Left)
             | Op::infix(gte, Left)
             | Op::infix(eq, Left)
             | Op::infix(neq, Left))
+        
+        .op(Op::prefix(not))
+        .op(Op::infix(add, Left) | Op::infix(subtract, Left))
+        .op(Op::infix(multiply, Left) | Op::infix(divide, Left) | Op::infix(modulo, Left))
+        .op(Op::prefix(unary_minus))
 });
 
 #[derive(Debug, Clone, PartialEq)]
@@ -264,7 +265,7 @@ fn compile_depth(
                 let rhs_len = rhs.len() + 3;
                 lhs.push(instruction!(store_skip temp_name "0" rhs_len));
                 lhs.append(&mut rhs);
-                lhs.push(instruction!(load_local temp_name));
+                lhs.push(instruction!(load_fast temp_name));
                 lhs.push(instruction!(bin_op "&&"));
 
                 return Ok(lhs);
@@ -274,15 +275,15 @@ fn compile_depth(
                 let rhs_len = rhs.len() + 3;
                 lhs.push(instruction!(store_skip temp_name "1" rhs_len));
                 lhs.append(&mut rhs);
-                lhs.push(instruction!(load_local temp_name));
+                lhs.push(instruction!(load_fast temp_name));
                 lhs.push(instruction!(bin_op "||"));
 
                 return Ok(lhs);
             }
 
-            lhs.push(instruction!(store temp_name));
+            lhs.push(instruction!(store_fast temp_name));
             lhs.append(&mut rhs);
-            lhs.push(instruction!(load_local temp_name));
+            lhs.push(instruction!(load_fast temp_name));
             lhs.push(instruction!(fast_rev2));
 
             match op {

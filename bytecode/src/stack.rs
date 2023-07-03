@@ -173,6 +173,7 @@ impl Stack {
 
     /// Extend the call stack by adding a new frame.
     pub fn extend(&mut self, label: String) {
+        // println!(">>> PUSHED {label}");
         self.0.push(StackFrame {
             label,
             variables: VariableMapping::default(),
@@ -186,7 +187,7 @@ impl Stack {
 
     /// Pop the top of the stack frame, releasing all of its resources.
     pub fn pop(&mut self) {
-        self.0.pop();
+        self.0.pop().expect("pop without stack frame");
     }
 
     pub fn pop_until_function(&mut self) {
@@ -203,6 +204,7 @@ impl Stack {
         let size = self.size();
 
         self.0.drain(size-c..);
+        // println!("<<< POPPED {}", popped.fold("".to_owned(), |str, frame| str + " + " +  frame.label.as_str()));
     }
 
     /// Search the call stack for a frame with a variable with a matching `name`. Will start at the top (most recent)
@@ -229,32 +231,50 @@ impl Stack {
         self.register_variable_flags(name, var, VariableFlags::none())
     }
 
-    /// Add a `name -> variable` mapping to the current stack frame, with special flags.
-    pub fn register_variable_flags(&mut self, name: String, var: Primitive, flags: VariableFlags) -> Result<()> {
+    pub fn register_variable_local(&mut self, name: String, var: Primitive, flags: VariableFlags) -> Result<()> {
         let stack_frame = self.0.last_mut().context("nothing in the stack")?;
 
         let variables = &mut stack_frame.variables.0;
+        // println!("\t\t[STORED] {name} to {}", stack_frame.label);
+        
+        variables.insert(name, Rc::new((var, flags)));
 
-        if let Some(mapping) = variables.get(&name) {
-            let mut_mapping_ref = rc_to_ref(mapping);
-            if mut_mapping_ref.1.is_read_only() {
-                bail!("cannot reassign to read-only variable {name}");
+        Ok(())
+    }
+
+    /// Add a `name -> variable` mapping to the current stack frame, with special flags.
+    pub fn register_variable_flags(&mut self, name: String, var: Primitive, flags: VariableFlags) -> Result<()> {
+        for frame in self.0.iter().rev() {
+            if let Some(ref mapping) = frame.variables.get(&name) {
+                let mut_mapping_ref: &mut (Primitive, VariableFlags) = rc_to_ref(mapping);
+                if mut_mapping_ref.1.is_read_only() {
+                    bail!("cannot reassign to read-only variable {name}");
+                }
+    
+                let new_flags_bitfield = flags.0;
+                let previos_flags_bitfield = mut_mapping_ref.1.0;
+    
+                // if a new flag was introduced that the original did not have
+                if new_flags_bitfield | previos_flags_bitfield != previos_flags_bitfield {
+                    bail!("cannot assign bitfield {new_flags_bitfield:8b} to variable {name}, which has bitfield {previos_flags_bitfield:8b}");
+                }
+    
+                let primitive_part = &mut mut_mapping_ref.0;
+                *primitive_part = var;
+
+                // println!("\t\t[STORED] {name} to {}", frame.label);
+
+                return Ok(())
+                // this means it has already been mapped.
             }
 
-            let new_flags_bitfield = flags.0;
-            let previos_flags_bitfield = mut_mapping_ref.1.0;
-
-            // if a new flag was introduced that the original did not have
-            if new_flags_bitfield | previos_flags_bitfield != previos_flags_bitfield {
-                bail!("cannot assign bitfield {new_flags_bitfield:8b} to variable {name}, which has bitfield {previos_flags_bitfield:8b}");
+            if !SpecialScope::is_label_special_scope(&frame.label) {
+                break;
             }
-
-            let primitive_part = &mut mut_mapping_ref.0;
-            *primitive_part = var;
-            // this means it has already been mapped.
-        } else {
-            variables.insert(name, Rc::new((var, flags)));
         }
+
+        self.register_variable_local(name, var, flags)?;
+
 
         Ok(())
     }

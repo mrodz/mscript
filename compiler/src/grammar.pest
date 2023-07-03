@@ -109,7 +109,7 @@ print_statement = { "print" ~ value }
 
 return_statement = { "return" ~ value? }
 
-declaration = { assignment | callable | print_statement | return_statement | if_statement | while_loop }
+declaration = { assignment | callable | print_statement | return_statement | continue_statement | if_statement | while_loop }
 
 file = {
     SOI ~

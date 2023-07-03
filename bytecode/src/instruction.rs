@@ -667,6 +667,22 @@ pub mod implementations {
             Ok(())
         }
 
+        store_fast(ctx, args) {
+            let Some(name) = args.first() else {
+                bail!("store requires a name")
+            };
+
+            if ctx.stack_size() != 1 {
+                bail!("store can only store a single item");
+            }
+
+            let arg = ctx.pop().unwrap();
+
+            ctx.register_variable_local(name.clone(), arg)?;
+
+            Ok(())
+        }
+
         store_object(ctx, args) {
             let Some(name) = args.first() else {
                 bail!("store_object requires a name")
@@ -721,7 +737,7 @@ pub mod implementations {
             }
 
             let arg = ctx.pop().unwrap();
-            ctx.register_variable(name.clone(), arg)?;
+            ctx.register_variable_local(name.clone(), arg)?;
 
             Ok(())
         }
@@ -756,13 +772,13 @@ pub mod implementations {
             Ok(())
         }
 
-        load_local(ctx, args) {
+        load_fast(ctx, args) {
             let Some(name) = args.first() else {
                 bail!("load requires a name")
             };
 
             let Some(var) = ctx.load_local(name) else {
-                bail!("load before store (`{name}` not in this stack frame)")
+                bail!("load before store (`{name}` not in this stack frame)\nframe `{}`'s variables:\n{}", ctx.rced_call_stack().get_frame_label(), ctx.get_frame_variables())
             };
 
             ctx.push(var.0.clone());
@@ -863,7 +879,9 @@ pub mod implementations {
             };
 
             if !b {
-                ctx.signal(InstructionExitState::GotoPushScope(offset.parse::<usize>()?, SpecialScope::If));
+                ctx.signal(InstructionExitState::Goto(offset.parse::<isize>()?));
+            } else {
+                ctx.signal(InstructionExitState::PushScope(SpecialScope::If));
             }
 
             Ok(())
@@ -885,8 +903,18 @@ pub mod implementations {
                 bail!("while statements require an argument to instruct where to jump if falsey")
             };
 
+            /*
             if !b {
-                ctx.signal(InstructionExitState::GotoPushScope(offset.parse::<usize>()?, SpecialScope::WhileLoop));
+                ctx.signal(InstructionExitState::Goto(offset.parse::<isize>()?));
+            } else {
+                ctx.signal(InstructionExitState::PushScope(SpecialScope::WhileLoop))
+            }
+             */
+
+            if !b {
+                ctx.signal(InstructionExitState::Goto(offset.parse::<isize>()?));
+            } else {
+                ctx.signal(InstructionExitState::PushScope(SpecialScope::WhileLoop))
             }
 
             Ok(())
@@ -898,6 +926,16 @@ pub mod implementations {
             };
 
             ctx.signal(InstructionExitState::Goto(offset.parse::<isize>()?));
+
+            Ok(())
+        }
+
+        jmp_pop(ctx, args) {
+            let Some(offset) = args.first() else {
+                bail!("jmp statements require an argument to instruct where to jump")
+            };
+
+            ctx.signal(InstructionExitState::GotoPopScope(offset.parse::<isize>()?));
 
             Ok(())
         }

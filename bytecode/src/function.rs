@@ -175,6 +175,10 @@ pub enum InstructionExitState {
     /// This request will fail if the requested interpreter cursor
     /// position would fall out of bounds.
     GotoPushScope(usize, SpecialScope),
+    /// This variant requests to:
+    /// * pop a [`SpecialScope`] from the interpreter process
+    /// * jump forward `+usize` instructions.
+    GotoPopScope(isize),
     /// This variant requests to pop a [`SpecialScope`] from the interpreter process.
     ///
     /// # Errors
@@ -308,6 +312,21 @@ impl Function {
             // `context` must have its exit state cleared before continuing the loop.
             let ret: &InstructionExitState = context.poll();
 
+            let mut goto_fn = |offset: isize| -> Result<()> {
+                let new_val = instruction_ptr.checked_add_signed(offset).with_context(|| format!("numeric overflow ({instruction_ptr} + {offset})"))?;
+
+                let instruction_len = self.instructions.len();
+
+                if new_val >= instruction_len {
+                    bail!("goto position index {new_val} is too big, instruction length is {instruction_len}.");
+                }
+
+                // println!("\twent from {instruction_ptr} to {new_val}");
+
+                instruction_ptr = new_val;
+                Ok(())
+            };
+
             // process the exit state
             match ret {
                 InstructionExitState::ReturnValue(ret) => {
@@ -327,15 +346,7 @@ impl Function {
                     }
                 }
                 InstructionExitState::Goto(offset) => {
-                    let new_val = instruction_ptr.checked_add_signed(*offset).with_context(|| format!("numeric overflow ({instruction_ptr} + {offset})"))?;
-
-                    let instruction_len = self.instructions.len();
-
-                    if new_val >= instruction_len {
-                        bail!("goto position index {new_val} is too big, instruction length is {instruction_len}.");
-                    }
- 
-                    instruction_ptr = new_val;
+                    goto_fn(*offset)?;
                     context.clear_signal();
                     continue;
                 }
@@ -344,23 +355,22 @@ impl Function {
                     context.add_frame(ty.to_string());
                 }
                 InstructionExitState::GotoPushScope(offset, ty) => {
-                    let new_val = instruction_ptr.checked_add(*offset).with_context(|| format!("numeric overflow ({instruction_ptr} + {offset})"))?;
-
-                    let instruction_len = self.instructions.len();
-
-                    if new_val >= instruction_len {
-                        bail!("goto position index {new_val} is too big, instruction length is {instruction_len}.");
-                    }
-
-                    instruction_ptr = new_val;
+                    goto_fn((*offset).try_into()?)?;
+                    
                     special_scopes.push(*ty);
-
-                    let string = ty.to_string();
+                    context.add_frame(ty.to_string());
 
                     context.clear_signal();
-
-                    context.add_frame(string);
                     continue;
+                }
+                InstructionExitState::GotoPopScope(offset) => {
+                    goto_fn(*offset)?;
+
+                    context.pop_frame();
+
+                    context.clear_signal();
+                    continue;                    
+
                 }
                 InstructionExitState::PopScope => {
                     if special_scopes.pop().is_some() {

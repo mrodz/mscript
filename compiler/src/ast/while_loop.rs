@@ -9,14 +9,6 @@ pub struct WhileLoop {
 }
 
 impl Compile for WhileLoop {
-	/// { # 0
-	/// 	<compile> condition
-	/// 	while # 1
-	/// 	
-	/// 	<compile> body
-	/// 	goto # 0
-	/// 
-	/// } # 1
 	fn compile(&self, function_buffer: &mut Vec<super::CompiledItem>) -> anyhow::Result<Vec<super::CompiledItem>, anyhow::Error> {
 		let mut condition_compiled = self.condition.compile(function_buffer)?;
 		let mut body_compiled = self.body.compile(function_buffer)?;
@@ -25,7 +17,8 @@ impl Compile for WhileLoop {
 		let body_len: isize = body_compiled.len().try_into()?;
 
 		condition_compiled.push(instruction!(while_loop (body_len + 2)));
-		body_compiled.push(instruction!(jmp (-(body_len + 1 + condition_len))));
+
+		body_compiled.push(instruction!(jmp_pop (-(body_len + 1 + condition_len))));
 
 		condition_compiled.append(&mut body_compiled);
 

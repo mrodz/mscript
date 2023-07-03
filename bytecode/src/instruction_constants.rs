@@ -22,7 +22,7 @@ pub static REPR_TO_BIN: Lazy<HashMap<&[u8], u8>> = Lazy::new(|| {
 ///
 /// Saving this as a constant makes it harder for the arrays to fall out of sync
 /// by requiring that they both take the same size.
-pub const INSTRUCTION_COUNT: usize = 50;
+pub const INSTRUCTION_COUNT: usize = 52;
 
 /// This is an array that provides O(1) lookups of names from bytes.
 pub static BIN_TO_REPR: [&[u8]; INSTRUCTION_COUNT] = [
@@ -52,7 +52,7 @@ pub static BIN_TO_REPR: [&[u8]; INSTRUCTION_COUNT] = [
     /* 0x17 [23] */ b"store",
     /* 0x18 [24] */ b"store_object",
     /* 0x19 [25] */ b"load",
-    /* 0x1A [26] */ b"load_local",
+    /* 0x1A [26] */ b"load_fast",
     /* 0x1B [27] */ b"typecmp",
     /* 0x1C [28] */ b"if",
     /* 0x1D [29] */ b"jmp",
@@ -76,6 +76,8 @@ pub static BIN_TO_REPR: [&[u8]; INSTRUCTION_COUNT] = [
     /* 0x2F [47] */ b"store_skip",
     /* 0x30 [48] */ b"fast_rev2",
     /* 0x31 [49] */ b"while_loop",
+    /* 0x32 [50] */ b"jmp_pop",
+    /* 0x33 [51] */ b"store_fast"
 ];
 
 /// Similar to [`BIN_TO_REPR`][crate::instruction_constants::BIN_TO_REPR],
@@ -107,7 +109,7 @@ pub static FUNCTION_POINTER_LOOKUP: [InstructionSignature; INSTRUCTION_COUNT] = 
     implementations::store,
     implementations::store_object,
     implementations::load,
-    implementations::load_local,
+    implementations::load_fast,
     implementations::typecmp,
     implementations::if_stmt,
     implementations::jmp,
@@ -131,4 +133,6 @@ pub static FUNCTION_POINTER_LOOKUP: [InstructionSignature; INSTRUCTION_COUNT] = 
     implementations::store_skip,
     implementations::fast_rev2,
     implementations::while_loop,
+    implementations::jmp_pop,
+    implementations::store_fast,
 ];
