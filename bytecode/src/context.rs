@@ -20,15 +20,18 @@ pub enum SpecialScope {
     If,
     /// The scope of an `Else` statement
     Else,
+    WhileLoop,
 }
-
 
 static DISPLAY_NAME_IF_SCOPE: &str = "<if>";
 static DISPLAY_NAME_ELSE_SCOPE: &str = "<else>";
+static DISPLAY_NAME_WHILE_LOOP_SCOPE: &str = "<while>";
 
 impl SpecialScope {
     pub fn is_label_special_scope(label: &str) -> bool {
-        label == DISPLAY_NAME_IF_SCOPE || label == DISPLAY_NAME_ELSE_SCOPE
+        label == DISPLAY_NAME_IF_SCOPE
+            || label == DISPLAY_NAME_ELSE_SCOPE
+            || label == DISPLAY_NAME_WHILE_LOOP_SCOPE
     }
 }
 
@@ -40,6 +43,7 @@ impl Display for SpecialScope {
             match self {
                 Self::If => DISPLAY_NAME_IF_SCOPE,
                 Self::Else => DISPLAY_NAME_ELSE_SCOPE,
+                Self::WhileLoop => DISPLAY_NAME_WHILE_LOOP_SCOPE,
             }
         )
     }
@@ -176,8 +180,8 @@ impl<'a> Ctx<'a> {
     /// Return many mutable references to items on the local operating stack.
     pub fn get_many_op_items_mut<I>(&mut self, range: I) -> Option<&mut I::Output>
     where
-        I: SliceIndex<[Primitive]>
-     {
+        I: SliceIndex<[Primitive]>,
+    {
         self.stack.get_mut(range)
     }
 
@@ -232,6 +236,7 @@ impl<'a> Ctx<'a> {
 
     /// Pop a frame from the stack.
     pub(crate) fn pop_frame(&self) {
+
         rc_to_ref(&self.call_stack).pop()
     }
 
@@ -267,14 +272,23 @@ impl<'a> Ctx<'a> {
     }
 
     /// Store a variable to this function. Will get dropped when the function goes out of scope.
-    pub(crate) fn register_variable(&self, name: String, var: Primitive) {
-        rc_to_ref(&self.call_stack).register_variable(name, var)
+    pub(crate) fn register_variable(&self, name: String, var: Primitive) -> Result<()> {
+        let call_stack = rc_to_ref(&self.call_stack);
+
+        call_stack.register_variable(name, var)
     }
 
-    /// Mutate a variable in this function.
-    pub(crate) fn update_variable(&self, name: String, var: Primitive) -> Result<()> {
-        rc_to_ref(&self.call_stack).update_variable(name, var)
+    /// Store a variable to the top of the call stack *only*. Will get dropped when the stack frame goes out of scope.
+    pub(crate) fn register_variable_local(&self, name: String, var: Primitive) -> Result<()> {
+        let call_stack = rc_to_ref(&self.call_stack);
+
+        call_stack.register_variable_local(name, var, VariableFlags::none())
     }
+
+    // /// Mutate a variable in this function.
+    // pub(crate) fn update_variable(&self, name: String, var: Primitive) -> Result<()> {
+    //     rc_to_ref(&self.call_stack).update_variable(name, var)
+    // }
 
     /// Get the [`Primitive`] value and its associated [`VariableFlags`] from a name.
     ///

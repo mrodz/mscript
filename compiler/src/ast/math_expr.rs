@@ -56,18 +56,19 @@ pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
     use Rule::*;
 
     PrattParser::new()
-        .op(Op::infix(add, Left) | Op::infix(subtract, Left))
-        .op(Op::infix(multiply, Left) | Op::infix(divide, Left) | Op::infix(modulo, Left))
-        .op(Op::prefix(unary_minus))
+        .op(Op::infix(or, Left) | Op::infix(xor, Left))
+        .op(Op::infix(and, Left))
         .op(Op::infix(lt, Left)
             | Op::infix(lte, Left)
             | Op::infix(gt, Left)
             | Op::infix(gte, Left)
             | Op::infix(eq, Left)
             | Op::infix(neq, Left))
-        .op(Op::infix(or, Left) | Op::infix(xor, Left))
-        .op(Op::infix(and, Left))
+        
         .op(Op::prefix(not))
+        .op(Op::infix(add, Left) | Op::infix(subtract, Left))
+        .op(Op::infix(multiply, Left) | Op::infix(divide, Left) | Op::infix(modulo, Left))
+        .op(Op::prefix(unary_minus))
 });
 
 #[derive(Debug, Clone, PartialEq)]
@@ -218,15 +219,10 @@ fn compile_depth(
         Expr::Value(val) => val.compile(function_buffer),
         Expr::UnaryNot(expr) => {
             if let Expr::Value(value) = expr.as_ref() {
-                match value {
-                    Value::Ident(ident) => {
-                        let x = ident.ty().context("no type data")?;
-                        if !x.is_boolean() {
-                            bail!("not can only be performed on a boolean value");
-                        }
-                    }
-                    Value::Boolean(..) => (),
-                    _ => bail!("cannot apply binary not"),
+                let ty = value.for_type()?;
+
+                if !ty.is_boolean() {
+                    bail!("cannot apply binary not to {:?}", ty)
                 }
             }
 
@@ -269,7 +265,7 @@ fn compile_depth(
                 let rhs_len = rhs.len() + 3;
                 lhs.push(instruction!(store_skip temp_name "0" rhs_len));
                 lhs.append(&mut rhs);
-                lhs.push(instruction!(load_local temp_name));
+                lhs.push(instruction!(load_fast temp_name));
                 lhs.push(instruction!(bin_op "&&"));
 
                 return Ok(lhs);
@@ -279,15 +275,15 @@ fn compile_depth(
                 let rhs_len = rhs.len() + 3;
                 lhs.push(instruction!(store_skip temp_name "1" rhs_len));
                 lhs.append(&mut rhs);
-                lhs.push(instruction!(load_local temp_name));
+                lhs.push(instruction!(load_fast temp_name));
                 lhs.push(instruction!(bin_op "||"));
 
                 return Ok(lhs);
             }
 
-            lhs.push(instruction!(store temp_name));
+            lhs.push(instruction!(store_fast temp_name));
             lhs.append(&mut rhs);
-            lhs.push(instruction!(load_local temp_name));
+            lhs.push(instruction!(load_fast temp_name));
             lhs.push(instruction!(fast_rev2));
 
             match op {

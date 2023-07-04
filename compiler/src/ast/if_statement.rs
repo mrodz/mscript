@@ -16,7 +16,18 @@ pub struct IfStatement {
     else_statement: Option<ElseStatement>,
 }
 
-impl Dependencies for IfStatement {}
+impl Dependencies for IfStatement {
+    fn dependencies(&self) -> Vec<super::Dependency> {
+        let mut value_deps = self.value.net_dependencies();
+        value_deps.append(&mut self.body.net_dependencies());
+        
+        if let Some(ref else_statement) = self.else_statement {
+            value_deps.append(&mut else_statement.net_dependencies());
+        }
+
+        value_deps
+    }
+}
 
 impl Compile for IfStatement {
     fn compile(&self, function_buffer: &mut Vec<super::CompiledItem>) -> Result<Vec<CompiledItem>> {
@@ -25,12 +36,28 @@ impl Compile for IfStatement {
         let mut value_init = self.value.compile(function_buffer)?;
         result.append(&mut value_init);
 
+        // result: 
+        //  - init value
+
         let mut body_init = self.body.compile(function_buffer)?;
         body_init.push(instruction!(done));
 
-        let if_size = body_init.len() + if self.else_statement.is_some() { 2 } else { 1 };
+        // result:
+        //  - value_init...
+        // body_init:
+        //  - body_init...
+        //  - done
+
+        let if_size = body_init.len() + if self.else_statement.is_some() { 3 } else { 1 };
 
         result.push(instruction!(if if_size));
+
+        // result:
+        //  - value_init...
+        //  - if ${body_init.len() + else ? 3 : 1}
+        // body_init:
+        //  - body_init...
+        //  - done
 
         if let Some(ref else_statement) = self.else_statement {
             let mut compiled = else_statement.compile(function_buffer)?;
@@ -38,6 +65,15 @@ impl Compile for IfStatement {
             let len = compiled.len();
             body_init.push(instruction!(jmp len));
             body_init.append(&mut compiled);
+
+            // result:
+            //  - value_init...
+            //  - if ${body_init.len() + else ? 2 : 1}
+            // body_init:
+            //  - body_init...
+            //  - done
+            //  - jmp ${else_len}
+            //  - else_statement...
         }
 
         result.append(&mut body_init);
@@ -50,6 +86,15 @@ impl Compile for IfStatement {
 pub enum ElseStatement {
     Block(Block),
     IfStatement(Box<IfStatement>),
+}
+
+impl Dependencies for ElseStatement {
+    fn dependencies(&self) -> Vec<super::Dependency> {
+        match self {
+            Self::Block(block) => block.net_dependencies(),
+            Self::IfStatement(if_statement) => if_statement.net_dependencies(),
+        }
+    }
 }
 
 impl Compile for ElseStatement {

@@ -99,7 +99,7 @@ impl Compile for Callable {
                 let mut value_init = x.compile(function_buffer).unwrap();
 
                 let argument_register = ArgumentRegisterHandle::new();
-                value_init.push(instruction!(store(argument_register.repr())));
+                value_init.push(instruction!(store_fast {argument_register.repr()}));
 
                 if register_start.is_none() {
                     register_start = Some(argument_register.0);
@@ -115,7 +115,7 @@ impl Compile for Callable {
         if let Some(register_start) = register_start {
             for register_idx in register_start..register_start + register_count {
                 let name = ArgumentRegisterHandle::repr_from_raw(register_idx);
-                args_init.push(instruction!(load_local name));
+                args_init.push(instruction!(load_fast name));
             }
         }
 
