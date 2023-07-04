@@ -5,13 +5,29 @@ is_even = fn(input: int) -> bool {
 }
 
 while i < 10 {
-	if i % 2 == 0 {
-		print "" + i + " is even!"
+	i = i + 1
+
+	if is_even(i) {
+		continue
 	}
 
 	print "cool whip " + i
 
-	i = i + 1
 }
 
-print "done"
+print "done\n"
+
+i = 0
+
+while true {
+	i = i + 1
+
+	print i
+
+	if i == 5 {
+		print "breaking..."
+		break
+	}
+}
+
+print "done v2!"

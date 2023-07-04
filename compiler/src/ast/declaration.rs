@@ -9,7 +9,7 @@ use crate::{
 
 use super::{
     Assignment, IfStatement, ReturnStatement, Callable,
-    Compile, CompiledItem, Dependencies, Dependency, PrintStatement, WhileLoop, Continue,
+    Compile, CompiledItem, Dependencies, Dependency, PrintStatement, WhileLoop, Continue, loop_control_flow::Break,
 };
 
 #[derive(Debug)]
@@ -21,6 +21,7 @@ pub(crate) enum Declaration {
     IfStatement(IfStatement),
     WhileLoop(WhileLoop),
     Continue(Continue),
+    Break(Break)
 }
 
 impl Dependencies for Declaration {
@@ -32,7 +33,7 @@ impl Dependencies for Declaration {
             Self::ReturnStatement(return_statement) => return_statement.supplies(),
             Self::IfStatement(if_statement) => if_statement.supplies(),
             Self::WhileLoop(while_loop) => while_loop.supplies(),
-            Self::Continue(_) => vec![]
+            Self::Continue(_) | Self::Break(_) => vec![],
         }
     }
 
@@ -52,7 +53,8 @@ impl Dependencies for Declaration {
             Self::ReturnStatement(return_statement) => return_statement.net_dependencies(),
             Self::IfStatement(if_statement) => if_statement.net_dependencies(),
             Self::WhileLoop(while_loop) => while_loop.net_dependencies(),
-            Self::Continue(_) => vec![],
+            Self::Continue(_) | Self::Break(_) => vec![],
+
         }
     }
 }
@@ -71,6 +73,7 @@ impl Compile for Declaration {
             Self::IfStatement(x) => x.compile(function_buffer),
             Self::WhileLoop(x) => x.compile(function_buffer),
             Self::Continue(x) => x.compile(function_buffer),
+            Self::Break(x) => x.compile(function_buffer),
         }
     }
 }
@@ -92,6 +95,7 @@ impl Parser {
             Rule::if_statement => Declaration::IfStatement(Self::if_statement(declaration)?),
             Rule::while_loop => Declaration::WhileLoop(Self::while_loop(declaration)?),
             Rule::continue_statement => Declaration::Continue(Self::continue_statement(declaration).to_err_vec()?),
+            Rule::break_statement => Declaration::Break(Self::break_statement(input).to_err_vec()?),
             _ => unreachable!(),
         };
 

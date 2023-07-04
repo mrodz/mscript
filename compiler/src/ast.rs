@@ -74,9 +74,21 @@ pub(crate) enum CompiledItem {
         id: u8,
         arguments: Box<[String]>,
     },
+    Break,
+    Continue,
 }
 
 impl CompiledItem {
+    pub fn is_loop_instruction(&self) -> bool {
+        const WHILE_LOOP: u8 = 0x31;
+        matches!(self, Self::Instruction { id: WHILE_LOOP, .. })
+    }
+
+    pub fn is_done_instruction(&self) -> bool {
+        const DONE: u8 = 0x31;
+        matches!(self, Self::Instruction { id: DONE, .. })
+    }
+
     pub fn repr(&self, use_string_version: bool) -> Result<String> {
         fn fix_arg_if_needed(arg: &String) -> Result<Cow<String>> {
             let starts = arg.starts_with('\"');
@@ -145,6 +157,7 @@ impl CompiledItem {
                     Ok(format!("{}{}\0", *id as char, args))
                 }
             }
+            Self::Break | Self::Continue => unreachable!("break/continue that was not fulfilled")
         }
     }
 }

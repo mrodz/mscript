@@ -44,7 +44,7 @@ impl PartialEq for Ident {
 
 pub static KEYWORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
     HashSet::from_iter([
-        "fn", "obj", "print", "return", "if", "else", "true", "false", "modify", "const", "self", "while"
+        "fn", "obj", "print", "return", "if", "else", "true", "false", "modify", "const", "self", "while", "continue", "break"
     ])
 });
 

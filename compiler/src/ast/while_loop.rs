@@ -1,4 +1,4 @@
-use crate::{parser::{Parser, Node}, instruction, scope::ScopeReturnStatus};
+use crate::{parser::{Parser, Node}, instruction, scope::ScopeReturnStatus, ast::CompiledItem};
 
 use super::{Value, Block, Dependencies, Compile};
 
@@ -13,14 +13,49 @@ impl Compile for WhileLoop {
 		let mut condition_compiled = self.condition.compile(function_buffer)?;
 		let mut body_compiled = self.body.compile(function_buffer)?;
 
+		const SPACE_FOR_WHILE_AND_JMP_POP: usize = 2;
+		condition_compiled.reserve_exact(body_compiled.len() + SPACE_FOR_WHILE_AND_JMP_POP);
+
 		let condition_len: isize = condition_compiled.len().try_into()?;
 		let body_len: isize = body_compiled.len().try_into()?;
 
-		condition_compiled.push(instruction!(while_loop (body_len + 2)));
+		const LENGTH_OF_JMP_INSTRUCTION_AND_SPACE: isize = 2;
+		let offset_to_end_of_loop: isize = body_len + LENGTH_OF_JMP_INSTRUCTION_AND_SPACE;
 
-		body_compiled.push(instruction!(jmp_pop (-(body_len + 1 + condition_len))));
+		const LENGTH_OF_WHILE_INSTRUCTION: isize = 1;
+		let offset_to_start_of_loop: isize = -LENGTH_OF_WHILE_INSTRUCTION - body_len - condition_len; 
 
-		condition_compiled.append(&mut body_compiled);
+		condition_compiled.push(instruction!(while_loop offset_to_end_of_loop));
+		body_compiled.push(instruction!(jmp_pop offset_to_start_of_loop));
+
+		let mut loop_depth = 0;
+
+		let final_body_compiled_len = body_compiled.len();
+
+		for (idx, body_item) in body_compiled.into_iter().enumerate() {
+			if body_item.is_loop_instruction() {
+				loop_depth += 1;
+			}
+
+			if body_item.is_done_instruction() {
+				loop_depth -= 1;
+			}
+
+			match body_item {
+				CompiledItem::Continue if loop_depth == 0 => {
+					let distance_to_end = final_body_compiled_len - idx - 1;
+					condition_compiled.push(instruction!(jmp distance_to_end))
+				}
+				CompiledItem::Break if loop_depth == 0 => {
+					let distance_to_end = final_body_compiled_len - idx;
+					condition_compiled.push(instruction!(jmp distance_to_end))
+				}
+				normal => condition_compiled.push(normal)
+			}
+			// print!("{}", body_item.repr(true).unwrap());
+		}
+
+		// condition_compiled.append(&mut body_compiled);
 
 		Ok(condition_compiled)
 	}
