@@ -1043,7 +1043,7 @@ pub fn split_string(string: Cow<str>) -> Result<Box<[String]>> {
     let mut escaping = false;
 
     for char in string.chars() {
-        if !in_quotes && (char.is_whitespace() || char == ',') {
+        if !in_quotes && (char.is_whitespace()) {
             if !buf.is_empty() {
                 result.push(buf.to_string());
                 buf.clear();
@@ -1057,13 +1057,6 @@ pub fn split_string(string: Cow<str>) -> Result<Box<[String]>> {
                     buf.push(char);
                 }
                 escaping = !escaping;
-                continue;
-            }
-            ',' => {
-                if escaping {
-                    buf.push(char);
-                    escaping = !escaping;
-                }
                 continue;
             }
             '"' => {

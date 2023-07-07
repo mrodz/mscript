@@ -1,6 +1,7 @@
 use std::{borrow::Cow, fmt::Display};
 
 use anyhow::{Context, Result};
+use pest::Span;
 
 use crate::{
     ast::{Block, CompiledItem, Ident, Value},
@@ -10,7 +11,7 @@ use crate::{
     VecErr,
 };
 
-use super::{Compile, Dependencies, INT_TYPE};
+use super::{math_expr::Op, new_err, r#type::{IntoType, NativeType}, Compile, Dependencies, INT_TYPE, TypeLayout, FLOAT_TYPE};
 
 #[derive(Debug)]
 pub(crate) struct NumberLoop {
@@ -219,20 +220,30 @@ impl Parser {
 
         input.user_data().push_number_loop(child_returns_type);
 
-        let val_start = Self::value(children.next().unwrap())?;
+        let val_start_node = children.next().unwrap();
+        let val_start_span = val_start_node.as_span();
+        let val_start = Self::value(val_start_node)?;
+        let start_ty = val_start.for_type().to_err_vec()?;
+
         let inclusive_or_exclusive = children.next().unwrap();
-        let val_end = Self::value(children.next().unwrap())?;
+
+        let val_end_node = children.next().unwrap();
+        let val_end_span = val_end_node.as_span();
+        let val_end = Self::value(val_end_node)?;
+        let end_ty = val_end.for_type().to_err_vec()?;
 
         // ^^^ these are guaranteed.
 
-        let mut step: Option<Value> = None;
+        let mut step: Option<(Value, Span)> = None;
         let mut name: Option<Ident> = None;
         let mut body: Option<Block> = None;
 
         for next in children {
             match next.as_rule() {
                 Rule::number_loop_step => {
-                    step = Some(Self::value(next.children().single().unwrap())?)
+                    let val = next.children().single().unwrap();
+                    let val_span = val.as_span();
+                    step = Some((Self::value(val)?, val_span))
                 }
                 Rule::number_loop_bind_name => {
                     name = {
@@ -252,6 +263,73 @@ impl Parser {
             }
         }
 
+
+
+        let rhs = step
+            .as_ref()
+            .map_or_else(
+                || Ok(Cow::Borrowed(*INT_TYPE)),
+                |(val, _)| val.for_type().map(Cow::Owned),
+            )
+            .to_err_vec()?;
+
+        let Some(step_output_type) = start_ty.get_output_type(rhs.as_ref(), &Op::Add) else {
+            let span = if let Some((_, span)) = step {
+                span
+            } else {
+                val_end_span
+            };
+
+            return Err(vec![new_err(
+                span,
+                &input.user_data().get_source_file_name(),
+                format!("attempting to use a step of type `{rhs}`, which cannot be applied to `{start_ty}`"),
+            )]);
+        };
+
+        let after_step_output: Option<TypeLayout> = step_output_type.get_output_type(&start_ty, &Op::Lte);
+
+        let Some(TypeLayout::Native(NativeType::Bool)) = after_step_output else {
+            return Err(vec![new_err(
+                val_start_span,
+                &input.user_data().get_source_file_name(),
+                format!("applying a step of `{rhs}` to `{start_ty}` produces `{}`", after_step_output.map_or_else(|| Cow::Borrowed("never"), |ty| Cow::Owned(ty.to_string()))),
+            )])
+        };
+        
+        if !start_ty.is_numeric(true) {
+            return Err(vec![new_err(
+                val_start_span,
+                &input.user_data().get_source_file_name(),
+                format!("`from` loops only allow numeric bounds, found {start_ty}"),
+            )]);
+        }
+
+        if !end_ty.is_numeric(true) {
+            return Err(vec![new_err(
+                val_end_span,
+                &input.user_data().get_source_file_name(),
+                format!("`from` loops only allow numeric bounds, found {end_ty}"),
+            )]);
+        }
+
+        let start_is_float = &start_ty == *FLOAT_TYPE;
+        let end_is_float = &end_ty == *FLOAT_TYPE;
+
+        if (start_is_float ^ end_is_float) && step.is_none() {
+            let span = if start_is_float {
+                val_start_span
+            } else {
+                val_end_span
+            };
+
+            return Err(vec![new_err(
+                span,
+                &input.user_data().get_source_file_name(),
+                format!("using floating point numbers in a `from` loop requires explicitly defining a step property"),
+            )])
+        }
+
         input.user_data().pop_scope();
 
         let name_is_collision = name
@@ -264,7 +342,7 @@ impl Parser {
         Ok(NumberLoop {
             body: body.context("expected a body").to_err_vec()?,
             name,
-            step,
+            step: step.map(|(val, _)| val),
             val_start,
             val_end,
             inclusive,

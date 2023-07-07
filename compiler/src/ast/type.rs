@@ -43,11 +43,11 @@ pub(crate) mod shorthands {
     });
     
     pub(crate) static FLOAT_TYPE: Lazy<&TypeLayout> = Lazy::new(|| unsafe {
-        TYPES.get("bigint").unwrap()
+        TYPES.get("float").unwrap()
     });
     
     pub(crate) static BYTE_TYPE: Lazy<&TypeLayout> = Lazy::new(|| unsafe {
-        TYPES.get("bigint").unwrap()
+        TYPES.get("byte").unwrap()
     });
 }
 
@@ -179,9 +179,8 @@ impl TypeLayout {
         Some(TypeLayout::Native(matched))
     }
 
-    #[allow(unused)]
     pub fn is_numeric(&self, allow_byte: bool) -> bool {
-        let Self::Native(native) = self else {
+        let Self::Native(native) = self.get_type_recursively() else {
             return false;
         };
 
