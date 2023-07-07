@@ -3,7 +3,7 @@ use std::{borrow::Cow, fmt::Display};
 use anyhow::{Context, Result};
 
 use crate::{
-    ast::{Block, Ident, Value, CompiledItem},
+    ast::{Block, CompiledItem, Ident, Value},
     instruction,
     parser::{Node, Parser, Rule},
     scope::ScopeReturnStatus,
@@ -20,6 +20,7 @@ pub(crate) struct NumberLoop {
     step: Option<Value>,
     name: Option<Ident>,
     body: Block,
+    name_is_collision: bool,
 }
 
 impl Dependencies for NumberLoop {
@@ -133,26 +134,25 @@ impl Compile for NumberLoop {
 
         let mut body_compiled = self.body.compile(function_buffer)?;
 
-		let mut step_compiled = vec![instruction!(load loop_identity)];
+        let mut step_compiled = vec![instruction!(load loop_identity)];
 
-		if let Some(ref step) = self.step {
-			step_compiled.append(&mut step.compile(function_buffer)?)
-		} else {
-			step_compiled.push(CompiledItem::Instruction {
-				id: 0x09,
-				arguments: Box::new(["1".to_owned()])
-			})
-		}
+        if let Some(ref step) = self.step {
+            step_compiled.append(&mut step.compile(function_buffer)?)
+        } else {
+            step_compiled.push(CompiledItem::Instruction {
+                id: 0x09,
+                arguments: Box::new(["1".to_owned()]),
+            })
+        }
 
-		step_compiled.push(instruction!(bin_op "+"));
-		step_compiled.push(instruction!(store loop_identity));
+        step_compiled.push(instruction!(bin_op "+"));
+        step_compiled.push(instruction!(store loop_identity));
 
-		body_compiled.append(&mut step_compiled);
-
+        body_compiled.append(&mut step_compiled);
 
         let body_len: isize = body_compiled.len().try_into()?;
 
-        const LENGTH_OF_JMP_INSTRUCTION_AND_SPACE: isize = 3;
+        const LENGTH_OF_JMP_INSTRUCTION_AND_SPACE: isize = 2;
         let offset_to_end_of_loop: isize = body_len + LENGTH_OF_JMP_INSTRUCTION_AND_SPACE;
 
         const LENGTH_OF_WHILE_INSTRUCTION: isize = 1;
@@ -165,7 +165,9 @@ impl Compile for NumberLoop {
 
         result.push(instruction!(jmp_pop offset_to_start_of_loop));
 
-        result.push(instruction!(delete_name_scoped loop_identity end_loop_register));
+		if !self.name_is_collision {
+        	result.push(instruction!(delete_name_scoped loop_identity end_loop_register));
+		}
 
         end_loop_register.free();
         loop_identity.free();
@@ -198,16 +200,19 @@ impl Parser {
         let mut name: Option<Ident> = None;
         let mut body: Option<Block> = None;
 
-		for next in children {
+        for next in children {
             match next.as_rule() {
                 Rule::number_loop_step => {
                     step = Some(Self::value(next.children().single().unwrap())?)
                 }
                 Rule::number_loop_bind_name => {
                     name = {
-                        let mut ident = Self::ident(next.children().single().unwrap()).to_err_vec()?;
+                        let mut ident =
+                            Self::ident(next.children().single().unwrap()).to_err_vec()?;
 
-						ident.link_force_no_inherit(input.user_data(), Cow::Borrowed(&INT_TYPE)).to_err_vec()?;
+                        ident
+                            .link_force_no_inherit(input.user_data(), Cow::Borrowed(&INT_TYPE))
+                            .to_err_vec()?;
 
                         input.user_data().add_dependency(&ident);
                         Some(ident)
@@ -220,6 +225,11 @@ impl Parser {
 
         input.user_data().pop_scope();
 
+        let name_is_collision = name
+			.as_ref()
+            .map(|ident| input.user_data().has_name_been_mapped(ident.name()))
+            .unwrap_or(false);
+
         let inclusive = inclusive_or_exclusive.as_rule() == Rule::number_loop_inclusive;
 
         Ok(NumberLoop {
@@ -229,6 +239,7 @@ impl Parser {
             val_start,
             val_end,
             inclusive,
+            name_is_collision,
         })
     }
 }

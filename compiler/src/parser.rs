@@ -118,6 +118,10 @@ impl AssocFileData {
             .add_dependency(dependency);
     }
 
+    pub fn has_name_been_mapped(&self, dependency: &String) -> bool {
+        self.get_dependency_flags_from_name(dependency).is_some()
+    }
+
     pub fn has_name_been_mapped_local(&self, dependency: &String) -> bool {
         self.get_ident_from_name_local(dependency).is_some()
     }

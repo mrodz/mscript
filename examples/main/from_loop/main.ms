@@ -1,6 +1,6 @@
 n = 10
 
-from 1 to 3, n {
+from 0 through 100 step 5, n {
 	print n
 }
 
