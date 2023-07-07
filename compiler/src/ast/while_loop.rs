@@ -42,13 +42,16 @@ impl Compile for WhileLoop {
 			}
 
 			match body_item {
-				CompiledItem::Continue if loop_depth == 0 => {
+				CompiledItem::Continue(frames_to_pop) if loop_depth == 0 => {
 					let distance_to_end = final_body_compiled_len - idx - 1;
-					condition_compiled.push(instruction!(jmp distance_to_end))
+
+					let frames_to_pop = frames_to_pop - 1;
+
+					condition_compiled.push(instruction!(jmp_pop distance_to_end frames_to_pop))
 				}
-				CompiledItem::Break if loop_depth == 0 => {
+				CompiledItem::Break(frames_to_pop) if loop_depth == 0 => {
 					let distance_to_end = final_body_compiled_len - idx;
-					condition_compiled.push(instruction!(jmp distance_to_end))
+					condition_compiled.push(instruction!(jmp_pop distance_to_end frames_to_pop))
 				}
 				normal => condition_compiled.push(normal)
 			}

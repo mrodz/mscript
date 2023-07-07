@@ -944,10 +944,12 @@ pub mod implementations {
 
         jmp_pop(ctx, args) {
             let Some(offset) = args.first() else {
-                bail!("jmp statements require an argument to instruct where to jump")
+                bail!("jmp_pop statements require an argument to instruct where to jump")
             };
 
-            ctx.signal(InstructionExitState::GotoPopScope(offset.parse::<isize>()?));
+            let frames_to_pop = args.get(1).map_or_else(|| Ok(1), |frames_to_pop| frames_to_pop.parse::<usize>())?;
+
+            ctx.signal(InstructionExitState::GotoPopScope(offset.parse::<isize>()?, frames_to_pop));
 
             Ok(())
         }

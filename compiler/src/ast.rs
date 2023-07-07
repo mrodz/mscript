@@ -79,8 +79,8 @@ pub(crate) enum CompiledItem {
         id: u8,
         arguments: Box<[String]>,
     },
-    Break,
-    Continue,
+    Break(usize),
+    Continue(usize),
 }
 
 impl CompiledItem {
@@ -90,8 +90,9 @@ impl CompiledItem {
     }
 
     pub fn is_done_instruction(&self) -> bool {
-        const DONE: u8 = 0x31;
-        matches!(self, Self::Instruction { id: DONE, .. })
+        const DONE: u8 = 0x27;
+        const JMP_POP: u8 = 0x32;
+        matches!(self, Self::Instruction { id: DONE | JMP_POP, .. })
     }
 
     pub fn repr(&self, use_string_version: bool) -> Result<String> {
@@ -162,7 +163,7 @@ impl CompiledItem {
                     Ok(format!("{}{}\0", *id as char, args))
                 }
             }
-            Self::Break | Self::Continue => unreachable!("break/continue that was not fulfilled"),
+            Self::Break(..) | Self::Continue(..) => unreachable!("break/continue that was not fulfilled"),
         }
     }
 }

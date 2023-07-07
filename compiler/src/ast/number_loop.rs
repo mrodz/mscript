@@ -148,6 +148,8 @@ impl Compile for NumberLoop {
         step_compiled.push(instruction!(bin_op "+"));
         step_compiled.push(instruction!(store loop_identity));
 
+        let step_compiled_len = step_compiled.len();
+
         body_compiled.append(&mut step_compiled);
 
         let body_len: isize = body_compiled.len().try_into()?;
@@ -161,13 +163,40 @@ impl Compile for NumberLoop {
             -LENGTH_OF_WHILE_INSTRUCTION - LENGTH_OF_CONDITION - body_len;
 
         result.push(instruction!(while_loop offset_to_end_of_loop));
-        result.append(&mut body_compiled);
+        body_compiled.push(instruction!(jmp_pop offset_to_start_of_loop));
 
-        result.push(instruction!(jmp_pop offset_to_start_of_loop));
+        let mut loop_depth = 0;
 
-		if !self.name_is_collision {
-        	result.push(instruction!(delete_name_scoped loop_identity end_loop_register));
-		}
+        let final_body_compiled_len = body_compiled.len();
+
+        for (idx, body_item) in body_compiled.into_iter().enumerate() {
+            if body_item.is_loop_instruction() {
+                loop_depth += 1;
+            }
+
+            if body_item.is_done_instruction() {
+                loop_depth -= 1;
+            }
+
+            match body_item {
+                CompiledItem::Continue(frames_to_pop) if loop_depth == 0 => {
+                    let distance_to_end = final_body_compiled_len - step_compiled_len - idx - 1;
+
+                    let frames_to_pop = frames_to_pop - 1;
+
+                    result.push(instruction!(jmp_pop distance_to_end frames_to_pop))
+                }
+                CompiledItem::Break(frames_to_pop) if loop_depth == 0 => {
+                    let distance_to_end = final_body_compiled_len - idx;
+                    result.push(instruction!(jmp_pop distance_to_end frames_to_pop))
+                }
+                normal => result.push(normal),
+            }
+        }
+
+        if !self.name_is_collision {
+            result.push(instruction!(delete_name_scoped loop_identity end_loop_register));
+        }
 
         end_loop_register.free();
         loop_identity.free();
@@ -226,7 +255,7 @@ impl Parser {
         input.user_data().pop_scope();
 
         let name_is_collision = name
-			.as_ref()
+            .as_ref()
             .map(|ident| input.user_data().has_name_been_mapped(ident.name()))
             .unwrap_or(false);
 

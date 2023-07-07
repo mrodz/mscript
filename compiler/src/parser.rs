@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::{cell::RefCell, rc::Rc};
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Result, bail};
 use pest_consume::Parser as ParserDerive;
 
 use crate::ast::{Compile, CompiledFunctionId, CompiledItem, Declaration, Ident, TypeLayout};
@@ -45,6 +45,24 @@ impl AssocFileData {
 
     pub fn get_file_name(&self) -> Rc<String> {
         self.file_name.clone()
+    }
+
+    pub fn scopes_since_loop(&self) -> Result<usize> {
+        let mut result = 1;
+
+        for scope in self.scopes.borrow().iter().rev() {
+            if scope.is_loop() {
+                return Ok(result);
+            }
+
+            if scope.is_function() {
+                break;
+            }
+
+            result += 1;
+        }
+
+        bail!("no loop found")
     }
 
     #[allow(clippy::mut_from_ref)]

@@ -99,6 +99,10 @@ impl Scope {
         self.ty == ScopeType::Function
     }
 
+    pub fn is_loop(&self) -> bool {
+        matches!(self.ty, ScopeType::NumberLoop | ScopeType::WhileLoop)
+    }
+
     pub fn add_dependency(&mut self, dependency: &Ident) {
         self.variables.insert(dependency.clone());
     }
