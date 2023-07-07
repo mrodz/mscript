@@ -285,6 +285,10 @@ impl<'a> Ctx<'a> {
         call_stack.register_variable_local(name, var, VariableFlags::none())
     }
 
+    pub(crate) fn delete_variable_local(&self, name: &String) -> Result<()> {
+        rc_to_ref(&self.call_stack).delete_variable_local(name)
+    }
+
     // /// Mutate a variable in this function.
     // pub(crate) fn update_variable(&self, name: String, var: Primitive) -> Result<()> {
     //     rc_to_ref(&self.call_stack).update_variable(name, var)

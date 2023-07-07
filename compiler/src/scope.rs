@@ -10,7 +10,8 @@ pub(crate) enum ScopeType {
     Function,
     IfBlock,
     ElseBlock,
-    WhileLoop
+    WhileLoop,
+    NumberLoop,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -96,6 +97,10 @@ impl Scope {
 
     pub fn is_function(&self) -> bool {
         self.ty == ScopeType::Function
+    }
+
+    pub fn is_loop(&self) -> bool {
+        matches!(self.ty, ScopeType::NumberLoop | ScopeType::WhileLoop)
     }
 
     pub fn add_dependency(&mut self, dependency: &Ident) {

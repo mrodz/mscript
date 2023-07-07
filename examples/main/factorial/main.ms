@@ -25,3 +25,29 @@ factorial_while_loop = fn(input: int) -> int {
 }
 
 print factorial_while_loop(5)
+
+factorial_through_loop = fn(input: int) -> int {
+	result = 1
+	from 1 through input, n {
+		result = result * n
+	}
+	return result
+}
+
+print factorial_through_loop(5)
+
+factorial_callback = fn(input: int) -> (fn() -> int) {
+	return fn() -> int {
+		result = 1
+		from 1 through input, n {
+			result = result * n
+		}
+		return result
+	}
+}
+
+factorial_fn = factorial_callback(5)
+print factorial_fn()
+factorial_fn2 = factorial_callback(6)
+print factorial_fn2()
+print factorial_fn()

@@ -173,7 +173,8 @@ impl Stack {
 
     /// Extend the call stack by adding a new frame.
     pub fn extend(&mut self, label: String) {
-        // println!(">>> PUSHED {label}");
+        #[cfg(feature = "developer")]
+        println!(">>> PUSHED {label}");
         self.0.push(StackFrame {
             label,
             variables: VariableMapping::default(),
@@ -187,7 +188,9 @@ impl Stack {
 
     /// Pop the top of the stack frame, releasing all of its resources.
     pub fn pop(&mut self) {
-        self.0.pop().expect("pop without stack frame");
+        let _popped = self.0.pop().expect("pop without stack frame");
+        #[cfg(feature = "developer")]
+        println!("<<< POPPED {}", _popped.label);
     }
 
     pub fn pop_until_function(&mut self) {
@@ -203,8 +206,10 @@ impl Stack {
 
         let size = self.size();
 
-        self.0.drain(size-c..);
-        // println!("<<< POPPED {}", popped.fold("".to_owned(), |str, frame| str + " + " +  frame.label.as_str()));
+        let _popped = self.0.drain(size-c..);
+        
+        #[cfg(feature = "developer")]
+        println!("<<< POPPED {}", _popped.fold("".to_owned(), |str, frame| str + " + " +  frame.label.as_str()));
     }
 
     /// Search the call stack for a frame with a variable with a matching `name`. Will start at the top (most recent)
@@ -226,18 +231,26 @@ impl Stack {
         None
     }
 
-    /// Add a `name -> variable` mapping to the current stack frame, with default flags.
+    /// Add a `name -> variable` mapping to the current stack frame, possibly searching, with default flags.
     pub fn register_variable(&mut self, name: String, var: Primitive) -> Result<()> {
         self.register_variable_flags(name, var, VariableFlags::none())
     }
 
+    /// Add a `name -> variable` mapping to the current stack frame, with flags.
     pub fn register_variable_local(&mut self, name: String, var: Primitive, flags: VariableFlags) -> Result<()> {
         let stack_frame = self.0.last_mut().context("nothing in the stack")?;
-
         let variables = &mut stack_frame.variables.0;
-        // println!("\t\t[STORED] {name} to {}", stack_frame.label);
-        
         variables.insert(name, Rc::new((var, flags)));
+
+        Ok(())
+    }
+
+    /// Delete a variable from the current stack frame.
+    pub fn delete_variable_local(&mut self, name: &String) -> Result<()> {
+        let frame = self.0.last_mut().expect("no stack frame");
+        if frame.variables.0.remove(name).is_none() {
+            bail!("{name} has not been mapped at this scope, and cannot be deleted");
+        }
 
         Ok(())
     }

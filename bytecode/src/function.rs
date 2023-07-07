@@ -178,7 +178,7 @@ pub enum InstructionExitState {
     /// This variant requests to:
     /// * pop a [`SpecialScope`] from the interpreter process
     /// * jump forward `+usize` instructions.
-    GotoPopScope(isize),
+    GotoPopScope(isize, usize),
     /// This variant requests to pop a [`SpecialScope`] from the interpreter process.
     ///
     /// # Errors
@@ -363,10 +363,12 @@ impl Function {
                     context.clear_signal();
                     continue;
                 }
-                InstructionExitState::GotoPopScope(offset) => {
+                InstructionExitState::GotoPopScope(offset, frames_to_pop) => {
                     goto_fn(*offset)?;
 
-                    context.pop_frame();
+                    for _ in 0..*frames_to_pop {
+                        context.pop_frame();
+                    }
 
                     context.clear_signal();
                     continue;                    

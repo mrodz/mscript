@@ -9,7 +9,7 @@ use once_cell::sync::Lazy;
 
 use super::{function::FunctionType, map_err, math_expr::Op, FunctionParameters};
 
-pub(crate) static mut TYPES: Lazy<HashMap<&str, TypeLayout>> = Lazy::new(|| {
+static mut TYPES: Lazy<HashMap<&str, TypeLayout>> = Lazy::new(|| {
     let mut x = HashMap::new();
 
     x.insert("bool", TypeLayout::Native(NativeType::Bool));
@@ -21,6 +21,36 @@ pub(crate) static mut TYPES: Lazy<HashMap<&str, TypeLayout>> = Lazy::new(|| {
 
     x
 });
+
+#[allow(unused)]
+pub(crate) mod shorthands {
+    use super::*;
+
+    pub(crate) static BOOL_TYPE: Lazy<&TypeLayout> = Lazy::new(|| unsafe {
+        TYPES.get("bool").unwrap()
+    });
+    
+    pub(crate) static STR_TYPE: Lazy<&TypeLayout> = Lazy::new(|| unsafe {
+        TYPES.get("str").unwrap()
+    });
+    
+    pub(crate) static INT_TYPE: Lazy<&TypeLayout> = Lazy::new(|| unsafe {
+        TYPES.get("int").unwrap()
+    });
+    
+    pub(crate) static BIGINT_TYPE: Lazy<&TypeLayout> = Lazy::new(|| unsafe {
+        TYPES.get("bigint").unwrap()
+    });
+    
+    pub(crate) static FLOAT_TYPE: Lazy<&TypeLayout> = Lazy::new(|| unsafe {
+        TYPES.get("float").unwrap()
+    });
+    
+    pub(crate) static BYTE_TYPE: Lazy<&TypeLayout> = Lazy::new(|| unsafe {
+        TYPES.get("byte").unwrap()
+    });
+}
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeType {
@@ -149,9 +179,8 @@ impl TypeLayout {
         Some(TypeLayout::Native(matched))
     }
 
-    #[allow(unused)]
     pub fn is_numeric(&self, allow_byte: bool) -> bool {
-        let Self::Native(native) = self else {
+        let Self::Native(native) = self.get_type_recursively() else {
             return false;
         };
 

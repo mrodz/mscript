@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::{cell::RefCell, rc::Rc};
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Result, bail};
 use pest_consume::Parser as ParserDerive;
 
 use crate::ast::{Compile, CompiledFunctionId, CompiledItem, Declaration, Ident, TypeLayout};
@@ -47,6 +47,24 @@ impl AssocFileData {
         self.file_name.clone()
     }
 
+    pub fn scopes_since_loop(&self) -> Result<usize> {
+        let mut result = 1;
+
+        for scope in self.scopes.borrow().iter().rev() {
+            if scope.is_loop() {
+                return Ok(result);
+            }
+
+            if scope.is_function() {
+                break;
+            }
+
+            result += 1;
+        }
+
+        bail!("no loop found")
+    }
+
     #[allow(clippy::mut_from_ref)]
     pub fn get_return_type(&self) -> &mut ScopeReturnStatus {
         unsafe {
@@ -71,6 +89,10 @@ impl AssocFileData {
 
     pub fn push_while_loop(&self, yields: ScopeReturnStatus) {
         self.push_scope_typed(ScopeType::WhileLoop, yields)
+    }
+
+    pub fn push_number_loop(&self, yields: ScopeReturnStatus) {
+        self.push_scope_typed(ScopeType::NumberLoop, yields)
     }
 
     pub fn return_statement_expected_yield_type(&self) -> Option<&Cow<'static, TypeLayout>> {
@@ -112,6 +134,10 @@ impl AssocFileData {
             .last_mut()
             .expect("no scopes registered")
             .add_dependency(dependency);
+    }
+
+    pub fn has_name_been_mapped(&self, dependency: &String) -> bool {
+        self.get_dependency_flags_from_name(dependency).is_some()
     }
 
     pub fn has_name_been_mapped_local(&self, dependency: &String) -> bool {

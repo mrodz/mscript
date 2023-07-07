@@ -12,7 +12,6 @@ while i < 10 {
 	}
 
 	print "cool whip " + i
-
 }
 
 print "done\n"

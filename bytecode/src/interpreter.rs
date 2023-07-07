@@ -205,13 +205,18 @@ impl Program {
             bail!("could not find entrypoint (hint: try adding `function main`)")
         };
 
-        let main_ret = function.run(Cow::Owned(vec![]), stack, None, &mut |req| {
+        let main_ret = function.run(Cow::Owned(vec![]), stack.clone(), None, &mut |req| {
             Self::process_jump_request(rc_of_self.clone(), req)
         });
 
         if let Err(e) = main_ret {
             eprintln!("\n******* MSCRIPT INTERPRETER FATAL RUNTIME ERROR *******\nCall stack trace:\n{e:?}\n\nPlease report this at https://github.com/mrodz/mscript-lang/issues/new\n");
             bail!("Interpreter crashed")
+        }
+
+        if stack.size() != 0 {
+            eprintln!("\n******* MSCRIPT INTERPRETER STACK MISMATCH *******\nFound:\n{stack}\n\n... When the program should have unwinded its stack completely. This is most likely a flaw with the compiler.\n\nPlease report this at https://github.com/mrodz/mscript-lang/issues/new\n");
+            bail!("Program exited in a confused state, execution integrity has been compromised.")
         }
 
         Ok(())

@@ -797,6 +797,18 @@ pub mod implementations {
 
             Ok(())
         }
+
+        delete_name_scoped(ctx, args) {
+            if args.is_empty() {
+                bail!("delete_name_scoped requires names to delete")
+            };
+
+            for name in args {
+                ctx.delete_variable_local(name)?;
+            }
+
+            Ok(())
+        }
     }
 
     instruction! {
@@ -932,10 +944,12 @@ pub mod implementations {
 
         jmp_pop(ctx, args) {
             let Some(offset) = args.first() else {
-                bail!("jmp statements require an argument to instruct where to jump")
+                bail!("jmp_pop statements require an argument to instruct where to jump")
             };
 
-            ctx.signal(InstructionExitState::GotoPopScope(offset.parse::<isize>()?));
+            let frames_to_pop = args.get(1).map_or_else(|| Ok(1), |frames_to_pop| frames_to_pop.parse::<usize>())?;
+
+            ctx.signal(InstructionExitState::GotoPopScope(offset.parse::<isize>()?, frames_to_pop));
 
             Ok(())
         }
@@ -1029,7 +1043,7 @@ pub fn split_string(string: Cow<str>) -> Result<Box<[String]>> {
     let mut escaping = false;
 
     for char in string.chars() {
-        if !in_quotes && (char.is_whitespace() || char == ',') {
+        if !in_quotes && (char.is_whitespace()) {
             if !buf.is_empty() {
                 result.push(buf.to_string());
                 buf.clear();
@@ -1043,13 +1057,6 @@ pub fn split_string(string: Cow<str>) -> Result<Box<[String]>> {
                     buf.push(char);
                 }
                 escaping = !escaping;
-                continue;
-            }
-            ',' => {
-                if escaping {
-                    buf.push(char);
-                    escaping = !escaping;
-                }
                 continue;
             }
             '"' => {
