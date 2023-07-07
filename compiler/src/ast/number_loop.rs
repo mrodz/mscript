@@ -326,7 +326,7 @@ impl Parser {
             return Err(vec![new_err(
                 span,
                 &input.user_data().get_source_file_name(),
-                format!("using floating point numbers in a `from` loop requires explicitly defining a step property"),
+                "using floating point numbers in a `from` loop requires explicitly defining a step property".to_owned(),
             )])
         }
 
