@@ -10,7 +10,8 @@ pub(crate) enum ScopeType {
     Function,
     IfBlock,
     ElseBlock,
-    WhileLoop
+    WhileLoop,
+    NumberLoop,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

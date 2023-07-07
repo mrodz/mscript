@@ -73,6 +73,10 @@ impl AssocFileData {
         self.push_scope_typed(ScopeType::WhileLoop, yields)
     }
 
+    pub fn push_number_loop(&self, yields: ScopeReturnStatus) {
+        self.push_scope_typed(ScopeType::NumberLoop, yields)
+    }
+
     pub fn return_statement_expected_yield_type(&self) -> Option<&Cow<'static, TypeLayout>> {
         for scope in unsafe { (*self.scopes.as_ptr()).iter().rev() } {
             let (ScopeReturnStatus::Should(result) | ScopeReturnStatus::Did(result)) = scope.peek_yields_value() else {

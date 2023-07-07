@@ -11,15 +11,16 @@ mod function_parameters;
 mod function_return_type;
 mod ident;
 mod if_statement;
+mod loop_control_flow;
 mod math_expr;
 mod number;
+mod number_loop;
 mod print_statement;
 mod r#return;
 mod string;
 mod r#type;
 mod value;
 mod while_loop;
-mod loop_control_flow;
 
 pub(crate) use assignment::Assignment;
 pub(crate) use callable::Callable;
@@ -30,13 +31,17 @@ pub(crate) use function_body::Block;
 pub(crate) use function_parameters::FunctionParameters;
 pub(crate) use ident::Ident;
 pub(crate) use if_statement::IfStatement;
+pub(crate) use loop_control_flow::{Break, Continue};
 pub(crate) use number::Number;
+pub(crate) use number_loop::NumberLoop;
 pub(crate) use print_statement::PrintStatement;
 pub(crate) use r#return::ReturnStatement;
 pub(crate) use r#type::TypeLayout;
 pub(crate) use value::Value;
 pub(crate) use while_loop::WhileLoop;
-pub(crate) use loop_control_flow::Continue;
+
+#[allow(unused_imports)]
+pub(crate) use r#type::shorthands::{BOOL_TYPE, STR_TYPE, INT_TYPE, BIGINT_TYPE, FLOAT_TYPE, BYTE_TYPE};
 
 use anyhow::{anyhow, bail, Context, Error, Result};
 use bytecode::compilation_lookups::raw_byte_instruction_to_string_representation;
@@ -157,7 +162,7 @@ impl CompiledItem {
                     Ok(format!("{}{}\0", *id as char, args))
                 }
             }
-            Self::Break | Self::Continue => unreachable!("break/continue that was not fulfilled")
+            Self::Break | Self::Continue => unreachable!("break/continue that was not fulfilled"),
         }
     }
 }

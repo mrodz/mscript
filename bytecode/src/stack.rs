@@ -226,18 +226,26 @@ impl Stack {
         None
     }
 
-    /// Add a `name -> variable` mapping to the current stack frame, with default flags.
+    /// Add a `name -> variable` mapping to the current stack frame, possibly searching, with default flags.
     pub fn register_variable(&mut self, name: String, var: Primitive) -> Result<()> {
         self.register_variable_flags(name, var, VariableFlags::none())
     }
 
+    /// Add a `name -> variable` mapping to the current stack frame, with flags.
     pub fn register_variable_local(&mut self, name: String, var: Primitive, flags: VariableFlags) -> Result<()> {
         let stack_frame = self.0.last_mut().context("nothing in the stack")?;
-
         let variables = &mut stack_frame.variables.0;
-        // println!("\t\t[STORED] {name} to {}", stack_frame.label);
-        
         variables.insert(name, Rc::new((var, flags)));
+
+        Ok(())
+    }
+
+    /// Delete a variable from the current stack frame.
+    pub fn delete_variable_local(&mut self, name: &String) -> Result<()> {
+        let frame = self.0.last_mut().expect("no stack frame");
+        if frame.variables.0.remove(name).is_none() {
+            bail!("{name} has not been mapped at this scope, and cannot be deleted");
+        }
 
         Ok(())
     }

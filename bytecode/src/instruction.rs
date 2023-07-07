@@ -797,6 +797,18 @@ pub mod implementations {
 
             Ok(())
         }
+
+        delete_name_scoped(ctx, args) {
+            if args.is_empty() {
+                bail!("delete_name_scoped requires names to delete")
+            };
+
+            for name in args {
+                ctx.delete_variable_local(name)?;
+            }
+
+            Ok(())
+        }
     }
 
     instruction! {
