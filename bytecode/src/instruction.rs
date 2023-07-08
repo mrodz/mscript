@@ -130,6 +130,7 @@ pub mod implementations {
     use crate::context::SpecialScope;
     use crate::function::{PrimitiveFunction, ReturnValue};
     use crate::rc_to_ref;
+    use crate::stack::VariableFlags;
     use crate::{bool, function, int, object, vector};
     use std::collections::HashMap;
     use std::rc::Rc;
@@ -246,7 +247,25 @@ pub mod implementations {
             let op_name = arg_iter.next().context("Expected a vector operation")?;
             let bytes = op_name.as_bytes();
 
-            if let (Some(b'['), Some(b']')) = (bytes.first(), bytes.last()) {
+            if let [b'+', ..] = bytes {
+                if ctx.stack_size() != 1 {
+                    bail!("vec_op +push operations require only a single item on the operating stack")
+                }
+
+                let new_val = ctx.pop().unwrap();
+
+                let mut primitive_with_flags: Rc<(Primitive, VariableFlags)> = ctx.load_local(&op_name[1..]).context("vector not found for pushing")?;
+
+                let primitive_with_flags: &mut (Primitive, VariableFlags) = Rc::make_mut(&mut primitive_with_flags);
+
+                let Primitive::Vector(ref mut vector) = primitive_with_flags.0 else {
+                    bail!("not a vector, trying to push")
+                };
+
+                let vector: &mut Vec<Primitive> = rc_to_ref(&vector);
+
+                vector.push(new_val);
+            } else if let (Some(b'['), Some(b']')) = (bytes.first(), bytes.last()) {
                 let Some(Primitive::Vector(vector)) = ctx.pop() else {
                     bail!("Cannot perform a vector operation on a non-vector")
                 };
@@ -806,6 +825,21 @@ pub mod implementations {
             for name in args {
                 ctx.delete_variable_local(name)?;
             }
+
+            Ok(())
+        }
+
+        delete_name_reference_scoped(ctx, args) {
+            if args.len() != 1 {
+                bail!("delete_name_reference_scoped can only delete to retrieve one name");
+            }
+
+            let name = args.first().unwrap();
+
+            let deleted: Rc<(Primitive, VariableFlags)> = ctx.delete_variable_local(name)?;
+            let primitive: Primitive = deleted.0.clone();
+
+            ctx.push(primitive);
 
             Ok(())
         }

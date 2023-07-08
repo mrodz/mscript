@@ -83,6 +83,13 @@ impl Compile for PrintStatement {
 
                 boolean_init
             }
+            Value::List(list) => {
+                let mut list_init = list.compile(function_buffer)?;
+
+                list_init.append(&mut vec![instruction!(printn '*'), instruction!(void)]);
+
+                list_init
+            }
         };
 
         Ok(matched)

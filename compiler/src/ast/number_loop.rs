@@ -57,12 +57,6 @@ enum NumberLoopRegister<'a> {
     Generated(usize),
 }
 
-impl Display for NumberLoopRegister<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.repr())
-    }
-}
-
 impl<'a> NumberLoopRegister<'a> {
     pub fn new() -> Self {
         unsafe {
@@ -88,11 +82,13 @@ impl<'a> NumberLoopRegister<'a> {
             }
         }
     }
+}
 
-    pub fn repr(&self) -> Cow<str> {
+impl Display for NumberLoopRegister<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Generated(id) => Cow::Owned(format!("L#{id}")),
-            Self::Named(name) => Cow::Borrowed(name),
+            Self::Generated(id) => write!(f, "L#{id}"),
+            Self::Named(name) => write!(f, "{name}"),
         }
     }
 }

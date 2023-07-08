@@ -7,7 +7,7 @@ use crate::{
 use anyhow::{bail, Result};
 use once_cell::sync::Lazy;
 
-use super::{function::FunctionType, map_err, math_expr::Op, FunctionParameters};
+use super::{function::FunctionType, list::ListType, map_err, math_expr::Op, FunctionParameters};
 
 static mut TYPES: Lazy<HashMap<&str, TypeLayout>> = Lazy::new(|| {
     let mut x = HashMap::new();
@@ -26,31 +26,24 @@ static mut TYPES: Lazy<HashMap<&str, TypeLayout>> = Lazy::new(|| {
 pub(crate) mod shorthands {
     use super::*;
 
-    pub(crate) static BOOL_TYPE: Lazy<&TypeLayout> = Lazy::new(|| unsafe {
-        TYPES.get("bool").unwrap()
-    });
-    
-    pub(crate) static STR_TYPE: Lazy<&TypeLayout> = Lazy::new(|| unsafe {
-        TYPES.get("str").unwrap()
-    });
-    
-    pub(crate) static INT_TYPE: Lazy<&TypeLayout> = Lazy::new(|| unsafe {
-        TYPES.get("int").unwrap()
-    });
-    
-    pub(crate) static BIGINT_TYPE: Lazy<&TypeLayout> = Lazy::new(|| unsafe {
-        TYPES.get("bigint").unwrap()
-    });
-    
-    pub(crate) static FLOAT_TYPE: Lazy<&TypeLayout> = Lazy::new(|| unsafe {
-        TYPES.get("float").unwrap()
-    });
-    
-    pub(crate) static BYTE_TYPE: Lazy<&TypeLayout> = Lazy::new(|| unsafe {
-        TYPES.get("byte").unwrap()
-    });
-}
+    pub(crate) static BOOL_TYPE: Lazy<&TypeLayout> =
+        Lazy::new(|| unsafe { TYPES.get("bool").unwrap() });
 
+    pub(crate) static STR_TYPE: Lazy<&TypeLayout> =
+        Lazy::new(|| unsafe { TYPES.get("str").unwrap() });
+
+    pub(crate) static INT_TYPE: Lazy<&TypeLayout> =
+        Lazy::new(|| unsafe { TYPES.get("int").unwrap() });
+
+    pub(crate) static BIGINT_TYPE: Lazy<&TypeLayout> =
+        Lazy::new(|| unsafe { TYPES.get("bigint").unwrap() });
+
+    pub(crate) static FLOAT_TYPE: Lazy<&TypeLayout> =
+        Lazy::new(|| unsafe { TYPES.get("float").unwrap() });
+
+    pub(crate) static BYTE_TYPE: Lazy<&TypeLayout> =
+        Lazy::new(|| unsafe { TYPES.get("byte").unwrap() });
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeType {
@@ -75,6 +68,7 @@ pub(crate) enum TypeLayout {
     /// metadata wrapper around a [TypeLayout]
     CallbackVariable(Box<TypeLayout>),
     Native(NativeType),
+    List(ListType),
 }
 
 impl Display for TypeLayout {
@@ -83,6 +77,7 @@ impl Display for TypeLayout {
             Self::Function(function_type) => write!(f, "{function_type}"),
             Self::CallbackVariable(cb) => write!(f, "{}", cb.get_type_recursively()),
             Self::Native(native) => write!(f, "{native}"),
+            Self::List(list) => write!(f, "{list}"),
         }
     }
 }
@@ -123,6 +118,15 @@ impl TypeLayout {
         }
     }
 
+    pub fn get_owned_type_recursively(self) -> Self {
+        use TypeLayout::*;
+
+        match self {
+            CallbackVariable(cb) => cb.get_owned_type_recursively(),
+            _ => self,
+        }
+    }
+
     pub fn get_output_type(&self, other: &Self, op: &Op) -> Option<TypeLayout> {
         use TypeLayout::*;
 
@@ -143,7 +147,7 @@ impl TypeLayout {
                     Bool
                 } else {
                     match (lhs, rhs) {
-                        (Int,  BigInt | Float | Byte) => Bool,
+                        (Int, BigInt | Float | Byte) => Bool,
                         //======================
                         (Float, Int | BigInt | Byte) => Bool,
                         //======================
@@ -220,10 +224,22 @@ pub(crate) fn type_from_str(
         if let Some(r#type) = TYPES.get(input) {
             Ok(Cow::Borrowed(r#type))
         } else {
-            if let Ok(function_type) = parse_with_userdata(Rule::function_type, input, user_data) {
+            if let Ok(list_type_open_only) =
+                parse_with_userdata(Rule::list_type_open_only, input, user_data.clone())
+            {
+                let single = list_type_open_only.single()?;
+                let ty = Parser::list_type_open_only(single)?;
+                return Ok(Cow::Owned(TypeLayout::List(ty)));
+            } else if let Ok(function_type) =
+                parse_with_userdata(Rule::function_type, input, user_data.clone())
+            {
                 let single = function_type.single()?;
                 let ty = Parser::function_type(single)?;
                 return Ok(Cow::Owned(TypeLayout::Function(ty)));
+            } else if let Ok(list_type) = parse_with_userdata(Rule::list_type, input, user_data) {
+                let single = list_type.single()?;
+                let ty = Parser::list_type(single)?;
+                return Ok(Cow::Owned(TypeLayout::List(ty)));
             }
 
             bail!("type '{input}' has not been registered")
@@ -270,6 +286,55 @@ impl Parser {
             types,
             ScopeReturnStatus::detect_should_return(return_type),
         ))
+    }
+
+    pub fn list_type_open_only(input: Node) -> Result<ListType> {
+        let ty_node = input
+            .children()
+            .single()? // Rule: open_ended_type
+            .children()
+            .single()?; // Rule: type
+
+        let ty = Self::r#type(ty_node)?;
+
+        Ok(ListType::Open { types: vec![], spread: Box::new(ty) })
+    }
+
+    pub fn list_type(input: Node) -> Result<ListType> {
+        let children = input.children();
+
+        let mut type_vec: Vec<Cow<'static, TypeLayout>> = vec![];
+        let mut open_ended_type: Option<Cow<'static, TypeLayout>> = None;
+
+        for child in children {
+            match child.as_rule() {
+                Rule::r#type => {
+                    let ty = Self::r#type(child)?;
+
+                    type_vec.push(ty);
+                }
+                Rule::open_ended_type if open_ended_type.is_none() => {
+                    let ty_node = child.children().single().unwrap();
+                    let ty = Self::r#type(ty_node)?;
+
+                    open_ended_type = Some(ty);
+                }
+                other_rule => unreachable!("{other_rule:?}"),
+            }
+        }
+
+        if type_vec.is_empty() && open_ended_type.is_none() {
+            return Ok(ListType::Empty);
+        }
+
+        if let Some(open_ended_type) = open_ended_type {
+            return Ok(ListType::Open {
+                types: type_vec,
+                spread: Box::new(open_ended_type),
+            });
+        }
+
+        return Ok(ListType::Mixed(type_vec));
     }
 
     pub fn r#type(input: Node) -> Result<Cow<'static, TypeLayout>> {

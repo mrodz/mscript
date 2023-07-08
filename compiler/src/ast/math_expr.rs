@@ -48,7 +48,7 @@ use crate::{
 
 use super::{
     boolean::boolean_from_str, new_err, r#type::IntoType, string::AstString, Compile, CompiledItem,
-    Dependencies, Dependency, Value,
+    Dependencies, Dependency, Value, TemporaryRegister,
 };
 
 pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
@@ -168,52 +168,10 @@ impl Dependencies for Expr {
     }
 }
 
-static mut EXPR_REGISTER: usize = 0;
-
-#[derive(Debug)]
-struct ExprRegister {
-    register: Option<usize>,
-}
-
-impl ExprRegister {
-    pub fn new() -> Self {
-        let mut result = Self { register: None };
-
-        result.reserve_register();
-
-        result
-    }
-
-    fn reserve_register(&mut self) {
-        unsafe {
-            self.register = Some(EXPR_REGISTER);
-            EXPR_REGISTER += 1;
-        }
-    }
-
-    pub fn repr(&mut self) -> String {
-        format!("#{}", self.register.unwrap())
-    }
-}
-
-impl Drop for ExprRegister {
-    fn drop(&mut self) {
-        unsafe {
-            if let Some(register) = self.register {
-                if register == EXPR_REGISTER - 1 {
-                    EXPR_REGISTER -= 1;
-                } else {
-                    unreachable!("dropped out of order")
-                }
-            }
-        }
-    }
-}
-
 fn compile_depth(
     expr: &Expr,
     function_buffer: &mut Vec<CompiledItem>,
-    mut depth: ExprRegister,
+    depth: TemporaryRegister,
 ) -> Result<Vec<CompiledItem>> {
     match expr {
         Expr::Value(val) => val.compile(function_buffer),
@@ -253,19 +211,19 @@ fn compile_depth(
             Ok(eval)
         }
         Expr::BinOp { lhs, op, rhs } => {
-            let mut lhs = compile_depth(lhs, function_buffer, ExprRegister::new())?;
-            let mut rhs = compile_depth(rhs, function_buffer, ExprRegister::new())?;
+            let mut lhs = compile_depth(lhs, function_buffer, TemporaryRegister::new())?;
+            let mut rhs = compile_depth(rhs, function_buffer, TemporaryRegister::new())?;
 
             lhs.reserve(rhs.len() + 4);
 
-            let temp_name = depth.repr();
+            // let temp_name = depth.repr();
 
             // store the initialization to the "second part"
             if op == &Op::And {
                 let rhs_len = rhs.len() + 3;
-                lhs.push(instruction!(store_skip temp_name "0" rhs_len));
+                lhs.push(instruction!(store_skip depth "0" rhs_len));
                 lhs.append(&mut rhs);
-                lhs.push(instruction!(load_fast temp_name));
+                lhs.push(instruction!(load_fast depth));
                 lhs.push(instruction!(bin_op "&&"));
 
                 return Ok(lhs);
@@ -273,17 +231,17 @@ fn compile_depth(
 
             if op == &Op::Or { 
                 let rhs_len = rhs.len() + 3;
-                lhs.push(instruction!(store_skip temp_name "1" rhs_len));
+                lhs.push(instruction!(store_skip depth "1" rhs_len));
                 lhs.append(&mut rhs);
-                lhs.push(instruction!(load_fast temp_name));
+                lhs.push(instruction!(load_fast depth));
                 lhs.push(instruction!(bin_op "||"));
 
                 return Ok(lhs);
             }
 
-            lhs.push(instruction!(store_fast temp_name));
+            lhs.push(instruction!(store_fast depth));
             lhs.append(&mut rhs);
-            lhs.push(instruction!(load_fast temp_name));
+            lhs.push(instruction!(load_fast depth));
             lhs.push(instruction!(fast_rev2));
 
             match op {
@@ -302,7 +260,7 @@ fn compile_depth(
 
 impl Compile for Expr {
     fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<super::CompiledItem>> {
-        compile_depth(self, function_buffer, ExprRegister::new())
+        compile_depth(self, function_buffer, TemporaryRegister::new())
     }
 }
 

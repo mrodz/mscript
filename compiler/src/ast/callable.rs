@@ -11,17 +11,13 @@ use crate::{
 
 use super::{
     map_err_messages, r#type::IntoType, Compile, CompiledItem, Dependencies, Dependency,
-    FunctionArguments, Ident, TypeLayout,
+    FunctionArguments, Ident, TemporaryRegister, TypeLayout,
 };
 
 #[derive(Debug)]
 pub(crate) enum CallableDestination {
-    Named {
-        ident: Ident,
-    },
-    ToSelf {
-        return_type: Option<TypeLayout>
-    }
+    Named { ident: Ident },
+    ToSelf { return_type: Option<TypeLayout> },
 }
 
 #[derive(Debug)]
@@ -54,39 +50,6 @@ impl IntoType for Callable {
     }
 }
 
-static mut ARGUMENT_REGISTER: usize = 0;
-
-struct ArgumentRegisterHandle(usize);
-
-impl ArgumentRegisterHandle {
-    pub fn new() -> Self {
-        unsafe {
-            ARGUMENT_REGISTER += 1;
-            Self(ARGUMENT_REGISTER)
-        }
-    }
-
-    pub fn repr_from_raw(raw: usize) -> String {
-        format!("a#{raw}")
-    }
-
-    pub fn free(tally: usize) {
-        unsafe {
-            ARGUMENT_REGISTER = ARGUMENT_REGISTER
-                .checked_sub(tally)
-                .expect("freeing too many registers");
-        }
-    }
-
-    pub fn repr(&self) -> String {
-        unsafe {
-            assert!(self.0 <= ARGUMENT_REGISTER);
-        }
-
-        Self::repr_from_raw(self.0)
-    }
-}
-
 impl Compile for Callable {
     fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>> {
         let mut register_start = None;
@@ -98,8 +61,8 @@ impl Compile for Callable {
             .flat_map(|x| {
                 let mut value_init = x.compile(function_buffer).unwrap();
 
-                let argument_register = ArgumentRegisterHandle::new();
-                value_init.push(instruction!(store_fast {argument_register.repr()}));
+                let argument_register = TemporaryRegister::new();
+                value_init.push(instruction!(store_fast argument_register));
 
                 if register_start.is_none() {
                     register_start = Some(argument_register.0);
@@ -111,15 +74,18 @@ impl Compile for Callable {
             })
             .collect();
 
-
         if let Some(register_start) = register_start {
             for register_idx in register_start..register_start + register_count {
-                let name = ArgumentRegisterHandle::repr_from_raw(register_idx);
-                args_init.push(instruction!(load_fast name));
+                unsafe {
+                    let name = TemporaryRegister::new_ghost_register(register_idx);
+                    args_init.push(instruction!(load_fast name));
+                }
             }
         }
 
-        ArgumentRegisterHandle::free(register_count);
+        unsafe {
+            TemporaryRegister::free_many(register_count);
+        }
 
         let CallableDestination::Named { ident } = &self.destination else {
             // let CallableDestination::ToSelf { return_type }
@@ -183,7 +149,8 @@ impl Parser {
 
             CallableDestination::Named { ident }
         } else {
-            let return_type: Option<&Cow<'_, TypeLayout>> = user_data.return_statement_expected_yield_type();
+            let return_type: Option<&Cow<'_, TypeLayout>> =
+                user_data.return_statement_expected_yield_type();
             let return_type: Option<TypeLayout> = return_type.cloned().map(Cow::into_owned);
 
             CallableDestination::ToSelf { return_type }

@@ -9,7 +9,7 @@ use crate::{
 
 use super::{
     math_expr::Expr, r#type::IntoType, string::AstString, Callable, Compile, CompiledItem,
-    Dependencies, Dependency, Function, Ident, Number, TypeLayout,
+    Dependencies, Dependency, Function, Ident, Number, TypeLayout, List,
 };
 
 #[derive(Debug)]
@@ -21,6 +21,7 @@ pub(crate) enum Value {
     MathExpr(Box<Expr>),
     Callable(Callable),
     Boolean(bool),
+    List(List)
 }
 
 impl Value {
@@ -65,6 +66,11 @@ impl Value {
                 let ty = boolean.for_type()?;
                 ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
             }
+            Self::List(ref list) => {
+                let ty = list.for_type()?;
+                ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
+
+            }
         }
 
         Ok(())
@@ -81,6 +87,7 @@ impl IntoType for Value {
             Self::String(string) => string.for_type(),
             Self::Callable(callable) => callable.for_type(),
             Self::Boolean(boolean) => boolean.for_type(),
+            Self::List(list) => list.for_type(),
         }
     }
 }
@@ -95,6 +102,7 @@ impl Dependencies for Value {
             Self::MathExpr(math_expr) => math_expr.net_dependencies(),
             Self::Callable(callable) => callable.net_dependencies(),
             Self::Boolean(boolean) => boolean.net_dependencies(),
+            Self::List(list) => list.net_dependencies(),
         }
     }
 }
@@ -109,6 +117,7 @@ impl Compile for Value {
             Self::MathExpr(math_expr) => math_expr.compile(function_buffer),
             Self::Callable(callable) => callable.compile(function_buffer),
             Self::Boolean(boolean) => boolean.compile(function_buffer),
+            Self::List(list) => list.compile(function_buffer),
         }
     }
 }
@@ -122,6 +131,7 @@ impl Parser {
             Rule::string => Value::String(Self::string(input).to_err_vec()?),
             Rule::math_expr => Value::MathExpr(Box::new(Self::math_expr(input)?)),
             Rule::callable => Value::Callable(Self::callable(input)?),
+            Rule::list => Value::List(Self::list(input)?),
             Rule::WHITESPACE => unreachable!("{:?}", input.as_span()),
             x => unreachable!("{x:?}"),
         };
