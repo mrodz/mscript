@@ -4,13 +4,13 @@ use anyhow::Result;
 
 use crate::parser::{Node, Parser};
 
-use super::{Dependencies, Dependency, Value};
+use super::{Dependencies, Dependency, value::ValueChain};
 
 #[derive(Debug)]
-pub(crate) struct FunctionArguments(Vec<Value>);
+pub(crate) struct FunctionArguments(Vec<ValueChain>);
 
 impl FunctionArguments {
-    pub fn iter(&self) -> Iter<Value> {
+    pub fn iter(&self) -> Iter<ValueChain> {
         self.0.iter()
     }
 }

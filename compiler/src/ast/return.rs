@@ -10,10 +10,10 @@ use crate::{
     VecErr,
 };
 
-use super::{Compile, Dependencies, Value};
+use super::{Compile, Dependencies, value::ValueChain};
 
 #[derive(Debug)]
-pub(crate) struct ReturnStatement(Option<Value>);
+pub(crate) struct ReturnStatement(Option<ValueChain>);
 
 impl Compile for ReturnStatement {
     fn compile(

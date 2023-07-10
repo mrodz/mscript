@@ -6,11 +6,11 @@ use crate::{
     VecErr,
 };
 
-use super::{new_err, r#type::IntoType, Block, Compile, Dependencies, Value};
+use super::{new_err, r#type::IntoType, Block, Compile, Dependencies, value::ValueChain};
 
 #[derive(Debug)]
 pub struct WhileLoop {
-    condition: Value,
+    condition: ValueChain,
     body: Block,
 }
 

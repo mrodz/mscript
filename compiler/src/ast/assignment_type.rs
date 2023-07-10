@@ -3,7 +3,8 @@ use std::borrow::Cow;
 use anyhow::Result;
 
 use super::r#type::IntoType;
-use super::{new_err, Assignment, Value};
+use super::value::ValueChain;
+use super::{new_err, Assignment};
 use crate::ast::{Ident, TypeLayout};
 use crate::parser::{Node, Parser};
 use crate::VecErr;
@@ -30,11 +31,11 @@ impl Parser {
         }
 
         let ty: Cow<'static, TypeLayout> = Self::r#type(ty).to_err_vec()?;
-        let value: Value = Self::value(value)?;
+        let value: ValueChain = Self::value(value)?;
 
         if let Ok(ref assignment_ty) = value.for_type() {
             if ty.as_ref() != assignment_ty {
-                let message = if value.is_callable() {
+                let message = if value.is_callable().to_err_vec()? {
                     format!("declaration wanted {ty}, but value is a function that returns {assignment_ty}")
                 } else {
                     // TODO: special check for function types.

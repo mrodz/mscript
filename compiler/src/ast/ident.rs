@@ -71,32 +71,6 @@ impl Ident {
         Ok(self)
     }
 
-    pub fn lookup(&mut self, user_data: &AssocFileData) -> Result<&mut Self> {
-        if let Some(ref ty) = self.ty {
-            bail!("already has type {ty:?}")
-        }
-
-        let (ident, is_callback) = user_data
-            .get_dependency_flags_from_name(&self.name)
-            .context("variable has not been mapped")?;
-
-        let ty = ident.ty.clone();
-
-        let x = ty.map(|x| {
-            if is_callback {
-                Cow::Owned(TypeLayout::CallbackVariable(x.into_owned().into()))
-            } else {
-                x
-            }
-        });
-
-        let ty = x.unwrap();
-
-        self.ty = Some(ty);
-
-        Ok(self)
-    }
-
     pub fn name(&self) -> &String {
         &self.name
     }

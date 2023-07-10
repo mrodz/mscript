@@ -90,6 +90,16 @@ impl TypeLayout {
         matches!(me, TypeLayout::Native(NativeType::Bool))
     }
 
+    pub fn is_list(&self) -> Option<&ListType> {
+        let me = self.get_type_recursively();
+
+        let TypeLayout::List(l) = me else {
+            return None;
+        };
+
+        Some(l)
+    }
+
     pub fn is_function(&self) -> Option<&FunctionType> {
         let me = self.get_type_recursively();
 
@@ -193,6 +203,14 @@ impl TypeLayout {
             NativeType::BigInt | NativeType::Int | NativeType::Float => true,
             _ => false,
         }
+    }
+
+    pub fn is_numeric_index(&self) -> bool {
+        let Self::Native(native) = self.get_type_recursively() else {
+            return false;
+        };
+
+        matches!(native, NativeType::BigInt | NativeType::Int)
     }
 
     pub fn get_load_instruction(&self) -> (&'static str, u8) {

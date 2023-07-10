@@ -19,6 +19,74 @@ pub enum Number {
     Byte(String),
 }
 
+impl Number {
+    pub fn negate(&self) -> Option<Self> {
+        use Number::*;
+        Some(match self {
+            Integer(x) => Integer("-".to_owned() + x),
+            BigInt(x) => Integer("-".to_owned() + x),
+            Float(x) => Float("-".to_owned() + x),
+            Byte(_) => return None,
+        })
+    }
+}
+
+mod string_arithmetic {
+    use anyhow::Result;
+    use std::ops::*;
+
+    use super::Number::{self, *};
+
+    macro_rules! compiler_math {
+        ($ty:ty: $lhs:ident $symbol:tt $rhs:ident) => {
+            ($lhs.parse::<$ty>()? $symbol $rhs.parse::<$ty>()?).to_string()
+        };
+    }
+
+    macro_rules! number_impl {
+        (@type=$type:ty, @output=$output:ty: $op:tt as $trait:ident, $def:ident) => {
+            impl $trait for $type {
+                type Output = Result<$output>;
+                fn $def(self, rhs: $type) -> Self::Output {
+                    let matched = match (self, rhs) {
+                        (Integer(x), Integer(y)) => Integer(compiler_math!(i32: x $op y)),
+                        (Integer(x), Float(y)) => Float(compiler_math!(f64: x $op y)),
+                        (Integer(x), BigInt(y)) => BigInt(compiler_math!(i128: x $op y)),
+                        (Integer(x), Byte(y)) => Integer(compiler_math!(i32: x $op y)),
+                        /*******************************/
+                        (Float(x), Integer(y)) => Float(compiler_math!(f64: x $op y)),
+                        (Float(x), Float(y)) => Float(compiler_math!(f64: x $op y)),
+                        (Float(x), BigInt(y)) => Float(compiler_math!(f64: x $op y)),
+                        (Float(x), Byte(y)) => Float(compiler_math!(f64: x $op y)),
+                        /*******************************/
+                        (BigInt(x), Integer(y)) => BigInt(compiler_math!(i128: x $op y)),
+                        (BigInt(x), Float(y)) => Float(compiler_math!(f64: x $op y)),
+                        (BigInt(x), BigInt(y)) => BigInt(compiler_math!(i128: x $op y)),
+                        (BigInt(x), Byte(y)) => BigInt(compiler_math!(i128: x $op y)),
+                        /*******************************/
+                        (Byte(x), Integer(y)) => Integer(compiler_math!(i32: x $op y)),
+                        (Byte(x), Float(y)) => Float(compiler_math!(f64: x $op y)),
+                        (Byte(x), BigInt(y)) => BigInt(compiler_math!(i128: x $op y)),
+                        (Byte(x), Byte(y)) => Byte(compiler_math!(u8: x $op y)),
+                    };
+
+                    Ok(matched)
+                }
+            }
+        };
+        ($op:tt as $trait:ident, $def:ident) => {
+            number_impl!(@type=Number, @output=Number: $op as $trait, $def);
+            number_impl!(@type=&Number, @output=Number: $op as $trait, $def);
+        }
+    }
+
+    number_impl!(+ as Add, add);
+    number_impl!(- as Sub, sub);
+    number_impl!(* as Mul, mul);
+    number_impl!(/ as Div, div);
+    number_impl!(% as Rem, rem);
+}
+
 impl Display for Number {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use Number::*;

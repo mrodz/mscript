@@ -4,21 +4,21 @@ use anyhow::{Context, Result};
 use pest::Span;
 
 use crate::{
-    ast::{Block, CompiledItem, Ident, Value},
+    ast::{Block, CompiledItem, Ident},
     instruction,
     parser::{Node, Parser, Rule},
     scope::ScopeReturnStatus,
     VecErr,
 };
 
-use super::{math_expr::Op, new_err, r#type::{IntoType, NativeType}, Compile, Dependencies, INT_TYPE, TypeLayout, FLOAT_TYPE};
+use super::{math_expr::Op, new_err, r#type::{IntoType, NativeType}, Compile, Dependencies, INT_TYPE, TypeLayout, FLOAT_TYPE, value::ValueChain};
 
 #[derive(Debug)]
 pub(crate) struct NumberLoop {
     inclusive: bool,
-    val_start: Value,
-    val_end: Value,
-    step: Option<Value>,
+    val_start: ValueChain,
+    val_end: ValueChain,
+    step: Option<ValueChain>,
     name: Option<Ident>,
     body: Block,
     name_is_collision: bool,
@@ -230,7 +230,7 @@ impl Parser {
 
         // ^^^ these are guaranteed.
 
-        let mut step: Option<(Value, Span)> = None;
+        let mut step: Option<(ValueChain, Span)> = None;
         let mut name: Option<Ident> = None;
         let mut body: Option<Block> = None;
 

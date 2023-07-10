@@ -1,18 +1,43 @@
 use std::{borrow::Cow, fmt::Display};
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 
 use crate::{
-    ast::TemporaryRegister,
+    ast::{TemporaryRegister, STR_TYPE, value::CompileTimeEvaluate},
     instruction,
     parser::{Node, Parser},
 };
 
-use super::{r#type::IntoType, Compile, Dependencies, TypeLayout, Value};
+use super::{r#type::{IntoType, NativeType}, Compile, Dependencies, TypeLayout, Value, value::{Indexable, ValueChain, ConstexprEvaluation}, Number};
 
 #[derive(Debug)]
 pub(crate) struct List {
-    values: Vec<Value>,
+    values: Vec<ValueChain>,
+}
+
+impl List {
+    #[allow(unused)]
+    pub fn type_at_index(&self, index: usize) -> Result<Cow<'static, TypeLayout>> {
+        if let Some(value) = self.values.get(index) {
+            return Ok(Cow::Owned(value.for_type()?));
+        }
+
+        bail!("out of bounds")
+    }
+
+    pub fn for_type_force_mixed(&self) -> Result<TypeLayout> {
+        let mut types = Vec::with_capacity(self.values.len());
+        for value in &self.values {
+            let value_ty = value.for_type()?;
+            types.push(Cow::Owned(value_ty));
+        }
+
+        Ok(TypeLayout::List(ListType::Mixed(types)))
+    }
+
+    pub fn get_value(&self, index: usize) -> Option<&ValueChain> {
+        self.values.get(index)
+    }
 }
 
 impl Compile for List {
@@ -62,6 +87,40 @@ pub(crate) enum ListType {
         spread: Box<Cow<'static, TypeLayout>>,
     },
     Empty,
+}
+
+impl ListType {
+    pub fn must_be_const(&self) -> bool {
+        if let Self::Open { types, .. } = self {
+            if !types.is_empty() {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    pub fn len(&self) -> Cow<'static, str> {
+        match self {
+            Self::Empty => Cow::Borrowed("0"),
+            Self::Open { .. } => Cow::Borrowed("∞"),
+            Self::Mixed(types) => Cow::Owned(types.len().to_string())
+        }
+    }
+
+    pub fn get_type_at_index(&self, index: usize) -> Option<&TypeLayout> {
+        match self {
+            Self::Empty => None,
+            Self::Mixed(types) => types.get(index).map(Cow::as_ref),
+            Self::Open { types, spread } => {
+                Some(if let Some(ty) = types.get(index) {
+                    ty.as_ref()
+                } else {
+                    spread.as_ref()
+                })
+            }
+        }
+    }
 }
 
 impl Display for ListType {
@@ -208,6 +267,68 @@ impl IntoType for List {
     }
 }
 
+#[derive(Debug)]
+pub(crate) struct Index {
+    value: ValueChain
+}
+
+impl Dependencies for Index {
+    fn dependencies(&self) -> Vec<super::Dependency> {
+        self.value.net_dependencies()
+    }
+}
+
+impl CompileTimeEvaluate for Index {
+    fn try_constexpr_eval(&self) -> Result<ConstexprEvaluation> {
+        self.value.try_constexpr_eval()
+    }
+}
+
+impl Indexable for Index {
+    fn output_from_value(&self, value: &Value) -> Result<Cow<'static, TypeLayout>> {
+        if !self.value.for_type()?.is_numeric_index() {
+            bail!("for now, indexing can only be done with integers")
+        }
+
+        let value_ty = value.for_type()?;
+
+        match value_ty {
+            TypeLayout::Native(NativeType::Str) => Ok(Cow::Borrowed(*STR_TYPE)),
+            TypeLayout::List(list_type) => {
+                let maybe_constexpr_eval = self.value.try_constexpr_eval()?;
+                let Some(constexpr_value) = maybe_constexpr_eval.as_ref() else {
+                    bail!("cannot know the type of a non-const index into a list at compile time");
+                };
+
+                let Value::Number(number) = constexpr_value else {
+                    unreachable!();
+                };
+
+                match number {
+                    Number::BigInt(idx) | Number::Integer(idx) | Number::Byte(idx) => {
+                        let idx: usize = idx.parse()?;
+
+                        let Some(type_at_index) = list_type.get_type_at_index(idx) else {
+                            bail!("{idx} is not a valid index into `{list_type}`, which has a known length at compile time of {}", list_type.len())
+                        };
+                        
+                        Ok(Cow::Owned(type_at_index.clone()))
+                    }
+                    Number::Float(_) => bail!("cannot index into a list with floats"),
+                }
+            }
+
+            other => unimplemented!("{other:?}")
+        }
+    }
+}
+
+impl Compile for Index {
+    fn compile(&self, _function_buffer: &mut Vec<super::CompiledItem>) -> Result<Vec<super::CompiledItem>, anyhow::Error> {
+        todo!()
+    }
+}
+
 impl Parser {
     pub fn list(input: Node) -> Result<List, Vec<anyhow::Error>> {
         let mut values = vec![];
@@ -219,5 +340,12 @@ impl Parser {
         let list = List { values };
 
         Ok(list)
+    }
+
+    pub fn list_index(input: Node) -> Result<Index, Vec<anyhow::Error>> {
+        let value_node = input.children().single().unwrap();
+        let value = Self::value(value_node)?;
+
+        Ok(Index { value })
     }
 }

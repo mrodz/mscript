@@ -40,7 +40,7 @@ use once_cell::sync::Lazy;
 use pest::{iterators::Pairs, pratt_parser::PrattParser, Span};
 
 use crate::{
-    ast::number,
+    ast::{number, value::ConstexprEvaluation},
     instruction,
     parser::{util, AssocFileData, Node, Parser, Rule},
     VecErr,
@@ -48,7 +48,7 @@ use crate::{
 
 use super::{
     boolean::boolean_from_str, new_err, r#type::IntoType, string::AstString, Compile, CompiledItem,
-    Dependencies, Dependency, Value, TemporaryRegister,
+    Dependencies, Dependency, Value, TemporaryRegister, value::CompileTimeEvaluate,
 };
 
 pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
@@ -125,8 +125,68 @@ pub(crate) enum Expr {
 }
 
 impl Expr {
-    pub fn validate(&self) -> Result<()> {
-        self.for_type().map(|_| ())
+    pub fn validate(&self) -> Result<&Self> {
+        self.for_type().map(|_| self)
+    }
+}
+
+impl CompileTimeEvaluate for Expr {
+    fn try_constexpr_eval(&self) -> Result<ConstexprEvaluation> {
+        self.validate()?;
+
+        match self {
+            Self::Value(val) => val.try_constexpr_eval(),
+            Self::UnaryNot(expr) => {
+                let maybe_constexpr_eval = expr.try_constexpr_eval()?;
+                if maybe_constexpr_eval.is_impossible() {
+                    return Ok(ConstexprEvaluation::Impossible);
+                }
+
+                let constexpr_eval = maybe_constexpr_eval.as_ref().unwrap();
+
+                if let Value::Boolean(b) = constexpr_eval {
+                    Ok(ConstexprEvaluation::Owned(Value::Boolean(!*b)))
+                } else {
+                    Ok(ConstexprEvaluation::Impossible)
+                }
+            }
+            Self::UnaryMinus(expr) => {
+                let maybe_constexpr_eval = expr.try_constexpr_eval()?;
+                if maybe_constexpr_eval.is_impossible() {
+                    return Ok(ConstexprEvaluation::Impossible);
+                }
+
+                let constexpr_eval = maybe_constexpr_eval.as_ref().unwrap();
+
+                if !constexpr_eval.for_type()?.can_negate() {
+                    let val = constexpr_eval.try_negate()?;
+                    if let Some(val) = val {
+                        return Ok(ConstexprEvaluation::Owned(val))
+                    }
+                }
+
+                Ok(ConstexprEvaluation::Impossible)
+            }
+            Self::BinOp { lhs, op, rhs } => {
+                let lhs = lhs.try_constexpr_eval()?;
+                let rhs = rhs.try_constexpr_eval()?;
+
+                let (Some(Value::Number(lhs)), Some(Value::Number(rhs))) = (lhs.as_ref(), rhs.as_ref()) else {
+                    return Ok(ConstexprEvaluation::Impossible);
+                };
+
+                let bin_op_applied = match op {
+                    Op::Add => lhs + rhs,
+                    Op::Subtract => lhs + rhs,
+                    Op::Multiply => lhs * rhs,
+                    Op::Divide => lhs / rhs,
+                    Op::Modulo => lhs % rhs,
+                    _ => return Ok(ConstexprEvaluation::Impossible)
+                };
+
+                return Ok(ConstexprEvaluation::Owned(Value::Number(bin_op_applied?)))
+            }
+        }
     }
 }
 

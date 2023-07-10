@@ -9,17 +9,21 @@ use crate::{
     VecErr,
 };
 
-use super::{map_err, new_err, value::Value, Compile, Dependencies, Dependency, Ident};
+use super::{
+    map_err, new_err,
+    value::{Value, ValueChain},
+    Compile, Dependencies, Dependency, Ident,
+};
 
 #[derive(Debug)]
 pub(crate) struct Assignment {
     pub ident: Ident,
-    pub value: Value,
+    pub value: ValueChain,
     pub flags: AssignmentFlag,
 }
 
 impl Assignment {
-    pub fn new(ident: Ident, value: Value) -> Self {
+    pub fn new(ident: Ident, value: ValueChain) -> Self {
         Self {
             ident,
             value,
@@ -94,7 +98,9 @@ impl Compile for Assignment {
     fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<super::CompiledItem>> {
         let name = self.ident.name();
 
-        let mut value_init = match &self.value {
+        let value_chain = &self.value;
+
+        let mut value_init = match &value_chain.0 {
             Value::Ident(ident) => ident.compile(function_buffer)?,
             Value::Function(function) => function.in_place_compile_for_value(function_buffer)?,
             Value::Number(number) => number.compile(function_buffer)?,
@@ -104,6 +110,10 @@ impl Compile for Assignment {
             Value::Boolean(boolean) => boolean.compile(function_buffer)?,
             Value::List(list) => list.compile(function_buffer)?,
         };
+
+        if let Some(ref next) = value_chain.1 {
+            value_init.append(&mut next.compile(function_buffer)?);
+        }
 
         let store_instruction = if self.flags.contains(AssignmentFlag::modify()) {
             instruction!(store_object name)
@@ -251,6 +261,17 @@ impl Parser {
             Rule::assignment_type => Self::assignment_type(assignment, is_const)?,
             rule => unreachable!("{rule:?}"),
         };
+
+        let ident_ty = x.ident.ty().unwrap();
+        if let Some(list_type) = ident_ty.is_list() {
+            if list_type.must_be_const() && !is_const {
+                return Err(vec![new_err(
+                    assignment_span,
+                    &user_data.get_source_file_name(),
+                    "mixed-type arrays must be const in order to ensure type safety".to_owned(),
+                )]);
+            }
+        }
 
         if let Some(flags) = flags {
             x.set_flags(flags)
