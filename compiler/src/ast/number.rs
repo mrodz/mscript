@@ -31,6 +31,18 @@ impl Number {
     }
 }
 
+impl TryInto<usize> for &Number {
+    type Error = std::num::ParseIntError;
+    fn try_into(self) -> std::result::Result<usize, Self::Error> {
+        match self {
+            Number::BigInt(bigint) => bigint.parse::<usize>(),
+            Number::Integer(int) => int.parse::<usize>(),
+            Number::Byte(byte) => byte.parse::<usize>(),
+            Number::Float(_) => unreachable!(),
+        }
+    }
+}
+
 mod string_arithmetic {
     use anyhow::Result;
     use std::ops::*;

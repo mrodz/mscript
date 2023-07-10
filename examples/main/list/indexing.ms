@@ -1,2 +1,4 @@
 list = [1, 2]
-a: int = list[1 + 2 * 3]
+a = list[2]
+
+print a

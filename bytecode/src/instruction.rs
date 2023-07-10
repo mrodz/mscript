@@ -265,24 +265,34 @@ pub mod implementations {
                 let vector: &mut Vec<Primitive> = rc_to_ref(&vector);
 
                 vector.push(new_val);
-            } else if let (Some(b'['), Some(b']')) = (bytes.first(), bytes.last()) {
+            } else if let [b'[', index @ .., b']'] = bytes {
                 let Some(Primitive::Vector(vector)) = ctx.pop() else {
                     bail!("Cannot perform a vector operation on a non-vector")
                 };
 
-                let content = &bytes[1..bytes.len() - 1];
+                // let content = &bytes[1..bytes.len() - 1];
 
                 // this manual byte slice to usize conversion is more performant
-                let mut idx: usize = 0;
-                let mut max = 10_usize.pow(content.len() as u32 - 1);
+                let idx: usize = 'index_gen: {
+                    let mut idx = 0;
+                    let mut max = 10_usize.pow(index.len() as u32 - 1);
 
-                for byte in content {
-                    if byte.is_ascii_digit() {
-                        bail!("'{}' is not numeric", char::from(*byte))
+                    for byte in index {
+                        if !byte.is_ascii_digit() {
+                            let index_as_str = std::str::from_utf8(index)?;
+                            let variable = ctx.load_local(index_as_str).with_context(|| format!("'{index_as_str}' is not a literal number nor a name that has been mapped locally"))?;
+                            let primitive_part: &Primitive = &variable.0;
+
+                            let as_index: usize = primitive_part.try_into_numeric_index()?;
+
+                            break 'index_gen as_index;
+                        }
+                        idx += (byte - b'0') as usize * max;
+                        max /= 10;
                     }
-                    idx += (byte - b'0') as usize * max;
-                    max /= 10;
-                }
+
+                    idx
+                };
 
                 let item = vector.get(idx)
                     .with_context(|| format!("index {idx} out of bounds (len {})", vector.len()))?;
@@ -775,7 +785,7 @@ pub mod implementations {
             *second = first_cloned;
 
             Ok(())
-        } 
+        }
 
         load(ctx, args) {
             let Some(name) = args.first() else {

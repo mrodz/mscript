@@ -1,14 +1,18 @@
 use std::{borrow::Cow, fmt::Display};
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 
 use crate::{
-    ast::{TemporaryRegister, STR_TYPE, value::CompileTimeEvaluate},
+    ast::{value::CompileTimeEvaluate, TemporaryRegister, STR_TYPE},
     instruction,
     parser::{Node, Parser},
 };
 
-use super::{r#type::{IntoType, NativeType}, Compile, Dependencies, TypeLayout, Value, value::{Indexable, ValueChain, ConstexprEvaluation}, Number};
+use super::{
+    r#type::{IntoType, NativeType},
+    value::{ConstexprEvaluation, Indexable, ValueChain},
+    Compile, Dependencies, Number, TypeLayout, Value,
+};
 
 #[derive(Debug)]
 pub(crate) struct List {
@@ -104,7 +108,7 @@ impl ListType {
         match self {
             Self::Empty => Cow::Borrowed("0"),
             Self::Open { .. } => Cow::Borrowed("∞"),
-            Self::Mixed(types) => Cow::Owned(types.len().to_string())
+            Self::Mixed(types) => Cow::Owned(types.len().to_string()),
         }
     }
 
@@ -112,13 +116,11 @@ impl ListType {
         match self {
             Self::Empty => None,
             Self::Mixed(types) => types.get(index).map(Cow::as_ref),
-            Self::Open { types, spread } => {
-                Some(if let Some(ty) = types.get(index) {
-                    ty.as_ref()
-                } else {
-                    spread.as_ref()
-                })
-            }
+            Self::Open { types, spread } => Some(if let Some(ty) = types.get(index) {
+                ty.as_ref()
+            } else {
+                spread.as_ref()
+            }),
         }
     }
 }
@@ -165,32 +167,32 @@ impl PartialEq for ListType {
                     types: t2,
                     spread: s2,
                 } => {
-					if types == t2 && spread == s2 {
-						return true;
-					}
+                    if types == t2 && spread == s2 {
+                        return true;
+                    }
 
-					let mut lhs_all_the_same = true;
+                    let mut lhs_all_the_same = true;
 
-					let lhs_ty = spread;
+                    let lhs_ty = spread;
 
-					for ty in types {
-						if ty != lhs_ty.as_ref() {
-							lhs_all_the_same = false;
-						}
-					}
+                    for ty in types {
+                        if ty != lhs_ty.as_ref() {
+                            lhs_all_the_same = false;
+                        }
+                    }
 
-					let mut rhs_all_the_same = true;
+                    let mut rhs_all_the_same = true;
 
-					let rhs_ty = s2;
+                    let rhs_ty = s2;
 
-					for ty in t2 {
-						if ty != rhs_ty.as_ref() {
-							rhs_all_the_same = false;
-						}
-					}
+                    for ty in t2 {
+                        if ty != rhs_ty.as_ref() {
+                            rhs_all_the_same = false;
+                        }
+                    }
 
-					return lhs_all_the_same && rhs_all_the_same;
-				},
+                    return lhs_all_the_same && rhs_all_the_same;
+                }
                 Mixed(t2) => {
                     for (idx, ty2) in t2.iter().enumerate() {
                         let ty1 = types.get(idx).unwrap_or_else(|| spread);
@@ -269,7 +271,7 @@ impl IntoType for List {
 
 #[derive(Debug)]
 pub(crate) struct Index {
-    value: ValueChain
+    value: ValueChain,
 }
 
 impl Dependencies for Index {
@@ -297,7 +299,7 @@ impl Indexable for Index {
             TypeLayout::List(list_type) => {
                 let maybe_constexpr_eval = self.value.try_constexpr_eval()?;
                 let Some(constexpr_value) = maybe_constexpr_eval.as_ref() else {
-                    bail!("cannot know the type of a non-const index into a list at compile time");
+                    bail!("an index that is not compile-time-constant cannot be used to deduce the type of the resulting element");
                 };
 
                 let Value::Number(number) = constexpr_value else {
@@ -309,23 +311,54 @@ impl Indexable for Index {
                         let idx: usize = idx.parse()?;
 
                         let Some(type_at_index) = list_type.get_type_at_index(idx) else {
-                            bail!("{idx} is not a valid index into `{list_type}`, which has a known length at compile time of {}", list_type.len())
+                            bail!("`{idx}` is not a valid index into `{list_type}`, which has a known length at compile time of {}", list_type.len())
                         };
-                        
+
                         Ok(Cow::Owned(type_at_index.clone()))
                     }
                     Number::Float(_) => bail!("cannot index into a list with floats"),
                 }
             }
 
-            other => unimplemented!("{other:?}")
+            other => unimplemented!("{other:?}"),
         }
     }
 }
 
 impl Compile for Index {
-    fn compile(&self, _function_buffer: &mut Vec<super::CompiledItem>) -> Result<Vec<super::CompiledItem>, anyhow::Error> {
-        todo!()
+    fn compile(
+        &self,
+        function_buffer: &mut Vec<super::CompiledItem>,
+    ) -> Result<Vec<super::CompiledItem>, anyhow::Error> {
+        let value = self.try_constexpr_eval()?;
+
+        // faster lookup if the value is already known.
+        if let Some(Value::Number(number)) = value.as_ref() {
+            let index: usize = number.try_into()?;
+            let instruction_str = format!("[{index}]");
+            return Ok(vec![instruction!(vec_op instruction_str)]);
+        }
+
+        let vec_temp_register = TemporaryRegister::new();
+
+        let mut result = vec![instruction!(store_fast vec_temp_register)];
+
+        result.append(&mut self.value.compile(function_buffer)?);
+
+        let index_temp_register = TemporaryRegister::new();
+
+        let instruction_str = format!("[{index_temp_register}]");
+
+        result.append(&mut vec![
+            instruction!(store_fast index_temp_register),
+            instruction!(load_fast vec_temp_register),
+            instruction!(vec_op instruction_str),
+        ]);
+
+        index_temp_register.free();
+        vec_temp_register.free();
+
+        Ok(result)
     }
 }
 

@@ -118,6 +118,15 @@ impl Primitive {
         matches!(self.ty(), Bool | Int | Float | Byte | BigInt)
     }
 
+    pub fn try_into_numeric_index(&self) -> Result<usize> {
+        Ok(match self {
+            Primitive::Byte(byte) => *byte as usize,
+            Primitive::BigInt(bigint) => *bigint as usize,
+            Primitive::Int(int) => *int as usize,
+            other => bail!("cannot index with {other}")
+        })
+    }
+
     /// Parse a string slice to a bytecode [`Primitive::Str`] primitive.
     pub fn make_str(string: &str) -> Result<Self> {
         Ok(string!(raw string))
