@@ -184,7 +184,7 @@ impl CompileTimeEvaluate for Expr {
                     _ => return Ok(ConstexprEvaluation::Impossible)
                 };
 
-                return Ok(ConstexprEvaluation::Owned(Value::Number(bin_op_applied?)))
+                Ok(ConstexprEvaluation::Owned(Value::Number(bin_op_applied?)))
             }
         }
     }

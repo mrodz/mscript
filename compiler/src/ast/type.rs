@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap, fmt::Display, rc::Rc};
+use std::{borrow::Cow, collections::HashMap, fmt::Display, rc::Rc, sync::Arc};
 
 use crate::{
     parser::{util::parse_with_userdata, AssocFileData, Node, Parser, Rule},
@@ -64,7 +64,7 @@ impl Display for NativeType {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum TypeLayout {
-    Function(FunctionType),
+    Function(Arc<FunctionType>),
     /// metadata wrapper around a [TypeLayout]
     CallbackVariable(Box<TypeLayout>),
     Native(NativeType),
@@ -100,14 +100,14 @@ impl TypeLayout {
         Some(l)
     }
 
-    pub fn is_function(&self) -> Option<&FunctionType> {
+    pub fn is_function(&self) -> Option<Arc<FunctionType>> {
         let me = self.get_type_recursively();
 
         let TypeLayout::Function(f) = me else {
             return None;
         };
 
-        Some(f)
+        Some(Arc::clone(f))
     }
 
     pub fn can_negate(&self) -> bool {
@@ -253,7 +253,7 @@ pub(crate) fn type_from_str(
             {
                 let single = function_type.single()?;
                 let ty = Parser::function_type(single)?;
-                return Ok(Cow::Owned(TypeLayout::Function(ty)));
+                return Ok(Cow::Owned(TypeLayout::Function(Arc::new(ty))));
             } else if let Ok(list_type) = parse_with_userdata(Rule::list_type, input, user_data) {
                 let single = list_type.single()?;
                 let ty = Parser::list_type(single)?;
@@ -298,7 +298,7 @@ impl Parser {
                 None
             };
 
-        let types = FunctionParameters::TypesOnly(types);
+        let types = Arc::new(FunctionParameters::TypesOnly(types));
 
         Ok(FunctionType::new(
             types,
@@ -352,7 +352,7 @@ impl Parser {
             });
         }
 
-        return Ok(ListType::Mixed(type_vec));
+        Ok(ListType::Mixed(type_vec))
     }
 
     pub fn r#type(input: Node) -> Result<Cow<'static, TypeLayout>> {

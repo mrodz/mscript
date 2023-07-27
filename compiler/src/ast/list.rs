@@ -20,15 +20,6 @@ pub(crate) struct List {
 }
 
 impl List {
-    #[allow(unused)]
-    pub fn type_at_index(&self, index: usize) -> Result<Cow<'static, TypeLayout>> {
-        if let Some(value) = self.values.get(index) {
-            return Ok(Cow::Owned(value.for_type()?));
-        }
-
-        bail!("out of bounds")
-    }
-
     pub fn for_type_force_mixed(&self) -> Result<TypeLayout> {
         let mut types = Vec::with_capacity(self.values.len());
         for value in &self.values {
@@ -74,6 +65,23 @@ impl Compile for List {
     }
 }
 
+impl CompileTimeEvaluate for List {
+    fn try_constexpr_eval(&self) -> Result<ConstexprEvaluation> {
+        let mut result = Vec::with_capacity(self.values.len());
+
+        for value in &self.values {
+            let constexpr_eval = value.try_constexpr_eval()?;
+            let Some(value) = constexpr_eval.into_owned() else {
+                return Ok(ConstexprEvaluation::Impossible);
+            };
+
+            result.push(ValueChain(value, None));
+        }
+
+        Ok(ConstexprEvaluation::Owned(Value::List(List { values: result })))
+    }
+}
+
 impl Dependencies for List {
     fn dependencies(&self) -> Vec<super::Dependency> {
         self.values
@@ -101,7 +109,7 @@ impl ListType {
             }
         }
 
-        return false;
+        false
     }
 
     pub fn len(&self) -> Cow<'static, str> {
@@ -191,11 +199,11 @@ impl PartialEq for ListType {
                         }
                     }
 
-                    return lhs_all_the_same && rhs_all_the_same;
+                    lhs_all_the_same && rhs_all_the_same
                 }
                 Mixed(t2) => {
                     for (idx, ty2) in t2.iter().enumerate() {
-                        let ty1 = types.get(idx).unwrap_or_else(|| spread);
+                        let ty1 = types.get(idx).unwrap_or(spread);
 
                         if ty1 != ty2 {
                             return false;
@@ -297,7 +305,7 @@ impl Indexable for Index {
         match value_ty {
             TypeLayout::Native(NativeType::Str) => Ok(Cow::Borrowed(*STR_TYPE)),
             TypeLayout::List(list_type) => {
-                let maybe_constexpr_eval = self.value.try_constexpr_eval()?;
+                let maybe_constexpr_eval = self.try_constexpr_eval()?;
                 let Some(constexpr_value) = maybe_constexpr_eval.as_ref() else {
                     bail!("an index that is not compile-time-constant cannot be used to deduce the type of the resulting element");
                 };
@@ -351,8 +359,9 @@ impl Compile for Index {
 
         result.append(&mut vec![
             instruction!(store_fast index_temp_register),
-            instruction!(load_fast vec_temp_register),
+            instruction!(delete_name_reference_scoped vec_temp_register),
             instruction!(vec_op instruction_str),
+            instruction!(delete_name_scoped index_temp_register)
         ]);
 
         index_temp_register.free();

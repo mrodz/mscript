@@ -53,22 +53,31 @@ use pest::Span;
 use std::{
     borrow::Cow,
     fmt::{Debug, Display},
-    rc::Rc,
+    sync::Arc,
 };
 
 static mut REGISTER_COUNT: usize = 0;
-pub struct TemporaryRegister(usize);
+
+pub struct TemporaryRegister(usize, bool);
 
 impl TemporaryRegister {
     pub unsafe fn new_ghost_register(mock_count: usize) -> Self {
-        Self(mock_count)
+        Self(mock_count, false)
     }
 
     pub fn new() -> Self {
         unsafe {
             REGISTER_COUNT += 1;
 
-            Self(REGISTER_COUNT)
+            Self(REGISTER_COUNT, true)
+        }
+    }
+
+    pub fn new_require_explicit_drop() -> Self {
+        unsafe {
+            REGISTER_COUNT += 1;
+
+            Self(REGISTER_COUNT, false)
         }
     }
 
@@ -97,11 +106,15 @@ impl Display for TemporaryRegister {
 
 impl Drop for TemporaryRegister {
     fn drop(&mut self) {
+        if !self.1 {
+            return;
+        } 
+
         unsafe {
             if self.0 == REGISTER_COUNT {
                 REGISTER_COUNT -= 1;
             } else if self.0 - 1 != REGISTER_COUNT {
-                unreachable!("dropped out of order")
+                unreachable!("dropped out of order {} {REGISTER_COUNT}", self.0)
             }
         }
     }
@@ -128,7 +141,7 @@ pub(crate) enum CompiledItem {
     Function {
         id: CompiledFunctionId,
         content: Option<Vec<CompiledItem>>,
-        location: Rc<String>,
+        location: Arc<String>,
     },
     Instruction {
         id: u8,

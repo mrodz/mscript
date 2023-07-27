@@ -1,13 +1,13 @@
-use std::{borrow::Cow, collections::HashSet};
+use std::{borrow::Cow, collections::HashSet, sync::Arc};
 
 use anyhow::{bail, Result};
 
-use crate::ast::{Ident, TypeLayout};
+use crate::ast::{FunctionParameters, Ident, TypeLayout};
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum ScopeType {
     File,
-    Function,
+    Function(Option<Arc<FunctionParameters>>),
     IfBlock,
     ElseBlock,
     WhileLoop,
@@ -24,18 +24,23 @@ pub(crate) enum ScopeReturnStatus {
 }
 
 impl ScopeReturnStatus {
+    pub fn get_type(&self) -> Option<&Cow<'static, TypeLayout>> {
+        match self {
+            Self::Did(x) | Self::ParentShould(x) | Self::Should(x) => Some(x),
+            _ => None
+        }
+    }
+
     pub fn eq_for_signature_checking(&self, rhs: &Self) -> Result<bool> {
         if self == rhs {
             return Ok(true);
         }
 
-        if let Self::Should(left) | Self::Did(left) = self {
-            if let Self::Should(right) | Self::Did(right) = rhs {
-                return Ok(left == right);
-            }
-        }
+        let (Some(lhs), Some(rhs)) = (self.get_type(), rhs.get_type()) else {
+            bail!("not applicable")
+        };
 
-        bail!("not applicable")
+        Ok(lhs == rhs)
     }
 
     pub fn detect_should_return(val: Option<Cow<'static, TypeLayout>>) -> Self {
@@ -96,7 +101,7 @@ impl Scope {
     }
 
     pub fn is_function(&self) -> bool {
-        self.ty == ScopeType::Function
+        matches!(self.ty, ScopeType::Function(..))
     }
 
     pub fn is_loop(&self) -> bool {
@@ -105,6 +110,14 @@ impl Scope {
 
     pub fn add_dependency(&mut self, dependency: &Ident) {
         self.variables.insert(dependency.clone());
+    }
+
+    pub fn ty_ref(&self) -> &ScopeType {
+        &self.ty
+    }
+
+    pub fn ty_ref_mut(&mut self) -> &mut ScopeType {
+        &mut self.ty
     }
 
     /// able to be improved

@@ -25,6 +25,7 @@ impl FunctionParameters {
             Self::TypesOnly(x) => x.len(),
         }
     }
+
     pub fn to_types(&self) -> Cow<Vec<Cow<TypeLayout>>> {
         match self {
             FunctionParameters::Named(names) => {

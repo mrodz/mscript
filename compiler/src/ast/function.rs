@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt::Display, rc::Rc};
+use std::{borrow::Cow, fmt::Display, sync::Arc};
 
 use anyhow::{anyhow, Result};
 
@@ -23,15 +23,15 @@ pub fn name_from_function_id(id: isize) -> String {
 
 #[derive(Debug)]
 pub(crate) struct Function {
-    pub parameters: FunctionParameters,
+    pub parameters: Arc<FunctionParameters>,
     pub body: Block,
     pub return_type: ScopeReturnStatus,
-    pub path_str: Rc<String>,
+    pub path_str: Arc<String>,
 }
 
 #[derive(Debug, Clone, Eq)]
 pub(crate) struct FunctionType {
-    pub parameters: FunctionParameters,
+    pub parameters: Arc<FunctionParameters>,
     pub return_type: Box<ScopeReturnStatus>,
 }
 
@@ -57,7 +57,7 @@ impl PartialEq for FunctionType {
 }
 
 impl FunctionType {
-    pub fn new(parameters: FunctionParameters, return_type: ScopeReturnStatus) -> Self {
+    pub fn new(parameters: Arc<FunctionParameters>, return_type: ScopeReturnStatus) -> Self {
         Self {
             parameters,
             return_type: Box::new(return_type),
@@ -91,10 +91,10 @@ impl Display for FunctionType {
 
 impl Function {
     pub fn new(
-        parameters: FunctionParameters,
+        parameters: Arc<FunctionParameters>,
         body: Block,
         return_type: ScopeReturnStatus,
-        path_str: Rc<String>,
+        path_str: Arc<String>,
     ) -> Self {
         Self {
             parameters,
@@ -108,10 +108,10 @@ impl Function {
 impl IntoType for Function {
     /// unimplemented
     fn for_type(&self) -> Result<TypeLayout> {
-        Ok(TypeLayout::Function(FunctionType::new(
+        Ok(TypeLayout::Function(Arc::new(FunctionType::new(
             self.parameters.clone(),
             self.return_type.clone(),
-        )))
+        ))))
     }
 }
 
@@ -219,7 +219,7 @@ impl Parser {
             // syntax checks.
             let parameters = Self::function_parameters(parameters, false).map_err(|e| vec![anyhow!(e)])?;
 
-            return Ok(Function::new(parameters, Block::empty_body(), ScopeReturnStatus::Void, path_str));
+            return Ok(Function::new(Arc::new(parameters), Block::empty_body(), ScopeReturnStatus::Void, path_str));
         };
 
         let (body, return_type) = if matches!(next.as_rule(), Rule::function_return_type) {
@@ -239,7 +239,9 @@ impl Parser {
             .user_data()
             .push_function(ScopeReturnStatus::detect_should_return(return_type));
 
-        let parameters = Self::function_parameters(parameters, true).to_err_vec()?;
+        let parameters = Arc::new(Self::function_parameters(parameters, true).to_err_vec()?);
+
+        input.user_data().register_function_parameters_to_scope(Arc::clone(&parameters));
 
         let body = if let Some(body) = body {
             Self::block(body)?

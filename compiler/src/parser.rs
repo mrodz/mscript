@@ -1,10 +1,11 @@
 use std::borrow::Cow;
+use std::sync::Arc;
 use std::{cell::RefCell, rc::Rc};
 
 use anyhow::{anyhow, Result, bail};
 use pest_consume::Parser as ParserDerive;
 
-use crate::ast::{Compile, CompiledFunctionId, CompiledItem, Declaration, Ident, TypeLayout};
+use crate::ast::{Compile, CompiledFunctionId, CompiledItem, Declaration, Ident, TypeLayout, FunctionParameters};
 use crate::instruction;
 use crate::scope::{Scope, ScopeReturnStatus, ScopeType};
 
@@ -18,8 +19,8 @@ pub(crate) struct Parser;
 #[derive(Debug)]
 pub(crate) struct AssocFileData {
     scopes: RefCell<Vec<Scope>>,
-    file_name: Rc<String>, // last_arg_type: Rc<RefCell<Vec<IdentType>>>
-    source_name: Rc<String>,
+    file_name: Arc<String>, // last_arg_type: Rc<RefCell<Vec<IdentType>>>
+    source_name: Arc<String>,
 }
 
 impl AssocFileData {
@@ -34,16 +35,16 @@ impl AssocFileData {
 
         Self {
             scopes: RefCell::new(vec![Scope::new_file()]),
-            file_name: Rc::new(destination_name), // last_arg_type: Rc::new(RefCell::new(vec![]))
-            source_name: Rc::new(source_name),
+            file_name: Arc::new(destination_name), // last_arg_type: Rc::new(RefCell::new(vec![]))
+            source_name: Arc::new(source_name),
         }
     }
 
-    pub fn get_source_file_name(&self) -> Rc<String> {
+    pub fn get_source_file_name(&self) -> Arc<String> {
         self.source_name.clone()
     }
 
-    pub fn get_file_name(&self) -> Rc<String> {
+    pub fn get_file_name(&self) -> Arc<String> {
         self.file_name.clone()
     }
 
@@ -84,7 +85,7 @@ impl AssocFileData {
     }
 
     pub fn push_function(&self, yields: ScopeReturnStatus) {
-        self.push_scope_typed(ScopeType::Function, yields)
+        self.push_scope_typed(ScopeType::Function(None), yields)
     }
 
     pub fn push_while_loop(&self, yields: ScopeReturnStatus) {
@@ -95,8 +96,29 @@ impl AssocFileData {
         self.push_scope_typed(ScopeType::NumberLoop, yields)
     }
 
+    pub fn iter(&self) -> std::iter::Rev<std::slice::Iter<Scope>> {
+        // we need a pointer hack to bypass borrow checker
+        // it is guaranteed to be safe because scopes will not be dropped as long as `self` is valid.
+        unsafe { (*self.scopes.as_ptr()).iter() }.rev()
+    }
+
+    pub fn get_current_executing_function(&self) -> Option<&Scope> {
+        self.iter().find(|x| x.is_function())
+    }
+
+    pub fn register_function_parameters_to_scope(&self, function_parameters: Arc<FunctionParameters>) {
+        let mut scopes = self.scopes.borrow_mut();
+        let this_scope = scopes.last_mut().unwrap();
+
+        let ScopeType::Function(ref mut parameters @ None) = this_scope.ty_ref_mut() else {
+            unreachable!("either not a function, or parameters have already been set");
+        };
+
+        *parameters = Some(function_parameters)
+    }
+
     pub fn return_statement_expected_yield_type(&self) -> Option<&Cow<'static, TypeLayout>> {
-        for scope in unsafe { (*self.scopes.as_ptr()).iter().rev() } {
+        for scope in self.iter() {
             let (ScopeReturnStatus::Should(result) | ScopeReturnStatus::Did(result)) = scope.peek_yields_value() else {
                 continue;
             };
@@ -240,7 +262,7 @@ pub(crate) fn root_node_from_str(
 #[derive(Debug, Default)]
 pub(crate) struct File {
     pub declarations: Vec<Declaration>,
-    pub location: Rc<String>,
+    pub location: Arc<String>,
 }
 
 impl File {

@@ -43,6 +43,7 @@ impl Value {
     }
 }
 
+#[derive(Debug)]
 pub(crate) enum ConstexprEvaluation {
     Impossible,
     Owned(Value)
@@ -59,21 +60,27 @@ impl ConstexprEvaluation {
             Self::Owned(val) => Some(val),
         }
     }
+
+    pub fn into_owned(self) -> Option<Value> {
+        match self {
+            Self::Impossible => None,
+            Self::Owned(val) => Some(val),
+        }
+    }
 }
 
 pub(crate) trait CompileTimeEvaluate {
     fn try_constexpr_eval(&self) -> Result<ConstexprEvaluation>;
 }
 
-impl <'a>CompileTimeEvaluate for Value {
+impl CompileTimeEvaluate for Value {
     fn try_constexpr_eval(&self) -> Result<ConstexprEvaluation> {
         match self {
             Self::Number(number) => Ok(ConstexprEvaluation::Owned(Value::Number(number.clone()))),
-            Self::Boolean(bool) => Ok(ConstexprEvaluation::Owned(Value::Boolean(bool.clone()))),
+            Self::Boolean(bool) => Ok(ConstexprEvaluation::Owned(Value::Boolean(*bool))),
             Self::String(string) => Ok(ConstexprEvaluation::Owned(Value::String(string.clone()))),
-            Self::MathExpr(expr) => {
-                expr.try_constexpr_eval()
-            }
+            Self::MathExpr(expr) => expr.try_constexpr_eval(),
+            Self::List(list) => list.try_constexpr_eval(),
             _ => Ok(ConstexprEvaluation::Impossible),
         }
     }
@@ -101,8 +108,6 @@ impl CompileTimeEvaluate for ValueChain {
                 return Ok(ConstexprEvaluation::Impossible);
             };
 
-            // let val_constexpr: &'a Value = val_constexpr;
-
             match next.as_ref() {
                 ValueChainType::Index(index) => {
                     let Value::List(list) = val_constexpr else {
@@ -122,11 +127,9 @@ impl CompileTimeEvaluate for ValueChain {
                         Number::BigInt(idx) | Number::Integer(idx) | Number::Byte(idx) => {
                             let numeric_idx: usize = idx.parse()?;
     
-                            dbg!(numeric_idx);
-    
                             let indexed = list.get_value(numeric_idx).context("index out of bounds")?;
 
-                            return indexed.try_constexpr_eval()
+                            indexed.try_constexpr_eval()
                         }
                         Number::Float(_) => bail!("cannot index into a list with floats"),
                     }
@@ -209,7 +212,7 @@ impl ValueChain {
     pub fn is_callable(&self) -> Result<bool> {
         let ty = self.for_type()?;
 
-        return Ok(ty.is_function().is_some());
+        Ok(ty.is_function().is_some())
     }
 
     pub fn associate_with_ident(&self, ident: &mut Ident, user_data: &AssocFileData) -> Result<()> {

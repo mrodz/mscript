@@ -1,23 +1,28 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::Arc};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 
 use crate::{
+    ast::FunctionParameters,
     instruction,
     parser::{Node, Parser},
-    scope::ScopeReturnStatus,
+    scope::ScopeType,
     VecErr,
 };
 
 use super::{
-    map_err_messages, r#type::IntoType, Compile, CompiledItem, Dependencies, Dependency,
-    FunctionArguments, Ident, TemporaryRegister, TypeLayout,
+    function::FunctionType, map_err_messages, r#type::IntoType, Compile, CompiledItem,
+    Dependencies, Dependency, FunctionArguments, Ident, TemporaryRegister, TypeLayout,
 };
 
 #[derive(Debug)]
 pub(crate) enum CallableDestination {
-    Named { ident: Ident },
-    ToSelf { return_type: Option<TypeLayout> },
+    Named {
+        ident: Ident,
+    },
+    ToSelf {
+        return_type: Option<Cow<'static, TypeLayout>>,
+    },
 }
 
 #[derive(Debug)]
@@ -30,23 +35,18 @@ impl IntoType for Callable {
     /// return the return type
     fn for_type(&self) -> Result<TypeLayout> {
         static VOID_MSG: &str = "function returns void";
-        let CallableDestination::Named { ident } = &self.destination else {
-            let CallableDestination::ToSelf { return_type } = &self.destination else {
-                unreachable!()
-            };
-
-            return return_type.clone().context(VOID_MSG);
-        };
-
-        let ty = ident.ty()?.get_type_recursively();
-
-        let (ScopeReturnStatus::Should(ref return_type) | ScopeReturnStatus::Did(ref return_type)) = ty.is_function().context("not a function")?.return_type.as_ref() else {
-            bail!(VOID_MSG)
-        };
-
-        let return_type_cloned: TypeLayout = return_type.as_ref().clone();
-
-        Ok(return_type_cloned)
+        match &self.destination {
+            CallableDestination::Named { ident } => {
+                let ty = ident.ty()?;
+                let function_type = ty.is_function().context("not a function")?;
+                let return_type = function_type.return_type.get_type().context(VOID_MSG)?;
+                let return_type = return_type.clone().into_owned();
+                Ok(return_type)
+            }
+            CallableDestination::ToSelf { return_type } => {
+                return_type.clone().map(Cow::into_owned).context(VOID_MSG)
+            }
+        }
     }
 }
 
@@ -61,7 +61,7 @@ impl Compile for Callable {
             .flat_map(|x| {
                 let mut value_init = x.compile(function_buffer).unwrap();
 
-                let argument_register = TemporaryRegister::new();
+                let argument_register = TemporaryRegister::new_require_explicit_drop();
                 value_init.push(instruction!(store_fast argument_register));
 
                 if register_start.is_none() {
@@ -133,7 +133,52 @@ impl Parser {
 
         let user_data = input.user_data();
 
-        let destination: CallableDestination = if ident.as_str() != "self" {
+        // let destination: CallableDestination = if ident.as_str() != "self" {
+            
+        //     CallableDestination::Named { ident }
+        // } else {
+        //     let return_type: Option<&Cow<'_, TypeLayout>> =
+        //         user_data.return_statement_expected_yield_type();
+
+        //     CallableDestination::ToSelf { return_type }
+        // };
+
+        let function_arguments = children.next().unwrap();
+
+        enum Choice {
+            Named(Arc<FunctionType>),
+            ToSelf(Arc<FunctionParameters>),
+        }
+
+        impl Choice {
+            fn get_parameters(&self) -> &FunctionParameters {
+                match self {
+                    Self::Named(function_type) => &function_type.parameters,
+                    Self::ToSelf(function_parameters) => function_parameters,
+                }
+            }
+        }
+
+        let (parameters_union, destination) = if ident.as_str() == "self" {
+            let function_scope = input
+                .user_data()
+                .get_current_executing_function()
+                .context("no function scope found for `self` call.")
+                .to_err_vec()?;
+
+            function_scope.ty_ref();
+
+            let ScopeType::Function(Some(parameters)) = function_scope.ty_ref() else {
+                unreachable!();
+            };
+
+            let ty = function_scope.peek_yields_value().get_type().cloned();
+
+            let parameters = Choice::ToSelf(parameters.clone());
+            let destination = CallableDestination::ToSelf { return_type: ty };
+
+            (parameters, destination)
+        } else {
             let mut ident = Self::ident(ident).to_err_vec()?;
 
             if let Err(e) = ident.link_from_pointed_type_with_lookup(user_data) {
@@ -147,17 +192,22 @@ impl Parser {
                 .to_err_vec();
             }
 
-            CallableDestination::Named { ident }
-        } else {
-            let return_type: Option<&Cow<'_, TypeLayout>> =
-                user_data.return_statement_expected_yield_type();
-            let return_type: Option<TypeLayout> = return_type.cloned().map(Cow::into_owned);
+            // lookup the identity of the function
+            let type_layout = ident.ty().to_err_vec()?;
 
-            CallableDestination::ToSelf { return_type }
+            let function_type = type_layout
+                .is_function()
+                .context("not a function")
+                .to_err_vec()?;
+
+            let parameters = Choice::Named(function_type);
+            let destination = CallableDestination::Named { ident };
+
+            (parameters, destination)
         };
 
-        let function_arguments = children.next().unwrap();
-        let function_arguments = Self::function_arguments(function_arguments)?;
+        let function_arguments =
+            Self::function_arguments(function_arguments, parameters_union.get_parameters())?;
 
         Ok(Callable {
             destination,

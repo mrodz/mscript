@@ -262,7 +262,7 @@ pub mod implementations {
                     bail!("not a vector, trying to push")
                 };
 
-                let vector: &mut Vec<Primitive> = rc_to_ref(&vector);
+                let vector: &mut Vec<Primitive> = rc_to_ref(vector);
 
                 vector.push(new_val);
             } else if let [b'[', index @ .., b']'] = bytes {

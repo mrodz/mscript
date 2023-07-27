@@ -1,4 +1,5 @@
-list = [1, 2]
-a = list[2]
+exploit = fn(x: int, y: int) -> int {
+	return x + y
+}
 
-print a
+print exploit([1, 2, 3], [4, 5, 6])

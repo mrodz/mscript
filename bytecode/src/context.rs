@@ -285,7 +285,7 @@ impl<'a> Ctx<'a> {
         call_stack.register_variable_local(name, var, VariableFlags::none())
     }
 
-    pub(crate) fn delete_variable_local(&self, name: &String) -> Result<Rc<(Primitive, VariableFlags)>> {
+    pub(crate) fn delete_variable_local(&self, name: &str) -> Result<Rc<(Primitive, VariableFlags)>> {
         rc_to_ref(&self.call_stack).delete_variable_local(name)
     }
 
