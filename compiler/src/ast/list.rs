@@ -278,27 +278,48 @@ impl IntoType for List {
 }
 
 #[derive(Debug)]
-pub(crate) struct Index {
-    value: ValueChain,
-}
+pub(crate) struct Index(Box<[ValueChain]>);
 
 impl Dependencies for Index {
     fn dependencies(&self) -> Vec<super::Dependency> {
-        self.value.net_dependencies()
+        let mut result = vec![];
+        for idx in self.0.iter() {
+            result.append(&mut idx.net_dependencies())
+        }
+        result
     }
 }
 
 impl CompileTimeEvaluate for Index {
     fn try_constexpr_eval(&self) -> Result<ConstexprEvaluation> {
-        self.value.try_constexpr_eval()
+        todo!();
+        // if self.0.is_empty() {
+        //     unreachable!("empty index");
+        // }
+
+        // let mut values = vec![];
+
+        // for index in self.0.iter() {
+        //     let index = index.try_constexpr_eval()?;
+        //     let ConstexprEvaluation::Owned(value) = index else {
+        //         return Ok(ConstexprEvaluation::Impossible);
+        //     };
+
+        //     values.push(value);
+        // }
+
+        // Ok(ConstexprEvaluation::Owned(Value::MultiIndex(values.into_boxed_slice())))
     }
 }
 
 impl Indexable for Index {
     fn output_from_value(&self, value: &Value) -> Result<Cow<'static, TypeLayout>> {
-        if !self.value.for_type()?.is_numeric_index() {
-            bail!("for now, indexing can only be done with integers")
-        }
+        
+        // un-comment
+        todo!();
+        // if !self.value.for_type()?.is_numeric_index() {
+        //     bail!("for now, indexing can only be done with integers")
+        // }
 
         let value_ty = value.for_type()?;
 
@@ -351,7 +372,9 @@ impl Compile for Index {
 
         let mut result = vec![instruction!(store_fast vec_temp_register)];
 
-        result.append(&mut self.value.compile(function_buffer)?);
+        todo!();
+        // un-comment
+        // result.append(&mut self.value.compile(function_buffer)?);
 
         let index_temp_register = TemporaryRegister::new();
 
@@ -385,9 +408,17 @@ impl Parser {
     }
 
     pub fn list_index(input: Node) -> Result<Index, Vec<anyhow::Error>> {
+        let mut children = input.children();
+
+        for child in children {
+
+        }
+
+        // input.children().for_each(|x| println!("{}", x.as_str()));
         let value_node = input.children().single().unwrap();
         let value = Self::value(value_node)?;
 
-        Ok(Index { value })
+        todo!()
+        // Ok(Index { value })
     }
 }

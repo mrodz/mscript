@@ -1,7 +1,10 @@
+#[allow(unused_imports)]
 use std::{borrow::Cow, sync::Arc};
 
+#[allow(unused_imports)]
 use anyhow::{Context, Result};
 
+#[allow(unused_imports)]
 use crate::{
     ast::FunctionParameters,
     instruction,
@@ -10,27 +13,46 @@ use crate::{
     VecErr,
 };
 
+#[allow(unused_imports)]
 use super::{
     function::FunctionType, map_err_messages, r#type::IntoType, Compile, CompiledItem,
     Dependencies, Dependency, FunctionArguments, Ident, TemporaryRegister, TypeLayout,
 };
 
-#[derive(Debug)]
-pub(crate) enum CallableDestination {
-    Named {
-        ident: Ident,
+enum CallableDestination {
+    Standard {
+        load_instruction: Box<dyn Fn() -> CompiledItem>,
     },
     ToSelf {
         return_type: Option<Cow<'static, TypeLayout>>,
     },
 }
 
-#[derive(Debug)]
-pub(crate) struct Callable {
-    pub destination: CallableDestination,
-    pub function_arguments: FunctionArguments,
+pub(crate) struct Callable<'a> {
+    destination: CallableDestination,
+    function_arguments: &'a FunctionArguments,
 }
 
+impl<'a> Callable<'a> {
+    pub fn new_recursive_call(arguments: &'a FunctionArguments, return_type: Option<Cow<'static, TypeLayout>>) -> Self {
+        Self {
+            destination: CallableDestination::ToSelf { return_type },
+            function_arguments: arguments,
+        }
+    }
+
+    pub fn new<L>(arguments: &'a FunctionArguments, load_instruction: L) -> Self
+    where
+        L: (Fn() -> CompiledItem) + 'static
+    {
+        Self {
+            destination: CallableDestination::Standard { load_instruction: Box::new(load_instruction) },
+            function_arguments: arguments,
+        }
+    }
+}
+
+#[cfg(not)]
 impl IntoType for Callable {
     /// return the return type
     fn for_type(&self) -> Result<TypeLayout> {
@@ -39,7 +61,7 @@ impl IntoType for Callable {
             CallableDestination::Named { ident } => {
                 let ty = ident.ty()?;
                 let function_type = ty.is_function().context("not a function")?;
-                let return_type = function_type.return_type.get_type().context(VOID_MSG)?;
+                let return_type = function_type.return_type().get_type().context(VOID_MSG)?;
                 let return_type = return_type.clone().into_owned();
                 Ok(return_type)
             }
@@ -50,7 +72,7 @@ impl IntoType for Callable {
     }
 }
 
-impl Compile for Callable {
+impl Compile for Callable<'_> {
     fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>> {
         let mut register_start = None;
         let mut register_count = 0;
@@ -87,45 +109,50 @@ impl Compile for Callable {
             TemporaryRegister::free_many(register_count);
         }
 
-        let CallableDestination::Named { ident } = &self.destination else {
+        let CallableDestination::Standard { load_instruction } = &self.destination else {
             // let CallableDestination::ToSelf { return_type }
             args_init.push(instruction!(call_self));
 
             return Ok(args_init);
         };
 
-        let func_name = ident.name();
+        // let func_name = ident.name();
 
-        let load_instruction = match ident.ty()? {
-            Cow::Owned(TypeLayout::CallbackVariable(..))
-            | Cow::Borrowed(TypeLayout::CallbackVariable(..)) => {
-                instruction!(load_callback func_name)
-            }
-            _ => instruction!(load func_name),
-        };
+        // let load_instruction = match ident.ty()? {
+        //     Cow::Owned(TypeLayout::CallbackVariable(..))
+        //     | Cow::Borrowed(TypeLayout::CallbackVariable(..)) => {
+        //         instruction!(load_callback func_name)
+        //     }
+        //     _ => instruction!(load func_name),
+        // };
 
-        args_init.push(load_instruction);
+        let x = (&load_instruction)();
+
+        args_init.push(load_instruction());
         args_init.push(instruction!(call));
 
         Ok(args_init)
     }
 }
 
+#[cfg(not)]
 impl Dependencies for Callable {
     fn dependencies(&self) -> Vec<Dependency> {
         // a call needs to have access to the function/object
         // println!("Function Call");
-        let mut maybe_arg_dependencies = self.function_arguments.net_dependencies();
+        // let mut maybe_arg_dependencies = self.function_arguments.net_dependencies();
 
-        if let CallableDestination::Named { ident } = &self.destination {
-            maybe_arg_dependencies.push(Dependency::new(Cow::Borrowed(ident)));
-        }
+        // if let CallableDestination::Named { ident } = &self.destination {
+        //     maybe_arg_dependencies.push(Dependency::new(Cow::Borrowed(ident)));
+        // }
 
-        maybe_arg_dependencies
+        // maybe_arg_dependencies
     }
 }
 
+#[cfg(not)]
 impl Parser {
+    #[deprecated(note = "Callable has been shifted from an atom to a binary operation postfix")]
     pub fn callable(input: Node) -> Result<Callable, Vec<anyhow::Error>> {
         let mut children = input.children();
 
@@ -153,7 +180,7 @@ impl Parser {
         impl Choice {
             fn get_parameters(&self) -> &FunctionParameters {
                 match self {
-                    Self::Named(function_type) => &function_type.parameters,
+                    Self::Named(function_type) => &function_type.parameters(),
                     Self::ToSelf(function_parameters) => function_parameters,
                 }
             }

@@ -14,7 +14,7 @@ bytecode_dev_transpiler = { path = "./bytecode_dev_transpiler" }
 compiler = { path = "./compiler" }
 
 [features]
-developer = ["bytecode/developer"]
+developer = ["bytecode/developer", "compiler/debug"]
 
 [workspace]
 members = ["bytecode", "bytecode_dev_transpiler", "compiler"]

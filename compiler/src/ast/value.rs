@@ -1,6 +1,7 @@
 use std::{borrow::Cow, ops::Deref};
 
-use anyhow::{Result, bail, Context};
+use anyhow::{bail, Context, Result};
+use pest::iterators::Pair;
 
 use crate::{
     parser::{AssocFileData, Node, Parser, Rule},
@@ -8,7 +9,7 @@ use crate::{
 };
 
 use super::{
-    list::Index, math_expr::Expr, r#type::IntoType, string::AstString, Callable, Compile,
+    list::Index, math_expr::Expr, new_err, r#type::IntoType, string::AstString, Callable, Compile,
     CompiledItem, Dependencies, Dependency, Function, Ident, List, Number, TypeLayout,
 };
 
@@ -19,11 +20,9 @@ pub(crate) enum Value {
     Number(Number),
     String(AstString),
     MathExpr(Box<Expr>),
-    Callable(Callable),
     Boolean(bool),
     List(List),
 }
-
 
 impl Value {
     pub fn try_negate(&self) -> Result<Option<Self>> {
@@ -38,7 +37,7 @@ impl Value {
 
                 x.as_ref().unwrap().try_negate()
             }
-            _ => Ok(None)
+            _ => Ok(None),
         }
     }
 }
@@ -46,7 +45,7 @@ impl Value {
 #[derive(Debug)]
 pub(crate) enum ConstexprEvaluation {
     Impossible,
-    Owned(Value)
+    Owned(Value),
 }
 
 impl ConstexprEvaluation {
@@ -100,6 +99,10 @@ pub(crate) enum ValueChainType {
     Dot(Dot), // todo
 }
 
+impl ValueChainType {
+    // pub fn add_index()
+}
+
 impl CompileTimeEvaluate for ValueChain {
     fn try_constexpr_eval(&self) -> Result<ConstexprEvaluation> {
         if let Some(ref next) = self.1 {
@@ -126,15 +129,16 @@ impl CompileTimeEvaluate for ValueChain {
                     match number {
                         Number::BigInt(idx) | Number::Integer(idx) | Number::Byte(idx) => {
                             let numeric_idx: usize = idx.parse()?;
-    
-                            let indexed = list.get_value(numeric_idx).context("index out of bounds")?;
+
+                            let indexed =
+                                list.get_value(numeric_idx).context("index out of bounds")?;
 
                             indexed.try_constexpr_eval()
                         }
                         Number::Float(_) => bail!("cannot index into a list with floats"),
                     }
                 }
-                ValueChainType::Dot(_) => unreachable!()
+                ValueChainType::Dot(_) => unreachable!(),
             }
         } else {
             self.0.try_constexpr_eval()
@@ -196,16 +200,24 @@ impl IntoType for ValueChain {
 }
 
 impl ValueChain {
-    #[allow(unused)]
-    pub fn is_value_callable(&self) -> bool {
-        match &self.0 {
-            Value::Callable(..) => true,
-            Value::MathExpr(maybe_value)
-                if matches!(maybe_value.deref(), Expr::Value(Value::Callable(..))) =>
-            {
-                true
-            }
-            _ => false,
+    // #[allow(unused)]
+    // pub fn is_value_callable(&self) -> bool {
+    //     match &self.0 {
+    //         Value::Callable(..) => true,
+    //         Value::MathExpr(maybe_value)
+    //             if matches!(maybe_value.deref(), Expr::Value(Value::Callable(..))) =>
+    //         {
+    //             true
+    //         }
+    //         _ => false,
+    //     }
+    // }
+
+    pub fn add_index(&mut self, index: Index) {
+        if let Some(_) = self.1 {
+            unreachable!("index already there!")
+        } else {
+            self.1 = Some(Box::new(ValueChainType::Index(index)))
         }
     }
 
@@ -240,10 +252,10 @@ impl ValueChain {
                     let ty = math_expr.for_type()?;
                     ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
                 }
-                Value::Callable(ref callback) => {
-                    let ty = callback.for_type()?;
-                    ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
-                }
+                // Value::Callable(ref callback) => {
+                //     let ty = callback.for_type()?;
+                //     ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
+                // }
                 Value::Boolean(ref boolean) => {
                     let ty = boolean.for_type()?;
                     ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
@@ -267,7 +279,7 @@ impl IntoType for Value {
             Self::MathExpr(math_expr) => math_expr.for_type(),
             Self::Number(number) => number.for_type(),
             Self::String(string) => string.for_type(),
-            Self::Callable(callable) => callable.for_type(),
+            // Self::Callable(callable) => callable.for_type(),
             Self::Boolean(boolean) => boolean.for_type(),
             Self::List(list) => list.for_type(),
         }
@@ -282,7 +294,7 @@ impl Dependencies for Value {
             Self::Number(number) => number.net_dependencies(),
             Self::String(string) => string.net_dependencies(),
             Self::MathExpr(math_expr) => math_expr.net_dependencies(),
-            Self::Callable(callable) => callable.net_dependencies(),
+            // Self::Callable(callable) => callable.net_dependencies(),
             Self::Boolean(boolean) => boolean.net_dependencies(),
             Self::List(list) => list.net_dependencies(),
         }
@@ -297,7 +309,7 @@ impl Compile for Value {
             Self::Number(number) => number.compile(function_buffer),
             Self::String(string) => string.compile(function_buffer),
             Self::MathExpr(math_expr) => math_expr.compile(function_buffer),
-            Self::Callable(callable) => callable.compile(function_buffer),
+            // Self::Callable(callable) => callable.compile(function_buffer),
             Self::Boolean(boolean) => boolean.compile(function_buffer),
             Self::List(list) => list.compile(function_buffer),
         }
@@ -319,6 +331,8 @@ impl Compile for ValueChain {
     }
 }
 
+pub(crate) fn value_from_pair<'a>(pair: Pair<'a, Rule>, user_data: &Rule) {}
+
 impl Parser {
     pub fn value(input: Node) -> Result<ValueChain, Vec<anyhow::Error>> {
         let mut children = input.children();
@@ -330,10 +344,16 @@ impl Parser {
             Rule::number => Value::Number(Self::number(value).to_err_vec()?),
             Rule::string => Value::String(Self::string(value).to_err_vec()?),
             Rule::math_expr => Value::MathExpr(Box::new(Self::math_expr(value)?)),
-            Rule::callable => Value::Callable(Self::callable(value)?),
+            // Rule::callable => Value::Callable(Self::callable(value)?),
             Rule::list => Value::List(Self::list(value)?),
             Rule::WHITESPACE => unreachable!("{:?}", value.as_span()),
-            x => unreachable!("{x:?}"),
+            x => {
+                return Err(vec![new_err(
+                    input.as_span(),
+                    &input.user_data().get_source_file_name(),
+                    format!("not sure how to handle `{x:?}` :("),
+                )])?
+            }
         };
 
         let next = children.next();

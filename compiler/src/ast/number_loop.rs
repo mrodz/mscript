@@ -214,7 +214,7 @@ impl Parser {
                 |ty| ScopeReturnStatus::ParentShould(ty.clone()),
             );
 
-        input.user_data().push_number_loop(child_returns_type);
+        let number_loop_scope = input.user_data().push_number_loop(child_returns_type);
 
         let val_start_node = children.next().unwrap();
         let val_start_span = val_start_node.as_span();
@@ -326,7 +326,7 @@ impl Parser {
             )])
         }
 
-        input.user_data().pop_scope();
+        number_loop_scope.consume();
 
         let name_is_collision = name
             .as_ref()
@@ -336,7 +336,7 @@ impl Parser {
         let inclusive = inclusive_or_exclusive.as_rule() == Rule::number_loop_inclusive;
 
         Ok(NumberLoop {
-            body: body.context("expected a body").to_err_vec()?,
+            body: body.unwrap(),
             name,
             step: step.map(|(val, _)| val),
             val_start,

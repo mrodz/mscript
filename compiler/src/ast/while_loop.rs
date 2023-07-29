@@ -110,11 +110,11 @@ impl Parser {
                 |ty| ScopeReturnStatus::ParentShould(ty.clone()),
             );
 
-        input.user_data().push_while_loop(child_returns_type);
+        let while_loop_scope = input.user_data().push_while_loop(child_returns_type);
 
         let body = Self::block(block)?;
 
-        input.user_data().pop_scope();
+        while_loop_scope.consume();
 
         Ok(WhileLoop { condition, body })
     }

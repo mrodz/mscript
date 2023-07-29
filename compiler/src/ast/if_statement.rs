@@ -3,7 +3,7 @@ use anyhow::Result;
 use crate::{
     instruction,
     parser::{Node, Parser, Rule},
-    scope::ScopeReturnStatus,
+    scope::{ScopeReturnStatus, ScopeHandle},
     VecErr,
 };
 
@@ -154,18 +154,26 @@ impl Parser {
                 |ty| ScopeReturnStatus::ParentShould(ty.clone()),
             );
 
-        input.user_data().push_if_typed(child_returns_type);
-        let body_as_block = Self::block(body)?;
+        let if_scope: ScopeHandle = input.user_data().push_if_typed(child_returns_type);
+
+        let body_as_block = Self::block(body);
+
         // get the return type back
-        let child_returns_type = input.user_data().pop_scope();
+        let child_returns_type = if_scope.consume();
+
+        let body_as_block = body_as_block?;
 
         let do_all_if_branches_return = child_returns_type.all_branches_return();
 
         let (else_statement, do_all_else_branches_return) =
             if let Some(else_statement) = else_statement {
-                input.user_data().push_else_typed(child_returns_type);
-                let x = Some(Self::else_statement(else_statement)?);
-                let child_returns_type = input.user_data().pop_scope();
+                let else_scope: ScopeHandle = input.user_data().push_else_typed(child_returns_type);
+                let else_statement = Self::else_statement(else_statement);
+
+                // let child_returns_type = input.user_data().pop_scope();
+                let child_returns_type = else_scope.consume();
+
+                let x = Some(else_statement?);
 
                 (x, child_returns_type.all_branches_return())
             } else {
@@ -175,9 +183,11 @@ impl Parser {
         if do_all_if_branches_return
             && (do_all_else_branches_return || can_determine_is_if_branch_truthy)
         {
-            input
+            let mut return_type = input
                 .user_data()
-                .get_return_type()
+                .get_return_type_mut();
+
+            return_type 
                 .mark_should_return_as_completed()
                 .to_err_vec()?;
         }

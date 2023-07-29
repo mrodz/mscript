@@ -100,13 +100,15 @@ impl Compile for Assignment {
 
         let value_chain = &self.value;
 
+        // todo!();
+        // un-comment
         let mut value_init = match &value_chain.0 {
             Value::Ident(ident) => ident.compile(function_buffer)?,
             Value::Function(function) => function.in_place_compile_for_value(function_buffer)?,
             Value::Number(number) => number.compile(function_buffer)?,
             Value::String(string) => string.compile(function_buffer)?,
             Value::MathExpr(math_expr) => math_expr.compile(function_buffer)?,
-            Value::Callable(callable) => callable.compile(function_buffer)?,
+            // Value::Callable(callable) => callable.compile(function_buffer)?,
             Value::Boolean(boolean) => boolean.compile(function_buffer)?,
             Value::List(list) => list.compile(function_buffer)?,
         };

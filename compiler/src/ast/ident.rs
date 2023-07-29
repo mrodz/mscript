@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::cell::Ref;
 use std::collections::HashSet;
 use std::fmt::Display;
 use std::hash::Hash;
@@ -145,7 +146,7 @@ impl Ident {
         user_data: &AssocFileData,
         ty: Option<Cow<'static, TypeLayout>>,
     ) -> Result<bool> {
-        let ident: Option<(&Ident, bool)> = user_data.get_dependency_flags_from_name(&self.name);
+        let ident: Option<(Ref<Ident>, bool)> = user_data.get_dependency_flags_from_name(&self.name);
 
         let inherited: bool = if let Some((ident, is_callback)) = ident {
             let new_ty = ident.ty.clone().map(|x| {
@@ -189,8 +190,6 @@ impl Parser {
         }
 
         let name = name.to_owned();
-
-        // println!("\n******\n{name} referenced\n******\n");
 
         Ok(Ident {
             name,

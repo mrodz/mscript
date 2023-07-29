@@ -1,7 +1,7 @@
 use std::{borrow::Cow, collections::HashMap, fmt::Display, rc::Rc, sync::Arc};
 
 use crate::{
-    parser::{util::parse_with_userdata, AssocFileData, Node, Parser, Rule},
+    parser::{util::parse_with_userdata_features, AssocFileData, Node, Parser, Rule},
     scope::ScopeReturnStatus,
 };
 use anyhow::{bail, Result};
@@ -243,18 +243,18 @@ pub(crate) fn type_from_str(
             Ok(Cow::Borrowed(r#type))
         } else {
             if let Ok(list_type_open_only) =
-                parse_with_userdata(Rule::list_type_open_only, input, user_data.clone())
+                parse_with_userdata_features(Rule::list_type_open_only, input, user_data.clone())
             {
                 let single = list_type_open_only.single()?;
                 let ty = Parser::list_type_open_only(single)?;
                 return Ok(Cow::Owned(TypeLayout::List(ty)));
             } else if let Ok(function_type) =
-                parse_with_userdata(Rule::function_type, input, user_data.clone())
+                parse_with_userdata_features(Rule::function_type, input, user_data.clone())
             {
                 let single = function_type.single()?;
                 let ty = Parser::function_type(single)?;
                 return Ok(Cow::Owned(TypeLayout::Function(Arc::new(ty))));
-            } else if let Ok(list_type) = parse_with_userdata(Rule::list_type, input, user_data) {
+            } else if let Ok(list_type) = parse_with_userdata_features(Rule::list_type, input, user_data) {
                 let single = list_type.single()?;
                 let ty = Parser::list_type(single)?;
                 return Ok(Cow::Owned(TypeLayout::List(ty)));

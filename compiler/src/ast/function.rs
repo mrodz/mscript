@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt::Display, sync::Arc};
+use std::{borrow::Cow, fmt::Display, sync::Arc, rc::Rc};
 
 use anyhow::{anyhow, Result};
 
@@ -31,8 +31,18 @@ pub(crate) struct Function {
 
 #[derive(Debug, Clone, Eq)]
 pub(crate) struct FunctionType {
-    pub parameters: Arc<FunctionParameters>,
-    pub return_type: Box<ScopeReturnStatus>,
+    parameters: Arc<FunctionParameters>,
+    return_type: Box<ScopeReturnStatus>,
+}
+
+impl FunctionType {
+    pub fn return_type(&self) -> &ScopeReturnStatus {
+        &self.return_type
+    }
+
+    pub fn parameters(&self) -> &FunctionParameters {
+        &self.parameters
+    }
 }
 
 impl PartialEq for FunctionType {
@@ -205,6 +215,10 @@ impl Compile for Function {
 impl Parser {
     pub fn function(input: Node) -> Result<Function, Vec<anyhow::Error>> {
         let path_str = input.user_data().get_file_name();
+
+        #[cfg(feature = "debug")]
+        let input_span = input.as_str();
+
         let mut children = input.children();
         let parameters = children.next().unwrap();
 
@@ -235,9 +249,12 @@ impl Parser {
             None
         };
 
-        input
+        let function_scope = input
             .user_data()
             .push_function(ScopeReturnStatus::detect_should_return(return_type));
+
+        #[cfg(feature = "debug")]
+        println!("\t^^ {input_span}");
 
         let parameters = Arc::new(Self::function_parameters(parameters, true).to_err_vec()?);
 
@@ -258,9 +275,8 @@ impl Parser {
             )]);
         }
 
-        let return_type = input.user_data().pop_scope();
+        let return_type = function_scope.consume();
 
-        // todo!("uncomment below")
         Ok(Function::new(parameters, body, return_type, path_str))
     }
 }

@@ -33,22 +33,22 @@
 //!
 //! END LICENSE
 
-use std::rc::Rc;
+use std::{rc::Rc, borrow::Cow, sync::Arc};
 
 use anyhow::{anyhow, bail, Context, Result};
 use once_cell::sync::Lazy;
-use pest::{iterators::Pairs, pratt_parser::PrattParser, Span};
+use pest::{iterators::{Pairs, Pair}, pratt_parser::PrattParser, Span};
 
 use crate::{
-    ast::{number, value::ConstexprEvaluation},
+    ast::{number, value::ConstexprEvaluation, Callable},
     instruction,
     parser::{util, AssocFileData, Node, Parser, Rule},
-    VecErr,
+    VecErr, scope::{Scope, ScopeType},
 };
 
 use super::{
     boolean::boolean_from_str, new_err, r#type::IntoType, string::AstString, Compile, CompiledItem,
-    Dependencies, Dependency, Value, TemporaryRegister, value::CompileTimeEvaluate,
+    Dependencies, Dependency, Value, TemporaryRegister, value::CompileTimeEvaluate, TypeLayout, function::FunctionType, FunctionArguments,
 };
 
 pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
@@ -69,6 +69,7 @@ pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
         .op(Op::infix(add, Left) | Op::infix(subtract, Left))
         .op(Op::infix(multiply, Left) | Op::infix(divide, Left) | Op::infix(modulo, Left))
         .op(Op::prefix(unary_minus))
+        .op(Op::postfix(list_index) | Op::postfix(callable))
 });
 
 #[derive(Debug, Clone, PartialEq)]
@@ -112,9 +113,23 @@ impl Op {
 }
 
 #[derive(Debug)]
+pub(crate) enum CallableContents {
+    ToSelf {
+        return_type: Option<Cow<'static, TypeLayout>>,
+        arguments: FunctionArguments,
+    },
+    Standard {
+        lhs_raw: Box<Expr>,
+        function: Arc<FunctionType>,
+        arguments: FunctionArguments,
+    }
+}
+
+#[derive(Debug)]
 pub(crate) enum Expr {
     // Number(Number),
     Value(Value),
+    ReferenceToSelf,
     UnaryMinus(Box<Expr>),
     UnaryNot(Box<Expr>),
     BinOp {
@@ -122,10 +137,12 @@ pub(crate) enum Expr {
         op: Op,
         rhs: Box<Expr>,
     },
+    Callable(CallableContents),
+    Index(Box<Expr>),
 }
 
 impl Expr {
-    pub fn validate(&self) -> Result<&Self> {
+    pub(crate) fn validate(&self) -> Result<&Self> {
         self.for_type().map(|_| self)
     }
 }
@@ -186,6 +203,9 @@ impl CompileTimeEvaluate for Expr {
 
                 Ok(ConstexprEvaluation::Owned(Value::Number(bin_op_applied?)))
             }
+            Self::ReferenceToSelf => Ok(ConstexprEvaluation::Impossible),
+            Self::Callable {..} => Ok(ConstexprEvaluation::Impossible),
+            Self::Index { .. } => todo!(),
         }
     }
 }
@@ -207,16 +227,30 @@ impl IntoType for Expr {
                 })
             }
             Expr::UnaryMinus(val) | Expr::UnaryNot(val) => val.for_type(),
+            Expr::Callable(CallableContents::Standard { function, .. }) => {
+                let return_type = function.return_type().get_type().context("function returns void")?;
+                return Ok(return_type.clone().into_owned())
+            }
+            Expr::Callable(CallableContents::ToSelf { return_type, .. }) => {
+                let Some(return_type) = return_type else {
+                    bail!("function returns void")
+                };
+
+                return Ok(return_type.clone().into_owned())
+            }
+            Expr::ReferenceToSelf => bail!("`self` is a keyword and does not have a type"),
+            Expr::Index{..} => todo!(),
         }
     }
 }
 
 impl Dependencies for Expr {
     fn dependencies(&self) -> Vec<Dependency> {
+        use Expr::*;
         match self {
-            Self::Value(val) => val.net_dependencies(),
-            Self::UnaryMinus(expr) | Self::UnaryNot(expr) => expr.net_dependencies(),
-            Self::BinOp { lhs, rhs, .. } => {
+            Value(val) => val.net_dependencies(),
+            UnaryMinus(expr) | UnaryNot(expr) => expr.net_dependencies(),
+            BinOp { lhs, rhs, .. } => {
                 let mut lhs_dep = lhs.net_dependencies();
                 let mut rhs_dep = rhs.net_dependencies();
 
@@ -224,6 +258,16 @@ impl Dependencies for Expr {
 
                 lhs_dep
             }
+            Callable(CallableContents::ToSelf { arguments, .. }) => arguments.net_dependencies(),
+            Callable(CallableContents::Standard { lhs_raw, arguments, .. }) => {
+                let mut lhs_depts = lhs_raw.net_dependencies();
+                lhs_depts.append(&mut arguments.net_dependencies());
+                lhs_depts
+            }
+            x => unimplemented!("{x:?}")
+            // CallToSelf { .. } => 
+            // Callable { lhs } => lhs.net_dependencies(),
+            // Index(_) => todo!()
         }
     }
 }
@@ -315,6 +359,37 @@ fn compile_depth(
 
             Ok(lhs)
         }
+        Expr::Callable(CallableContents::Standard {
+            lhs_raw, arguments, ..
+        }) => {
+            let mut lhs_compiled = lhs_raw.compile(function_buffer)?;
+            let lhs_register = TemporaryRegister::new();
+
+            lhs_compiled.push(instruction!(store_fast lhs_register));
+
+            let callable = Callable::new(arguments, move || instruction!(load_fast lhs_register));
+
+            lhs_compiled.append(&mut callable.compile(function_buffer)?);
+
+
+            // lhs_compiled.iter().for_each(|x| print!("{}", x.repr(true).unwrap()));
+
+
+            // dbg!(lhs_compiled);
+            // let mut callable_init = lhs_raw.compile(function_buffer)?;
+            // let callable_register = TemporaryRegister::new();
+            // callable_init.push(instruction!(store_fast callable_register));
+
+
+            Ok(lhs_compiled)
+        },
+        Expr::ReferenceToSelf => Ok(vec![]),
+        Expr::Callable(CallableContents::ToSelf { arguments, return_type  }) => {
+            let callable = Callable::new_recursive_call(arguments, return_type.clone());
+
+            callable.compile(function_buffer)
+        },
+        Expr::Index(_) => todo!(),
     }
 }
 
@@ -348,6 +423,10 @@ pub(crate) fn parse_expr(
                     Rule::ident => {
                         let raw_string = primary.as_str();
 
+                        if raw_string == "self" {
+                            return Ok((Expr::ReferenceToSelf, Some(primary_span)))
+                        }
+
                         let file_name = user_data.get_file_name();
 
                         let (ident, is_callback) = user_data
@@ -370,23 +449,24 @@ pub(crate) fn parse_expr(
                         Expr::Value(Value::Ident(cloned))
                     }
                     Rule::math_expr => parse_expr(primary.into_inner(), user_data.clone())?,
-                    Rule::callable => {
-                        let x = util::parse_with_userdata(
-                            Rule::callable,
-                            primary.as_str(),
-                            user_data.clone(),
-                        )
-                        .map_err(|e| vec![anyhow!(e)])?;
+                    // Rule::callable => {
+                    //     let x = util::parse_with_userdata_features(
+                    //         Rule::callable,
+                    //         primary.as_str(),
+                    //         user_data.clone(),
+                    //     )
+                    //     .map_err(|e| vec![anyhow!(e)])?;
 
-                        let single = x.single().map_err(|e| vec![anyhow!(e)])?;
+                    //     let single = x.single().map_err(|e| vec![anyhow!(e)])?;
 
-                        let callable = Parser::callable(single)?;
+                    //     let callable = Parser::callable(single)?;
 
-                        Expr::Value(Value::Callable(callable))
-                    }
+                    //     Expr::Value(Value::Callable(callable))
+                    // }
                     Rule::boolean => {
                         Expr::Value(Value::Boolean(boolean_from_str(primary.as_str())))
                     }
+
                     rule => unreachable!("Expr::parse expected atom, found {:?}", rule),
                 };
 
@@ -436,6 +516,39 @@ pub(crate) fn parse_expr(
             // Rule::unary_minus => rhs,
             Rule::unary_minus => Ok((Expr::UnaryMinus(Box::new(rhs?.0)), None)),
             Rule::not => Ok((Expr::UnaryNot(Box::new(rhs?.0)), None)),
+            _ => unreachable!(),
+        })
+        .map_postfix(|lhs, op| match op.as_rule() {
+            Rule::callable => {
+                let (lhs, l_span) = lhs?;
+
+                if let Expr::ReferenceToSelf = lhs {
+                    let return_type = user_data.return_statement_expected_yield_type().map(|x| x.clone());
+
+                    let function_arguments: Pair<Rule> = op.into_inner().next().unwrap();
+                    let function_arguments: Node = Node::new_with_user_data(function_arguments, Rc::clone(&user_data));
+
+                    let (function, parameters) = user_data.get_current_executing_function().unwrap();
+
+                    let arguments: FunctionArguments = Parser::function_arguments(function_arguments, &parameters)?;
+
+
+                    return Ok((Expr::Callable(CallableContents::ToSelf { return_type, arguments }), None))    
+                }
+
+                let lhs_ty = lhs.for_type().to_err_vec()?;
+
+                let Some(function_type) = lhs_ty.is_function() else {
+                    return Err(vec![new_err(l_span.unwrap(), &user_data.get_source_file_name(), format!("`{lhs_ty}` is not callable"))]);
+                };
+
+                let function_arguments: Pair<Rule> = op.into_inner().next().unwrap();
+                let function_arguments: Node = Node::new_with_user_data(function_arguments, Rc::clone(&user_data));
+                let function_arguments: FunctionArguments = Parser::function_arguments(function_arguments, function_type.parameters())?;
+
+                Ok((Expr::Callable(CallableContents::Standard { lhs_raw: Box::new(lhs), function: function_type, arguments: function_arguments }), None))
+            },
+            Rule::list_index => todo!(),
             _ => unreachable!(),
         })
         .parse(pairs);

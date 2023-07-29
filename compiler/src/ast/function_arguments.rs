@@ -47,7 +47,10 @@ impl Parser {
 
             let user_gave = arg_ty.get_type_recursively();
 
+
             if !user_gave.eq(expected_ty_at_idx) {
+                dbg!(user_gave, expected_ty_at_idx);
+
                 let argument_number = idx + 1;
                 let error_message = format!("type mismatch when calling function (argument #{argument_number} was expected to be `{expected_ty_at_idx}` based on type signature, instead found `{user_gave}`)");
                 errors.push(new_err(
