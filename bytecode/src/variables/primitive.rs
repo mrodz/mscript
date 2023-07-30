@@ -118,6 +118,15 @@ impl Primitive {
         matches!(self.ty(), Bool | Int | Float | Byte | BigInt)
     }
 
+    pub fn try_into_numeric_index(&self) -> Result<usize> {
+        Ok(match self {
+            Primitive::Byte(byte) => *byte as usize,
+            Primitive::BigInt(bigint) => *bigint as usize,
+            Primitive::Int(int) => *int as usize,
+            other => bail!("cannot index with {other}")
+        })
+    }
+
     /// Parse a string slice to a bytecode [`Primitive::Str`] primitive.
     pub fn make_str(string: &str) -> Result<Self> {
         Ok(string!(raw string))
@@ -199,15 +208,39 @@ impl Display for Primitive {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use Primitive::*;
 
+        static mut NESTED_DEPTH: u8 = 0;
+
         match self {
             Bool(b) => write!(f, "{}", *b),
+            Str(s) if unsafe { NESTED_DEPTH != 0 } => write!(f, "\"{s}\""),
             Str(s) => write!(f, "{s}"),
             Int(n) => write!(f, "{n}"),
             BigInt(n) => write!(f, "{n}"),
             Float(n) => write!(f, "{n}"),
             Byte(b) => write!(f, "0b{:b}", *b),
             Function(fun) => write!(f, "{fun}"),
-            Vector(l) => write!(f, "{l:?}"),
+            Vector(l) => {
+                write!(f, "[")?;
+                let mut iter = l.iter();
+
+                unsafe {
+                    NESTED_DEPTH += 1;
+                }
+
+                if let Some(first) = iter.next() {
+                    write!(f, "{first}")?;
+                }
+
+                for value in iter {
+                    write!(f, ", {value}")?;
+                }
+
+                unsafe {
+                    NESTED_DEPTH -= 1;
+                }
+
+                write!(f, "]")
+            },
             Object(o) => write!(f, "{o}"),
         }
     }

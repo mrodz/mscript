@@ -112,7 +112,7 @@ impl<'a> Ctx<'a> {
     ///
     /// * `name` - the name of the callback variable
     /// * `value` - the [`Primitive`] value that will be stored in the same slot.
-    pub fn update_callback_variable(&mut self, name: &String, value: Primitive) -> Result<()> {
+    pub fn update_callback_variable(&mut self, name: &str, value: Primitive) -> Result<()> {
         let Some(ref mapping) = self.callback_state else {
             bail!("this function is not a callback")
         };
@@ -135,7 +135,7 @@ impl<'a> Ctx<'a> {
     ///
     /// * `name` - the name of the callback variable
     /// * `value` - the [`Primitive`] value that will be stored in the same slot.
-    pub fn load_callback_variable(&self, name: &String) -> Result<Rc<(Primitive, VariableFlags)>> {
+    pub fn load_callback_variable(&self, name: &str) -> Result<Rc<(Primitive, VariableFlags)>> {
         let Some(ref mapping) = self.callback_state else {
             bail!("this function is not a callback")
         };
@@ -285,7 +285,7 @@ impl<'a> Ctx<'a> {
         call_stack.register_variable_local(name, var, VariableFlags::none())
     }
 
-    pub(crate) fn delete_variable_local(&self, name: &String) -> Result<()> {
+    pub(crate) fn delete_variable_local(&self, name: &str) -> Result<Rc<(Primitive, VariableFlags)>> {
         rc_to_ref(&self.call_stack).delete_variable_local(name)
     }
 
@@ -297,7 +297,7 @@ impl<'a> Ctx<'a> {
     /// Get the [`Primitive`] value and its associated [`VariableFlags`] from a name.
     ///
     /// Will start the search in the current function and bubble all the way up to the highest stack frame.
-    pub(crate) fn load_variable(&self, name: &String) -> Option<Rc<(Primitive, VariableFlags)>> {
+    pub(crate) fn load_variable(&self, name: &str) -> Option<Rc<(Primitive, VariableFlags)>> {
         self.call_stack.find_name(name)
     }
 
@@ -310,7 +310,7 @@ impl<'a> Ctx<'a> {
     ///
     /// Will search _exclusively_ in the current stack frame, which makes this function more performant
     /// when searching for variables that should exist in the same stack frame.
-    pub(crate) fn load_local(&self, name: &String) -> Option<Rc<(Primitive, VariableFlags)>> {
+    pub(crate) fn load_local(&self, name: &str) -> Option<Rc<(Primitive, VariableFlags)>> {
         self.call_stack.get_frame_variables().get(name)
     }
 

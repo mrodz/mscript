@@ -29,10 +29,17 @@ boolean = { "true" | "false" }
 unary_minus = { "-" }
 not = { "!" }
 
-allow_bin_op = _{ callable | boolean | ident | number | string }
+primitive = _{ boolean | number | string }
+
+allow_bin_op = _{ primitive | ident | function }
 
 math_primary = _{ allow_bin_op | "(" ~ math_expr ~ ")" }
-math_atom = _{ (unary_minus | not)? ~ math_primary }
+
+math_prefix = _{ unary_minus | not }
+math_postfix = _{ callable | list_index }
+
+math_atom = _{ math_prefix? ~ math_primary ~ math_postfix? }
+math_expr = { math_atom ~ (bin_op ~ math_atom)* }
 
 bin_op = _{ add | subtract | multiply | divide | modulo | lte | gte | lt | gt | eq | neq | and | or | xor }
 add = { "+" }
@@ -52,19 +59,6 @@ and = { "&&" }
 or = { "||" }
 xor = { "^" }
 
-/*
-thread 'main' panicked at 'Expected operator, found lt(6, 7)', C:\Users\mateo\.cargo\registry\src\github.com-1ecc6299db9ec823\pest-2.6.0\src\pratt_parser.rs:382:25
-lt = { "<" }
-gt = { ">" }
-lte = { "<=" }
-gte = { ">=" }
-eq = { "==" }
-neq = { "!=" }
-*/
-
-
-math_expr = { math_atom ~ (bin_op ~ math_atom)* }
-
 escape_character = _{ "\\" | "r" | "n" }
 escape_sequence = @{ "\\" ~ escape_character }
 
@@ -74,11 +68,11 @@ string = @{ "\"" ~ (("\\\"") | (!("\"") ~ ANY))* ~ "\"" }
 ident_chars = _{ (('a'..'z') | ('0'..'9') | "_") }
 
 ident = @{ !('0'..'9') ~ ident_chars+ }
-type = { function_type | ident }
+type = { function_type | list_type_open_only | list_type | ident }
 ident_type = _{ ident ~ ":" ~ type }
 
 function_arguments = { (value ~ ("," ~ value)*)? }
-callable = { ident ~ "(" ~ function_arguments ~ ")" }
+callable = { "(" ~ function_arguments ~ ")" }
 
 block = { "{" ~ declaration* ~ "}" }
 
@@ -89,7 +83,13 @@ function_type = { "fn" ~ "(" ~ (type ~ ("," ~ type)*)? ~ ")" ~ function_return_t
 function_return_type = { "->" ~ (type | ("(" ~ type ~ ")")) }
 function = { "fn" ~ "(" ~ (function_parameters) ~ ")" ~ function_return_type? ~ block }
 
-value = _{ function | math_expr | ident | string }
+list = { "[" ~ value? ~ ("," ~ value)* ~ "]" }
+open_ended_type = { type ~ "..." }
+list_type = { "[" ~ type? ~ ("," ~ (type ~ !("...")))* ~ ("," ~ open_ended_type)? ~ "]" }
+list_type_open_only = { "[" ~ open_ended_type ~ "]" }
+list_index = { ("[" ~ value ~ "]")+ }
+
+value = { function | math_expr | ident | list }
 
 assignment_flag = { "modify" | "const" }
 // bad_assignment_flag = { &ident }
@@ -119,7 +119,7 @@ print_statement = { "print" ~ value }
 
 return_statement = { "return" ~ value? }
 
-declaration = { assignment | callable | print_statement | return_statement | continue_statement | break_statement | if_statement | while_loop | number_loop }
+declaration = { assignment | print_statement | return_statement | continue_statement | break_statement | if_statement | while_loop | number_loop | math_expr }
 
 file = {
     SOI ~

@@ -6,7 +6,6 @@ use crate::{
     ast::{new_err, r#type::IntoType},
     instruction,
     parser::{Node, Parser},
-    scope::ScopeReturnStatus,
     VecErr,
 };
 
@@ -42,11 +41,12 @@ impl Dependencies for ReturnStatement {
 
 impl Parser {
     pub fn return_statement(input: Node) -> Result<ReturnStatement, Vec<anyhow::Error>> {
-        let expected_return_type = input.user_data().get_return_type();
-
-        expected_return_type
-            .mark_should_return_as_completed()
-            .to_err_vec()?;
+        {
+            let mut expected_return_type = input.user_data().get_return_type_mut();
+            expected_return_type
+                .mark_should_return_as_completed()
+                .to_err_vec()?;
+        };
 
         let value_node = input.children().next();
 
@@ -62,7 +62,9 @@ impl Parser {
         */
 
         let Some(value_node) = value_node else {
-			if let ScopeReturnStatus::Did(expected_return_type) = expected_return_type {
+            let expected_return_type = input.user_data().get_return_type();
+
+            if let Some(expected_return_type) = expected_return_type.get_type() {
 				// #0
 				return Err(vec![new_err(
 					input.as_span(),
@@ -77,12 +79,20 @@ impl Parser {
 			}
 		};
 
+        #[cfg(feature = "debug")]
+        println!("pre-value-chain-init");
+
         let value = Self::value(value_node)?;
+
+        #[cfg(feature = "debug")]
+        println!("post-value-chain-init");
 
         let supplied_type = value.for_type().to_err_vec()?;
         let supplied_type = supplied_type.get_type_recursively();
 
-        let ScopeReturnStatus::Did(expected_return_type) = expected_return_type else {
+        let expected_return_type = input.user_data().get_return_type();
+
+        let Some(expected_return_type) = expected_return_type.get_type() else {
 			// #3
 			return Err(vec![new_err(
 				input.as_span(),
@@ -102,6 +112,9 @@ impl Parser {
 				),
             )]);
         }
+
+        #[cfg(feature = "debug")]
+        println!("return concluded");
 
         // #2
         Ok(ReturnStatement(Some(value)))

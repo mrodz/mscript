@@ -94,7 +94,7 @@ impl Object {
 
     pub fn has_variable(
         &mut self,
-        variable_name: &String,
+        variable_name: &str,
     ) -> Option<Rc<(Primitive, VariableFlags)>> {
         rc_to_ref(&self.object_variables).get(variable_name)
     }

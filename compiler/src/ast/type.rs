@@ -1,13 +1,19 @@
-use std::{borrow::Cow, collections::HashMap, fmt::Display, rc::Rc};
+use std::{borrow::Cow, collections::HashMap, fmt::Display, rc::Rc, sync::Arc};
 
 use crate::{
-    parser::{util::parse_with_userdata, AssocFileData, Node, Parser, Rule},
+    parser::{util::parse_with_userdata_features, AssocFileData, Node, Parser, Rule},
     scope::ScopeReturnStatus,
 };
-use anyhow::{bail, Result};
+use anyhow::{bail, Result, Context};
 use once_cell::sync::Lazy;
 
-use super::{function::FunctionType, map_err, math_expr::Op, FunctionParameters};
+use super::{
+    function::FunctionType,
+    list::{ListBound, ListType},
+    map_err,
+    math_expr::Op,
+    FunctionParameters, BIGINT_TYPE, INT_TYPE, Value, STR_TYPE,
+};
 
 static mut TYPES: Lazy<HashMap<&str, TypeLayout>> = Lazy::new(|| {
     let mut x = HashMap::new();
@@ -22,35 +28,52 @@ static mut TYPES: Lazy<HashMap<&str, TypeLayout>> = Lazy::new(|| {
     x
 });
 
+pub(crate) struct SupportedTypesWrapper(Box<[Cow<'static, TypeLayout>]>);
+
+impl Display for SupportedTypesWrapper {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut iter = self.0.iter();
+        let Some(first) = iter.next() else {
+                            return Ok(())
+                        };
+        write!(f, "{first}")?;
+
+        for ty in iter {
+            write!(f, ", {ty}")?;
+        }
+
+        Ok(())
+    }
+}
+
+impl SupportedTypesWrapper {
+    pub fn contains(&self, index: &TypeLayout) -> bool {
+        self.0.contains(&Cow::Borrowed(index))
+    }
+}
+
 #[allow(unused)]
 pub(crate) mod shorthands {
     use super::*;
 
-    pub(crate) static BOOL_TYPE: Lazy<&TypeLayout> = Lazy::new(|| unsafe {
-        TYPES.get("bool").unwrap()
-    });
-    
-    pub(crate) static STR_TYPE: Lazy<&TypeLayout> = Lazy::new(|| unsafe {
-        TYPES.get("str").unwrap()
-    });
-    
-    pub(crate) static INT_TYPE: Lazy<&TypeLayout> = Lazy::new(|| unsafe {
-        TYPES.get("int").unwrap()
-    });
-    
-    pub(crate) static BIGINT_TYPE: Lazy<&TypeLayout> = Lazy::new(|| unsafe {
-        TYPES.get("bigint").unwrap()
-    });
-    
-    pub(crate) static FLOAT_TYPE: Lazy<&TypeLayout> = Lazy::new(|| unsafe {
-        TYPES.get("float").unwrap()
-    });
-    
-    pub(crate) static BYTE_TYPE: Lazy<&TypeLayout> = Lazy::new(|| unsafe {
-        TYPES.get("byte").unwrap()
-    });
-}
+    pub(crate) static BOOL_TYPE: Lazy<&TypeLayout> =
+        Lazy::new(|| unsafe { TYPES.get("bool").unwrap() });
 
+    pub(crate) static STR_TYPE: Lazy<&TypeLayout> =
+        Lazy::new(|| unsafe { TYPES.get("str").unwrap() });
+
+    pub(crate) static INT_TYPE: Lazy<&TypeLayout> =
+        Lazy::new(|| unsafe { TYPES.get("int").unwrap() });
+
+    pub(crate) static BIGINT_TYPE: Lazy<&TypeLayout> =
+        Lazy::new(|| unsafe { TYPES.get("bigint").unwrap() });
+
+    pub(crate) static FLOAT_TYPE: Lazy<&TypeLayout> =
+        Lazy::new(|| unsafe { TYPES.get("float").unwrap() });
+
+    pub(crate) static BYTE_TYPE: Lazy<&TypeLayout> =
+        Lazy::new(|| unsafe { TYPES.get("byte").unwrap() });
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeType {
@@ -71,10 +94,12 @@ impl Display for NativeType {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum TypeLayout {
-    Function(FunctionType),
+    Function(Arc<FunctionType>),
     /// metadata wrapper around a [TypeLayout]
     CallbackVariable(Box<TypeLayout>),
     Native(NativeType),
+    List(ListType),
+    ValidIndexes(ListBound, ListBound),
 }
 
 impl Display for TypeLayout {
@@ -83,6 +108,8 @@ impl Display for TypeLayout {
             Self::Function(function_type) => write!(f, "{function_type}"),
             Self::CallbackVariable(cb) => write!(f, "{}", cb.get_type_recursively()),
             Self::Native(native) => write!(f, "{native}"),
+            Self::List(list) => write!(f, "{list}"),
+            Self::ValidIndexes(lower, upper) => write!(f, "B({lower}..{upper})"),
         }
     }
 }
@@ -95,17 +122,56 @@ impl TypeLayout {
         matches!(me, TypeLayout::Native(NativeType::Bool))
     }
 
-    pub fn is_function(&self) -> Option<&FunctionType> {
+    pub fn is_list(&self) -> Option<&ListType> {
+        let me = self.get_type_recursively();
+
+        let TypeLayout::List(l) = me else {
+            return None;
+        };
+
+        Some(l)
+    }
+
+    pub fn is_function(&self) -> Option<Arc<FunctionType>> {
         let me = self.get_type_recursively();
 
         let TypeLayout::Function(f) = me else {
             return None;
         };
 
-        Some(f)
+        Some(Arc::clone(f))
     }
 
-    pub fn can_negate(&self) -> bool {
+    pub fn get_output_type_from_index(&self, index: &Value) -> Result<Cow<TypeLayout>> {
+        let me = self.get_type_recursively();
+
+        Ok(match me {
+            Self::List(list) => {
+                let index = index.get_usize().with_context(|| format!("List index must be an integer between {} and {}", usize::MIN, usize::MAX))?;
+                Cow::Borrowed(list.get_type_at_known_index(index)?) 
+            }
+            Self::Native(NativeType::Str) => Cow::Borrowed(&STR_TYPE),
+            _ => bail!("not indexable"),
+        })
+    }
+
+    pub fn supports_index(&self) -> Option<SupportedTypesWrapper> {
+        let me = self.get_type_recursively();
+
+        Some(SupportedTypesWrapper(match me {
+            Self::Native(NativeType::Str) => {
+                Box::new([Cow::Borrowed(&INT_TYPE), Cow::Borrowed(&BIGINT_TYPE)])
+            }
+            Self::List(x) => {
+                let (lower, upper) = x.valid_indexes();
+
+                Box::new([Cow::Owned(TypeLayout::ValidIndexes(lower, upper))])
+            }
+            _ => return None,
+        }))
+    }
+
+    pub fn supports_negate(&self) -> bool {
         let me = self.get_type_recursively();
         match me {
             Self::Native(NativeType::Str) => false,
@@ -119,6 +185,15 @@ impl TypeLayout {
 
         match self {
             CallbackVariable(cb) => cb.get_type_recursively(),
+            _ => self,
+        }
+    }
+
+    pub fn get_owned_type_recursively(self) -> Self {
+        use TypeLayout::*;
+
+        match self {
+            CallbackVariable(cb) => cb.get_owned_type_recursively(),
             _ => self,
         }
     }
@@ -143,7 +218,7 @@ impl TypeLayout {
                     Bool
                 } else {
                     match (lhs, rhs) {
-                        (Int,  BigInt | Float | Byte) => Bool,
+                        (Int, BigInt | Float | Byte) => Bool,
                         //======================
                         (Float, Int | BigInt | Byte) => Bool,
                         //======================
@@ -220,10 +295,24 @@ pub(crate) fn type_from_str(
         if let Some(r#type) = TYPES.get(input) {
             Ok(Cow::Borrowed(r#type))
         } else {
-            if let Ok(function_type) = parse_with_userdata(Rule::function_type, input, user_data) {
+            if let Ok(list_type_open_only) =
+                parse_with_userdata_features(Rule::list_type_open_only, input, user_data.clone())
+            {
+                let single = list_type_open_only.single()?;
+                let ty = Parser::list_type_open_only(single)?;
+                return Ok(Cow::Owned(TypeLayout::List(ty)));
+            } else if let Ok(function_type) =
+                parse_with_userdata_features(Rule::function_type, input, user_data.clone())
+            {
                 let single = function_type.single()?;
                 let ty = Parser::function_type(single)?;
-                return Ok(Cow::Owned(TypeLayout::Function(ty)));
+                return Ok(Cow::Owned(TypeLayout::Function(Arc::new(ty))));
+            } else if let Ok(list_type) =
+                parse_with_userdata_features(Rule::list_type, input, user_data)
+            {
+                let single = list_type.single()?;
+                let ty = Parser::list_type(single)?;
+                return Ok(Cow::Owned(TypeLayout::List(ty)));
             }
 
             bail!("type '{input}' has not been registered")
@@ -264,12 +353,64 @@ impl Parser {
                 None
             };
 
-        let types = FunctionParameters::TypesOnly(types);
+        let types = Arc::new(FunctionParameters::TypesOnly(types));
 
         Ok(FunctionType::new(
             types,
             ScopeReturnStatus::detect_should_return(return_type),
         ))
+    }
+
+    pub fn list_type_open_only(input: Node) -> Result<ListType> {
+        let ty_node = input
+            .children()
+            .single()? // Rule: open_ended_type
+            .children()
+            .single()?; // Rule: type
+
+        let ty = Self::r#type(ty_node)?;
+
+        Ok(ListType::Open {
+            types: vec![],
+            spread: Box::new(ty),
+        })
+    }
+
+    pub fn list_type(input: Node) -> Result<ListType> {
+        let children = input.children();
+
+        let mut type_vec: Vec<Cow<'static, TypeLayout>> = vec![];
+        let mut open_ended_type: Option<Cow<'static, TypeLayout>> = None;
+
+        for child in children {
+            match child.as_rule() {
+                Rule::r#type => {
+                    let ty = Self::r#type(child)?;
+
+                    type_vec.push(ty);
+                }
+                Rule::open_ended_type if open_ended_type.is_none() => {
+                    let ty_node = child.children().single().unwrap();
+                    let ty = Self::r#type(ty_node)?;
+
+                    open_ended_type = Some(ty);
+                }
+                other_rule => unreachable!("{other_rule:?}"),
+            }
+        }
+
+        if type_vec.is_empty() && open_ended_type.is_none() {
+            return Ok(ListType::Empty);
+        }
+
+        if let Some(open_ended_type) = open_ended_type {
+            return Ok(ListType::Open {
+                types: type_vec,
+                spread: Box::new(open_ended_type),
+            });
+        }
+
+        Ok(ListType::Mixed(type_vec))
     }
 
     pub fn r#type(input: Node) -> Result<Cow<'static, TypeLayout>> {

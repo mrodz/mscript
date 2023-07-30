@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::cell::Ref;
 use std::collections::HashSet;
 use std::fmt::Display;
 use std::hash::Hash;
@@ -67,32 +68,6 @@ impl Ident {
         self.ty = Some(Cow::Owned(TypeLayout::CallbackVariable(
             ty.into_owned().into(),
         )));
-
-        Ok(self)
-    }
-
-    pub fn lookup(&mut self, user_data: &AssocFileData) -> Result<&mut Self> {
-        if let Some(ref ty) = self.ty {
-            bail!("already has type {ty:?}")
-        }
-
-        let (ident, is_callback) = user_data
-            .get_dependency_flags_from_name(&self.name)
-            .context("variable has not been mapped")?;
-
-        let ty = ident.ty.clone();
-
-        let x = ty.map(|x| {
-            if is_callback {
-                Cow::Owned(TypeLayout::CallbackVariable(x.into_owned().into()))
-            } else {
-                x
-            }
-        });
-
-        let ty = x.unwrap();
-
-        self.ty = Some(ty);
 
         Ok(self)
     }
@@ -166,12 +141,14 @@ impl Ident {
         Ok(())
     }
 
+    #[deprecated]
+    #[allow(unused)]
     pub fn link(
         &mut self,
         user_data: &AssocFileData,
         ty: Option<Cow<'static, TypeLayout>>,
     ) -> Result<bool> {
-        let ident: Option<(&Ident, bool)> = user_data.get_dependency_flags_from_name(&self.name);
+        let ident: Option<(Ref<Ident>, bool)> = user_data.get_dependency_flags_from_name(&self.name);
 
         let inherited: bool = if let Some((ident, is_callback)) = ident {
             let new_ty = ident.ty.clone().map(|x| {
@@ -215,8 +192,6 @@ impl Parser {
         }
 
         let name = name.to_owned();
-
-        // println!("\n******\n{name} referenced\n******\n");
 
         Ok(Ident {
             name,

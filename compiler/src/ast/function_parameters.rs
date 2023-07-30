@@ -25,6 +25,7 @@ impl FunctionParameters {
             Self::TypesOnly(x) => x.len(),
         }
     }
+
     pub fn to_types(&self) -> Cow<Vec<Cow<TypeLayout>>> {
         match self {
             FunctionParameters::Named(names) => {
@@ -60,7 +61,7 @@ impl Display for FunctionParameters {
 impl Dependencies for FunctionParameters {
     fn supplies(&self) -> Vec<Dependency> {
         let Self::Named(names) = self else {
-            return vec![];
+            unreachable!("cannot compile nameless function parameters");
         };
 
         names
@@ -122,7 +123,7 @@ impl Parser {
 
             let ty: Cow<'static, TypeLayout> = Self::r#type(ty)?;
 
-            ident.link(input.user_data(), Some(ty))?;
+            ident.link_force_no_inherit(input.user_data(), ty)?;
 
             if add_to_scope_dependencies {
                 input.user_data().add_dependency(&ident);

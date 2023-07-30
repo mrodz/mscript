@@ -1,12 +1,16 @@
 use std::borrow::Cow;
-use std::{cell::RefCell, rc::Rc};
+use std::cell::{RefMut, Ref};
+use std::sync::Arc;
+use std::rc::Rc;
 
-use anyhow::{anyhow, Result, bail};
+use anyhow::{anyhow, bail, Result};
 use pest_consume::Parser as ParserDerive;
 
-use crate::ast::{Compile, CompiledFunctionId, CompiledItem, Declaration, Ident, TypeLayout};
+use crate::ast::{
+    Compile, CompiledFunctionId, CompiledItem, Declaration, FunctionParameters, Ident, TypeLayout, Dependencies,
+};
 use crate::instruction;
-use crate::scope::{Scope, ScopeReturnStatus, ScopeType};
+use crate::scope::{Scope, ScopeReturnStatus, ScopeType, Scopes, ScopeIter, ScopeHandle};
 
 #[allow(unused)]
 pub(crate) type Node<'i> = pest_consume::Node<'i, Rule, Rc<AssocFileData>>;
@@ -17,9 +21,9 @@ pub(crate) struct Parser;
 
 #[derive(Debug)]
 pub(crate) struct AssocFileData {
-    scopes: RefCell<Vec<Scope>>,
-    file_name: Rc<String>, // last_arg_type: Rc<RefCell<Vec<IdentType>>>
-    source_name: Rc<String>,
+    scopes: Scopes,
+    file_name: Arc<String>, // last_arg_type: Rc<RefCell<Vec<IdentType>>>
+    source_name: Arc<String>,
 }
 
 impl AssocFileData {
@@ -33,24 +37,24 @@ impl AssocFileData {
         };
 
         Self {
-            scopes: RefCell::new(vec![Scope::new_file()]),
-            file_name: Rc::new(destination_name), // last_arg_type: Rc::new(RefCell::new(vec![]))
-            source_name: Rc::new(source_name),
+            scopes: Scopes::new(),
+            file_name: Arc::new(destination_name), // last_arg_type: Rc::new(RefCell::new(vec![]))
+            source_name: Arc::new(source_name),
         }
     }
 
-    pub fn get_source_file_name(&self) -> Rc<String> {
+    pub fn get_source_file_name(&self) -> Arc<String> {
         self.source_name.clone()
     }
 
-    pub fn get_file_name(&self) -> Rc<String> {
+    pub fn get_file_name(&self) -> Arc<String> {
         self.file_name.clone()
     }
 
     pub fn scopes_since_loop(&self) -> Result<usize> {
         let mut result = 1;
 
-        for scope in self.scopes.borrow().iter().rev() {
+        for scope in self.scopes.iter() {
             if scope.is_loop() {
                 return Ok(result);
             }
@@ -65,75 +69,113 @@ impl AssocFileData {
         bail!("no loop found")
     }
 
-    #[allow(clippy::mut_from_ref)]
-    pub fn get_return_type(&self) -> &mut ScopeReturnStatus {
-        unsafe {
-            (*self.scopes.as_ptr())
-                .last_mut()
-                .expect("no scope registered")
-                .peek_yields_value_mut()
-        }
+    pub fn get_return_type_mut(&self) -> RefMut<ScopeReturnStatus> {
+        RefMut::map(self.scopes.last_mut(), Scope::peek_yields_value_mut)
     }
 
-    pub fn push_if_typed(&self, yields: ScopeReturnStatus) {
+    pub fn get_return_type(&self) -> Ref<ScopeReturnStatus> {
+        Ref::map(self.scopes.last(), Scope::peek_yields_value)
+    }
+
+    pub fn push_if_typed(&self, yields: ScopeReturnStatus) -> ScopeHandle {
         self.push_scope_typed(ScopeType::IfBlock, yields)
     }
 
-    pub fn push_else_typed(&self, yields: ScopeReturnStatus) {
+    pub fn push_else_typed(&self, yields: ScopeReturnStatus) -> ScopeHandle {
         self.push_scope_typed(ScopeType::ElseBlock, yields)
     }
 
-    pub fn push_function(&self, yields: ScopeReturnStatus) {
-        self.push_scope_typed(ScopeType::Function, yields)
+    pub fn push_function(&self, yields: ScopeReturnStatus) -> ScopeHandle {
+        self.push_scope_typed(ScopeType::Function(None), yields)
     }
 
-    pub fn push_while_loop(&self, yields: ScopeReturnStatus) {
+    pub fn push_while_loop(&self, yields: ScopeReturnStatus) -> ScopeHandle {
         self.push_scope_typed(ScopeType::WhileLoop, yields)
     }
 
-    pub fn push_number_loop(&self, yields: ScopeReturnStatus) {
+    pub fn push_number_loop(&self, yields: ScopeReturnStatus) -> ScopeHandle {
         self.push_scope_typed(ScopeType::NumberLoop, yields)
     }
 
-    pub fn return_statement_expected_yield_type(&self) -> Option<&Cow<'static, TypeLayout>> {
-        for scope in unsafe { (*self.scopes.as_ptr()).iter().rev() } {
-            let (ScopeReturnStatus::Should(result) | ScopeReturnStatus::Did(result)) = scope.peek_yields_value() else {
+    pub fn get_current_executing_function(&self) -> Option<(Ref<Scope>, Ref<Arc<FunctionParameters>>)> {
+        let mut iter = self.scopes.iter();
+
+        iter.find(|x| x.is_function()).map(|scope| {
+            Ref::map_split(scope, |scope| {
+                let ty = scope.ty_ref();
+
+                let ScopeType::Function(parameters) = ty else {
+                    unreachable!()
+                };  
+
+                (scope, parameters.as_ref().expect("function parameters should have been initialized"))
+            })
+        })
+    }
+
+    // pub fn register_function_parameters_to_scope(
+    //     &self,
+    //     function_parameters: Arc<FunctionParameters>,
+    // ) {
+    //     let mut this_scope = self.scopes.last_mut();
+
+    //     let idents = function_parameters.slice();
+
+    //     for ident in idents {
+    //         self.scopes.add_variable(ident);
+    //     }
+
+    //     this_scope.add_parameters(function_parameters);
+
+    // }
+
+    pub fn return_statement_expected_yield_type(&self) -> Option<Ref<Cow<'static, TypeLayout>>> {
+        for scope in self.scopes.iter() {
+            let Ok(result) = Ref::filter_map(scope, |x| x.peek_yields_value().get_type()) else {
                 continue;
             };
 
             return Some(result);
+            // let Some(ty) = scope.peek_yields_value().get_type();
+
+            // save this code in case this change breaks it:
+            // let (ScopeReturnStatus::Should(result) | ScopeReturnStatus::Did(result)) = scope.peek_yields_value() else {
+            //     continue;
+            // };
         }
 
         None
     }
 
-    pub fn push_scope_typed(&self, ty: ScopeType, yields: ScopeReturnStatus) {
-        self.scopes
-            .borrow_mut()
-            .push(Scope::new_with_ty_yields(ty, yields));
+    /// Returns the depth at which the stack is expected to be once the added frame is cleaned up.
+    pub fn push_scope_typed(&self, ty: ScopeType, yields: ScopeReturnStatus) -> ScopeHandle {
+        #[cfg(feature = "debug")]
+        println!("{ty}");
+
+        let depth = {
+            self.scopes.push_scope_typed(ty, yields);
+            self.scopes.depth()
+        };
+
+        ScopeHandle::new(depth, &self.scopes)
     }
 
     pub fn did_scope_exit_with_value_if_required(&self) -> bool {
-        let scopes = self.scopes.borrow();
-        let yields = scopes.last().expect("no scope").peek_yields_value();
+        let last = self.scopes.last();
+        let yields = last.peek_yields_value();
 
         !matches!(yields, ScopeReturnStatus::Should(..))
     }
 
-    pub fn pop_scope(&self) -> ScopeReturnStatus {
-        self.scopes
-            .borrow_mut()
-            .pop()
-            .expect("pop without scope")
-            .get_yields_value()
-    }
+    // #[deprecated(note = "use scope handles instead")]
+    // pub fn pop_scope(&self) -> ScopeReturnStatus {
+    //     self.scopes.pop()
+    //         .expect("pop without scope")
+    //         .get_yields_value()
+    // }
 
     pub fn add_dependency(&self, dependency: &Ident) {
-        self.scopes
-            .borrow_mut()
-            .last_mut()
-            .expect("no scopes registered")
-            .add_dependency(dependency);
+        self.scopes.add_variable(dependency)
     }
 
     pub fn has_name_been_mapped(&self, dependency: &String) -> bool {
@@ -144,14 +186,14 @@ impl AssocFileData {
         self.get_ident_from_name_local(dependency).is_some()
     }
 
-    pub fn get_ident_from_name_local(&self, dependency: &String) -> Option<&Ident> {
-        let scope = unsafe { (*self.scopes.as_ptr()).last()? };
+    pub fn get_ident_from_name_local(&self, dependency: &String) -> Option<Ref<Ident>> {
+        let scope = self.scopes.last();
 
-        scope.contains(dependency)
+        Ref::filter_map(scope, |scope| scope.contains(dependency)).ok()
     }
 
-    pub fn get_dependency_flags_from_name(&self, dependency: &String) -> Option<(&Ident, bool)> {
-        let scopes = unsafe { (*self.scopes.as_ptr()).iter() };
+    pub fn get_dependency_flags_from_name(&self, dependency: &String) -> Option<(Ref<Ident>, bool)> {
+        let scopes = self.scopes.iter();
         self.get_dependency_flags_from_name_and_scopes_plus_skip(dependency, scopes, 0)
     }
 
@@ -159,27 +201,23 @@ impl AssocFileData {
         &self,
         dependency: &String,
         skip: usize,
-    ) -> Option<(&Ident, bool)> {
-        let scopes = unsafe { (*self.scopes.as_ptr()).iter() };
+    ) -> Option<(Ref<Ident>, bool)> {
+        let scopes =self.scopes.iter();
         self.get_dependency_flags_from_name_and_scopes_plus_skip(dependency, scopes, skip)
     }
 
-    fn get_dependency_flags_from_name_and_scopes_plus_skip<'a, S>(
+    fn get_dependency_flags_from_name_and_scopes_plus_skip<'a>(
         &'a self,
         dependency: &String,
-        scopes: S,
+        scopes: ScopeIter<'a>,
         skip: usize,
-    ) -> Option<(&Ident, bool)>
-    where
-        S: Iterator<Item = &'a Scope> + DoubleEndedIterator,
-    {
+    ) -> Option<(Ref<Ident>, bool)> {
         let mut is_callback = false;
 
         // let mut c = 0;
 
-        for (count, scope) in scopes.rev().enumerate() {
-            // println!("\t\t{:?}", scope.scope_type());
-            if let (true, Some(flags)) = (count >= skip, scope.contains(dependency)) {
+        for (count, scope) in scopes.enumerate() {
+            if let (true, Ok(flags)) = (count >= skip, Ref::filter_map(Ref::clone(&scope), |scope| scope.contains(dependency))) {
                 return Some((flags, is_callback));
             }
 
@@ -194,21 +232,68 @@ impl AssocFileData {
 }
 
 #[allow(dead_code)]
-pub mod util {
+pub(crate) mod util {
+    use std::rc::Rc;
+
     use pest_consume::Nodes;
 
-    use super::{Parser, Rule};
+    use super::{AssocFileData, Parser, Rule};
 
-    pub fn parse_with_userdata<D>(
+    macro_rules! rename {
+        ($($rule:ident => $text:literal $(,)?)*) => {
+            |rule| match rule {
+                $(
+                    Rule::$rule => ($text).to_owned(),
+                )*
+                rule => format!("{rule:?}"),
+            }
+        }
+    }
+
+    pub(crate) fn parse_with_userdata_features(
+        rule: Rule,
+        input_str: &str,
+        user_data: Rc<AssocFileData>,
+    ) -> Result<Nodes<Rule, Rc<AssocFileData>>, Box<pest_consume::Error<Rule>>> {
+        parse_with_userdata(rule, input_str, user_data.clone()).map_err(|error| {
+            Box::new(
+                error
+                    .with_path(&user_data.source_name)
+                    .renamed_rules(rename! {
+                        math_expr => "expression",
+                        function_return_type => "return type",
+                        function_type => "function type",
+                        open_ended_type => "open ended list spread",
+                        list_type => "list type",
+                        list_type_open_only => "list spread",
+                        add => "+",
+                        subtract => "-",
+                        multiply => "*",
+                        divide => "/",
+                        modulo => "%",
+                        lt => "<",
+                        gt => ">",
+                        lte => "<=",
+                        gte => ">=",
+                        eq => "==",
+                        neq => "!=",
+                        and => "&&",
+                        or => "||",
+                        xor => "^"
+                    }),
+            )
+        })
+    }
+
+    pub(crate) fn parse_with_userdata<D>(
         rule: Rule,
         input_str: &str,
         user_data: D,
     ) -> Result<Nodes<Rule, D>, Box<pest_consume::Error<Rule>>> {
-        <Parser as pest_consume::Parser>::parse_with_userdata(rule, input_str, user_data)
-            .map_err(Box::new)
+        <Parser as pest_consume::Parser>::parse_with_userdata(rule, input_str, user_data).map_err(Box::new)
     }
 
-    pub fn parse(
+    pub(crate) fn parse(
         rule: Rule,
         input_str: &str,
     ) -> Result<Nodes<Rule, ()>, Box<pest_consume::Error<Rule>>> {
@@ -220,14 +305,7 @@ pub(crate) fn root_node_from_str(
     input_str: &str,
     user_data: Rc<AssocFileData>,
 ) -> Result<Node, Vec<anyhow::Error>> {
-    let source_name = &*user_data.get_source_file_name();
-    let x = util::parse_with_userdata(Rule::file, input_str, user_data).map_err(|err| {
-        err.with_path(source_name).renamed_rules(|rule| match rule {
-            Rule::math_expr => "expression".to_owned(),
-            Rule::function_return_type => "return type".to_owned(),
-            rule => format!("{rule:?}"),
-        })
-    });
+    let x = util::parse_with_userdata_features(Rule::file, input_str, user_data);
 
     let x = x
         .map_err(|e| vec![anyhow!(e)])?
@@ -240,12 +318,22 @@ pub(crate) fn root_node_from_str(
 #[derive(Debug, Default)]
 pub(crate) struct File {
     pub declarations: Vec<Declaration>,
-    pub location: Rc<String>,
+    pub location: Arc<String>,
 }
 
 impl File {
     fn add_declaration(&mut self, declaration: Declaration) {
         self.declarations.push(declaration)
+    }
+}
+
+impl Dependencies for File {
+    fn dependencies(&self) -> Vec<crate::ast::Dependency> {
+        let mut result = vec![];
+        for declaration in &self.declarations {
+            result.append(&mut declaration.net_dependencies());
+        }
+        result
     }
 }
 

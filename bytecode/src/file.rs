@@ -147,9 +147,6 @@ impl MScriptFile {
 
         while let Ok(size) = reader.read_until(0x00, &mut buffer) {
             if size == 0 {
-                #[cfg(feature = "developer")]
-                println!("EOF @ L:{line_number}");
-
                 break;
             }
 

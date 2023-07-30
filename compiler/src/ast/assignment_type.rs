@@ -34,7 +34,7 @@ impl Parser {
 
         if let Ok(ref assignment_ty) = value.for_type() {
             if ty.as_ref() != assignment_ty {
-                let message = if value.is_callable() {
+                let message = if value.is_callable().to_err_vec()? {
                     format!("declaration wanted {ty}, but value is a function that returns {assignment_ty}")
                 } else {
                     // TODO: special check for function types.

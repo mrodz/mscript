@@ -11,6 +11,7 @@ mod function_parameters;
 mod function_return_type;
 mod ident;
 mod if_statement;
+mod list;
 mod loop_control_flow;
 mod math_expr;
 mod number;
@@ -31,17 +32,21 @@ pub(crate) use function_body::Block;
 pub(crate) use function_parameters::FunctionParameters;
 pub(crate) use ident::Ident;
 pub(crate) use if_statement::IfStatement;
+pub(crate) use list::List;
 pub(crate) use loop_control_flow::{Break, Continue};
+pub(crate) use math_expr::{Expr, Op as BinaryOperation};
 pub(crate) use number::Number;
 pub(crate) use number_loop::NumberLoop;
 pub(crate) use print_statement::PrintStatement;
 pub(crate) use r#return::ReturnStatement;
 pub(crate) use r#type::TypeLayout;
-pub(crate) use value::Value;
+pub(crate) use value::{Value, ConstexprEvaluation, CompileTimeEvaluate};
 pub(crate) use while_loop::WhileLoop;
 
 #[allow(unused_imports)]
-pub(crate) use r#type::shorthands::{BOOL_TYPE, STR_TYPE, INT_TYPE, BIGINT_TYPE, FLOAT_TYPE, BYTE_TYPE};
+pub(crate) use r#type::shorthands::{
+    BIGINT_TYPE, BOOL_TYPE, BYTE_TYPE, FLOAT_TYPE, INT_TYPE, STR_TYPE,
+};
 
 use anyhow::{anyhow, bail, Context, Error, Result};
 use bytecode::compilation_lookups::raw_byte_instruction_to_string_representation;
@@ -49,8 +54,72 @@ use pest::Span;
 use std::{
     borrow::Cow,
     fmt::{Debug, Display},
-    rc::Rc,
+    sync::Arc,
 };
+
+static mut REGISTER_COUNT: usize = 0;
+
+pub struct TemporaryRegister(usize, bool);
+
+impl TemporaryRegister {
+    pub unsafe fn new_ghost_register(mock_count: usize) -> Self {
+        Self(mock_count, false)
+    }
+
+    pub fn new() -> Self {
+        unsafe {
+            REGISTER_COUNT += 1;
+
+            Self(REGISTER_COUNT, true)
+        }
+    }
+
+    pub fn new_require_explicit_drop() -> Self {
+        unsafe {
+            REGISTER_COUNT += 1;
+
+            Self(REGISTER_COUNT, false)
+        }
+    }
+
+    pub fn free(self) {
+        unsafe {
+            if self.0 != REGISTER_COUNT {
+                unreachable!("dropped out of order");
+            }
+
+            REGISTER_COUNT -= 1;
+        }
+    }
+
+    pub unsafe fn free_many(count: usize) {
+        REGISTER_COUNT = REGISTER_COUNT
+            .checked_sub(count)
+            .expect("dropped too many registers");
+    }
+}
+
+impl Display for TemporaryRegister {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "#{}", self.0)
+    }
+}
+
+impl Drop for TemporaryRegister {
+    fn drop(&mut self) {
+        if !self.1 {
+            return;
+        }
+
+        unsafe {
+            if self.0 == REGISTER_COUNT {
+                REGISTER_COUNT -= 1;
+            } else if self.0 - 1 != REGISTER_COUNT {
+                unreachable!("dropped out of order {} {REGISTER_COUNT}", self.0)
+            }
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub(crate) enum CompiledFunctionId {
@@ -73,7 +142,7 @@ pub(crate) enum CompiledItem {
     Function {
         id: CompiledFunctionId,
         content: Option<Vec<CompiledItem>>,
-        location: Rc<String>,
+        location: Arc<String>,
     },
     Instruction {
         id: u8,
@@ -92,7 +161,13 @@ impl CompiledItem {
     pub fn is_done_instruction(&self) -> bool {
         const DONE: u8 = 0x27;
         const JMP_POP: u8 = 0x32;
-        matches!(self, Self::Instruction { id: DONE | JMP_POP, .. })
+        matches!(
+            self,
+            Self::Instruction {
+                id: DONE | JMP_POP,
+                ..
+            }
+        )
     }
 
     pub fn repr(&self, use_string_version: bool) -> Result<String> {
@@ -163,7 +238,9 @@ impl CompiledItem {
                     Ok(format!("{}{}\0", *id as char, args))
                 }
             }
-            Self::Break(..) | Self::Continue(..) => unreachable!("break/continue that was not fulfilled"),
+            Self::Break(..) | Self::Continue(..) => {
+                unreachable!("break/continue that was not fulfilled")
+            }
         }
     }
 }

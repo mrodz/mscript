@@ -130,6 +130,7 @@ pub mod implementations {
     use crate::context::SpecialScope;
     use crate::function::{PrimitiveFunction, ReturnValue};
     use crate::rc_to_ref;
+    use crate::stack::VariableFlags;
     use crate::{bool, function, int, object, vector};
     use std::collections::HashMap;
     use std::rc::Rc;
@@ -246,29 +247,61 @@ pub mod implementations {
             let op_name = arg_iter.next().context("Expected a vector operation")?;
             let bytes = op_name.as_bytes();
 
-            if let (Some(b'['), Some(b']')) = (bytes.first(), bytes.last()) {
-                let Some(Primitive::Vector(vector)) = ctx.pop() else {
-                    bail!("Cannot perform a vector operation on a non-vector")
-                };
-
-                let content = &bytes[1..bytes.len() - 1];
-
-                // this manual byte slice to usize conversion is more performant
-                let mut idx: usize = 0;
-                let mut max = 10_usize.pow(content.len() as u32 - 1);
-
-                for byte in content {
-                    if byte.is_ascii_digit() {
-                        bail!("'{}' is not numeric", char::from(*byte))
-                    }
-                    idx += (byte - b'0') as usize * max;
-                    max /= 10;
+            if let [b'+', ..] = bytes {
+                if ctx.stack_size() != 1 {
+                    bail!("vec_op +push operations require only a single item on the operating stack")
                 }
 
-                let item = vector.get(idx)
-                    .with_context(|| format!("index {idx} out of bounds (len {})", vector.len()))?;
+                let new_val = ctx.pop().unwrap();
 
-                ctx.push(item.clone());
+                let mut primitive_with_flags: Rc<(Primitive, VariableFlags)> = ctx.load_local(&op_name[1..]).context("vector not found for pushing")?;
+
+                let primitive_with_flags: &mut (Primitive, VariableFlags) = Rc::make_mut(&mut primitive_with_flags);
+
+                let Primitive::Vector(ref mut vector) = primitive_with_flags.0 else {
+                    bail!("not a vector, trying to push")
+                };
+
+                let vector: &mut Vec<Primitive> = rc_to_ref(vector);
+
+                vector.push(new_val);
+            } else if let [b'[', index @ .., b']'] = bytes {
+                let Some(indexable) = ctx.pop() else {
+                    bail!("the stack is empty");
+                };
+
+                // this manual byte slice to usize conversion is more performant
+                let idx: usize = 'index_gen: {
+                    let mut idx = 0;
+                    let mut max = 10_usize.pow(index.len() as u32 - 1);
+
+                    for byte in index {
+                        if !byte.is_ascii_digit() {
+                            let index_as_str = std::str::from_utf8(index)?;
+                            let variable = ctx.load_local(index_as_str).with_context(|| format!("'{index_as_str}' is not a literal number nor a name that has been mapped locally"))?;
+                            let primitive_part: &Primitive = &variable.0;
+
+                            let as_index: usize = primitive_part.try_into_numeric_index()?;
+
+                            break 'index_gen as_index;
+                        }
+                        idx += (byte - b'0') as usize * max;
+                        max /= 10;
+                    }
+
+                    idx
+                };
+
+                let item = match indexable {
+                    Primitive::Vector(vector) => vector.get(idx).with_context(|| format!("index {idx} out of bounds (len {})", vector.len()))?.clone(),
+                    Primitive::Str(string) => {
+                        let mut str_chars = string.chars();
+                        Primitive::Str(str_chars.nth(idx).with_context(|| format!("index {idx} out of bounds (len {} chars, {} bytes)", string.chars().count(), string.len()))?.to_string())
+                    }
+                    _ => bail!("Cannot perform a vector operation on a non-vector"),
+                };
+
+                ctx.push(item);
             } else {
                 match op_name.as_str() {
                     "reverse" => {
@@ -756,7 +789,7 @@ pub mod implementations {
             *second = first_cloned;
 
             Ok(())
-        } 
+        }
 
         load(ctx, args) {
             let Some(name) = args.first() else {
@@ -806,6 +839,21 @@ pub mod implementations {
             for name in args {
                 ctx.delete_variable_local(name)?;
             }
+
+            Ok(())
+        }
+
+        delete_name_reference_scoped(ctx, args) {
+            if args.len() != 1 {
+                bail!("delete_name_reference_scoped can only delete to retrieve one name");
+            }
+
+            let name = args.first().unwrap();
+
+            let deleted: Rc<(Primitive, VariableFlags)> = ctx.delete_variable_local(name)?;
+            let primitive: Primitive = deleted.0.clone();
+
+            ctx.push(primitive);
 
             Ok(())
         }

@@ -1,17 +1,21 @@
 use std::{borrow::Cow, fmt::Display};
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use pest::Span;
 
 use crate::{
-    ast::{Block, CompiledItem, Ident, Value},
+    ast::{Block, CompiledItem, Ident},
     instruction,
     parser::{Node, Parser, Rule},
     scope::ScopeReturnStatus,
     VecErr,
 };
 
-use super::{math_expr::Op, new_err, r#type::{IntoType, NativeType}, Compile, Dependencies, INT_TYPE, TypeLayout, FLOAT_TYPE};
+use super::{
+    new_err,
+    r#type::{IntoType, NativeType},
+    BinaryOperation, Compile, Dependencies, TypeLayout, FLOAT_TYPE, INT_TYPE, Value,
+};
 
 #[derive(Debug)]
 pub(crate) struct NumberLoop {
@@ -57,12 +61,6 @@ enum NumberLoopRegister<'a> {
     Generated(usize),
 }
 
-impl Display for NumberLoopRegister<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.repr())
-    }
-}
-
 impl<'a> NumberLoopRegister<'a> {
     pub fn new() -> Self {
         unsafe {
@@ -88,11 +86,13 @@ impl<'a> NumberLoopRegister<'a> {
             }
         }
     }
+}
 
-    pub fn repr(&self) -> Cow<str> {
+impl Display for NumberLoopRegister<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Generated(id) => Cow::Owned(format!("L#{id}")),
-            Self::Named(name) => Cow::Borrowed(name),
+            Self::Generated(id) => write!(f, "L#{id}"),
+            Self::Named(name) => write!(f, "{name}"),
         }
     }
 }
@@ -218,7 +218,7 @@ impl Parser {
                 |ty| ScopeReturnStatus::ParentShould(ty.clone()),
             );
 
-        input.user_data().push_number_loop(child_returns_type);
+        let number_loop_scope = input.user_data().push_number_loop(child_returns_type);
 
         let val_start_node = children.next().unwrap();
         let val_start_span = val_start_node.as_span();
@@ -263,8 +263,6 @@ impl Parser {
             }
         }
 
-
-
         let rhs = step
             .as_ref()
             .map_or_else(
@@ -273,7 +271,7 @@ impl Parser {
             )
             .to_err_vec()?;
 
-        let Some(step_output_type) = start_ty.get_output_type(rhs.as_ref(), &Op::Add) else {
+        let Some(step_output_type) = start_ty.get_output_type(rhs.as_ref(), &BinaryOperation::Add) else {
             let span = if let Some((_, span)) = step {
                 span
             } else {
@@ -287,7 +285,8 @@ impl Parser {
             )]);
         };
 
-        let after_step_output: Option<TypeLayout> = step_output_type.get_output_type(&start_ty, &Op::Lte);
+        let after_step_output: Option<TypeLayout> =
+            step_output_type.get_output_type(&start_ty, &BinaryOperation::Lte);
 
         let Some(TypeLayout::Native(NativeType::Bool)) = after_step_output else {
             return Err(vec![new_err(
@@ -296,7 +295,7 @@ impl Parser {
                 format!("applying a step of `{rhs}` to `{start_ty}` produces `{}`", after_step_output.map_or_else(|| Cow::Borrowed("never"), |ty| Cow::Owned(ty.to_string()))),
             )])
         };
-        
+
         if !start_ty.is_numeric(true) {
             return Err(vec![new_err(
                 val_start_span,
@@ -327,10 +326,10 @@ impl Parser {
                 span,
                 &input.user_data().get_source_file_name(),
                 "using floating point numbers in a `from` loop requires explicitly defining a step property".to_owned(),
-            )])
+            )]);
         }
 
-        input.user_data().pop_scope();
+        number_loop_scope.consume();
 
         let name_is_collision = name
             .as_ref()
@@ -340,7 +339,7 @@ impl Parser {
         let inclusive = inclusive_or_exclusive.as_rule() == Rule::number_loop_inclusive;
 
         Ok(NumberLoop {
-            body: body.context("expected a body").to_err_vec()?,
+            body: body.unwrap(),
             name,
             step: step.map(|(val, _)| val),
             val_start,

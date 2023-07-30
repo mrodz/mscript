@@ -9,7 +9,10 @@ use crate::{
     VecErr,
 };
 
-use super::{map_err, new_err, value::Value, Compile, Dependencies, Dependency, Ident};
+use super::{
+    map_err, new_err, value::Value, Compile, CompileTimeEvaluate, ConstexprEvaluation,
+    Dependencies, Dependency, Ident,
+};
 
 #[derive(Debug)]
 pub(crate) struct Assignment {
@@ -32,7 +35,6 @@ impl Assignment {
         user_data: &AssocFileData,
         is_modify: bool,
     ) -> Result<bool> {
-        // println!("wooooo!!!!");
         let skip = if is_modify { 1 } else { 0 };
 
         if self.flags.contains(AssignmentFlag::modify()) {
@@ -94,17 +96,27 @@ impl Compile for Assignment {
     fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<super::CompiledItem>> {
         let name = self.ident.name();
 
-        let mut value_init = match &self.value {
-            Value::Ident(ident) => {
-                vec![instruction!(load ident)]
+        let maybe_constexpr_eval = self.value.try_constexpr_eval()?;
+
+        let mut value_init = if let ConstexprEvaluation::Owned(value) = maybe_constexpr_eval {
+            value.compile(function_buffer)?
+        } else {
+            match &self.value {
+                Value::Ident(ident) => ident.compile(function_buffer)?,
+                Value::Function(function) => {
+                    function.in_place_compile_for_value(function_buffer)?
+                }
+                Value::Number(number) => number.compile(function_buffer)?,
+                Value::String(string) => string.compile(function_buffer)?,
+                Value::MathExpr(math_expr) => math_expr.compile(function_buffer)?,
+                Value::Boolean(boolean) => boolean.compile(function_buffer)?,
+                Value::List(list) => list.compile(function_buffer)?,
             }
-            Value::Function(function) => function.in_place_compile_for_value(function_buffer)?,
-            Value::Number(number) => number.compile(function_buffer)?,
-            Value::String(string) => string.compile(function_buffer)?,
-            Value::MathExpr(math_expr) => math_expr.compile(function_buffer)?,
-            Value::Callable(callable) => callable.compile(function_buffer)?,
-            Value::Boolean(boolean) => boolean.compile(function_buffer)?,
         };
+
+        // if let Some(ref next) = &self.value {
+        //     value_init.append(&mut next.compile(function_buffer)?);
+        // }
 
         let store_instruction = if self.flags.contains(AssignmentFlag::modify()) {
             instruction!(store_object name)
@@ -253,6 +265,17 @@ impl Parser {
             rule => unreachable!("{rule:?}"),
         };
 
+        let ident_ty = x.ident.ty().unwrap();
+        if let Some(list_type) = ident_ty.is_list() {
+            if list_type.must_be_const() && !is_const {
+                return Err(vec![new_err(
+                    assignment_span,
+                    &user_data.get_source_file_name(),
+                    "mixed-type arrays must be const in order to ensure type safety".to_owned(),
+                )]);
+            }
+        }
+
         if let Some(flags) = flags {
             x.set_flags(flags)
         }
@@ -271,7 +294,7 @@ impl Parser {
                 assignment_span,
                 &input.user_data().get_source_file_name(),
                 format!(
-                    "cannot mutate \"{}\", which is a const variable",
+                    "cannot reassign to \"{}\", which is a const variable",
                     x.ident.name()
                 ),
             )]);
