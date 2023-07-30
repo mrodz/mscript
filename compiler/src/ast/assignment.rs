@@ -35,7 +35,6 @@ impl Assignment {
         user_data: &AssocFileData,
         is_modify: bool,
     ) -> Result<bool> {
-        // println!("wooooo!!!!");
         let skip = if is_modify { 1 } else { 0 };
 
         if self.flags.contains(AssignmentFlag::modify()) {

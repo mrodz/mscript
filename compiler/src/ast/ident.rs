@@ -22,7 +22,6 @@ pub(crate) struct Ident {
 impl Compile for Ident {
     fn compile(&self, _: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>> {
         let ty = self.ty()?;
-        // println!(ty);
         let (_, id) = TypeLayout::get_load_instruction(ty);
 
         Ok(vec![CompiledItem::Instruction {

@@ -290,7 +290,7 @@ impl IntoType for Value {
 impl Dependencies for Value {
     fn dependencies(&self) -> Vec<Dependency> {
         match self {
-            Self::Function(function) => dbg!(function.net_dependencies()),
+            Self::Function(function) => function.net_dependencies(),
             Self::Ident(name) => name.net_dependencies(),
             Self::Number(number) => number.net_dependencies(),
             Self::String(string) => string.net_dependencies(),
