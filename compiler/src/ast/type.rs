@@ -4,10 +4,16 @@ use crate::{
     parser::{util::parse_with_userdata_features, AssocFileData, Node, Parser, Rule},
     scope::ScopeReturnStatus,
 };
-use anyhow::{bail, Result};
+use anyhow::{bail, Result, Context};
 use once_cell::sync::Lazy;
 
-use super::{function::FunctionType, list::ListType, map_err, math_expr::Op, FunctionParameters};
+use super::{
+    function::FunctionType,
+    list::{ListBound, ListType},
+    map_err,
+    math_expr::Op,
+    FunctionParameters, BIGINT_TYPE, INT_TYPE, Value, STR_TYPE,
+};
 
 static mut TYPES: Lazy<HashMap<&str, TypeLayout>> = Lazy::new(|| {
     let mut x = HashMap::new();
@@ -21,6 +27,30 @@ static mut TYPES: Lazy<HashMap<&str, TypeLayout>> = Lazy::new(|| {
 
     x
 });
+
+pub(crate) struct SupportedTypesWrapper(Box<[Cow<'static, TypeLayout>]>);
+
+impl Display for SupportedTypesWrapper {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut iter = self.0.iter();
+        let Some(first) = iter.next() else {
+                            return Ok(())
+                        };
+        write!(f, "{first}")?;
+
+        for ty in iter {
+            write!(f, ", {ty}")?;
+        }
+
+        Ok(())
+    }
+}
+
+impl SupportedTypesWrapper {
+    pub fn contains(&self, index: &TypeLayout) -> bool {
+        self.0.contains(&Cow::Borrowed(index))
+    }
+}
 
 #[allow(unused)]
 pub(crate) mod shorthands {
@@ -69,6 +99,7 @@ pub(crate) enum TypeLayout {
     CallbackVariable(Box<TypeLayout>),
     Native(NativeType),
     List(ListType),
+    ValidIndexes(ListBound, ListBound),
 }
 
 impl Display for TypeLayout {
@@ -78,6 +109,7 @@ impl Display for TypeLayout {
             Self::CallbackVariable(cb) => write!(f, "{}", cb.get_type_recursively()),
             Self::Native(native) => write!(f, "{native}"),
             Self::List(list) => write!(f, "{list}"),
+            Self::ValidIndexes(lower, upper) => write!(f, "B({lower}..{upper})"),
         }
     }
 }
@@ -110,7 +142,36 @@ impl TypeLayout {
         Some(Arc::clone(f))
     }
 
-    pub fn can_negate(&self) -> bool {
+    pub fn get_output_type_from_index(&self, index: &Value) -> Result<Cow<TypeLayout>> {
+        let me = self.get_type_recursively();
+
+        Ok(match me {
+            Self::List(list) => {
+                let index = index.get_usize().with_context(|| format!("List index must be an integer between {} and {}", usize::MIN, usize::MAX))?;
+                Cow::Borrowed(list.get_type_at_known_index(index)?) 
+            }
+            Self::Native(NativeType::Str) => Cow::Borrowed(&STR_TYPE),
+            _ => bail!("not indexable"),
+        })
+    }
+
+    pub fn supports_index(&self) -> Option<SupportedTypesWrapper> {
+        let me = self.get_type_recursively();
+
+        Some(SupportedTypesWrapper(match me {
+            Self::Native(NativeType::Str) => {
+                Box::new([Cow::Borrowed(&INT_TYPE), Cow::Borrowed(&BIGINT_TYPE)])
+            }
+            Self::List(x) => {
+                let (lower, upper) = x.valid_indexes();
+
+                Box::new([Cow::Owned(TypeLayout::ValidIndexes(lower, upper))])
+            }
+            _ => return None,
+        }))
+    }
+
+    pub fn supports_negate(&self) -> bool {
         let me = self.get_type_recursively();
         match me {
             Self::Native(NativeType::Str) => false,
@@ -205,14 +266,6 @@ impl TypeLayout {
         }
     }
 
-    pub fn is_numeric_index(&self) -> bool {
-        let Self::Native(native) = self.get_type_recursively() else {
-            return false;
-        };
-
-        matches!(native, NativeType::BigInt | NativeType::Int)
-    }
-
     pub fn get_load_instruction(&self) -> (&'static str, u8) {
         const LOAD_CALLBACK: u8 = 0x23;
         const LOAD: u8 = 0x19;
@@ -254,7 +307,9 @@ pub(crate) fn type_from_str(
                 let single = function_type.single()?;
                 let ty = Parser::function_type(single)?;
                 return Ok(Cow::Owned(TypeLayout::Function(Arc::new(ty))));
-            } else if let Ok(list_type) = parse_with_userdata_features(Rule::list_type, input, user_data) {
+            } else if let Ok(list_type) =
+                parse_with_userdata_features(Rule::list_type, input, user_data)
+            {
                 let single = list_type.single()?;
                 let ty = Parser::list_type(single)?;
                 return Ok(Cow::Owned(TypeLayout::List(ty)));
@@ -315,7 +370,10 @@ impl Parser {
 
         let ty = Self::r#type(ty_node)?;
 
-        Ok(ListType::Open { types: vec![], spread: Box::new(ty) })
+        Ok(ListType::Open {
+            types: vec![],
+            spread: Box::new(ty),
+        })
     }
 
     pub fn list_type(input: Node) -> Result<ListType> {

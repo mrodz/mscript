@@ -280,6 +280,7 @@ impl Scope {
     }
 
     fn add_dependency(&mut self, dependency: &Ident) {
+        #[cfg(debug)]
         println!("Added {dependency} to {}", &self.ty);
         self.variables.insert(dependency.clone());
     }

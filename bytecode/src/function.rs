@@ -97,7 +97,7 @@ impl Display for PrimitiveFunction {
         write!(f, "function ptr {}()", self.location)?;
 
         if let Some(ref callback_state) = self.callback_state {
-            write!(f, " + pool@{:#x}", Rc::as_ptr(&callback_state) as usize)?;
+            write!(f, " + pool@{:#x}", Rc::as_ptr(callback_state) as usize)?;
         };
 
         Ok(())

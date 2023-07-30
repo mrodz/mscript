@@ -14,11 +14,14 @@ use crate::cli::CompilationTargets;
 
 fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<()> {
     if let Err(errors) = compile_file(path_str, output_bin, verbose) {
+        let cerr = errors.len();
         for error in &errors {
             println!("{error:?}")
         }
 
-        bail!("Did not compile successfully ({} Errors)", errors.len())
+        let plural_char = if cerr > 1 { "s" } else { "" };
+
+        bail!("Did not compile successfully ({cerr} Error{plural_char})")
     }
 
     Ok(())

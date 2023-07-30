@@ -31,10 +31,19 @@ impl Number {
     }
 }
 
-impl TryInto<usize> for &Number {
+impl TryFrom<Number> for usize {
     type Error = std::num::ParseIntError;
-    fn try_into(self) -> std::result::Result<usize, Self::Error> {
-        match self {
+
+    fn try_from(value: Number) -> std::result::Result<Self, Self::Error> {
+        value.try_into()
+    }
+}
+
+impl TryFrom<&Number> for usize {
+    type Error = std::num::ParseIntError;
+
+    fn try_from(value: &Number) -> std::result::Result<Self, Self::Error> {
+        match value {
             Number::BigInt(bigint) => bigint.parse::<usize>(),
             Number::Integer(int) => int.parse::<usize>(),
             Number::Byte(byte) => byte.parse::<usize>(),

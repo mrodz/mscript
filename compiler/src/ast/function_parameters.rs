@@ -61,16 +61,13 @@ impl Display for FunctionParameters {
 impl Dependencies for FunctionParameters {
     fn supplies(&self) -> Vec<Dependency> {
         let Self::Named(names) = self else {
-            unimplemented!("uncomment if the need arises");
-            // return vec![];
+            unreachable!("cannot compile nameless function parameters");
         };
 
-        let result = names
+        names
             .iter()
             .map(|x| Dependency::new(Cow::Borrowed(x)))
-            .collect();
-
-        dbg!(result)
+            .collect()
     }
 }
 

@@ -48,7 +48,7 @@ use crate::{
 
 use super::{
     boolean::boolean_from_str, new_err, r#type::IntoType, string::AstString, Compile, CompiledItem,
-    Dependencies, Dependency, Value, TemporaryRegister, CompileTimeEvaluate, TypeLayout, function::FunctionType, FunctionArguments,
+    Dependencies, Dependency, Value, TemporaryRegister, CompileTimeEvaluate, TypeLayout, function::FunctionType, FunctionArguments, list::Index,
 };
 
 pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
@@ -127,7 +127,6 @@ pub(crate) enum CallableContents {
 
 #[derive(Debug)]
 pub(crate) enum Expr {
-    // Number(Number),
     Value(Value),
     ReferenceToSelf,
     UnaryMinus(Box<Expr>),
@@ -138,7 +137,10 @@ pub(crate) enum Expr {
         rhs: Box<Expr>,
     },
     Callable(CallableContents),
-    Index(Box<Expr>),
+    Index {
+        lhs_raw: Box<Expr>,
+        index: Index,
+    },
 }
 
 impl Expr {
@@ -180,7 +182,7 @@ impl CompileTimeEvaluate for Expr {
 
                 let constexpr_eval = maybe_constexpr_eval.as_ref().unwrap();
 
-                if !constexpr_eval.for_type()?.can_negate() {
+                if !constexpr_eval.for_type()?.supports_negate() {
                     let val = constexpr_eval.try_negate()?;
                     if let Some(val) = val {
                         return Ok(ConstexprEvaluation::Owned(val))
@@ -234,17 +236,17 @@ impl IntoType for Expr {
             Expr::UnaryMinus(val) | Expr::UnaryNot(val) => val.for_type(),
             Expr::Callable(CallableContents::Standard { function, .. }) => {
                 let return_type = function.return_type().get_type().context("function returns void")?;
-                return Ok(return_type.clone().into_owned())
+                Ok(return_type.clone().into_owned())
             }
             Expr::Callable(CallableContents::ToSelf { return_type, .. }) => {
                 let Some(return_type) = return_type else {
                     bail!("function returns void")
                 };
 
-                return Ok(return_type.clone().into_owned())
+                Ok(return_type.clone().into_owned())
             }
             Expr::ReferenceToSelf => bail!("`self` is a keyword and does not have a type"),
-            Expr::Index{..} => todo!(),
+            Expr::Index{ index, .. } => index.for_type(),
         }
     }
 }
@@ -301,7 +303,7 @@ fn compile_depth(
                 match value {
                     Value::Ident(ident) => {
                         let x = ident.ty().context("no type data")?;
-                        if !x.can_negate() {
+                        if !x.supports_negate() {
                             bail!("cannot negate")
                         }
                     }
@@ -373,16 +375,6 @@ fn compile_depth(
 
             lhs_compiled.append(&mut callable.compile(function_buffer)?);
 
-
-            // lhs_compiled.iter().for_each(|x| print!("{}", x.repr(true).unwrap()));
-
-
-            // dbg!(lhs_compiled);
-            // let mut callable_init = lhs_raw.compile(function_buffer)?;
-            // let callable_register = TemporaryRegister::new();
-            // callable_init.push(instruction!(store_fast callable_register));
-
-
             Ok(lhs_compiled)
         },
         Expr::ReferenceToSelf => Ok(vec![]),
@@ -391,7 +383,11 @@ fn compile_depth(
 
             callable.compile(function_buffer)
         },
-        Expr::Index(_) => todo!(),
+        Expr::Index{ lhs_raw, index } => {
+            let mut result = lhs_raw.compile(function_buffer)?;
+            result.append(&mut index.compile(function_buffer)?);
+            Ok(result)
+        },
     }
 }
 
@@ -550,7 +546,23 @@ fn parse_expr(
 
                 Ok((Expr::Callable(CallableContents::Standard { lhs_raw: Box::new(lhs), function: function_type, arguments: function_arguments }), None))
             },
-            Rule::list_index => todo!(),
+            Rule::list_index => {
+                let lhs = lhs?.0;
+
+                let lhs_ty = lhs.for_type().to_err_vec()?;
+
+                let index: Pair<Rule> = op;
+                let index: Node = Node::new_with_user_data(index, Rc::clone(&user_data));
+                let index: Index = Parser::list_index(index, lhs_ty)?;
+
+                // let index_ty = index.for_type().to_err_vec()?;
+
+                // if !types_supported_for_index.contains(&index_ty) {
+                //     return Err(vec![new_err(l_span.unwrap(), &user_data.get_source_file_name(), format!("`{lhs_ty}` is not indexable with `{index_ty}` (Hint: this type supports indexes of {types_supported_for_index})"))]);
+                // }
+
+                Ok((Expr::Index { lhs_raw: Box::new(lhs), index }, None))
+            },
             _ => unreachable!(),
         })
         .parse(pairs);

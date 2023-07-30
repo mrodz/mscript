@@ -10,9 +10,8 @@ use crate::{
 };
 
 use super::{
-    map_err, new_err,
-    value::Value,
-    Compile, Dependencies, Dependency, Ident,
+    map_err, new_err, value::Value, Compile, CompileTimeEvaluate, ConstexprEvaluation,
+    Dependencies, Dependency, Ident,
 };
 
 #[derive(Debug)]
@@ -98,14 +97,22 @@ impl Compile for Assignment {
     fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<super::CompiledItem>> {
         let name = self.ident.name();
 
-        let mut value_init = match &self.value {
-            Value::Ident(ident) => ident.compile(function_buffer)?,
-            Value::Function(function) => function.in_place_compile_for_value(function_buffer)?,
-            Value::Number(number) => number.compile(function_buffer)?,
-            Value::String(string) => string.compile(function_buffer)?,
-            Value::MathExpr(math_expr) => math_expr.compile(function_buffer)?,
-            Value::Boolean(boolean) => boolean.compile(function_buffer)?,
-            Value::List(list) => list.compile(function_buffer)?,
+        let maybe_constexpr_eval = self.value.try_constexpr_eval()?;
+
+        let mut value_init = if let ConstexprEvaluation::Owned(value) = maybe_constexpr_eval {
+            value.compile(function_buffer)?
+        } else {
+            match &self.value {
+                Value::Ident(ident) => ident.compile(function_buffer)?,
+                Value::Function(function) => {
+                    function.in_place_compile_for_value(function_buffer)?
+                }
+                Value::Number(number) => number.compile(function_buffer)?,
+                Value::String(string) => string.compile(function_buffer)?,
+                Value::MathExpr(math_expr) => math_expr.compile(function_buffer)?,
+                Value::Boolean(boolean) => boolean.compile(function_buffer)?,
+                Value::List(list) => list.compile(function_buffer)?,
+            }
         };
 
         // if let Some(ref next) = &self.value {
@@ -288,7 +295,7 @@ impl Parser {
                 assignment_span,
                 &input.user_data().get_source_file_name(),
                 format!(
-                    "cannot mutate \"{}\", which is a const variable",
+                    "cannot reassign to \"{}\", which is a const variable",
                     x.ident.name()
                 ),
             )]);

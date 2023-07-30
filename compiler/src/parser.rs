@@ -289,8 +289,8 @@ pub(crate) mod util {
         rule: Rule,
         input_str: &str,
         user_data: D,
-    ) -> Result<Nodes<Rule, D>, pest_consume::Error<Rule>> {
-        <Parser as pest_consume::Parser>::parse_with_userdata(rule, input_str, user_data)
+    ) -> Result<Nodes<Rule, D>, Box<pest_consume::Error<Rule>>> {
+        <Parser as pest_consume::Parser>::parse_with_userdata(rule, input_str, user_data).map_err(Box::new)
     }
 
     pub(crate) fn parse(

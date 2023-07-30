@@ -127,14 +127,11 @@ impl IntoType for Function {
 
 impl Dependencies for Function {
     fn supplies(&self) -> Vec<Dependency> {
-        let param_supplies = self.parameters.supplies();
-
-        dbg!(param_supplies)
+        self.parameters.supplies()
     }
 
     fn dependencies(&self) -> Vec<Dependency> {
-        let body_deps = self.body.net_dependencies();
-        dbg!(body_deps)
+        self.body.net_dependencies()
     }
 }
 

@@ -24,6 +24,14 @@ pub(crate) enum Value {
 }
 
 impl Value {
+    pub fn get_usize(&self) -> Option<usize> {
+        let Self::Number(number) = self else {
+            return None;
+        };
+
+        number.try_into().ok()
+    }
+
     pub fn try_negate(&self) -> Result<Option<Self>> {
         match self {
             Self::Number(number) => Ok(number.negate().map(Value::Number)),
@@ -286,7 +294,7 @@ impl Dependencies for Value {
             Self::Ident(name) => name.net_dependencies(),
             Self::Number(number) => number.net_dependencies(),
             Self::String(string) => string.net_dependencies(),
-            Self::MathExpr(math_expr) => dbg!(math_expr.net_dependencies()),
+            Self::MathExpr(math_expr) => math_expr.net_dependencies(),
             // Self::Callable(callable) => callable.net_dependencies(),
             Self::Boolean(boolean) => boolean.net_dependencies(),
             Self::List(list) => list.net_dependencies(),

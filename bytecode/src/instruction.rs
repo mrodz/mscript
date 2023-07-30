@@ -266,11 +266,9 @@ pub mod implementations {
 
                 vector.push(new_val);
             } else if let [b'[', index @ .., b']'] = bytes {
-                let Some(Primitive::Vector(vector)) = ctx.pop() else {
-                    bail!("Cannot perform a vector operation on a non-vector")
+                let Some(indexable) = ctx.pop() else {
+                    bail!("the stack is empty");
                 };
-
-                // let content = &bytes[1..bytes.len() - 1];
 
                 // this manual byte slice to usize conversion is more performant
                 let idx: usize = 'index_gen: {
@@ -294,10 +292,16 @@ pub mod implementations {
                     idx
                 };
 
-                let item = vector.get(idx)
-                    .with_context(|| format!("index {idx} out of bounds (len {})", vector.len()))?;
+                let item = match indexable {
+                    Primitive::Vector(vector) => vector.get(idx).with_context(|| format!("index {idx} out of bounds (len {})", vector.len()))?.clone(),
+                    Primitive::Str(string) => {
+                        let mut str_chars = string.chars();
+                        Primitive::Str(str_chars.nth(idx).with_context(|| format!("index {idx} out of bounds (len {} chars, {} bytes)", string.chars().count(), string.len()))?.to_string())
+                    }
+                    _ => bail!("Cannot perform a vector operation on a non-vector"),
+                };
 
-                ctx.push(item.clone());
+                ctx.push(item);
             } else {
                 match op_name.as_str() {
                     "reverse" => {

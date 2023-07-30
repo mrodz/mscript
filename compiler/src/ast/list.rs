@@ -1,17 +1,17 @@
 use std::{borrow::Cow, fmt::Display};
 
-use anyhow::Result;
+use anyhow::{Result, bail, Context};
 
 use crate::{
-    ast::{CompileTimeEvaluate, TemporaryRegister},
+    ast::{CompileTimeEvaluate, TemporaryRegister, new_err},
     instruction,
-    parser::{Node, Parser},
+    parser::{Node, Parser}, VecErr,
 };
 
 use super::{
     r#type::IntoType,
     ConstexprEvaluation,
-    Compile, Dependencies, TypeLayout, Value,
+    Compile, Dependencies, TypeLayout, Value
 };
 
 #[derive(Debug)]
@@ -28,10 +28,6 @@ impl List {
         }
 
         Ok(TypeLayout::List(ListType::Mixed(types)))
-    }
-
-    pub fn get_value(&self, index: usize) -> Option<&Value> {
-        self.values.get(index)
     }
 }
 
@@ -101,6 +97,23 @@ pub(crate) enum ListType {
     Empty,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ListBound {
+    Numeric(usize),
+    NotIndexable,
+    Infinite,
+}
+
+impl Display for ListBound {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Numeric(index) => write!(f, "{index}"),
+            Self::NotIndexable => write!(f, "!"),
+            Self::Infinite => write!(f, "∞"),
+        }
+    }
+}
+
 impl ListType {
     pub fn must_be_const(&self) -> bool {
         if let Self::Open { types, .. } = self {
@@ -112,6 +125,49 @@ impl ListType {
         false
     }
 
+    // pub fn get_type_at_index(&self, index: ) {
+    //     let maybe_constexpr_eval = self.try_constexpr_eval()?;
+    //     let Some(constexpr_value) = maybe_constexpr_eval.as_ref() else {
+    //         bail!("an index that is not compile-time-constant cannot be used to deduce the type of the resulting element");
+    //     };
+
+    //     let Value::Number(number) = constexpr_value else {
+    //         unreachable!();
+    //     };
+
+    //     match number {
+    //         Number::BigInt(idx) | Number::Integer(idx) | Number::Byte(idx) => {
+    //             let idx: usize = idx.parse()?;
+
+    //             let Some(type_at_index) = list_type.get_type_at_index(idx) else {
+    //                 bail!("`{idx}` is not a valid index into `{list_type}`, which has a known length at compile time of {}", list_type.len())
+    //             };
+    //             Ok(Cow::Owned(type_at_index.clone()))
+    //         }
+    //         Number::Float(_) => bail!("cannot index into a list with floats"),
+    //     }
+    // }
+
+    pub fn lower_bound(&self) -> ListBound {
+        match self {
+            Self::Empty => ListBound::NotIndexable,
+            _ => ListBound::Numeric(0)
+        }
+    }
+
+    pub fn upper_bound(&self) -> ListBound {
+        match self {
+            Self::Empty => ListBound::NotIndexable,
+            Self::Open { .. } => ListBound::Infinite,
+            Self::Mixed(types) => ListBound::Numeric(types.len() - 1)
+        }
+    }
+
+    pub fn valid_indexes(&self) -> (ListBound, ListBound) {
+        (self.lower_bound(), self.upper_bound())
+    }
+
+    #[allow(unused)]
     pub fn len(&self) -> Cow<'static, str> {
         match self {
             Self::Empty => Cow::Borrowed("0"),
@@ -120,11 +176,11 @@ impl ListType {
         }
     }
 
-    pub fn get_type_at_index(&self, index: usize) -> Option<&TypeLayout> {
+    pub fn get_type_at_known_index(&self, index: usize) -> Result<&TypeLayout> {
         match self {
-            Self::Empty => None,
-            Self::Mixed(types) => types.get(index).map(Cow::as_ref),
-            Self::Open { types, spread } => Some(if let Some(ty) = types.get(index) {
+            Self::Empty => bail!("empty list"),
+            Self::Mixed(types) => types.get(index).map(Cow::as_ref).context("there is no value at the specified index"),
+            Self::Open { types, spread } => Ok(if let Some(ty) = types.get(index) {
                 ty.as_ref()
             } else {
                 spread.as_ref()
@@ -218,6 +274,12 @@ impl PartialEq for ListType {
     }
 }
 
+impl IntoType for Index {
+    fn for_type(&self) -> Result<TypeLayout> {
+        Ok(self.final_output_type.clone())
+    }
+}
+
 impl IntoType for List {
     fn for_type(&self) -> Result<TypeLayout> {
         if self.values.is_empty() {
@@ -278,17 +340,24 @@ impl IntoType for List {
 }
 
 #[derive(Debug)]
-pub(crate) struct Index(Value);
+pub(crate) struct Index {
+    parts: Box<[Value]>,
+    final_output_type: TypeLayout,
+}
 
 impl Dependencies for Index {
     fn dependencies(&self) -> Vec<super::Dependency> {
-        self.0.net_dependencies()
+        self.parts.iter().flat_map(Value::net_dependencies).collect()
     }
 }
 
 impl CompileTimeEvaluate for Index {
     fn try_constexpr_eval(&self) -> Result<ConstexprEvaluation> {
-        self.0.try_constexpr_eval()
+        if self.parts.len() == 1 {
+            self.parts[0].try_constexpr_eval()
+        } else {
+            Ok(ConstexprEvaluation::Impossible)
+        }
         // if self.0.is_empty() {
         //     unreachable!("empty index");
         // }
@@ -365,26 +434,43 @@ impl Compile for Index {
             return Ok(vec![instruction!(vec_op instruction_str)]);
         }
 
-        let vec_temp_register = TemporaryRegister::new();
+        let registerc = self.parts.len();
 
-        let mut result = vec![instruction!(store_fast vec_temp_register)];
+        let mut result = vec![];
+        for i in 0..registerc {
+            let lhs_register = TemporaryRegister::new(); // TemporaryRegister::reserve_many(registerc);
+            result.push(instruction!(store_fast lhs_register));
+            let index_temp_register = TemporaryRegister::new();
+
+            let mut val_init = self.parts[i].compile(function_buffer)?;
+            result.append(&mut val_init);
+
+            let instruction_str = format!("[{index_temp_register}]");
+
+
+            result.append(&mut vec![
+                instruction!(store_fast index_temp_register),
+                instruction!(delete_name_reference_scoped lhs_register),
+                instruction!(vec_op instruction_str),
+                instruction!(delete_name_scoped index_temp_register)
+            ]);
+
+            index_temp_register.free();
+            lhs_register.free();
+        }
 
         // un-comment
-        result.append(&mut self.0.compile(function_buffer)?);
 
-        let index_temp_register = TemporaryRegister::new();
+    //     result.append(&mut self.0.compile(function_buffer)?);
 
-        let instruction_str = format!("[{index_temp_register}]");
+    //     let index_temp_register = TemporaryRegister::new();
 
-        result.append(&mut vec![
-            instruction!(store_fast index_temp_register),
-            instruction!(delete_name_reference_scoped vec_temp_register),
-            instruction!(vec_op instruction_str),
-            instruction!(delete_name_scoped index_temp_register)
-        ]);
+    //     let instruction_str = format!("[{index_temp_register}]");
 
-        index_temp_register.free();
-        vec_temp_register.free();
+    //    ;
+
+    //     index_temp_register.free();
+    //     vec_temp_register.free();
 
         Ok(result)
     }
@@ -403,18 +489,37 @@ impl Parser {
         Ok(list)
     }
 
-    pub fn list_index(input: Node) -> Result<Index, Vec<anyhow::Error>> {
-        let mut children = input.children();
+    pub fn list_index(input: Node, starting_type: TypeLayout) -> Result<Index, Vec<anyhow::Error>> {
+        let children = input.children();
 
-        for child in children {
+        let file_name: &str = &input.user_data().get_source_file_name();
 
+        let mut last_ty = starting_type;
+
+        let mut values = vec![];
+
+        for value in children {
+            let value_span = value.as_span();
+            let value = Self::value(value)?;
+            let value_ty = value.for_type().to_err_vec()?;
+            
+            let Some(expected_type_for_value) = last_ty.supports_index() else {
+                return Err(vec![new_err(value_span, file_name, format!("{last_ty} does not support indexing, yet here `{value_ty}` is used"))]);
+            };
+
+            if !expected_type_for_value.contains(&value_ty) {
+                return Err(vec![new_err(value_span, file_name, format!("{last_ty} does not support indexing for `{value_ty}` (Hint: this type does support indexes of types {expected_type_for_value})"))]);
+            }
+
+            let index_output_ty = last_ty.get_output_type_from_index(&value).with_context(|| format!("invalid index into `{last_ty}`")).to_err_vec()?;
+
+            last_ty = index_output_ty.into_owned();
+            values.push(value);
         }
 
-        // input.children().for_each(|x| println!("{}", x.as_str()));
-        let value_node = input.children().single().unwrap();
-        let value = Self::value(value_node)?;
-
-        todo!()
-        // Ok(Index { value })
+        Ok(Index {
+            parts: values.into_boxed_slice(),
+            final_output_type: last_ty
+        })
     }
 }
