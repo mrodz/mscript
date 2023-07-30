@@ -145,6 +145,7 @@ pub(crate) fn compile_from_str(
     let file = logger.wrap_in_spinner(format!("Creating AST ({input_path_str}):"), || {
         Parser::file(input)
     })?;
+    
 
     let mut function_buffer = vec![];
     logger.wrap_in_spinner(format!("Validating AST ({input_path_str}):"), || {

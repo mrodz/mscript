@@ -6,15 +6,15 @@ use crate::{
 };
 
 use super::{
-    new_err, r#type::IntoType, value::ValueChain, Dependencies, Dependency,
+    new_err, r#type::IntoType, Value, Dependencies, Dependency,
     FunctionParameters, TypeLayout,
 };
 
 #[derive(Debug)]
-pub(crate) struct FunctionArguments(Vec<ValueChain>);
+pub(crate) struct FunctionArguments(Vec<Value>);
 
 impl FunctionArguments {
-    pub fn iter(&self) -> Iter<ValueChain> {
+    pub fn iter(&self) -> Iter<Value> {
         self.0.iter()
     }
 }

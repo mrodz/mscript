@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt::Display, sync::Arc, rc::Rc};
+use std::{borrow::Cow, fmt::Display, sync::Arc};
 
 use anyhow::{anyhow, Result};
 
@@ -128,11 +128,13 @@ impl IntoType for Function {
 impl Dependencies for Function {
     fn supplies(&self) -> Vec<Dependency> {
         let param_supplies = self.parameters.supplies();
-        param_supplies
+
+        dbg!(param_supplies)
     }
 
     fn dependencies(&self) -> Vec<Dependency> {
-        self.body.net_dependencies()
+        let body_deps = self.body.net_dependencies();
+        dbg!(body_deps)
     }
 }
 
@@ -258,7 +260,7 @@ impl Parser {
 
         let parameters = Arc::new(Self::function_parameters(parameters, true).to_err_vec()?);
 
-        input.user_data().register_function_parameters_to_scope(Arc::clone(&parameters));
+        // input.user_data().register_function_parameters_to_scope(Arc::clone(&parameters));
 
         let body = if let Some(body) = body {
             Self::block(body)?

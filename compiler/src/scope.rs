@@ -251,13 +251,13 @@ impl Scope {
         }
     }
 
-    pub fn add_parameters(&mut self, parameters: Arc<FunctionParameters>) {
-        let ScopeType::Function(ref mut parameters_option @ None) = self.ty else {
-            unreachable!("either not a function, or parameters have already been set");
-        };
+    // pub fn add_parameters(&mut self, parameters: Arc<FunctionParameters>) {
+    //     let ScopeType::Function(ref mut parameters_option @ None) = self.ty else {
+    //         unreachable!("either not a function, or parameters have already been set");
+    //     };
 
-        *parameters_option = Some(parameters)
-    }
+    //     *parameters_option = Some(parameters)
+    // }
 
     pub fn peek_yields_value(&self) -> &ScopeReturnStatus {
         &self.yields
@@ -279,7 +279,8 @@ impl Scope {
         matches!(self.ty, ScopeType::NumberLoop | ScopeType::WhileLoop)
     }
 
-    pub fn add_dependency(&mut self, dependency: &Ident) {
+    fn add_dependency(&mut self, dependency: &Ident) {
+        println!("Added {dependency} to {}", &self.ty);
         self.variables.insert(dependency.clone());
     }
 
@@ -287,9 +288,9 @@ impl Scope {
         &self.ty
     }
 
-    pub fn ty_ref_mut(&mut self) -> &mut ScopeType {
-        &mut self.ty
-    }
+    // pub fn ty_ref_mut(&mut self) -> &mut ScopeType {
+    //     &mut self.ty
+    // }
 
     /// able to be improved
     pub fn contains(&self, dependency: &String) -> Option<&Ident> {

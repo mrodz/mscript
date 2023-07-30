@@ -11,19 +11,19 @@ use crate::{
 
 use super::{
     map_err, new_err,
-    value::{Value, ValueChain},
+    value::Value,
     Compile, Dependencies, Dependency, Ident,
 };
 
 #[derive(Debug)]
 pub(crate) struct Assignment {
     pub ident: Ident,
-    pub value: ValueChain,
+    pub value: Value,
     pub flags: AssignmentFlag,
 }
 
 impl Assignment {
-    pub fn new(ident: Ident, value: ValueChain) -> Self {
+    pub fn new(ident: Ident, value: Value) -> Self {
         Self {
             ident,
             value,
@@ -98,24 +98,19 @@ impl Compile for Assignment {
     fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<super::CompiledItem>> {
         let name = self.ident.name();
 
-        let value_chain = &self.value;
-
-        // todo!();
-        // un-comment
-        let mut value_init = match &value_chain.0 {
+        let mut value_init = match &self.value {
             Value::Ident(ident) => ident.compile(function_buffer)?,
             Value::Function(function) => function.in_place_compile_for_value(function_buffer)?,
             Value::Number(number) => number.compile(function_buffer)?,
             Value::String(string) => string.compile(function_buffer)?,
             Value::MathExpr(math_expr) => math_expr.compile(function_buffer)?,
-            // Value::Callable(callable) => callable.compile(function_buffer)?,
             Value::Boolean(boolean) => boolean.compile(function_buffer)?,
             Value::List(list) => list.compile(function_buffer)?,
         };
 
-        if let Some(ref next) = value_chain.1 {
-            value_init.append(&mut next.compile(function_buffer)?);
-        }
+        // if let Some(ref next) = &self.value {
+        //     value_init.append(&mut next.compile(function_buffer)?);
+        // }
 
         let store_instruction = if self.flags.contains(AssignmentFlag::modify()) {
             instruction!(store_object name)

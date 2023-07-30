@@ -1,13 +1,13 @@
 use std::borrow::Cow;
 use std::cell::{RefMut, Ref};
 use std::sync::Arc;
-use std::{cell::RefCell, rc::Rc};
+use std::rc::Rc;
 
-use anyhow::{anyhow, bail, Result, Context};
+use anyhow::{anyhow, bail, Result};
 use pest_consume::Parser as ParserDerive;
 
 use crate::ast::{
-    Compile, CompiledFunctionId, CompiledItem, Declaration, FunctionParameters, Ident, TypeLayout,
+    Compile, CompiledFunctionId, CompiledItem, Declaration, FunctionParameters, Ident, TypeLayout, Dependencies,
 };
 use crate::instruction;
 use crate::scope::{Scope, ScopeReturnStatus, ScopeType, Scopes, ScopeIter, ScopeHandle};
@@ -113,14 +113,21 @@ impl AssocFileData {
         })
     }
 
-    pub fn register_function_parameters_to_scope(
-        &self,
-        function_parameters: Arc<FunctionParameters>,
-    ) {
-        let mut this_scope = self.scopes.last_mut();
+    // pub fn register_function_parameters_to_scope(
+    //     &self,
+    //     function_parameters: Arc<FunctionParameters>,
+    // ) {
+    //     let mut this_scope = self.scopes.last_mut();
 
-        this_scope.add_parameters(function_parameters);
-    }
+    //     let idents = function_parameters.slice();
+
+    //     for ident in idents {
+    //         self.scopes.add_variable(ident);
+    //     }
+
+    //     this_scope.add_parameters(function_parameters);
+
+    // }
 
     pub fn return_statement_expected_yield_type(&self) -> Option<Ref<Cow<'static, TypeLayout>>> {
         for scope in self.scopes.iter() {
@@ -317,6 +324,16 @@ pub(crate) struct File {
 impl File {
     fn add_declaration(&mut self, declaration: Declaration) {
         self.declarations.push(declaration)
+    }
+}
+
+impl Dependencies for File {
+    fn dependencies(&self) -> Vec<crate::ast::Dependency> {
+        let mut result = vec![];
+        for declaration in &self.declarations {
+            result.append(&mut declaration.net_dependencies());
+        }
+        result
     }
 }
 

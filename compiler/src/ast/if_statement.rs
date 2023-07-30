@@ -7,11 +7,11 @@ use crate::{
     VecErr,
 };
 
-use super::{new_err, r#type::IntoType, Block, Compile, CompiledItem, Dependencies, value::ValueChain};
+use super::{new_err, r#type::IntoType, Block, Compile, CompiledItem, Dependencies, Value};
 
 #[derive(Debug)]
 pub struct IfStatement {
-    value: ValueChain,
+    value: Value,
     body: Block,
     else_statement: Option<ElseStatement>,
 }

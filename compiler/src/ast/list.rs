@@ -1,22 +1,22 @@
 use std::{borrow::Cow, fmt::Display};
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 
 use crate::{
-    ast::{value::CompileTimeEvaluate, TemporaryRegister, STR_TYPE},
+    ast::{CompileTimeEvaluate, TemporaryRegister},
     instruction,
     parser::{Node, Parser},
 };
 
 use super::{
-    r#type::{IntoType, NativeType},
-    value::{ConstexprEvaluation, Indexable, ValueChain},
-    Compile, Dependencies, Number, TypeLayout, Value,
+    r#type::IntoType,
+    ConstexprEvaluation,
+    Compile, Dependencies, TypeLayout, Value,
 };
 
 #[derive(Debug)]
 pub(crate) struct List {
-    values: Vec<ValueChain>,
+    values: Vec<Value>,
 }
 
 impl List {
@@ -30,7 +30,7 @@ impl List {
         Ok(TypeLayout::List(ListType::Mixed(types)))
     }
 
-    pub fn get_value(&self, index: usize) -> Option<&ValueChain> {
+    pub fn get_value(&self, index: usize) -> Option<&Value> {
         self.values.get(index)
     }
 }
@@ -75,7 +75,7 @@ impl CompileTimeEvaluate for List {
                 return Ok(ConstexprEvaluation::Impossible);
             };
 
-            result.push(ValueChain(value, None));
+            result.push(value);
         }
 
         Ok(ConstexprEvaluation::Owned(Value::List(List { values: result })))
@@ -278,21 +278,17 @@ impl IntoType for List {
 }
 
 #[derive(Debug)]
-pub(crate) struct Index(Box<[ValueChain]>);
+pub(crate) struct Index(Value);
 
 impl Dependencies for Index {
     fn dependencies(&self) -> Vec<super::Dependency> {
-        let mut result = vec![];
-        for idx in self.0.iter() {
-            result.append(&mut idx.net_dependencies())
-        }
-        result
+        self.0.net_dependencies()
     }
 }
 
 impl CompileTimeEvaluate for Index {
     fn try_constexpr_eval(&self) -> Result<ConstexprEvaluation> {
-        todo!();
+        self.0.try_constexpr_eval()
         // if self.0.is_empty() {
         //     unreachable!("empty index");
         // }
@@ -312,6 +308,7 @@ impl CompileTimeEvaluate for Index {
     }
 }
 
+#[cfg(not)]
 impl Indexable for Index {
     fn output_from_value(&self, value: &Value) -> Result<Cow<'static, TypeLayout>> {
         
@@ -372,9 +369,8 @@ impl Compile for Index {
 
         let mut result = vec![instruction!(store_fast vec_temp_register)];
 
-        todo!();
         // un-comment
-        // result.append(&mut self.value.compile(function_buffer)?);
+        result.append(&mut self.0.compile(function_buffer)?);
 
         let index_temp_register = TemporaryRegister::new();
 

@@ -94,7 +94,13 @@ impl PartialEq for PrimitiveFunction {
 
 impl Display for PrimitiveFunction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "function {}()", self.location)
+        write!(f, "function ptr {}()", self.location)?;
+
+        if let Some(ref callback_state) = self.callback_state {
+            write!(f, " + pool@{:#x}", Rc::as_ptr(&callback_state) as usize)?;
+        };
+
+        Ok(())
     }
 }
 

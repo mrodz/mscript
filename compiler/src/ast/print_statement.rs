@@ -5,10 +5,10 @@ use crate::{
     parser::{Node, Parser},
 };
 
-use super::{Compile, CompiledItem, Dependencies, Dependency, value::ValueChain};
+use super::{Compile, CompiledItem, Dependencies, Dependency, Value};
 
 #[derive(Debug)]
-pub struct PrintStatement(ValueChain);
+pub struct PrintStatement(Value);
 
 impl Dependencies for PrintStatement {
     fn dependencies(&self) -> Vec<Dependency> {

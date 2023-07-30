@@ -61,13 +61,16 @@ impl Display for FunctionParameters {
 impl Dependencies for FunctionParameters {
     fn supplies(&self) -> Vec<Dependency> {
         let Self::Named(names) = self else {
-            return vec![];
+            unimplemented!("uncomment if the need arises");
+            // return vec![];
         };
 
-        names
+        let result = names
             .iter()
             .map(|x| Dependency::new(Cow::Borrowed(x)))
-            .collect()
+            .collect();
+
+        dbg!(result)
     }
 }
 
@@ -123,7 +126,7 @@ impl Parser {
 
             let ty: Cow<'static, TypeLayout> = Self::r#type(ty)?;
 
-            ident.link(input.user_data(), Some(ty))?;
+            ident.link_force_no_inherit(input.user_data(), ty)?;
 
             if add_to_scope_dependencies {
                 input.user_data().add_dependency(&ident);

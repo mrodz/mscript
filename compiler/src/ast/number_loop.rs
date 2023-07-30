@@ -1,6 +1,6 @@
 use std::{borrow::Cow, fmt::Display};
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use pest::Span;
 
 use crate::{
@@ -11,14 +11,18 @@ use crate::{
     VecErr,
 };
 
-use super::{math_expr::Op, new_err, r#type::{IntoType, NativeType}, Compile, Dependencies, INT_TYPE, TypeLayout, FLOAT_TYPE, value::ValueChain};
+use super::{
+    new_err,
+    r#type::{IntoType, NativeType},
+    BinaryOperation, Compile, Dependencies, TypeLayout, FLOAT_TYPE, INT_TYPE, Value,
+};
 
 #[derive(Debug)]
 pub(crate) struct NumberLoop {
     inclusive: bool,
-    val_start: ValueChain,
-    val_end: ValueChain,
-    step: Option<ValueChain>,
+    val_start: Value,
+    val_end: Value,
+    step: Option<Value>,
     name: Option<Ident>,
     body: Block,
     name_is_collision: bool,
@@ -230,7 +234,7 @@ impl Parser {
 
         // ^^^ these are guaranteed.
 
-        let mut step: Option<(ValueChain, Span)> = None;
+        let mut step: Option<(Value, Span)> = None;
         let mut name: Option<Ident> = None;
         let mut body: Option<Block> = None;
 
@@ -259,8 +263,6 @@ impl Parser {
             }
         }
 
-
-
         let rhs = step
             .as_ref()
             .map_or_else(
@@ -269,7 +271,7 @@ impl Parser {
             )
             .to_err_vec()?;
 
-        let Some(step_output_type) = start_ty.get_output_type(rhs.as_ref(), &Op::Add) else {
+        let Some(step_output_type) = start_ty.get_output_type(rhs.as_ref(), &BinaryOperation::Add) else {
             let span = if let Some((_, span)) = step {
                 span
             } else {
@@ -283,7 +285,8 @@ impl Parser {
             )]);
         };
 
-        let after_step_output: Option<TypeLayout> = step_output_type.get_output_type(&start_ty, &Op::Lte);
+        let after_step_output: Option<TypeLayout> =
+            step_output_type.get_output_type(&start_ty, &BinaryOperation::Lte);
 
         let Some(TypeLayout::Native(NativeType::Bool)) = after_step_output else {
             return Err(vec![new_err(
@@ -292,7 +295,7 @@ impl Parser {
                 format!("applying a step of `{rhs}` to `{start_ty}` produces `{}`", after_step_output.map_or_else(|| Cow::Borrowed("never"), |ty| Cow::Owned(ty.to_string()))),
             )])
         };
-        
+
         if !start_ty.is_numeric(true) {
             return Err(vec![new_err(
                 val_start_span,
@@ -323,7 +326,7 @@ impl Parser {
                 span,
                 &input.user_data().get_source_file_name(),
                 "using floating point numbers in a `from` loop requires explicitly defining a step property".to_owned(),
-            )])
+            )]);
         }
 
         number_loop_scope.consume();

@@ -31,7 +31,7 @@ not = { "!" }
 
 primitive = _{ boolean | number | string }
 
-allow_bin_op = _{ primitive | ident }
+allow_bin_op = _{ primitive | ident | function }
 
 math_primary = _{ allow_bin_op | "(" ~ math_expr ~ ")" }
 

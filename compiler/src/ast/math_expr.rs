@@ -35,20 +35,20 @@
 
 use std::{rc::Rc, borrow::Cow, sync::Arc};
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{bail, Context, Result};
 use once_cell::sync::Lazy;
 use pest::{iterators::{Pairs, Pair}, pratt_parser::PrattParser, Span};
 
 use crate::{
-    ast::{number, value::ConstexprEvaluation, Callable},
+    ast::{number, ConstexprEvaluation, Callable},
     instruction,
-    parser::{util, AssocFileData, Node, Parser, Rule},
-    VecErr, scope::{Scope, ScopeType},
+    parser::{AssocFileData, Node, Parser, Rule},
+    VecErr,
 };
 
 use super::{
     boolean::boolean_from_str, new_err, r#type::IntoType, string::AstString, Compile, CompiledItem,
-    Dependencies, Dependency, Value, TemporaryRegister, value::CompileTimeEvaluate, TypeLayout, function::FunctionType, FunctionArguments,
+    Dependencies, Dependency, Value, TemporaryRegister, CompileTimeEvaluate, TypeLayout, function::FunctionType, FunctionArguments,
 };
 
 pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
@@ -144,6 +144,11 @@ pub(crate) enum Expr {
 impl Expr {
     pub(crate) fn validate(&self) -> Result<&Self> {
         self.for_type().map(|_| self)
+    }
+
+    pub(crate) fn parse(input: Node) -> Result<Expr, Vec<anyhow::Error>> {
+        let children_as_pairs = input.children().into_pairs();
+        parse_expr(children_as_pairs, input.user_data().clone())
     }
 }
 
@@ -265,9 +270,6 @@ impl Dependencies for Expr {
                 lhs_depts
             }
             x => unimplemented!("{x:?}")
-            // CallToSelf { .. } => 
-            // Callable { lhs } => lhs.net_dependencies(),
-            // Index(_) => todo!()
         }
     }
 }
@@ -384,8 +386,8 @@ fn compile_depth(
             Ok(lhs_compiled)
         },
         Expr::ReferenceToSelf => Ok(vec![]),
-        Expr::Callable(CallableContents::ToSelf { arguments, return_type  }) => {
-            let callable = Callable::new_recursive_call(arguments, return_type.clone());
+        Expr::Callable(CallableContents::ToSelf { arguments, .. }) => {
+            let callable = Callable::new_recursive_call(arguments);
 
             callable.compile(function_buffer)
         },
@@ -399,7 +401,7 @@ impl Compile for Expr {
     }
 }
 
-pub(crate) fn parse_expr(
+fn parse_expr(
     pairs: Pairs<Rule>,
     user_data: Rc<AssocFileData>,
 ) -> Result<Expr, Vec<anyhow::Error>> {
@@ -528,7 +530,7 @@ pub(crate) fn parse_expr(
                     let function_arguments: Pair<Rule> = op.into_inner().next().unwrap();
                     let function_arguments: Node = Node::new_with_user_data(function_arguments, Rc::clone(&user_data));
 
-                    let (function, parameters) = user_data.get_current_executing_function().unwrap();
+                    let (_, parameters) = user_data.get_current_executing_function().unwrap();
 
                     let arguments: FunctionArguments = Parser::function_arguments(function_arguments, &parameters)?;
 
@@ -556,11 +558,11 @@ pub(crate) fn parse_expr(
     maybe_expr.map(|(expr, ..)| expr)
 }
 
-impl Parser {
-    pub fn math_expr(input: Node) -> Result<Expr, Vec<anyhow::Error>> {
-        let children_as_pairs = input.children().into_pairs();
-        let parsed = parse_expr(children_as_pairs, input.user_data().clone());
+// impl Parser {
+//     pub fn math_expr(input: Node) -> Result<Expr, Vec<anyhow::Error>> {
+//         let children_as_pairs = input.children().into_pairs();
+//         let parsed = parse_expr(children_as_pairs, input.user_data().clone());
 
-        parsed
-    }
-}
+//         parsed
+//     }
+// }

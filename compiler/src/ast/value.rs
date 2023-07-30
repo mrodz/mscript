@@ -1,7 +1,6 @@
-use std::{borrow::Cow, ops::Deref};
+use std::borrow::Cow;
 
-use anyhow::{bail, Context, Result};
-use pest::iterators::Pair;
+use anyhow::Result;
 
 use crate::{
     parser::{AssocFileData, Node, Parser, Rule},
@@ -9,7 +8,7 @@ use crate::{
 };
 
 use super::{
-    list::Index, math_expr::Expr, new_err, r#type::IntoType, string::AstString, Callable, Compile,
+    math_expr::Expr, new_err, r#type::IntoType, string::AstString, Compile,
     CompiledItem, Dependencies, Dependency, Function, Ident, List, Number, TypeLayout,
 };
 
@@ -88,10 +87,12 @@ impl CompileTimeEvaluate for Value {
 #[derive(Debug)]
 pub(crate) struct Dot;
 
+#[deprecated]
 pub(crate) trait Indexable {
     fn output_from_value(&self, value: &Value) -> Result<Cow<'static, TypeLayout>>;
 }
 
+#[cfg(not)]
 #[derive(Debug)]
 pub(crate) enum ValueChainType {
     Index(Index),
@@ -99,11 +100,9 @@ pub(crate) enum ValueChainType {
     Dot(Dot), // todo
 }
 
-impl ValueChainType {
-    // pub fn add_index()
-}
 
-impl CompileTimeEvaluate for ValueChain {
+#[cfg(not)]
+impl CompileTimeEvaluate for Value {
     fn try_constexpr_eval(&self) -> Result<ConstexprEvaluation> {
         if let Some(ref next) = self.1 {
             let val_constexpr: ConstexprEvaluation = self.0.try_constexpr_eval()?;
@@ -146,6 +145,7 @@ impl CompileTimeEvaluate for ValueChain {
     }
 }
 
+#[cfg(not)]
 impl Dependencies for ValueChainType {
     fn dependencies(&self) -> Vec<Dependency> {
         match self {
@@ -155,6 +155,7 @@ impl Dependencies for ValueChainType {
     }
 }
 
+#[cfg(not)]
 impl Indexable for ValueChainType {
     fn output_from_value(&self, value: &Value) -> Result<Cow<'static, TypeLayout>> {
         match self {
@@ -164,6 +165,7 @@ impl Indexable for ValueChainType {
     }
 }
 
+#[cfg(not)]
 impl Compile for ValueChainType {
     fn compile(
         &self,
@@ -176,30 +178,30 @@ impl Compile for ValueChainType {
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct ValueChain(pub(crate) Value, pub(crate) Option<Box<ValueChainType>>);
+// #[derive(Debug)]
+// pub(crate) struct ValueChain(pub(crate) Value, pub(crate) Option<Box<ValueChainType>>);
 
-impl Dependencies for ValueChain {
-    fn dependencies(&self) -> Vec<Dependency> {
-        let mut value_dependencies = self.0.net_dependencies();
-        if let Some(ref next) = self.1 {
-            value_dependencies.append(&mut next.net_dependencies());
-        }
-        value_dependencies
-    }
-}
+// impl Dependencies for ValueChain {
+//     fn dependencies(&self) -> Vec<Dependency> {
+//         let mut value_dependencies = self.0.net_dependencies();
+//         if let Some(ref next) = self.1 {
+//             value_dependencies.append(&mut next.net_dependencies());
+//         }
+//         value_dependencies
+//     }
+// }
 
-impl IntoType for ValueChain {
-    fn for_type(&self) -> Result<TypeLayout> {
-        if let Some(ref other) = self.1 {
-            other.output_from_value(&self.0).map(|x| x.into_owned())
-        } else {
-            self.0.for_type()
-        }
-    }
-}
+// impl IntoType for ValueChain {
+//     fn for_type(&self) -> Result<TypeLayout> {
+//         if let Some(ref other) = self.1 {
+//             other.output_from_value(&self.0).map(|x| x.into_owned())
+//         } else {
+//             self.0.for_type()
+//         }
+//     }
+// }
 
-impl ValueChain {
+impl Value {
     // #[allow(unused)]
     // pub fn is_value_callable(&self) -> bool {
     //     match &self.0 {
@@ -213,13 +215,13 @@ impl ValueChain {
     //     }
     // }
 
-    pub fn add_index(&mut self, index: Index) {
-        if let Some(_) = self.1 {
-            unreachable!("index already there!")
-        } else {
-            self.1 = Some(Box::new(ValueChainType::Index(index)))
-        }
-    }
+    // pub fn add_index(&mut self, index: Index) {
+    //     if let Some(_) = self.1 {
+    //         unreachable!("index already there!")
+    //     } else {
+    //         self.1 = Some(Box::new(ValueChainType::Index(index)))
+    //     }
+    // }
 
     pub fn is_callable(&self) -> Result<bool> {
         let ty = self.for_type()?;
@@ -228,43 +230,34 @@ impl ValueChain {
     }
 
     pub fn associate_with_ident(&self, ident: &mut Ident, user_data: &AssocFileData) -> Result<()> {
-        if let Some(next) = self.1.as_deref() {
-            let ty = next.output_from_value(&self.0)?;
-            ident.link_force_no_inherit(user_data, ty)?;
-        } else {
-            match self.0 {
-                Value::Function(ref f) => {
-                    let ty = f.for_type()?;
-                    ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
-                }
-                Value::Ident(..) => {
-                    ident.link_from_pointed_type_with_lookup(user_data)?;
-                }
-                Value::Number(ref number) => {
-                    let ty = number.for_type()?;
-                    ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
-                }
-                Value::String(ref string) => {
-                    let ty = string.for_type()?;
-                    ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
-                }
-                Value::MathExpr(ref math_expr) => {
-                    let ty = math_expr.for_type()?;
-                    ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
-                }
-                // Value::Callable(ref callback) => {
-                //     let ty = callback.for_type()?;
-                //     ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
-                // }
-                Value::Boolean(ref boolean) => {
-                    let ty = boolean.for_type()?;
-                    ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
-                }
-                Value::List(ref list) => {
-                    let ty = list.for_type_force_mixed()?;
-                    ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
-                }
+        match self {
+            Value::Function(ref f) => {
+                let ty = f.for_type()?;
+                ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
             }
+            Value::Ident(..) => {
+                ident.link_from_pointed_type_with_lookup(user_data)?;
+            }
+            Value::Number(ref number) => {
+                let ty = number.for_type()?;
+                ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
+            }
+            Value::String(ref string) => {
+                let ty = string.for_type()?;
+                ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
+            }
+            Value::MathExpr(ref math_expr) => {
+                let ty = math_expr.for_type()?;
+                ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
+            }
+            Value::Boolean(ref boolean) => {
+                let ty = boolean.for_type()?;
+                ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
+            }
+            Value::List(ref list) => {
+                let ty = list.for_type_force_mixed()?;
+                ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
+            }            
         }
 
         Ok(())
@@ -289,11 +282,11 @@ impl IntoType for Value {
 impl Dependencies for Value {
     fn dependencies(&self) -> Vec<Dependency> {
         match self {
-            Self::Function(function) => function.net_dependencies(),
+            Self::Function(function) => dbg!(function.net_dependencies()),
             Self::Ident(name) => name.net_dependencies(),
             Self::Number(number) => number.net_dependencies(),
             Self::String(string) => string.net_dependencies(),
-            Self::MathExpr(math_expr) => math_expr.net_dependencies(),
+            Self::MathExpr(math_expr) => dbg!(math_expr.net_dependencies()),
             // Self::Callable(callable) => callable.net_dependencies(),
             Self::Boolean(boolean) => boolean.net_dependencies(),
             Self::List(list) => list.net_dependencies(),
@@ -316,7 +309,8 @@ impl Compile for Value {
     }
 }
 
-impl Compile for ValueChain {
+#[cfg(not)]
+impl Compile for Value {
     fn compile(
         &self,
         function_buffer: &mut Vec<CompiledItem>,
@@ -331,10 +325,8 @@ impl Compile for ValueChain {
     }
 }
 
-pub(crate) fn value_from_pair<'a>(pair: Pair<'a, Rule>, user_data: &Rule) {}
-
 impl Parser {
-    pub fn value(input: Node) -> Result<ValueChain, Vec<anyhow::Error>> {
+    pub fn value(input: Node) -> Result<Value, Vec<anyhow::Error>> {
         let mut children = input.children();
 
         let value = children.next().unwrap();
@@ -343,7 +335,7 @@ impl Parser {
             Rule::ident => Value::Ident(Self::ident(value).to_err_vec()?),
             Rule::number => Value::Number(Self::number(value).to_err_vec()?),
             Rule::string => Value::String(Self::string(value).to_err_vec()?),
-            Rule::math_expr => Value::MathExpr(Box::new(Self::math_expr(value)?)),
+            Rule::math_expr => Value::MathExpr(Box::new(Expr::parse(value)?)),
             // Rule::callable => Value::Callable(Self::callable(value)?),
             Rule::list => Value::List(Self::list(value)?),
             Rule::WHITESPACE => unreachable!("{:?}", value.as_span()),
@@ -356,19 +348,6 @@ impl Parser {
             }
         };
 
-        let next = children.next();
-
-        let chain = if let Some(next) = next {
-            let x = match next.as_rule() {
-                Rule::list_index => ValueChainType::Index(Self::list_index(next)?),
-                other => unreachable!("{other:?}"),
-            };
-
-            Some(Box::new(x))
-        } else {
-            None
-        };
-
-        Ok(ValueChain(matched, chain))
+        Ok(matched)
     }
 }

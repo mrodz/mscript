@@ -34,12 +34,13 @@ pub(crate) use ident::Ident;
 pub(crate) use if_statement::IfStatement;
 pub(crate) use list::List;
 pub(crate) use loop_control_flow::{Break, Continue};
+pub(crate) use math_expr::{Expr, Op as BinaryOperation};
 pub(crate) use number::Number;
 pub(crate) use number_loop::NumberLoop;
 pub(crate) use print_statement::PrintStatement;
 pub(crate) use r#return::ReturnStatement;
 pub(crate) use r#type::TypeLayout;
-pub(crate) use value::Value;
+pub(crate) use value::{Value, ConstexprEvaluation, CompileTimeEvaluate};
 pub(crate) use while_loop::WhileLoop;
 
 #[allow(unused_imports)]
@@ -108,7 +109,7 @@ impl Drop for TemporaryRegister {
     fn drop(&mut self) {
         if !self.1 {
             return;
-        } 
+        }
 
         unsafe {
             if self.0 == REGISTER_COUNT {
