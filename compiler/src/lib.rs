@@ -175,7 +175,7 @@ pub fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<(), Ve
 
     let output_path = input_path.with_extension("mmm");
 
-    let file = File::open(input_path).map_err(|e| vec![anyhow!(e)])?;
+    let file = File::open(input_path).map_err(|e| vec![anyhow!(e).context("Could not open file for parsing :(")])?;
 
     let mut reader = BufReader::new(file);
 

@@ -1,18 +1,20 @@
 use std::{borrow::Cow, collections::HashMap, fmt::Display, rc::Rc, sync::Arc};
 
 use crate::{
+    ast::value::ValToUsize,
     parser::{util::parse_with_userdata_features, AssocFileData, Node, Parser, Rule},
     scope::ScopeReturnStatus,
 };
-use anyhow::{bail, Result, Context};
+use anyhow::{bail, Result};
 use once_cell::sync::Lazy;
+use pest::Span;
 
 use super::{
     function::FunctionType,
     list::{ListBound, ListType},
     map_err,
     math_expr::Op,
-    FunctionParameters, BIGINT_TYPE, INT_TYPE, Value, STR_TYPE,
+    FunctionParameters, Value, BIGINT_TYPE, INT_TYPE, STR_TYPE,
 };
 
 static mut TYPES: Lazy<HashMap<&str, TypeLayout>> = Lazy::new(|| {
@@ -47,8 +49,18 @@ impl Display for SupportedTypesWrapper {
 }
 
 impl SupportedTypesWrapper {
-    pub fn contains(&self, index: &TypeLayout) -> bool {
-        self.0.contains(&Cow::Borrowed(index))
+    pub fn contains(&self, index: &Value, value_span: Span, file_name: &str) -> Result<bool> {
+        for supported_type in self.0.iter() {
+            if map_err(
+                supported_type.eq_for_indexing(index),
+                value_span,
+                file_name,
+                "the compiler will not allow this index".to_string(),
+            )? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 }
 
@@ -142,17 +154,53 @@ impl TypeLayout {
         Some(Arc::clone(f))
     }
 
+    pub fn can_be_used_as_list_index(&self) -> bool {
+        matches!(
+            self,
+            TypeLayout::Native(NativeType::Int | NativeType::BigInt)
+        )
+    }
+
     pub fn get_output_type_from_index(&self, index: &Value) -> Result<Cow<TypeLayout>> {
         let me = self.get_type_recursively();
 
-        Ok(match me {
-            Self::List(list) => {
-                let index = index.get_usize().with_context(|| format!("List index must be an integer between {} and {}", usize::MIN, usize::MAX))?;
-                Cow::Borrowed(list.get_type_at_known_index(index)?) 
+        if let Self::Native(NativeType::Str) = me {
+            return Ok(Cow::Borrowed(&STR_TYPE));
+        }
+
+        let index_ty = index.for_type()?;
+
+        if !index_ty.can_be_used_as_list_index() {
+            bail!("`{index_ty}` cannot be used as an index into a list");
+        }
+
+        let index_as_usize = index.get_usize()?;
+
+        match index_as_usize {
+            ValToUsize::Ok(index_as_usize) => {
+                // let index = .with_context(|| format!("List index must be an integer between {} and {:#}", usize::MIN, usize::MAX))?;
+
+                match me {
+                    Self::List(ListType::Empty) => bail!("cannot index into empty list"),
+                    Self::List(list) => {
+                        return Ok(Cow::Borrowed(list.get_type_at_known_index(index_as_usize)?));
+                    }
+                    _ => bail!("not indexable"),
+                }
             }
-            Self::Native(NativeType::Str) => Cow::Borrowed(&STR_TYPE),
-            _ => bail!("not indexable"),
-        })
+            ValToUsize::NaN => bail!("List index must be an integer between {} and {:#}", usize::MIN, usize::MAX),
+            ValToUsize::NotConstexpr => (),
+        }
+
+        if let Self::List(ListType::Open { types, spread }) = me {
+            if !types.is_empty() {
+                bail!("indexing into spread-type lists with fixed-type parts requires that the index be a compile-time-constant expression")
+            }
+
+            return Ok(Cow::Owned(spread.clone().into_owned()));
+        }
+
+        bail!("cannot index")
     }
 
     pub fn supports_index(&self) -> Option<SupportedTypesWrapper> {
@@ -273,6 +321,13 @@ impl TypeLayout {
         match self {
             Self::CallbackVariable(..) => ("load_callback", LOAD_CALLBACK),
             _ => ("load", LOAD),
+        }
+    }
+
+    pub(crate) fn eq_for_indexing(&self, value: &Value) -> Result<bool> {
+        match self {
+            Self::ValidIndexes(start, end) => ListBound::val_fits_between(start, end, value),
+            other => Ok(&value.for_type()? == other),
         }
     }
 }

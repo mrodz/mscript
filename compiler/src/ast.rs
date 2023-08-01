@@ -425,7 +425,10 @@ pub fn map_err<R, E>(
     span: Span,
     file_name: &str,
     message: String,
-) -> Result<R> {
+) -> Result<R> 
+where
+    E: Display + Debug + Send + Sync + 'static
+{
     let x: Result<R, E> = value.into();
 
     if let Ok(x) = x {
@@ -436,7 +439,9 @@ pub fn map_err<R, E>(
     use pest_consume::Error as PE;
     let custom_error = PE::<()>::new_from_span(CustomError { message }, span).with_path(file_name);
 
-    bail!(custom_error)
+    let always_err = unsafe { x.unwrap_err_unchecked() };
+
+    return Err(anyhow!(always_err).context(custom_error));
 }
 
 pub fn map_err_messages<R, C>(

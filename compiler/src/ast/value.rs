@@ -23,13 +23,27 @@ pub(crate) enum Value {
     List(List),
 }
 
+pub(crate) enum ValToUsize {
+    Ok(usize),
+    NotConstexpr,
+    NaN
+}
+
 impl Value {
-    pub fn get_usize(&self) -> Option<usize> {
-        let Self::Number(number) = self else {
-            return None;
+    pub fn get_usize(&self) -> Result<ValToUsize> {
+        let maybe_evaluable = self.try_constexpr_eval()?;
+
+        if maybe_evaluable.is_impossible() {
+            return Ok(ValToUsize::NotConstexpr);
+        }
+
+        let number = maybe_evaluable.as_ref().unwrap(); 
+
+        let Value::Number(number) = number else {
+            return Ok(ValToUsize::NaN);
         };
 
-        number.try_into().ok()
+        Ok(ValToUsize::Ok(number.try_into()?))
     }
 
     pub fn try_negate(&self) -> Result<Option<Self>> {
@@ -280,7 +294,6 @@ impl IntoType for Value {
             Self::MathExpr(math_expr) => math_expr.for_type(),
             Self::Number(number) => number.for_type(),
             Self::String(string) => string.for_type(),
-            // Self::Callable(callable) => callable.for_type(),
             Self::Boolean(boolean) => boolean.for_type(),
             Self::List(list) => list.for_type(),
         }
