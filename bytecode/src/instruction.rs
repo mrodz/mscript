@@ -242,6 +242,25 @@ pub mod implementations {
             Ok(())
         }
 
+        vec_mut(ctx, _args) {
+            if ctx.stack_size() < 2 {
+                bail!("mutating a vec requires [ptr, value]");
+            }
+
+            let new_val = ctx.pop().unwrap();
+            let maybe_vec = ctx.pop().unwrap();
+
+            let Primitive::HeapPrimitive(vec_ptr) = maybe_vec else {
+                bail!("expected a mutable heap primitive, found {maybe_vec}");
+            };
+
+            unsafe {
+                *vec_ptr = new_val;
+            }
+
+            Ok(())
+        }
+
         vec_op(ctx, args) {
             let mut arg_iter = args.iter();
             let op_name = arg_iter.next().context("Expected a vector operation")?;
@@ -292,16 +311,18 @@ pub mod implementations {
                     idx
                 };
 
-                let item = match indexable {
-                    Primitive::Vector(vector) => vector.get(idx).with_context(|| format!("index {idx} out of bounds (len {})", vector.len()))?.clone(),
+                match indexable {
+                    Primitive::Vector(vector) => {
+                        let r: *mut Primitive = rc_to_ref(&vector).get_mut(idx).with_context(|| format!("index {idx} out of bounds (len {})", vector.len()))?;
+                        ctx.push(Primitive::HeapPrimitive(r));
+
+                    }
                     Primitive::Str(string) => {
                         let mut str_chars = string.chars();
-                        Primitive::Str(str_chars.nth(idx).with_context(|| format!("index {idx} out of bounds (len {} chars, {} bytes)", string.chars().count(), string.len()))?.to_string())
+                        ctx.push(Primitive::Str(str_chars.nth(idx).with_context(|| format!("index {idx} out of bounds (len {} chars, {} bytes)", string.chars().count(), string.len()))?.to_string()))
                     }
                     _ => bail!("Cannot perform a vector operation on a non-vector"),
-                };
-
-                ctx.push(item);
+                }
             } else {
                 match op_name.as_str() {
                     "reverse" => {
@@ -693,7 +714,7 @@ pub mod implementations {
                 bail!("store can only store a single item");
             }
 
-            let arg = ctx.pop().unwrap();
+            let arg = ctx.pop().unwrap().move_out_of_heap_primitive();
 
             ctx.register_variable(name.clone(), arg)?;
 
@@ -709,7 +730,7 @@ pub mod implementations {
                 bail!("store can only store a single item");
             }
 
-            let arg = ctx.pop().unwrap();
+            let arg = ctx.pop().unwrap().move_out_of_heap_primitive();
 
             ctx.register_variable_local(name.clone(), arg)?;
 
@@ -725,7 +746,7 @@ pub mod implementations {
                 bail!("store can only store a single item");
             }
 
-            let arg = ctx.pop().unwrap();
+            let arg = ctx.pop().unwrap().move_out_of_heap_primitive();
 
             ctx.update_callback_variable(name, arg)?;
 
@@ -769,7 +790,7 @@ pub mod implementations {
                 }
             }
 
-            let arg = ctx.pop().unwrap();
+            let arg = ctx.pop().unwrap().move_out_of_heap_primitive();
             ctx.register_variable_local(name.clone(), arg)?;
 
             Ok(())

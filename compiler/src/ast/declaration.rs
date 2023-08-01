@@ -9,12 +9,13 @@ use crate::{
 
 use super::{
     Expr, Assignment, Break, Compile, CompiledItem, Continue, Dependencies,
-    Dependency, IfStatement, NumberLoop, PrintStatement, ReturnStatement, WhileLoop,
+    Dependency, IfStatement, NumberLoop, PrintStatement, ReturnStatement, WhileLoop, Reassignment,
 };
 
 #[derive(Debug)]
 pub(crate) enum Declaration {
     Assignment(Assignment),
+    Reassignment(Reassignment),
     Expr(Expr),
     // Callable(Callable),
     PrintStatement(PrintStatement),
@@ -36,7 +37,7 @@ impl Dependencies for Declaration {
             Self::IfStatement(if_statement) => if_statement.supplies(),
             Self::WhileLoop(while_loop) => while_loop.supplies(),
             Self::NumberLoop(number_loop) => number_loop.supplies(),
-            Self::Continue(_) | Self::Break(_) => vec![],
+            Self::Reassignment(_) | Self::Continue(_) | Self::Break(_) => vec![],
         }
     }
 
@@ -49,6 +50,7 @@ impl Dependencies for Declaration {
             Self::IfStatement(if_statement) => if_statement.net_dependencies(),
             Self::WhileLoop(while_loop) => while_loop.net_dependencies(),
             Self::NumberLoop(number_loop) => number_loop.net_dependencies(),
+            Self::Reassignment(reassignment) => reassignment.net_dependencies(),
             Self::Continue(_) | Self::Break(_) => vec![],
         }
     }
@@ -59,13 +61,8 @@ impl Compile for Declaration {
         match self {
             Self::PrintStatement(x) => x.compile(function_buffer),
             Self::Expr(x) => x.compile(function_buffer),
-
-            // {
-            //     // let mut callable_exe = x.compile(function_buffer)?;
-            //     // callable_exe.push(instruction!(void));
-            //     // Ok(callable_e/xe)
-            // }
             Self::Assignment(x) => x.compile(function_buffer),
+            Self::Reassignment(x) => x.compile(function_buffer),
             Self::ReturnStatement(x) => x.compile(function_buffer),
             Self::IfStatement(x) => x.compile(function_buffer),
             Self::WhileLoop(x) => x.compile(function_buffer),
@@ -98,6 +95,7 @@ impl Parser {
             Rule::break_statement => Declaration::Break(Self::break_statement(input).to_err_vec()?),
             Rule::number_loop => Declaration::NumberLoop(Self::number_loop(declaration)?),
             Rule::math_expr => Declaration::Expr(Expr::parse(input)?),
+            Rule::reassignment => Declaration::Reassignment(Self::reassignment(declaration)?),
             x => unreachable!("{x:?} is not supported"),
         };
 

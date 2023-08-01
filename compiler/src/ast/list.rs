@@ -11,7 +11,7 @@ use crate::{
 use super::{
     r#type::IntoType,
     ConstexprEvaluation,
-    Compile, Dependencies, TypeLayout, Value
+    Compile, Dependencies, TypeLayout, Value, map_err, value::ValToUsize
 };
 
 #[derive(Debug)]
@@ -102,6 +102,34 @@ pub(crate) enum ListBound {
     Numeric(usize),
     NotIndexable,
     Infinite,
+}
+
+impl ListBound {
+    pub(crate) fn val_fits_between(start: &Self, end: &Self, value: &Value) -> Result<bool> {
+        if matches!(start, Self::NotIndexable) {
+            bail!("this list is not indexable (is it empty?)")
+        }
+
+        match end {
+            Self::Infinite => Ok(true),
+            Self::Numeric(last_valid_index) => {
+                let ConstexprEvaluation::Owned(value) = value.try_constexpr_eval()? else {
+                    bail!("Cannot guarantee that this operation will not fail, as it is a non-constexpr index.\nTo allow fallable lookups, explicitly give a spread type to the list:\n```\n\tvar: [int...] = [1, 2, 3]\n```")
+                };
+
+                let ValToUsize::Ok(value) = value.get_usize().context("cannot index with this type")? else {
+                    bail!("error converting to numeric index")
+                };
+
+                if value > *last_valid_index {
+                    bail!("operation will be out of bounds; cannot index with `{value}` into list whose known valid safe indexes are 0..{last_valid_index}")
+                }
+
+                Ok(true)
+            }
+            _ => unreachable!()
+        }
+    }
 }
 
 impl Display for ListBound {
@@ -377,49 +405,6 @@ impl CompileTimeEvaluate for Index {
     }
 }
 
-#[cfg(not)]
-impl Indexable for Index {
-    fn output_from_value(&self, value: &Value) -> Result<Cow<'static, TypeLayout>> {
-        
-        // un-comment
-        todo!();
-        // if !self.value.for_type()?.is_numeric_index() {
-        //     bail!("for now, indexing can only be done with integers")
-        // }
-
-        let value_ty = value.for_type()?;
-
-        match value_ty {
-            TypeLayout::Native(NativeType::Str) => Ok(Cow::Borrowed(*STR_TYPE)),
-            TypeLayout::List(list_type) => {
-                let maybe_constexpr_eval = self.try_constexpr_eval()?;
-                let Some(constexpr_value) = maybe_constexpr_eval.as_ref() else {
-                    bail!("an index that is not compile-time-constant cannot be used to deduce the type of the resulting element");
-                };
-
-                let Value::Number(number) = constexpr_value else {
-                    unreachable!();
-                };
-
-                match number {
-                    Number::BigInt(idx) | Number::Integer(idx) | Number::Byte(idx) => {
-                        let idx: usize = idx.parse()?;
-
-                        let Some(type_at_index) = list_type.get_type_at_index(idx) else {
-                            bail!("`{idx}` is not a valid index into `{list_type}`, which has a known length at compile time of {}", list_type.len())
-                        };
-
-                        Ok(Cow::Owned(type_at_index.clone()))
-                    }
-                    Number::Float(_) => bail!("cannot index into a list with floats"),
-                }
-            }
-
-            other => unimplemented!("{other:?}"),
-        }
-    }
-}
-
 impl Compile for Index {
     fn compile(
         &self,
@@ -504,15 +489,15 @@ impl Parser {
             let value_ty = value.for_type().to_err_vec()?;
             
             let Some(expected_type_for_value) = last_ty.supports_index() else {
-                return Err(vec![new_err(value_span, file_name, format!("{last_ty} does not support indexing, yet here `{value_ty}` is used"))]);
+                return Err(vec![new_err(value_span, file_name, format!("`{last_ty}` does not support indexing, yet here `{value_ty}` is used"))]);
             };
 
-            if !expected_type_for_value.contains(&value_ty) {
-                return Err(vec![new_err(value_span, file_name, format!("{last_ty} does not support indexing for `{value_ty}` (Hint: this type does support indexes of types {expected_type_for_value})"))]);
+            if !expected_type_for_value.contains(&value, value_span, file_name).to_err_vec()? {
+                return Err(vec![new_err(value_span, file_name, format!("`{last_ty}` does not support indexing for `{value_ty}` (Hint: this type does support indexes of types {expected_type_for_value})"))]);
             }
 
-            let index_output_ty = last_ty.get_output_type_from_index(&value).with_context(|| format!("invalid index into `{last_ty}`")).to_err_vec()?;
-
+            let index_output_ty = map_err(last_ty.get_output_type_from_index(&value), value_span, file_name, format!("invalid index into `{last_ty}`")).to_err_vec()?;
+            
             last_ty = index_output_ty.into_owned();
             values.push(value);
         }
