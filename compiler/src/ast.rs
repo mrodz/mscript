@@ -17,6 +17,7 @@ mod math_expr;
 mod number;
 mod number_loop;
 mod print_statement;
+mod reassignment;
 mod r#return;
 mod string;
 mod r#type;
@@ -40,7 +41,8 @@ pub(crate) use number_loop::NumberLoop;
 pub(crate) use print_statement::PrintStatement;
 pub(crate) use r#return::ReturnStatement;
 pub(crate) use r#type::TypeLayout;
-pub(crate) use value::{Value, ConstexprEvaluation, CompileTimeEvaluate};
+pub(crate) use reassignment::Reassignment;
+pub(crate) use value::{CompileTimeEvaluate, ConstexprEvaluation, Value};
 pub(crate) use while_loop::WhileLoop;
 
 #[allow(unused_imports)]
@@ -425,9 +427,9 @@ pub fn map_err<R, E>(
     span: Span,
     file_name: &str,
     message: String,
-) -> Result<R> 
+) -> Result<R>
 where
-    E: Display + Debug + Send + Sync + 'static
+    E: Display + Debug + Send + Sync + 'static,
 {
     let x: Result<R, E> = value.into();
 

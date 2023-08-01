@@ -98,6 +98,11 @@ assignment_no_type = { ident ~ "=" ~ value }
 assignment_type = { ident ~ ":" ~ type ~ "=" ~ value }
 assignment = { (assignment_flags ~ (assignment_no_type | assignment_type)) | (assignment_no_type | assignment_type) }
 
+reassignment_primary = _{ ident | "(" ~ reassignment_expr ~ ")" }
+reassignment_postfix = _{ list_index }
+reassignment_expr = { reassignment_primary ~ reassignment_postfix }
+reassignment = { reassignment_expr ~ "=" ~ value }
+
 else_statement = { "else" ~ (block | if_statement) }
 
 if_statement = { "if" ~ value ~ block ~ else_statement? }
@@ -119,7 +124,7 @@ print_statement = { "print" ~ value }
 
 return_statement = { "return" ~ value? }
 
-declaration = { assignment | print_statement | return_statement | continue_statement | break_statement | if_statement | while_loop | number_loop | math_expr }
+declaration = { assignment | reassignment | print_statement | return_statement | continue_statement | break_statement | if_statement | while_loop | number_loop | math_expr }
 
 file = {
     SOI ~

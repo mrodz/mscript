@@ -52,6 +52,7 @@ primitive! {
     Byte(u8),
     Function(std::rc::Rc<crate::function::PrimitiveFunction>),
     Vector(std::rc::Rc<Vec<crate::variables::Primitive>>),
+    HeapPrimitive(*mut crate::variables::Primitive),
     Object(std::rc::Rc<crate::variables::Object>),
 }
 
@@ -109,6 +110,26 @@ impl Primitive {
         use Type::*;
 
         matches!(self.ty(), Int | Float | Byte | BigInt)
+    }
+
+    
+    /// This function *must* be called before storing a primitive to any sort of
+    /// long-term storage, as [`Primitive::HeapPrimitive`]s are inherently dangerous
+    /// and should only be used for optimization/temporary register purposes.
+    /// 
+    /// This code will blow up the VM if the HP ptr is not valid. If this happens, though, 
+    /// it is a bug with the compiler. Users will NEVER encounter a stale mutable pointer on 
+    /// their own, as it is a private type known only to the compiler used for array tricks.
+    pub fn move_out_of_heap_primitive(self) -> Self {
+        if let Self::HeapPrimitive(primitive) = self {
+            #[cfg(feature = "developer")]
+            println!("heap->clone");
+            unsafe {
+                (*primitive).clone()
+            }
+        } else {
+            self
+        }
     }
 
     /// Returns whether this primitive is a numeric coalesce.
@@ -241,6 +262,9 @@ impl Display for Primitive {
 
                 write!(f, "]")
             },
+            // For all intents and purposes, this code is safe. We assume that if this code blows up, 
+            // something went SERIOUSLY wrong with the MScript compiler.
+            HeapPrimitive(hp) => unsafe { write!(f, "*mut {:#X} -> {}", *hp as usize , **hp) },
             Object(o) => write!(f, "{o}"),
         }
     }
