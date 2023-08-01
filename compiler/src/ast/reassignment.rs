@@ -6,7 +6,7 @@ use pest::{iterators::Pairs, pratt_parser::PrattParser};
 
 use crate::{parser::{AssocFileData, Node, Parser, Rule}, VecErr, ast::new_err, instruction};
 
-use super::{list::Index, Dependencies, Ident, Value, r#type::IntoType, TypeLayout, Compile, value, TemporaryRegister};
+use super::{list::Index, Dependencies, Ident, Value, r#type::IntoType, TypeLayout, Compile, TemporaryRegister};
 
 pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
     use pest::pratt_parser::Op;

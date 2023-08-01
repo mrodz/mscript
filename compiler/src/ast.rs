@@ -443,7 +443,8 @@ where
 
     let always_err = unsafe { x.unwrap_err_unchecked() };
 
-    return Err(anyhow!(always_err).context(custom_error));
+    
+    Err(anyhow!(always_err).context(custom_error))
 }
 
 pub fn map_err_messages<R, C>(
