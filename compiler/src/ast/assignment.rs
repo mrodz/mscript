@@ -69,7 +69,11 @@ impl Dependencies for Assignment {
     }
 
     fn dependencies(&self) -> Vec<Dependency> {
-        self.value.net_dependencies()
+        let mut base = self.value.net_dependencies();
+        if self.ident.is_instance_callback_variable().unwrap() {
+            base.push(Dependency::new(Cow::Borrowed(&self.ident)));
+        }
+        base
     }
 
     /// custom implementation
@@ -260,8 +264,8 @@ impl Parser {
         let user_data = input.user_data();
 
         let (mut x, did_exist_before) = match assignment.as_rule() {
-            Rule::assignment_no_type => Self::assignment_no_type(assignment, is_const)?,
-            Rule::assignment_type => Self::assignment_type(assignment, is_const)?,
+            Rule::assignment_no_type => Self::assignment_no_type(assignment, is_const, is_modify)?,
+            Rule::assignment_type => Self::assignment_type(assignment, is_const, is_modify)?,
             rule => unreachable!("{rule:?}"),
         };
 

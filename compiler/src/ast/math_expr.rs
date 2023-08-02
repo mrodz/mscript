@@ -212,7 +212,7 @@ impl CompileTimeEvaluate for Expr {
             }
             Self::ReferenceToSelf => Ok(ConstexprEvaluation::Impossible),
             Self::Callable {..} => Ok(ConstexprEvaluation::Impossible),
-            Self::Index { .. } => todo!(),
+            Self::Index { .. } => Ok(ConstexprEvaluation::Impossible),
         }
     }
 }

@@ -12,6 +12,7 @@ impl Parser {
     pub fn assignment_type(
         input: Node,
         is_const: bool,
+        is_modify: bool,
     ) -> Result<(Assignment, bool), Vec<anyhow::Error>> {
         let mut children = input.children();
 
@@ -52,6 +53,10 @@ impl Parser {
         ident
             .link_force_no_inherit(input.user_data(), ty)
             .to_err_vec()?;
+
+        if is_modify {
+            ident = ident.wrap_in_callback().to_err_vec()?;
+        }
 
         let assignment = Assignment::new(ident, value);
 

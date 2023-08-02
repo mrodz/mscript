@@ -9,4 +9,5 @@ my_list[0][1] = 555
 
 print my_list[0][1]
 
-print my_list[0]
+a = my_list[0]
+print 1 + a[0]

@@ -144,6 +144,10 @@ impl TypeLayout {
         Some(l)
     }
 
+    pub fn is_directly_callback_variable(&self) -> bool {
+        matches!(self, Self::CallbackVariable(..))
+    }
+
     pub fn is_function(&self) -> Option<Arc<FunctionType>> {
         let me = self.get_type_recursively();
 
