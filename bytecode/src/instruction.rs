@@ -544,6 +544,8 @@ pub mod implementations {
                     return Ok(())
                 };
 
+                log::warn!("The `printn` instruction should not be used. Favor the standard library instead.");
+
                 print!("{first}");
                 let operating_stack = ctx.get_local_operating_stack();
 

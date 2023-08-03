@@ -65,12 +65,15 @@ pub struct TemporaryRegister(usize, bool);
 
 impl TemporaryRegister {
     pub unsafe fn new_ghost_register(mock_count: usize) -> Self {
+        log::trace!("reg. -G--m {mock_count}");
         Self(mock_count, false)
     }
 
     pub fn new() -> Self {
         unsafe {
             REGISTER_COUNT += 1;
+
+            log::trace!("reg. -n--- {REGISTER_COUNT}");
 
             Self(REGISTER_COUNT, true)
         }
@@ -79,6 +82,8 @@ impl TemporaryRegister {
     pub fn new_require_explicit_drop() -> Self {
         unsafe {
             REGISTER_COUNT += 1;
+
+            log::trace!("reg. -n-e- {REGISTER_COUNT}");
 
             Self(REGISTER_COUNT, false)
         }
@@ -90,14 +95,19 @@ impl TemporaryRegister {
                 unreachable!("dropped out of order");
             }
 
+            log::trace!("reg. F--e- {REGISTER_COUNT}");
+
             REGISTER_COUNT -= 1;
         }
     }
 
     pub unsafe fn free_many(count: usize) {
+
         REGISTER_COUNT = REGISTER_COUNT
             .checked_sub(count)
             .expect("dropped too many registers");
+
+        log::trace!("reg. F--em {count}");
     }
 }
 
@@ -115,6 +125,7 @@ impl Drop for TemporaryRegister {
 
         unsafe {
             if self.0 == REGISTER_COUNT {
+                log::trace!("reg. F---- {REGISTER_COUNT}");
                 REGISTER_COUNT -= 1;
             } else if self.0 - 1 != REGISTER_COUNT {
                 unreachable!("dropped out of order {} {REGISTER_COUNT}", self.0)

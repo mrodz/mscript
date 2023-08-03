@@ -122,8 +122,7 @@ impl Primitive {
     /// their own, as it is a private type known only to the compiler used for array tricks.
     pub fn move_out_of_heap_primitive(self) -> Self {
         if let Self::HeapPrimitive(primitive) = self {
-            #[cfg(feature = "developer")]
-            println!("heap->clone");
+            log::trace!("Heap clone @ {:#X}", primitive as usize);
             unsafe {
                 (*primitive).clone()
             }
@@ -264,7 +263,10 @@ impl Display for Primitive {
             },
             // For all intents and purposes, this code is safe. We assume that if this code blows up, 
             // something went SERIOUSLY wrong with the MScript compiler.
-            HeapPrimitive(hp) => unsafe { write!(f, "*mut {:#X} -> {}", *hp as usize , **hp) },
+            #[cfg(feature = "debug")]
+            HeapPrimitive(hp) => unsafe { write!(f, "*mut {:#X} -> {}", *hp as usize, **hp) },
+            #[cfg(not(feature = "debug"))]
+            HeapPrimitive(hp) => unsafe { write!(f, "&{}", **hp) },
             Object(o) => write!(f, "{o}"),
         }
     }

@@ -267,9 +267,14 @@ impl Dependencies for Expr {
             }
             Callable(CallableContents::ToSelf { arguments, .. }) => arguments.net_dependencies(),
             Callable(CallableContents::Standard { lhs_raw, arguments, .. }) => {
-                let mut lhs_depts = lhs_raw.net_dependencies();
-                lhs_depts.append(&mut arguments.net_dependencies());
-                lhs_depts
+                let mut lhs_deps = lhs_raw.net_dependencies();
+                lhs_deps.append(&mut arguments.net_dependencies());
+                lhs_deps
+            }
+            Index { lhs_raw, index } => {
+                let mut lhs_deps = lhs_raw.net_dependencies();
+                lhs_deps.append(&mut index.net_dependencies());
+                lhs_deps
             }
             x => unimplemented!("{x:?}")
         }

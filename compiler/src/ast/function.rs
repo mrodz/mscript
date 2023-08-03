@@ -215,9 +215,6 @@ impl Parser {
     pub fn function(input: Node) -> Result<Function, Vec<anyhow::Error>> {
         let path_str = input.user_data().get_file_name();
 
-        #[cfg(feature = "debug")]
-        let input_span = input.as_str();
-
         let mut children = input.children();
         let parameters = children.next().unwrap();
 
@@ -251,9 +248,6 @@ impl Parser {
         let function_scope = input
             .user_data()
             .push_function(ScopeReturnStatus::detect_should_return(return_type));
-
-        #[cfg(feature = "debug")]
-        println!("\t^^ {input_span}");
 
         let parameters = Arc::new(Self::function_parameters(parameters, true).to_err_vec()?);
 

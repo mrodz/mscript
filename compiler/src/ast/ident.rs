@@ -49,8 +49,6 @@ pub static KEYWORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
     ])
 });
 
-
-
 impl Ident {
     pub fn mark_const(&mut self) {
         self.read_only = true;
@@ -87,7 +85,12 @@ impl Ident {
 
 impl Display for Ident {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: {:?}", self.name, self.ty)
+        write!(f, "{}: ", self.name)?;
+        if let Some(ref ty) = self.ty {
+            write!(f, "{ty}")
+        } else {
+            write!(f, "!!!")
+        }
     }
 }
 

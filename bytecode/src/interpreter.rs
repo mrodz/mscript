@@ -198,12 +198,19 @@ impl Program {
 
         let path = &*rc_of_self.entrypoint;
 
+        log::debug!("Loading instructions from file...");
         let entrypoint = Self::get_file(rc_of_self.clone(), path)?;
+        log::debug!("Loaded instructions from file");
+
+        log::debug!("Creating call stack...");
         let stack = Rc::new(Stack::new());
+        log::debug!("Created call stack");
 
         let Some(function) = rc_to_ref(&entrypoint).get_function("main") else {
             bail!("could not find entrypoint (hint: try adding `function main`)")
         };
+
+        log::debug!("Spawning interpreter...");
 
         let main_ret = function.run(Cow::Owned(vec![]), stack.clone(), None, &mut |req| {
             Self::process_jump_request(rc_of_self.clone(), req)
@@ -218,6 +225,8 @@ impl Program {
             eprintln!("\n******* MSCRIPT INTERPRETER STACK MISMATCH *******\nFound:\n{stack}\n\n... When the program should have unwinded its stack completely. This is most likely a flaw with the compiler.\n\nPlease report this at https://github.com/mrodz/mscript-lang/issues/new\n");
             bail!("Program exited in a confused state, execution integrity has been compromised.")
         }
+
+        log::info!("Program exited succesfully");
 
         Ok(())
     }

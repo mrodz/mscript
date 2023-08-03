@@ -79,13 +79,7 @@ impl Parser {
 			}
 		};
 
-        #[cfg(feature = "debug")]
-        println!("pre-value-chain-init");
-
         let value = Self::value(value_node)?;
-
-        #[cfg(feature = "debug")]
-        println!("post-value-chain-init");
 
         let supplied_type = value.for_type().to_err_vec()?;
         let supplied_type = supplied_type.get_type_recursively();
@@ -112,9 +106,6 @@ impl Parser {
 				),
             )]);
         }
-
-        #[cfg(feature = "debug")]
-        println!("return concluded");
 
         // #2
         Ok(ReturnStatement(Some(value)))

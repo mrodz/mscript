@@ -173,8 +173,7 @@ impl Stack {
 
     /// Extend the call stack by adding a new frame.
     pub fn extend(&mut self, label: String) {
-        #[cfg(feature = "developer")]
-        println!(">>> PUSHED {label}");
+        log::trace!("Stack ++PUSH {label}");
         self.0.push(StackFrame {
             label,
             variables: VariableMapping::default(),
@@ -188,9 +187,8 @@ impl Stack {
 
     /// Pop the top of the stack frame, releasing all of its resources.
     pub fn pop(&mut self) {
-        let _popped = self.0.pop().expect("pop without stack frame");
-        #[cfg(feature = "developer")]
-        println!("<<< POPPED {}", _popped.label);
+        let popped = self.0.pop().expect("pop without stack frame");
+        log::trace!("Stack --POP {}", popped.label);
     }
 
     pub fn pop_until_function(&mut self) {
@@ -205,13 +203,11 @@ impl Stack {
 
         let size = self.size();
 
-        let _popped = self.0.drain(size - c..);
+        let popped = self.0.drain(size - c..);
 
-        #[cfg(feature = "developer")]
-        println!(
-            "<<< POPPED {}",
-            _popped.fold("".to_owned(), |str, frame| str
-                + " + "
+        log::trace!(
+            "{}", popped.fold("Stack --POP".to_owned(), |str, frame| str
+                + " "
                 + frame.label.as_str())
         );
     }

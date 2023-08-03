@@ -71,6 +71,7 @@ impl<'a> ScopeIter<'a> {
 
 impl Scopes {
     pub(crate) fn new() -> Self {
+        log::trace!("INIT Virtual Stack at MODULE");
         Self(RefCell::new(vec![Scope::new_file()]))
     }
 
@@ -96,12 +97,15 @@ impl Scopes {
 
     /// Returns the depth at which the stack is expected to be once the added frame is cleaned up.
     pub(crate) fn push_scope_typed(&self, ty: ScopeType, yields: ScopeReturnStatus) {
+        log::trace!("Virtual Stack PUSH: {ty} -> {yields:?}");
+
         self.0
             .borrow_mut()
             .push(Scope::new_with_ty_yields(ty, yields));
     }
 
     fn pop(&self) -> Option<Scope> {
+        log::trace!("Virtual Stack POP");
         self.0.borrow_mut().pop()
     }
 
@@ -280,8 +284,8 @@ impl Scope {
     }
 
     fn add_dependency(&mut self, dependency: &Ident) {
-        #[cfg(debug)]
-        println!("Added {dependency} to {}", &self.ty);
+        log::trace!("+ {dependency}");
+    
         self.variables.insert(dependency.clone());
     }
 

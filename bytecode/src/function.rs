@@ -2,13 +2,12 @@
 //! * Execution of loaded bytecode functions ([`Function`])
 //! * Representation of runtime callbacks/closures ([`PrimitiveFunction`])
 
+use anyhow::{bail, Context, Result};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::path::Path;
 use std::rc::Rc;
-
-use anyhow::{bail, Context, Result};
 
 use crate::compilation_lookups::raw_byte_instruction_to_string_representation;
 use crate::context::{Ctx, SpecialScope};
@@ -319,7 +318,9 @@ impl Function {
             let ret: &InstructionExitState = context.poll();
 
             let mut goto_fn = |offset: isize| -> Result<()> {
-                let new_val = instruction_ptr.checked_add_signed(offset).with_context(|| format!("numeric overflow ({instruction_ptr} + {offset})"))?;
+                let new_val = instruction_ptr
+                    .checked_add_signed(offset)
+                    .with_context(|| format!("numeric overflow ({instruction_ptr} + {offset})"))?;
 
                 let instruction_len = self.instructions.len();
 
@@ -362,7 +363,7 @@ impl Function {
                 }
                 InstructionExitState::GotoPushScope(offset, ty) => {
                     goto_fn((*offset).try_into()?)?;
-                    
+
                     special_scopes.push(*ty);
                     context.add_frame(ty.to_string());
 
@@ -377,8 +378,7 @@ impl Function {
                     }
 
                     context.clear_signal();
-                    continue;                    
-
+                    continue;
                 }
                 InstructionExitState::PopScope => {
                     if special_scopes.pop().is_some() {
@@ -394,8 +394,7 @@ impl Function {
         }
 
         // Handle when a function does not explicitly return.
-        #[cfg(feature = "developer")]
-        eprintln!("Warning: function concludes without `ret` instruction");
+        log::warn!("Warning: function concludes without `ret` instruction");
 
         rc_to_ref(&current_frame).pop();
 

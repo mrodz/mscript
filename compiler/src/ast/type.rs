@@ -192,7 +192,7 @@ impl TypeLayout {
             ValToUsize::NotConstexpr => (),
         }
 
-        if let Self::List(ListType::Open { types, spread }) = me {
+        if let Self::List(ListType::Open { types, spread, .. }) = me {
             if !types.is_empty() {
                 bail!("indexing into spread-type lists with fixed-type parts requires that the index be a compile-time-constant expression")
             }
@@ -428,6 +428,7 @@ impl Parser {
         Ok(ListType::Open {
             types: vec![],
             spread: Box::new(ty),
+            len_at_init: None
         })
     }
 
@@ -451,6 +452,7 @@ impl Parser {
                     open_ended_type = Some(ty);
                 }
                 other_rule => unreachable!("{other_rule:?}"),
+
             }
         }
 
@@ -462,6 +464,7 @@ impl Parser {
             return Ok(ListType::Open {
                 types: type_vec,
                 spread: Box::new(open_ended_type),
+                len_at_init: None
             });
         }
 
