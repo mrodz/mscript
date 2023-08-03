@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use crate::{
     parser::{Node, Parser, Rule},
-    VecErr,
+    VecErr, instruction,
 };
 
 use super::{
@@ -60,7 +60,11 @@ impl Compile for Declaration {
     fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>> {
         match self {
             Self::PrintStatement(x) => x.compile(function_buffer),
-            Self::Expr(x) => x.compile(function_buffer),
+            Self::Expr(x) => {
+                let mut expr_compiled = x.compile(function_buffer)?;
+                expr_compiled.push(instruction!(void));
+                Ok(expr_compiled)
+            },
             Self::Assignment(x) => x.compile(function_buffer),
             Self::Reassignment(x) => x.compile(function_buffer),
             Self::ReturnStatement(x) => x.compile(function_buffer),

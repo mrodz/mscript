@@ -116,13 +116,13 @@ number_loop_bind_name = { "," ~ ident }
 
 number_loop_step = { "step" ~ value }
 
-number_loop = { "from" ~ value ~ (number_loop_inclusive | number_loop_exclusive) ~ value ~ number_loop_step? ~ number_loop_bind_name? ~ block }
+number_loop = { "from" ~ value ~ (number_loop_inclusive | number_loop_exclusive) ~ (value) ~ (number_loop_step?) ~ (number_loop_bind_name?) ~ block }
 continue_statement = { "continue" }
 break_statement = { "break" }
 
-print_statement = { "print" ~ value }
+print_statement = { "print " ~ value }
 
-return_statement = { "return" ~ value? }
+return_statement = { "return " ~ value? }
 
 declaration = { assignment | reassignment | print_statement | return_statement | continue_statement | break_statement | if_statement | while_loop | number_loop | math_expr }
 

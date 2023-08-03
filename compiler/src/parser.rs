@@ -149,9 +149,6 @@ impl AssocFileData {
 
     /// Returns the depth at which the stack is expected to be once the added frame is cleaned up.
     pub fn push_scope_typed(&self, ty: ScopeType, yields: ScopeReturnStatus) -> ScopeHandle {
-        #[cfg(feature = "debug")]
-        println!("{ty}");
-
         let depth = {
             self.scopes.push_scope_typed(ty, yields);
             self.scopes.depth()
@@ -166,13 +163,6 @@ impl AssocFileData {
 
         !matches!(yields, ScopeReturnStatus::Should(..))
     }
-
-    // #[deprecated(note = "use scope handles instead")]
-    // pub fn pop_scope(&self) -> ScopeReturnStatus {
-    //     self.scopes.pop()
-    //         .expect("pop without scope")
-    //         .get_yields_value()
-    // }
 
     pub fn add_dependency(&self, dependency: &Ident) {
         self.scopes.add_variable(dependency)

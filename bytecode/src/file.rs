@@ -96,7 +96,7 @@ impl MScriptFile {
         Ok(new_uninit)
     }
 
-    /// SeRches for a function given its name.
+    /// Searches for a function given its name.
     pub fn get_function(&mut self, name: &str) -> Option<&mut Function> {
         let name = format!("{}#{name}", self.path);
 

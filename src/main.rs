@@ -1,13 +1,15 @@
 mod cli;
 
 use anyhow::{bail, Context, Result};
+use colored::*;
 use bytecode::Program;
 use clap::Parser;
 use cli::{Args, Commands};
 use compiler::compile as compile_file;
+use log::{Level, LevelFilter, Metadata, Record};
 use std::{
     path::{Path, PathBuf},
-    thread,
+    thread, sync::Mutex,
 };
 
 use crate::cli::CompilationTargets;
@@ -76,6 +78,55 @@ pub fn is_path_source(input: &String) -> Result<PathBuf> {
     bail!("Please use the .ms file extension for MScript source files.")
 }
 
+struct GlobalLogger(Mutex<bool>);
+
+impl GlobalLogger {
+    const fn new() -> Self {
+        Self(Mutex::new(false))
+    }
+
+    fn set_verbose(&self) {
+        let mut lock = self.0.lock().unwrap();
+        *lock = true;
+    }
+
+    pub fn is_verbose(&self) -> bool {
+        let lock = self.0.lock().unwrap();
+        *lock
+    } 
+
+}
+
+impl log::Log for GlobalLogger {
+    fn enabled(&self, _: &Metadata) -> bool {
+        self.is_verbose()
+    }
+
+    fn log(&self, record: &Record) {
+        fn level_format(level: &Level) -> ColoredString {
+            match level {
+                Level::Debug => "[ Debug ]".white().on_purple(),
+                Level::Error => "[ Error ]".bright_red().on_white(),
+                Level::Warn => "[ Warning ]".black().on_yellow(),
+                Level::Info => "[ Info ]".white().on_bright_blue(),
+                Level::Trace => "[ Trace ]".on_green(),
+            }
+        }
+    
+        if self.enabled(record.metadata()) {
+            println!(
+                "{} {}",
+                level_format(&record.level()),
+                record.args()
+            );
+        }
+    }
+
+    fn flush(&self) {}
+}
+
+static LOGGER: GlobalLogger = GlobalLogger::new();
+
 fn main() -> Result<()> {
     let args = Args::parse();
 
@@ -86,9 +137,18 @@ fn main() -> Result<()> {
             path,
             stack_size,
             verbose,
+            quick
         } => {
+            if verbose && !quick {
+                LOGGER.set_verbose();
+            }
+
+            if let Err(err) = log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Trace)) {
+                bail!("Error initializing logger: {err:?}")
+            };
+        
             let output_path = is_path_source(&path)?;
-            compile(&path, true, verbose)?;
+            compile(&path, true, !quick)?;
             println!("Running...\n");
             execute_command(output_path.to_string_lossy().to_string(), stack_size, false)?
         }
@@ -104,9 +164,18 @@ fn main() -> Result<()> {
             path,
             output_format,
             verbose,
+            quick,
         } => {
+            if verbose && !quick {
+                LOGGER.set_verbose();
+            }
+
+            if let Err(err) = log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Trace)) {
+                bail!("Error initializing logger: {err:?}")
+            };
+
             let output_bin = matches!(output_format, CompilationTargets::Binary);
-            compile(&path, output_bin, verbose)?;
+            compile(&path, output_bin, !quick)?;
         }
     }
 

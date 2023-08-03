@@ -141,11 +141,9 @@ pub(crate) fn compile_from_str(
         root_node_from_str(mscript_code, user_data.clone())
     })?;
 
-
     let file = logger.wrap_in_spinner(format!("Creating AST ({input_path_str}):"), || {
         Parser::file(input)
     })?;
-    
 
     let mut function_buffer = vec![];
     logger.wrap_in_spinner(format!("Validating AST ({input_path_str}):"), || {
@@ -175,7 +173,8 @@ pub fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<(), Ve
 
     let output_path = input_path.with_extension("mmm");
 
-    let file = File::open(input_path).map_err(|e| vec![anyhow!(e).context("Could not open file for parsing :(")])?;
+    let file = File::open(input_path)
+        .map_err(|e| vec![anyhow!(e).context("Could not open file for parsing :(")])?;
 
     let mut reader = BufReader::new(file);
 
@@ -248,7 +247,16 @@ pub fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<(), Ve
     writing_pb.maybe(|writing_pb| {
         writing_pb.finish_with_message(format!("Done in {} ms", writing_pb.elapsed().as_millis()))
     });
-    println!("Compiled in {:?}", start_time.elapsed());
+
+    if verbose {
+        print!("\n\n");
+    }
+
+    println!(
+        "Compiled in {:?}{}",
+        start_time.elapsed(),
+        if verbose { " ✔️" } else { "" }
+    );
 
     Ok(())
 }

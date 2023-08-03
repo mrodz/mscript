@@ -12,9 +12,13 @@ clap = { version = "4.2.4", features = ["derive"] }
 bytecode = { path = "./bytecode" }
 bytecode_dev_transpiler = { path = "./bytecode_dev_transpiler" }
 compiler = { path = "./compiler" }
+log = "0.4.19"
+colored = "2.0.4"
 
 [features]
-developer = ["bytecode/developer", "compiler/debug"]
+debug_runtime = ["bytecode/debug"]
+debug_compiler = ["compiler/debug"]
+debug = ["bytecode/debug", "compiler/debug"]
 
 [workspace]
 members = ["bytecode", "bytecode_dev_transpiler", "compiler"]

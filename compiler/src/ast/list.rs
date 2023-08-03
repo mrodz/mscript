@@ -93,6 +93,7 @@ pub(crate) enum ListType {
     Open {
         types: Vec<Cow<'static, TypeLayout>>,
         spread: Box<Cow<'static, TypeLayout>>,
+        len_at_init: Option<usize>,
     },
     Empty,
 }
@@ -208,7 +209,7 @@ impl ListType {
         match self {
             Self::Empty => bail!("empty list"),
             Self::Mixed(types) => types.get(index).map(Cow::as_ref).context("there is no value at the specified index"),
-            Self::Open { types, spread } => Ok(if let Some(ty) = types.get(index) {
+            Self::Open { types, spread, .. } => Ok(if let Some(ty) = types.get(index) {
                 ty.as_ref()
             } else {
                 spread.as_ref()
@@ -232,7 +233,7 @@ impl Display for ListType {
 
                 write!(f, "]")
             }
-            Self::Open { types, spread } => {
+            Self::Open { types, spread, .. } => {
                 write!(f, "[")?;
                 if !types.is_empty() {
                     for ty in types {
@@ -254,11 +255,18 @@ impl PartialEq for ListType {
             (Empty, Empty) => true,
             (Empty, _) | (_, Empty) => false,
             (Mixed(t1), Mixed(t2)) => t1 == t2,
-            (Open { types, spread }, other) | (other, Open { types, spread }) => match other {
+            (Open { types, spread, len_at_init }, other) | (other, Open { types, spread, len_at_init }) => match other {
                 Open {
                     types: t2,
                     spread: s2,
+                    len_at_init: len_at_init2
                 } => {
+                    if let (Some(len1), Some(len2)) = (len_at_init, len_at_init2) {
+                        if len1 != len2 {
+                            return false;
+                        }
+                    }
+
                     if types == t2 && spread == s2 {
                         return true;
                     }
@@ -286,6 +294,12 @@ impl PartialEq for ListType {
                     lhs_all_the_same && rhs_all_the_same
                 }
                 Mixed(t2) => {
+                    if let Some(len) = len_at_init {
+                        if *len != t2.len() {
+                            return false;
+                        }
+                    }
+                    
                     for (idx, ty2) in t2.iter().enumerate() {
                         let ty1 = types.get(idx).unwrap_or(spread);
 
@@ -350,6 +364,7 @@ impl IntoType for List {
                 return Ok(TypeLayout::List(ListType::Open {
                     types: vec![],
                     spread: Box::new(Cow::Owned(last_ty)),
+                    len_at_init: Some(self.values.len()),
                 }));
             }
 
@@ -362,6 +377,7 @@ impl IntoType for List {
             Ok(TypeLayout::List(ListType::Open {
                 types,
                 spread: Box::new(Cow::Owned(last_ty)),
+                len_at_init: Some(self.values.len()),
             }))
         }
     }

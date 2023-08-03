@@ -31,6 +31,9 @@ pub enum Commands {
         /// print extra compilation information, but slows down the process considerably.
         #[arg(long = "verbose", default_value = "false")]
         verbose: bool,
+        /// no debug or display info besides the minimum.
+        #[arg(long = "quick", default_value = "false")]
+        quick: bool,
     },
     /// Build the interpreter and have it look for the
     /// entrypoint of a `.mmm` file
@@ -56,6 +59,9 @@ pub enum Commands {
         /// print extra compilation information, but slows down the process considerably.
         #[arg(long = "verbose", default_value = "false")]
         verbose: bool,
+        /// No debug or display info besides the minimum.
+        #[arg(long = "quick", default_value = "false")]
+        quick: bool,
     },
     /// Transpile human-readable bytecode (`.transpiled.mmm` extension)
     /// into an executable `.mmm` file.
