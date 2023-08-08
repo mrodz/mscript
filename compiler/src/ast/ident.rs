@@ -58,6 +58,10 @@ impl Ident {
         self.read_only
     }
 
+    pub fn is_instance_callback_variable(&self) -> Result<bool> {
+        Ok(self.ty()?.is_directly_callback_variable())
+    }
+
     pub fn wrap_in_callback(mut self) -> Result<Self> {
         let Some(ty) = self.ty else {
             bail!("this variable does not have a type; it can't be wrapped in a callback")

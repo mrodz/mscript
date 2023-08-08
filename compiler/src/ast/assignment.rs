@@ -11,23 +11,46 @@ use crate::{
 
 use super::{
     map_err, new_err, value::Value, Compile, CompileTimeEvaluate, ConstexprEvaluation,
-    Dependencies, Dependency, Ident,
+    Dependencies, Dependency, Ident, TemporaryRegister,
 };
 
 #[derive(Debug)]
-pub(crate) struct Assignment {
-    pub ident: Ident,
-    pub value: Value,
-    pub flags: AssignmentFlag,
+pub(crate) enum Assignment {
+    Single {
+        ident: Ident,
+        value: Value,
+        flags: AssignmentFlag,
+    },
+    Multiple {
+        idents: Box<[Ident]>,
+        value: Value,
+        flags: AssignmentFlag,
+    },
 }
 
 impl Assignment {
     pub fn new(ident: Ident, value: Value) -> Self {
-        Self {
+        Self::Single {
             ident,
             value,
             flags: AssignmentFlag::default(),
         }
+    }
+
+    pub fn new_multi(idents: Box<[Ident]>, value: Value) -> Self {
+        Self::Multiple { idents, value, flags: AssignmentFlag::default() }
+    }
+
+    #[inline]
+    pub fn flags(&self) -> &AssignmentFlag {
+        let (Self::Single { flags, .. } | Self::Multiple { flags, .. }) = self;
+        flags
+    }
+
+    #[inline]
+    pub fn value(&self) -> &Value {
+        let (Self::Single { value, .. } | Self::Multiple { value, .. }) = self;
+        value
     }
 
     pub fn can_modify_if_applicable(
@@ -35,11 +58,17 @@ impl Assignment {
         user_data: &AssocFileData,
         is_modify: bool,
     ) -> Result<bool> {
+        let Self::Single { ident, .. } = self else {
+            bail!("cannot modify a pre-existing variable when unpacking");
+        };
+
         let skip = if is_modify { 1 } else { 0 };
 
-        if self.flags.contains(AssignmentFlag::modify()) {
+        let name = ident.name();
+
+        if self.flags().contains(AssignmentFlag::modify()) {
             let (ident, _) = user_data
-                .get_dependency_flags_from_name_skip_n(self.ident.name(), skip)
+                .get_dependency_flags_from_name_skip_n(name, skip)
                 .context(
                     "attempting to look up a variable that does not exist in any parent scope",
                 )?;
@@ -47,29 +76,41 @@ impl Assignment {
             return Ok(!ident.is_const());
         }
 
-        let has_been_declared = user_data.get_ident_from_name_local(self.ident.name());
+        let has_been_declared = user_data.get_ident_from_name_local(name);
 
         Ok(has_been_declared.map_or_else(|| true, |ident| !ident.is_const()))
     }
 
-    pub fn set_flags(&mut self, flags: AssignmentFlag) {
-        self.flags = flags;
+    pub fn set_flags(&mut self, new_flags: AssignmentFlag) {
+        let (Self::Multiple { ref mut flags, .. } | Self::Single { ref mut flags, .. }) = self;
+        *flags = new_flags;
     }
 }
 
 impl Dependencies for Assignment {
     fn supplies(&self) -> Vec<Dependency> {
-        if !self.flags.contains(AssignmentFlag::modify()) {
-            vec![Dependency::new(Cow::Borrowed(&self.ident))]
-        } else {
-            // We are not introducing a new variable, just pointing to a callback variable.
-            // This means we shouldn't count child dependencies as filled by this assignment.
-            vec![]
+        if let Self::Single { ident, .. } = self {
+            if !self.flags().contains(AssignmentFlag::modify()) {
+                return vec![Dependency::new(Cow::Borrowed(ident))]
+            }
         }
+
+        // We are not introducing a new variable, just pointing to a callback variable.
+        // This means we shouldn't count child dependencies as filled by this assignment.
+        // Unpacking a result does not support the modify keyword so it is left out.
+        vec![]
     }
 
     fn dependencies(&self) -> Vec<Dependency> {
-        self.value.net_dependencies()
+        let mut base = self.value().net_dependencies();
+
+        if let Self::Single { ident, .. } = self {
+            if ident.is_instance_callback_variable().unwrap() {
+                base.push(Dependency::new(Cow::Borrowed(ident)));
+            }
+        }
+
+        base
     }
 
     /// custom implementation
@@ -94,14 +135,15 @@ impl Dependencies for Assignment {
 
 impl Compile for Assignment {
     fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<super::CompiledItem>> {
-        let name = self.ident.name();
 
-        let maybe_constexpr_eval = self.value.try_constexpr_eval()?;
+        // let name = self.ident.name();
+
+        let maybe_constexpr_eval = self.value().try_constexpr_eval()?;
 
         let mut value_init = if let ConstexprEvaluation::Owned(value) = maybe_constexpr_eval {
             value.compile(function_buffer)?
         } else {
-            match &self.value {
+            match &self.value() {
                 Value::Ident(ident) => ident.compile(function_buffer)?,
                 Value::Function(function) => {
                     function.in_place_compile_for_value(function_buffer)?
@@ -118,13 +160,36 @@ impl Compile for Assignment {
         //     value_init.append(&mut next.compile(function_buffer)?);
         // }
 
-        let store_instruction = if self.flags.contains(AssignmentFlag::modify()) {
-            instruction!(store_object name)
-        } else {
-            instruction!(store name)
-        };
+        match self {
+            Self::Single { ident, .. } => {
+                let name = ident.name();
+                let store_instruction = if self.flags().contains(AssignmentFlag::modify()) {
+                    instruction!(store_object name)
+                } else {
+                    instruction!(store name)
+                };
+        
+                value_init.push(store_instruction);
+            }
+            Self::Multiple { idents, ..} => {
+                let indexable = TemporaryRegister::new();
+                value_init.push(instruction!(store_fast indexable));
+                    
+                for (idx, ident) in idents.iter().enumerate() {
+                    let name = ident.name();
 
-        value_init.push(store_instruction);
+                    value_init.append(&mut vec![
+                        instruction!(load_fast indexable),
+                        instruction!(vec_op (format!("[{idx}]"))),
+                        instruction!(store name),
+                    ])
+                }
+
+                value_init.push(instruction!(delete_name_scoped indexable));
+            }
+        }
+
+        
 
         Ok(value_init)
     }
@@ -260,19 +325,22 @@ impl Parser {
         let user_data = input.user_data();
 
         let (mut x, did_exist_before) = match assignment.as_rule() {
-            Rule::assignment_no_type => Self::assignment_no_type(assignment, is_const)?,
-            Rule::assignment_type => Self::assignment_type(assignment, is_const)?,
+            Rule::assignment_no_type => Self::assignment_no_type(assignment, is_const, is_modify)?,
+            Rule::assignment_type => Self::assignment_type(assignment, is_const, is_modify)?,
+            Rule::assignment_unpack => Self::assignment_unpack(assignment, is_const, is_modify)?,
             rule => unreachable!("{rule:?}"),
         };
 
-        let ident_ty = x.ident.ty().unwrap();
-        if let Some(list_type) = ident_ty.is_list() {
-            if list_type.must_be_const() && !is_const {
-                return Err(vec![new_err(
-                    assignment_span,
-                    &user_data.get_source_file_name(),
-                    "mixed-type arrays must be const in order to ensure type safety".to_owned(),
-                )]);
+        if let Assignment::Single { ref ident, .. } = x {
+            let ident_ty = ident.ty().unwrap();
+            if let Some(list_type) = ident_ty.is_list() {
+                if list_type.must_be_const() && !is_const {
+                    return Err(vec![new_err(
+                        assignment_span,
+                        &user_data.get_source_file_name(),
+                        "mixed-type arrays must be const in order to ensure type safety".to_owned(),
+                    )]);
+                }
             }
         }
 
@@ -280,24 +348,26 @@ impl Parser {
             x.set_flags(flags)
         }
 
-        let requires_check = did_exist_before || is_modify;
+        if let Assignment::Single { ref ident, .. } = x {
+            let requires_check = did_exist_before || is_modify;
 
-        let can_modify_if_applicable = map_err(
-            x.can_modify_if_applicable(user_data, is_modify),
-            flags_span,
-            &user_data.get_source_file_name(),
-            "this assignment contains the \"modify\" attribute, which is used to mutate a variable from a higher scope".to_owned(),
-        ).to_err_vec()?;
-
-        if requires_check && !can_modify_if_applicable {
-            return Err(vec![new_err(
-                assignment_span,
-                &input.user_data().get_source_file_name(),
-                format!(
-                    "cannot reassign to \"{}\", which is a const variable",
-                    x.ident.name()
-                ),
-            )]);
+            let can_modify_if_applicable = map_err(
+                x.can_modify_if_applicable(user_data, is_modify),
+                flags_span,
+                &user_data.get_source_file_name(),
+                "this assignment contains the \"modify\" attribute, which is used to mutate a variable from a higher scope".to_owned(),
+            ).to_err_vec()?;
+    
+            if requires_check && !can_modify_if_applicable {
+                return Err(vec![new_err(
+                    assignment_span,
+                    &input.user_data().get_source_file_name(),
+                    format!(
+                        "cannot reassign to \"{}\", which is a const variable",
+                        ident.name()
+                    ),
+                )]);
+            }
         }
 
         Ok(x)

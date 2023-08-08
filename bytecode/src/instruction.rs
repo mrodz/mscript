@@ -220,6 +220,9 @@ pub mod implementations {
                 bail!("bin_op requires two items on the local operating stack (found {:?})", ctx.get_local_operating_stack())
             };
 
+            let left = left.move_out_of_heap_primitive();
+            let right = right.move_out_of_heap_primitive();
+
             let result = match (symbols.as_str(), &left, &right) {
                 ("+", ..) => left + right,
                 ("-", ..) => left - right,
@@ -553,6 +556,7 @@ pub mod implementations {
                     print!(", {var}")
                 }
 
+                #[cfg(feature = "debug")]
                 stdout().flush()?;
 
                 println!();

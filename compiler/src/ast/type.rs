@@ -14,14 +14,14 @@ use super::{
     list::{ListBound, ListType},
     map_err,
     math_expr::Op,
-    FunctionParameters, Value, BIGINT_TYPE, INT_TYPE, STR_TYPE,
+    FunctionParameters, Value, BIGINT_TYPE, INT_TYPE,
 };
 
 static mut TYPES: Lazy<HashMap<&str, TypeLayout>> = Lazy::new(|| {
     let mut x = HashMap::new();
 
     x.insert("bool", TypeLayout::Native(NativeType::Bool));
-    x.insert("str", TypeLayout::Native(NativeType::Str));
+    // x.insert("str", TypeLayout::Native(NativeType::Str(0)));
     x.insert("int", TypeLayout::Native(NativeType::Int));
     x.insert("bigint", TypeLayout::Native(NativeType::BigInt));
     x.insert("float", TypeLayout::Native(NativeType::Float));
@@ -62,6 +62,10 @@ impl SupportedTypesWrapper {
         }
         Ok(false)
     }
+
+    pub(crate) fn contains_raw_type(&self, ty: &TypeLayout) -> bool {
+        self.0.contains(&Cow::Borrowed(ty))
+    }
 }
 
 #[allow(unused)]
@@ -70,9 +74,6 @@ pub(crate) mod shorthands {
 
     pub(crate) static BOOL_TYPE: Lazy<&TypeLayout> =
         Lazy::new(|| unsafe { TYPES.get("bool").unwrap() });
-
-    pub(crate) static STR_TYPE: Lazy<&TypeLayout> =
-        Lazy::new(|| unsafe { TYPES.get("str").unwrap() });
 
     pub(crate) static INT_TYPE: Lazy<&TypeLayout> =
         Lazy::new(|| unsafe { TYPES.get("int").unwrap() });
@@ -90,7 +91,7 @@ pub(crate) mod shorthands {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeType {
     Bool,
-    Str,
+    Str(Option<usize>),
     Int,
     BigInt,
     Float,
@@ -144,6 +145,19 @@ impl TypeLayout {
         Some(l)
     }
 
+    pub fn is_directly_callback_variable(&self) -> bool {
+        matches!(self, Self::CallbackVariable(..))
+    }
+
+    pub fn has_index_length_property(&self) -> Option<ListBound> {
+        match self {
+            Self::List(list) => Some(list.upper_bound()),
+            Self::Native(NativeType::Str(Some(len))) => Some(ListBound::Numeric(*len)),
+            Self::Native(NativeType::Str(None)) => Some(ListBound::Infinite),
+            _ => None
+        }
+    }
+
     pub fn is_function(&self) -> Option<Arc<FunctionType>> {
         let me = self.get_type_recursively();
 
@@ -164,17 +178,29 @@ impl TypeLayout {
     pub fn get_output_type_from_index(&self, index: &Value) -> Result<Cow<TypeLayout>> {
         let me = self.get_type_recursively();
 
-        if let Self::Native(NativeType::Str) = me {
-            return Ok(Cow::Borrowed(&STR_TYPE));
-        }
-
         let index_ty = index.for_type()?;
 
         if !index_ty.can_be_used_as_list_index() {
-            bail!("`{index_ty}` cannot be used as an index into a list");
+            bail!("`{index_ty}` cannot be used as an index here");
         }
 
         let index_as_usize = index.get_usize()?;
+
+        if let Self::Native(NativeType::Str(Some(str_len))) = me {
+            match index_as_usize {
+                ValToUsize::Ok(index) => {
+                    if index >= *str_len {
+                        bail!("index {index} too big for str of len {str_len}")
+                    }
+
+                    let native_type = TypeLayout::Native(NativeType::Str(Some(1)));
+
+                    return Ok(Cow::Owned(native_type));
+                }
+                ValToUsize::NotConstexpr => (),
+                ValToUsize::NaN => bail!("str cannot be indexed by a non-int")
+            }
+        }
 
         match index_as_usize {
             ValToUsize::Ok(index_as_usize) => {
@@ -207,7 +233,7 @@ impl TypeLayout {
         let me = self.get_type_recursively();
 
         Some(SupportedTypesWrapper(match me {
-            Self::Native(NativeType::Str) => {
+            Self::Native(NativeType::Str(_)) => {
                 Box::new([Cow::Borrowed(&INT_TYPE), Cow::Borrowed(&BIGINT_TYPE)])
             }
             Self::List(x) => {
@@ -222,7 +248,7 @@ impl TypeLayout {
     pub fn supports_negate(&self) -> bool {
         let me = self.get_type_recursively();
         match me {
-            Self::Native(NativeType::Str) => false,
+            Self::Native(NativeType::Str(_)) => false,
             Self::Native(_) => true,
             _ => false,
         }
@@ -291,9 +317,10 @@ impl TypeLayout {
             //======================
             (x, Byte, ..) => *x, // byte will always get overshadowed.
             //======================
-            (Str, Str | Int | BigInt | Float | Bool, Add) => Str,
-            (Str, Int | BigInt, Multiply) => Str,
-            (Int | BigInt, Str, Multiply) => Str,
+            (Str(Some(len1)), Str(Some(len2)), Add) => Str(Some(len1 + len2)),
+            (Str(_), Str(_) | Int | BigInt | Float | Bool, Add) => Str(None),
+            (Str(_), Int | BigInt, Multiply) => Str(None),
+            (Int | BigInt, Str(_), Multiply) => Str(None),
             //======================
             (Bool, Bool, And | Or | Xor) => Bool,
             _ => return None,

@@ -11,6 +11,7 @@ impl Parser {
     pub fn assignment_no_type(
         input: Node,
         is_const: bool,
+        is_modify: bool,
     ) -> Result<(Assignment, bool), Vec<anyhow::Error>> {
         let mut children = input.children();
 
@@ -30,6 +31,10 @@ impl Parser {
         let user_data = input.user_data();
 
         let maybe_error = value.associate_with_ident(&mut ident, user_data);
+
+        if is_modify {
+            ident = ident.wrap_in_callback().to_err_vec()?;
+        }
 
         map_err_messages(
             maybe_error,
