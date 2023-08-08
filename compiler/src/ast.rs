@@ -1,6 +1,7 @@
 mod assignment;
 mod assignment_no_type;
 mod assignment_type;
+mod assignment_unpack;
 mod boolean;
 mod callable;
 mod declaration;
@@ -47,7 +48,7 @@ pub(crate) use while_loop::WhileLoop;
 
 #[allow(unused_imports)]
 pub(crate) use r#type::shorthands::{
-    BIGINT_TYPE, BOOL_TYPE, BYTE_TYPE, FLOAT_TYPE, INT_TYPE, STR_TYPE,
+    BIGINT_TYPE, BOOL_TYPE, BYTE_TYPE, FLOAT_TYPE, INT_TYPE,
 };
 
 use anyhow::{anyhow, bail, Context, Error, Result};
@@ -102,7 +103,6 @@ impl TemporaryRegister {
     }
 
     pub unsafe fn free_many(count: usize) {
-
         REGISTER_COUNT = REGISTER_COUNT
             .checked_sub(count)
             .expect("dropped too many registers");
@@ -454,7 +454,6 @@ where
 
     let always_err = unsafe { x.unwrap_err_unchecked() };
 
-    
     Err(anyhow!(always_err).context(custom_error))
 }
 

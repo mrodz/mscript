@@ -96,7 +96,10 @@ assignment_flag = { "modify" | "const" }
 assignment_flags = { assignment_flag ~ assignment_flag* }
 assignment_no_type = { ident ~ "=" ~ value }
 assignment_type = { ident ~ ":" ~ type ~ "=" ~ value }
-assignment = { (assignment_flags ~ (assignment_no_type | assignment_type)) | (assignment_no_type | assignment_type) }
+assignment_unpack = { "[" ~ (ident ~ ("," ~ ident)*) ~ "]" ~ "=" ~ value }
+
+assignment_variant = _{ assignment_no_type | assignment_type | assignment_unpack }
+assignment = { (assignment_flags ~ assignment_variant) | assignment_variant }
 
 reassignment_primary = _{ ident | "(" ~ reassignment_expr ~ ")" }
 reassignment_postfix = _{ list_index }

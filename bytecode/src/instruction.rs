@@ -556,6 +556,7 @@ pub mod implementations {
                     print!(", {var}")
                 }
 
+                #[cfg(feature = "debug")]
                 stdout().flush()?;
 
                 println!();
