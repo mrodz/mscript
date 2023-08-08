@@ -98,7 +98,7 @@ impl Parser {
 
             let cloned = type_at_idx.clone().into_owned();
             ident
-                .link_force_no_inherit(&input.user_data(), Cow::Owned(cloned))
+                .link_force_no_inherit(input.user_data(), Cow::Owned(cloned))
                 .to_err_vec()?;
         }
 

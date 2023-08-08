@@ -318,7 +318,7 @@ impl TypeLayout {
             (x, Byte, ..) => *x, // byte will always get overshadowed.
             //======================
             (Str(Some(len1)), Str(Some(len2)), Add) => Str(Some(len1 + len2)),
-            (Str(_), Int | BigInt | Float | Bool, Add) => Str(None),
+            (Str(_), Str(_) | Int | BigInt | Float | Bool, Add) => Str(None),
             (Str(_), Int | BigInt, Multiply) => Str(None),
             (Int | BigInt, Str(_), Multiply) => Str(None),
             //======================

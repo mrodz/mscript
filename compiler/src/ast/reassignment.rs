@@ -108,6 +108,10 @@ fn parse_path(pairs: Pairs<Rule>, user_data: Rc<AssocFileData>) -> Result<Reassi
 				})
 				.to_err_vec()?;
 
+			if ident.is_const() {
+				return Err(vec![new_err(primary.as_span(), &file_name, format!("cannot reassign to `{ident}`, which is a const variable in this scope"))])
+			}
+
 			let cloned = if is_callback {
 				ident.clone().wrap_in_callback().to_err_vec()?
 			} else {
