@@ -21,7 +21,7 @@ static mut TYPES: Lazy<HashMap<&str, TypeLayout>> = Lazy::new(|| {
     let mut x = HashMap::new();
 
     x.insert("bool", TypeLayout::Native(NativeType::Bool));
-    // x.insert("str", TypeLayout::Native(NativeType::Str(0)));
+    x.insert("str", TypeLayout::Native(NativeType::Str(StrWrapper(None))));
     x.insert("int", TypeLayout::Native(NativeType::Int));
     x.insert("bigint", TypeLayout::Native(NativeType::BigInt));
     x.insert("float", TypeLayout::Native(NativeType::Float));
@@ -88,10 +88,28 @@ pub(crate) mod shorthands {
         Lazy::new(|| unsafe { TYPES.get("byte").unwrap() });
 }
 
+#[derive(Debug, Clone, Copy, Eq)]
+pub struct StrWrapper(pub(in crate::ast) Option<usize>);
+
+impl From<StrWrapper> for Option<usize> {
+    fn from(value: StrWrapper) -> Self {
+        value.0
+    }
+}
+
+impl PartialEq for StrWrapper {
+    fn eq(&self, other: &Self) -> bool {
+        match (self.0, other.0) {
+            (Some(lhs), Some(rhs)) => lhs == rhs,
+            _ => true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeType {
     Bool,
-    Str(Option<usize>),
+    Str(StrWrapper),
     Int,
     BigInt,
     Float,
@@ -152,8 +170,8 @@ impl TypeLayout {
     pub fn has_index_length_property(&self) -> Option<ListBound> {
         match self {
             Self::List(list) => Some(list.upper_bound()),
-            Self::Native(NativeType::Str(Some(len))) => Some(ListBound::Numeric(*len)),
-            Self::Native(NativeType::Str(None)) => Some(ListBound::Infinite),
+            Self::Native(NativeType::Str(StrWrapper(Some(len)))) => Some(ListBound::Numeric(*len)),
+            Self::Native(NativeType::Str(StrWrapper(None))) => Some(ListBound::Infinite),
             _ => None
         }
     }
@@ -186,14 +204,14 @@ impl TypeLayout {
 
         let index_as_usize = index.get_usize()?;
 
-        if let Self::Native(NativeType::Str(Some(str_len))) = me {
+        if let Self::Native(NativeType::Str(StrWrapper(Some(str_len)))) = me {
             match index_as_usize {
                 ValToUsize::Ok(index) => {
                     if index >= *str_len {
                         bail!("index {index} too big for str of len {str_len}")
                     }
 
-                    let native_type = TypeLayout::Native(NativeType::Str(Some(1)));
+                    let native_type = TypeLayout::Native(NativeType::Str(StrWrapper(Some(1))));
 
                     return Ok(Cow::Owned(native_type));
                 }
@@ -317,10 +335,11 @@ impl TypeLayout {
             //======================
             (x, Byte, ..) => *x, // byte will always get overshadowed.
             //======================
-            (Str(Some(len1)), Str(Some(len2)), Add) => Str(Some(len1 + len2)),
-            (Str(_), Str(_) | Int | BigInt | Float | Bool, Add) => Str(None),
-            (Str(_), Int | BigInt, Multiply) => Str(None),
-            (Int | BigInt, Str(_), Multiply) => Str(None),
+            (Str(StrWrapper(Some(len1))), Str(StrWrapper(Some(len2))), Add) => Str(StrWrapper(Some(len1 + len2))),
+            (Str(_), _, Add) => Str(StrWrapper(None)),
+            (_, Str(_), Add) => Str(StrWrapper(None)),
+            (Str(_), Int | BigInt, Multiply) => Str(StrWrapper(None)),
+            (Int | BigInt, Str(_), Multiply) => Str(StrWrapper(None)),
             //======================
             (Bool, Bool, And | Or | Xor) => Bool,
             _ => return None,
