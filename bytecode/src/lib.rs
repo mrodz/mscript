@@ -9,7 +9,14 @@ pub(crate) mod instruction;
 pub(crate) mod instruction_constants;
 pub(crate) mod interpreter;
 pub(crate) mod stack;
+mod serialization;
 mod variables;
+
+pub(crate) use context::Ctx;
+pub(crate) use instruction::Instruction;
+pub(crate) use function::{InstructionExitState, ReturnValue};
+pub(crate) use variables::Primitive::{self, *};
+pub(crate) use serialization::{SerializedInstructionBuilder, InstructionDeserializationFactory};
 
 // Alternate naming to make writing FFI functions simpler.
 pub use function::ReturnValue as FFIReturnValue;
@@ -20,6 +27,7 @@ pub use interpreter::Program;
 
 /// Useful functions that make `bytecode -> ir`, `mscript -> bytecode`, and `bytecode -> ir` conversions easier.
 pub mod compilation_lookups {
+    #![cfg(not)]
     use std::borrow::Cow;
 
     pub use crate::instruction::split_string;

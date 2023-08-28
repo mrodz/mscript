@@ -140,7 +140,7 @@ impl MScriptFile {
         let mut functions: HashMap<Rc<String>, Function> = HashMap::new();
 
         // growable list of all the instructions that belong to a function.
-        let mut instruction_buffer: Vec<Instruction> = Vec::new();
+        let mut instruction_buffer: Vec<Box<dyn Instruction>> = Vec::new();
 
         // store the current name of the function.
         let mut current_function_name: Option<String> = None;

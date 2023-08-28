@@ -1,20 +1,63 @@
 //! All of the implementations for each bytecode instruction are found here.
+mod arg;
+mod bin_op;
+mod call;
+mod call_lib;
+mod call_object;
+mod call_self;
+mod constexpr;
+mod delete;
+mod done;
+mod equalities;
+mod fast_rev2;
+mod r#if;
+mod jumps;
+mod load;
+mod load_callback;
+mod load_fast;
+mod make_function;
+mod mutate;
+mod neg;
+mod not;
+mod objects;
+mod pop;
+mod primitives;
+mod printn;
+mod ret;
+mod store;
+mod store_fast;
+mod store_object;
+mod store_skip;
+mod take;
+mod vec_mut;
+mod vec_op;
+mod vectors;
+mod void;
+mod r#while;
+
+use crate::instruction_constants::TERMINATOR;
 
 use super::context::Ctx;
 use super::function::InstructionExitState;
-use super::instruction_constants;
+// use super::instruction_constants;
 use super::stack::{Stack, VariableMapping};
-use super::variables::{ObjectBuilder, Primitive};
-use anyhow::{bail, Context, Result};
-use once_cell::sync::Lazy;
+use super::variables::Primitive;
+use anyhow::{bail, Result};
 use std::borrow::Cow;
-use std::collections::HashSet;
-use std::fmt::Debug;
-use std::io::{stdin, stdout, Write};
 use std::rc::Rc;
 
-/// This variable allows instructions to register objects on the fly.
-static mut OBJECT_BUILDER: Lazy<ObjectBuilder> = Lazy::new(ObjectBuilder::new);
+// /// This variable allows instructions to register objects on the fly.
+// static mut OBJECT_BUILDER: Lazy<ObjectBuilder> = Lazy::new(ObjectBuilder::new);
+
+// use erased_serde::serialize_trait_object;
+
+pub(crate) trait Instruction {
+    fn execute(&self, context: &mut Ctx) -> Result<InstructionExitState>;
+    fn serialize(&self) -> Vec<u8>;
+    fn deserialize(bytes: &[u8]) -> Self;
+}
+
+// serialize_trait_object!(Instruction);
 
 /// Used for type declarations in lookup tables.
 pub type InstructionSignature = fn(&mut Ctx, &[String]) -> Result<()>;
@@ -74,6 +117,7 @@ pub type InstructionSignature = fn(&mut Ctx, &[String]) -> Result<()>;
 /// author, one must ensure that error messages capture the essense of how the program
 /// blew up. If an instruction errors, it is considered a fatal error by the interpreter
 /// and the **entire** program will shut down.
+#[cfg(not)]
 macro_rules! instruction {
     ($($name:ident $body:expr)*) => {
         $(
@@ -104,6 +148,7 @@ macro_rules! instruction {
 /// * `make_float`
 /// * `make_byte`
 /// * `make_bigint`
+#[cfg(not)]
 macro_rules! make_type {
     ($name:ident) => {
         instruction! {
@@ -124,6 +169,7 @@ macro_rules! make_type {
 
 /// This submodule contains the implementations for
 /// each instruction, and nothing more.
+#[cfg(not)]
 #[deny(dead_code)]
 pub mod implementations {
     use super::*;
@@ -136,949 +182,939 @@ pub mod implementations {
     use std::rc::Rc;
 
     instruction! {
-        constexpr(ctx, args) {
-            if args.len() != 1 {
-                bail!("unexpected 1 parameter")
-            }
+        // constexpr(ctx, args) {
+        //     if args.len() != 1 {
+        //         bail!("unexpected 1 parameter")
+        //     }
 
-            let var = Primitive::from(args[0].as_str());
+        //     let var = Primitive::from(args[0].as_str());
 
-            ctx.push(var);
+        //     ctx.push(var);
 
-            Ok(())
-        }
+        //     Ok(())
+        // }
     }
 
     instruction! {
-        pop(ctx, args) {
-            if !args.is_empty() {
-                bail!("unexpected parameter")
-            }
+        // pop(ctx, args) {
+        //     if !args.is_empty() {
+        //         bail!("unexpected parameter")
+        //     }
 
-            ctx.pop();
+        //     ctx.pop();
 
-            Ok(())
-        }
+        //     Ok(())
+        // }
+    }
+
+    // instruction! {
+    //     stack_dump(ctx, args) {
+    //         println!("====== Start Context Dump ======");
+    //         'get_data: {
+    //             if let Some(arg0) = args.first() {
+    //                 if arg0 == "verbose" {
+    //                     dbg!(ctx);
+    //                     break 'get_data;
+    //                 } else {
+    //                     bail!("unknown debug argument ({arg0})")
+    //                 }
+    //             }
+
+    //             let stack = ctx.get_call_stack_string();
+
+    //             println!("\nFunction: {}", ctx.owner());
+    //             println!("\nOperating Stack: {:?}", ctx.get_local_operating_stack());
+    //             println!("\nStack Trace:\n{stack}");
+    //             println!("\nThis Frame's Variables:\n\t{}\n", ctx.get_frame_variables());
+    //         }
+    //         println!("======= End Context Dump =======");
+
+    //         Ok(())
+    //     }
+    // }
+
+    instruction! {
+        // neg(ctx, _args) {
+        //     let Some(val) = ctx.get_last_op_item_mut() else {
+        //         bail!("neg requires one item on the local operating stack")
+        //     };
+
+        //     val.negate()?;
+
+        //     Ok(())
+        // }
+
+        // not(ctx, _args) {
+        //     let Some(val) = ctx.get_last_op_item_mut() else {
+        //         bail!("not requires one item on the local operating stack")
+        //     };
+
+        //     let Primitive::Bool(val) = val else {
+        //         bail!("not can only negate booleans")
+        //     };
+
+        //     *val = !*val;
+
+        //     Ok(())
+        // }
+
+        // bin_op(ctx, args) {
+        //     use Primitive::*;
+        //     let symbols = args.first().context("Expected an operation [+,-,*,/,%,>,>=,<,<=]")?;
+
+        //     let (Some(right), Some(left)) = (ctx.pop(), ctx.pop()) else {
+        //         bail!("bin_op requires two items on the local operating stack (found {:?})", ctx.get_local_operating_stack())
+        //     };
+
+        //     let left = left.move_out_of_heap_primitive();
+        //     let right = right.move_out_of_heap_primitive();
+
+        //     let result = match (symbols.as_str(), &left, &right) {
+        //         ("+", ..) => left + right,
+        //         ("-", ..) => left - right,
+        //         ("*", ..) => left * right,
+        //         ("/", ..) => left / right,
+        //         ("%", ..) => left % right,
+        //         (">", ..) => Ok(bool!(left > right)),
+        //         ("<", ..) => Ok(bool!(left < right)),
+        //         (">=", ..) => Ok(bool!(left >= right)),
+        //         ("<=", ..) => Ok(bool!(left <= right)),
+        //         ("=", ..) => Ok(bool!(left.equals(&right)?)),
+        //         ("&&", Bool(x), Bool(y)) => Ok(bool!(*x && *y)),
+        //         ("||", Bool(x), Bool(y)) => Ok(bool!(*x || *y)),
+        //         ("^", Bool(x), Bool(y)) => Ok(bool!(*x ^ *y)),
+        //         _ => bail!("unknown operation: {symbols}")
+        //     }.context("invalid binary operation")?;
+
+        //     ctx.clear_and_set_stack(result);
+
+        //     Ok(())
+        // }
+
+        // vec_mut(ctx, _args) {
+        //     if ctx.stack_size() < 2 {
+        //         bail!("mutating a vec requires [ptr, value]");
+        //     }
+
+        //     let new_val = ctx.pop().unwrap();
+        //     let maybe_vec = ctx.pop().unwrap();
+
+        //     let Primitive::HeapPrimitive(vec_ptr) = maybe_vec else {
+        //         bail!("expected a mutable heap primitive, found {maybe_vec}");
+        //     };
+
+        //     unsafe {
+        //         *vec_ptr = new_val;
+        //     }
+
+        //     Ok(())
+        // }
+
+        // vec_op(ctx, args) {
+        //     let mut arg_iter = args.iter();
+        //     let op_name = arg_iter.next().context("Expected a vector operation")?;
+        //     let bytes = op_name.as_bytes();
+
+        //     if let [b'+', ..] = bytes {
+        //         if ctx.stack_size() != 1 {
+        //             bail!("vec_op +push operations require only a single item on the operating stack")
+        //         }
+
+        //         let new_val = ctx.pop().unwrap();
+
+        //         let mut primitive_with_flags: Rc<(Primitive, VariableFlags)> = ctx.load_local(&op_name[1..]).context("vector not found for pushing")?;
+
+        //         let primitive_with_flags: &mut (Primitive, VariableFlags) = Rc::make_mut(&mut primitive_with_flags);
+
+        //         let Primitive::Vector(ref mut vector) = primitive_with_flags.0 else {
+        //             bail!("not a vector, trying to push")
+        //         };
+
+        //         let vector: &mut Vec<Primitive> = rc_to_ref(vector);
+
+        //         vector.push(new_val);
+        //     } else if let [b'[', index @ .., b']'] = bytes {
+        //         let Some(indexable) = ctx.pop() else {
+        //             bail!("the stack is empty");
+        //         };
+
+        //         // this manual byte slice to usize conversion is more performant
+        //         let idx: usize = 'index_gen: {
+        //             let mut idx = 0;
+        //             let mut max = 10_usize.pow(index.len() as u32 - 1);
+
+        //             for byte in index {
+        //                 if !byte.is_ascii_digit() {
+        //                     let index_as_str = std::str::from_utf8(index)?;
+        //                     let variable = ctx.load_local(index_as_str).with_context(|| format!("'{index_as_str}' is not a literal number nor a name that has been mapped locally"))?;
+        //                     let primitive_part: &Primitive = &variable.0;
+
+        //                     let as_index: usize = primitive_part.try_into_numeric_index()?;
+
+        //                     break 'index_gen as_index;
+        //                 }
+        //                 idx += (byte - b'0') as usize * max;
+        //                 max /= 10;
+        //             }
+
+        //             idx
+        //         };
+
+        //         match indexable {
+        //             Primitive::Vector(vector) => {
+        //                 let r: *mut Primitive = rc_to_ref(&vector).get_mut(idx).with_context(|| format!("index {idx} out of bounds (len {})", vector.len()))?;
+        //                 ctx.push(Primitive::HeapPrimitive(r));
+
+        //             }
+        //             Primitive::Str(string) => {
+        //                 let mut str_chars = string.chars();
+        //                 ctx.push(Primitive::Str(str_chars.nth(idx).with_context(|| format!("index {idx} out of bounds (len {} chars, {} bytes)", string.chars().count(), string.len()))?.to_string()))
+        //             }
+        //             _ => bail!("Cannot perform a vector operation on a non-vector"),
+        //         }
+        //     } else {
+        //         match op_name.as_str() {
+        //             "reverse" => {
+        //                 let Some(Primitive::Vector(vector)) = ctx.get_last_op_item_mut() else {
+        //                     bail!("Cannot perform a vector operation on a non-vector")
+        //                 };
+
+        //                 let reference = Rc::get_mut(vector).context("could not get reference to vector")?;
+        //                 reference.reverse();
+        //             },
+        //             "mut" => {
+        //                 let idx = arg_iter.next().context("mutating an array requires an argument")?;
+        //                 let idx = idx.parse::<usize>()?;
+
+        //                 if ctx.stack_size() != 2 {
+        //                     bail!("mutating an array requires two items in the local operating stack")
+        //                 }
+
+        //                 let new_item = ctx.pop().context("could not pop first item")?;
+
+        //                 let Some(Primitive::Vector(vector)) = ctx.get_last_op_item_mut() else {
+        //                     bail!("Cannot perform a vector operation on a non-vector")
+        //                 };
+
+        //                 Rc::get_mut(vector).context("could not get reference to vector")?[idx] = new_item;
+
+        //             }
+        //             not_found => bail!("operation not found: `{not_found}`")
+        //         }
+        //     }
+
+        //     Ok(())
+        // }
+    }
+
+    // instruction! {
+    //     nop bail!("nop instructions are deprecated")
+    // }
+
+    instruction! {
+        // len(ctx=ctx) {
+        //     let Some(top) = ctx.pop() else {
+        //         bail!("len requires an item on the local stack")
+        //     };
+
+        //     let result = match top {
+        //         Primitive::Vector(v) => int!(v.len().try_into()?),
+        //         Primitive::Str(s) => int!(s.len().try_into()?),
+        //         _ => bail!("cannot get the raw length of a non-string/vector"),
+        //     };
+
+        //     ctx.push(result);
+
+        //     Ok(())
+        // }
+
+        // void(ctx=ctx) {
+        //     ctx.clear_stack();
+        //     Ok(())
+        // }
     }
 
     instruction! {
-        stack_dump(ctx, args) {
-            println!("====== Start Context Dump ======");
-            'get_data: {
-                if let Some(arg0) = args.first() {
-                    if arg0 == "verbose" {
-                        dbg!(ctx);
-                        break 'get_data;
-                    } else {
-                        bail!("unknown debug argument ({arg0})")
-                    }
-                }
+        // breakpoint(ctx, args) {
+        //     print!("[!!] BREAKPOINT\n[!!] options\n[!!] - continue\n[!!] - dump\n[!!] Enter Option: ");
 
-                let stack = ctx.get_call_stack_string();
+        //     let mut buf = String::new();
+        //     stdout().flush()?;
+        //     stdin().read_line(&mut buf)?;
 
-                println!("\nFunction: {}", ctx.owner());
-                println!("\nOperating Stack: {:?}", ctx.get_local_operating_stack());
-                println!("\nStack Trace:\n{stack}");
-                println!("\nThis Frame's Variables:\n\t{}\n", ctx.get_frame_variables());
-            }
-            println!("======= End Context Dump =======");
+        //     match buf.trim_end() {
+        //         "continue" => Ok(()),
+        //         "dump" => {
+        //             stack_dump(ctx, args)
+        //         }
+        //         buf => {
+        //             println!("[!!]\n[!!] BREAKPOINT\n[!!] '{buf}' is not a valid option.\n[!!]");
+        //             breakpoint(ctx, args)
+        //         }
+        //     }
+        // }
+    }
 
-            Ok(())
-        }
+    // instruction! {
+    //     ret(ctx=ctx) {
+    //         if ctx.stack_size() > 1 {
+    //             bail!("ret can only return a single item");
+    //         }
+
+    //         let var = ctx.pop();
+
+    //         let ret = if let Some(primitive) = var {
+    //             ReturnValue::Value(primitive)
+    //         } else {
+    //             ReturnValue::NoValue
+    //         };
+
+    //         ctx.signal(InstructionExitState::ReturnValue(ret));
+
+    //         Ok(())
+    //     }
+    // }
+
+    // make_type!(make_bool);
+    // make_type!(make_int);
+    // make_type!(make_float);
+    // make_type!(make_byte);
+    // make_type!(make_bigint);
+
+    instruction! {
+        // make_str(ctx, args) {
+        //     let raw_str = match args.len() {
+        //         0 => "",
+        //         1 => &args[0],
+        //         _ => bail!("make_str requires 0 arguments (empty string) or one argument (the string)")
+        //     };
+
+        //     let var = crate::string!(raw raw_str);
+
+        //     ctx.push(var);
+
+        //     Ok(())
+        // }
+
+        // make_function(ctx, args) {
+        //     let Some(location) = args.first() else {
+        //         bail!("making a function pointer requires a path to find it")
+        //     };
+
+        //     let len = args.len();
+        //     let callback_state = if len != 1 {
+        //         let mut arguments = HashMap::with_capacity(len - 1); // maybe len
+        //         for var_name in &args[1..] {
+        //             let Some(var) = ctx.load_variable(var_name) else {
+        //                 bail!("{var_name} is not in scope")
+        //             };
+
+        //             arguments.insert(var_name.clone(), var.clone());
+        //         }
+
+        //         Some(Rc::new(arguments.into()))
+        //     } else {
+        //         None
+        //     };
+
+        //     ctx.push(function!(PrimitiveFunction::new(location.into(), callback_state)));
+
+        //     Ok(())
+        // }
+
+        // make_object(ctx, args) {
+        //     if !args.is_empty() {
+        //         bail!("`make_object` does not require arguments")
+        //     }
+
+        //     let object_variables = Rc::new(ctx.get_frame_variables().clone());
+
+        //     let function = ctx.owner();
+        //     let name = Rc::new(function.name().clone());
+
+        //     let obj = unsafe {
+        //         if !OBJECT_BUILDER.has_class_been_registered(&name) {
+        //             let location = &function.location();
+        //             let object_path = format!("{}#{name}$", location.path());
+
+        //             let object_functions = rc_to_ref(location).get_object_functions(&object_path)?;
+
+        //             let mut mapping: HashSet<String> = HashSet::new();
+
+        //             for func in object_functions {
+        //                 mapping.insert(func.get_qualified_name());
+        //             }
+
+        //             OBJECT_BUILDER.register_class(Rc::clone(&name), mapping);
+        //         }
+
+        //         OBJECT_BUILDER.name(Rc::clone(&name)).object_variables(object_variables).build()
+        //     };
+
+        //     ctx.push(object!(Rc::new(obj)));
+
+        //     Ok(())
+        // }
+
+        // make_vector(ctx, args) {
+        //     if args.len() > 1 {
+        //         bail!("`make_vector` instruction requires 1 argument (capacity) or none (initializes with contents of local operating stack)")
+        //     }
+
+        //     let Some(arg) = args.first() else {
+        //         let vec = ctx.get_local_operating_stack();
+        //         // ^^ new capacity = old length
+
+        //         ctx.clear_stack();
+        //         ctx.push(vector!(raw vec));
+
+        //         return Ok(())
+        //     };
+
+        //     let capacity = arg.parse::<usize>().context("argument must be of type usize")?;
+
+        //     let vec = vector!(raw Vec::with_capacity(capacity));
+
+        //     ctx.push(vec);
+
+        //     Ok(())
+        // }
     }
 
     instruction! {
-        neg(ctx, _args) {
-            let Some(val) = ctx.get_last_op_item_mut() else {
-                bail!("neg requires one item on the local operating stack")
-            };
+        // printn(ctx, args) {
+        //     let Some(arg) = args.first() else {
+        //         bail!("expected 1 parameter (index into local operating stack), or * to print all");
+        //     };
 
-            val.negate()?;
+        //     if arg == "*" {
+        //         let Some(first) = ctx.get_nth_op_item(0) else {
+        //             println!();
+        //             return Ok(())
+        //         };
 
-            Ok(())
-        }
+        //         print!("{first}");
+        //         let operating_stack = ctx.get_local_operating_stack();
 
-        not(ctx, _args) {
-            let Some(val) = ctx.get_last_op_item_mut() else {
-                bail!("not requires one item on the local operating stack")
-            };
+        //         for var in operating_stack.iter().skip(1) {
+        //             print!(", {var}")
+        //         }
 
-            let Primitive::Bool(val) = val else {
-                bail!("not can only negate booleans")
-            };
+        //         #[cfg(feature = "debug")]
+        //         stdout().flush()?;
 
-            *val = !*val;
+        //         println!();
 
-            Ok(())
-        }
+        //         return Ok(());
+        //     }
 
-        bin_op(ctx, args) {
-            use Primitive::*;
-            let symbols = args.first().context("Expected an operation [+,-,*,/,%,>,>=,<,<=]")?;
+        //     let arg = arg.parse::<usize>().context("argument must be of type usize")?;
 
-            let (Some(right), Some(left)) = (ctx.pop(), ctx.pop()) else {
-                bail!("bin_op requires two items on the local operating stack (found {:?})", ctx.get_local_operating_stack())
-            };
+        //     println!("{}", ctx.get_nth_op_item(arg).context("nothing at index")?);
 
-            let left = left.move_out_of_heap_primitive();
-            let right = right.move_out_of_heap_primitive();
-
-            let result = match (symbols.as_str(), &left, &right) {
-                ("+", ..) => left + right,
-                ("-", ..) => left - right,
-                ("*", ..) => left * right,
-                ("/", ..) => left / right,
-                ("%", ..) => left % right,
-                (">", ..) => Ok(bool!(left > right)),
-                ("<", ..) => Ok(bool!(left < right)),
-                (">=", ..) => Ok(bool!(left >= right)),
-                ("<=", ..) => Ok(bool!(left <= right)),
-                ("=", ..) => Ok(bool!(left.equals(&right)?)),
-                ("&&", Bool(x), Bool(y)) => Ok(bool!(*x && *y)),
-                ("||", Bool(x), Bool(y)) => Ok(bool!(*x || *y)),
-                ("^", Bool(x), Bool(y)) => Ok(bool!(*x ^ *y)),
-                _ => bail!("unknown operation: {symbols}")
-            }.context("invalid binary operation")?;
-
-            ctx.clear_and_set_stack(result);
-
-            Ok(())
-        }
-
-        vec_mut(ctx, _args) {
-            if ctx.stack_size() < 2 {
-                bail!("mutating a vec requires [ptr, value]");
-            }
-
-            let new_val = ctx.pop().unwrap();
-            let maybe_vec = ctx.pop().unwrap();
-
-            let Primitive::HeapPrimitive(vec_ptr) = maybe_vec else {
-                bail!("expected a mutable heap primitive, found {maybe_vec}");
-            };
-
-            unsafe {
-                *vec_ptr = new_val;
-            }
-
-            Ok(())
-        }
-
-        vec_op(ctx, args) {
-            let mut arg_iter = args.iter();
-            let op_name = arg_iter.next().context("Expected a vector operation")?;
-            let bytes = op_name.as_bytes();
-
-            if let [b'+', ..] = bytes {
-                if ctx.stack_size() != 1 {
-                    bail!("vec_op +push operations require only a single item on the operating stack")
-                }
-
-                let new_val = ctx.pop().unwrap();
-
-                let mut primitive_with_flags: Rc<(Primitive, VariableFlags)> = ctx.load_local(&op_name[1..]).context("vector not found for pushing")?;
-
-                let primitive_with_flags: &mut (Primitive, VariableFlags) = Rc::make_mut(&mut primitive_with_flags);
-
-                let Primitive::Vector(ref mut vector) = primitive_with_flags.0 else {
-                    bail!("not a vector, trying to push")
-                };
-
-                let vector: &mut Vec<Primitive> = rc_to_ref(vector);
-
-                vector.push(new_val);
-            } else if let [b'[', index @ .., b']'] = bytes {
-                let Some(indexable) = ctx.pop() else {
-                    bail!("the stack is empty");
-                };
-
-                // this manual byte slice to usize conversion is more performant
-                let idx: usize = 'index_gen: {
-                    let mut idx = 0;
-                    let mut max = 10_usize.pow(index.len() as u32 - 1);
-
-                    for byte in index {
-                        if !byte.is_ascii_digit() {
-                            let index_as_str = std::str::from_utf8(index)?;
-                            let variable = ctx.load_local(index_as_str).with_context(|| format!("'{index_as_str}' is not a literal number nor a name that has been mapped locally"))?;
-                            let primitive_part: &Primitive = &variable.0;
-
-                            let as_index: usize = primitive_part.try_into_numeric_index()?;
-
-                            break 'index_gen as_index;
-                        }
-                        idx += (byte - b'0') as usize * max;
-                        max /= 10;
-                    }
-
-                    idx
-                };
-
-                match indexable {
-                    Primitive::Vector(vector) => {
-                        let r: *mut Primitive = rc_to_ref(&vector).get_mut(idx).with_context(|| format!("index {idx} out of bounds (len {})", vector.len()))?;
-                        ctx.push(Primitive::HeapPrimitive(r));
-
-                    }
-                    Primitive::Str(string) => {
-                        let mut str_chars = string.chars();
-                        ctx.push(Primitive::Str(str_chars.nth(idx).with_context(|| format!("index {idx} out of bounds (len {} chars, {} bytes)", string.chars().count(), string.len()))?.to_string()))
-                    }
-                    _ => bail!("Cannot perform a vector operation on a non-vector"),
-                }
-            } else {
-                match op_name.as_str() {
-                    "reverse" => {
-                        let Some(Primitive::Vector(vector)) = ctx.get_last_op_item_mut() else {
-                            bail!("Cannot perform a vector operation on a non-vector")
-                        };
-
-                        let reference = Rc::get_mut(vector).context("could not get reference to vector")?;
-                        reference.reverse();
-                    },
-                    "mut" => {
-                        let idx = arg_iter.next().context("mutating an array requires an argument")?;
-                        let idx = idx.parse::<usize>()?;
-
-                        if ctx.stack_size() != 2 {
-                            bail!("mutating an array requires two items in the local operating stack")
-                        }
-
-                        let new_item = ctx.pop().context("could not pop first item")?;
-
-                        let Some(Primitive::Vector(vector)) = ctx.get_last_op_item_mut() else {
-                            bail!("Cannot perform a vector operation on a non-vector")
-                        };
-
-                        Rc::get_mut(vector).context("could not get reference to vector")?[idx] = new_item;
-
-                    }
-                    not_found => bail!("operation not found: `{not_found}`")
-                }
-            }
-
-            Ok(())
-        }
+        //     Ok(())
+        // }
     }
 
     instruction! {
-        nop bail!("nop instructions are deprecated")
+        // call_object(ctx, args) {
+        //     let path = args.last().context("missing method name argument")?;
+
+        //     let Some(first) = ctx.get_nth_op_item(0) else {
+        //         bail!("there is no item in the local stack")
+        //     };
+
+        //     let Primitive::Object(o) = first else {
+        //         bail!("last item in the local stack {first:?} is not an object.")
+        //     };
+
+        //     let callback_state = Some(o.object_variables.clone());
+
+        //     let arguments = ctx.get_local_operating_stack();
+        //     ctx.clear_stack();
+
+        //     ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
+        //         destination: JumpRequestDestination::Standard(path.clone()),
+        //         callback_state,
+        //         stack: ctx.rced_call_stack(),
+        //         arguments,
+        //     }));
+
+        //     Ok(())
+        // }
+
+        // mutate(ctx, args) {
+        //     let var_name = args.first().context("object mutation requires a name argument")?;
+
+        //     if ctx.stack_size() != 2 {
+        //         bail!("mutating an object requires two items in the local operating stack (obj, data)")
+        //     }
+
+        //     let new_item: Primitive = ctx.pop().context("could not pop first item")?;
+
+        //     let Some(Primitive::Object(o)) = ctx.get_last_op_item_mut() else {
+        //         bail!("Cannot perform an object mutation on a non-object")
+        //     };
+
+        //     // this bypass of Rc protections is messy and should be refactored.
+        //     let var = rc_to_ref(o).has_variable(var_name).context("variable does not exist on object")?;
+
+        //     if var.0.ty() != new_item.ty() {
+        //         bail!("mismatched types in assignment ({:?} & {:?})", var.0.ty(), new_item.ty())
+        //     }
+
+        //     // let () = rc_to_ref(&var.0);
+        //     let x = &mut rc_to_ref(&var).0;
+        //     *x = new_item;
+        //     // var.0 = new_item;
+
+        //     Ok(())
+        // }
+
+        // call(ctx, args) {
+        //     // This never needs to re-allocate, but does need to do O(n) data movement
+        //     // if the circular buffer doesn’t happen to be at the beginning of the
+        //     // allocation (https://doc.rust-lang.org/std/collections/vec_deque/struct.VecDeque.html)
+        //     let arguments = ctx.get_local_operating_stack();
+
+        //     let Some(first) = args.first() else {
+        //         let last = ctx.pop();
+
+        //         let Some(Primitive::Function(f)) = last else {
+        //             bail!("missing argument, and the last item in the local stack {last:?} is not a function.")
+        //         };
+
+        //         ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
+        //             destination: JumpRequestDestination::Standard(f.location().clone()),
+        //             callback_state: f.callback_state().clone(),
+        //             stack: ctx.rced_call_stack(),
+        //             arguments,
+        //         }));
+
+        //         ctx.clear_stack();
+
+        //         return Ok(())
+        //     };
+
+        //     ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
+        //         destination: JumpRequestDestination::Standard(first.clone()),
+        //         callback_state: None,
+        //         stack: ctx.rced_call_stack(),
+        //         arguments,
+        //     }));
+
+        //     ctx.clear_stack();
+
+        //     Ok(())
+        // }
+
+        // call_self(ctx, _args) {
+        //     let arguments = ctx.get_local_operating_stack();
+
+        //     let callback_state = ctx.get_callback_variables();
+
+        //     let stack = ctx.rced_call_stack();
+        //     let name = stack.get_executing_function_label().context("not run in a function")?;
+
+        //     ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
+        //         destination: JumpRequestDestination::Standard(name.clone()),
+        //         callback_state,
+        //         stack,
+        //         arguments
+        //     }));
+
+        //     ctx.clear_stack();
+
+        //     Ok(())
+        // }
+
+        // arg(ctx, args) {
+        //     let Some(first) = args.first() else {
+        //         bail!("expected one argument")
+        //     };
+
+        //     let n = first.parse::<usize>().context("argument must be of type usize")?;
+
+        //     let Some(nth_arg) = ctx.nth_arg(n) else {
+        //         bail!("#{n} argument does not exist (range 0..{})", ctx.argc())
+        //     };
+
+        //     ctx.push(nth_arg.clone()); // 4/4/2023: why do we need to clone here? maybe re-work this.
+
+        //     Ok(())
+        // }
+    }
+
+    // instruction! {
+    //     stack_size(ctx=ctx) {
+    //         let size = int!(ctx.frames_count().try_into()?);
+    //         ctx.push(size);
+
+    //         Ok(())
+    //     }
+    // }
+
+    instruction! {
+        // store(ctx, args) {
+        //     let Some(name) = args.first() else {
+        //         bail!("store requires a name")
+        //     };
+
+        //     if ctx.stack_size() != 1 {
+        //         bail!("store can only store a single item");
+        //     }
+
+        //     let arg = ctx.pop().unwrap().move_out_of_heap_primitive();
+
+        //     ctx.register_variable(name.clone(), arg)?;
+
+        //     Ok(())
+        // }
+
+        // store_fast(ctx, args) {
+        //     let Some(name) = args.first() else {
+        //         bail!("store requires a name")
+        //     };
+
+        //     if ctx.stack_size() != 1 {
+        //         bail!("store can only store a single item");
+        //     }
+
+        //     let arg = ctx.pop().unwrap().move_out_of_heap_primitive();
+
+        //     ctx.register_variable_local(name.clone(), arg)?;
+
+        //     Ok(())
+        // }
+
+        // store_object(ctx, args) {
+        //     let Some(name) = args.first() else {
+        //         bail!("store_object requires a name")
+        //     };
+
+        //     if ctx.stack_size() != 1 {
+        //         bail!("store can only store a single item");
+        //     }
+
+        //     let arg = ctx.pop().unwrap().move_out_of_heap_primitive();
+
+        //     ctx.update_callback_variable(name, arg)?;
+
+        //     Ok(())
+        // }
+
+        // store_skip(ctx, args) {
+        //     let Some([name, predicate, lines_to_jump]) = args.get(0..=2) else {
+        //         bail!("store_skip: name:str predicate:u8(1/0) lines_to_jump:isize")
+        //     };
+
+        //     let predicate = predicate.parse::<u8>().context("store_skip needs predicate: u8")?;
+        //     let lines_to_jump = lines_to_jump.parse::<isize>().context("store_skip needs lines_to_jump: isize")?;
+
+        //     if lines_to_jump.is_negative() {
+        //         bail!("store_skip can only skip forwards");
+        //     }
+
+        //     if ctx.stack_size() != 1 {
+        //         bail!("store_skip can only store a single item");
+        //     }
+
+        //     let arg = ctx.get_last_op_item().unwrap();
+
+        //     let Primitive::Bool(val) = arg else {
+        //         bail!("store_skip can only operate on bool (found {arg})");
+        //     };
+
+        //     if predicate == 1 {
+        //         // skip if true
+        //         if *val {
+        //             ctx.signal(InstructionExitState::Goto(lines_to_jump));
+        //             return Ok(())
+        //         }
+
+        //     } else {
+        //         // skip if false
+        //         if !val {
+        //             ctx.signal(InstructionExitState::Goto(lines_to_jump));
+        //             return Ok(())
+        //         }
+        //     }
+
+        //     let arg = ctx.pop().unwrap().move_out_of_heap_primitive();
+        //     ctx.register_variable_local(name.clone(), arg)?;
+
+        //     Ok(())
+        // }
+
+        // fast_rev2(ctx, _args) {
+        //     if ctx.stack_size() != 2 {
+        //         bail!("fast_rev2 requires a stack size of 2");
+        //     }
+
+        //     let Some([first, second]) = ctx.get_many_op_items_mut(0..2) else {
+        //         bail!("could not get op items");
+        //     };
+
+        //     let first_cloned = first.clone();
+        //     *first = second.clone();
+        //     *second = first_cloned;
+
+        //     Ok(())
+        // }
+
+        // load(ctx, args) {
+        //     let Some(name) = args.first() else {
+        //         bail!("load requires a name")
+        //     };
+
+        //     let Some(var) = ctx.load_variable(name) else {
+        //         bail!("load before store (`{name}` not in scope)")
+        //     };
+
+        //     ctx.push(var.0.clone());
+
+        //     Ok(())
+        // }
+
+        // load_fast(ctx, args) {
+        //     let Some(name) = args.first() else {
+        //         bail!("load requires a name")
+        //     };
+
+        //     let Some(var) = ctx.load_local(name) else {
+        //         bail!("load before store (`{name}` not in this stack frame)\nframe `{}`'s variables:\n{}", ctx.rced_call_stack().get_frame_label(), ctx.get_frame_variables())
+        //     };
+
+        //     ctx.push(var.0.clone());
+
+        //     Ok(())
+        // }
+
+        // load_callback(ctx, args) {
+        //     let Some(name) = args.first() else {
+        //         bail!("loading a callback variable requires one parameter: (name)")
+        //     };
+
+        //     let var = ctx.load_callback_variable(name)?;
+
+        //     ctx.push(var.0.clone());
+
+        //     Ok(())
+        // }
+
+        // delete_name_scoped(ctx, args) {
+        //     if args.is_empty() {
+        //         bail!("delete_name_scoped requires names to delete")
+        //     };
+
+        //     for name in args {
+        //         ctx.delete_variable_local(name)?;
+        //     }
+
+        //     Ok(())
+        // }
+
+        // delete_name_reference_scoped(ctx, args) {
+        //     if args.len() != 1 {
+        //         bail!("delete_name_reference_scoped can only delete to retrieve one name");
+        //     }
+
+        //     let name = args.first().unwrap();
+
+        //     let deleted: Rc<(Primitive, VariableFlags)> = ctx.delete_variable_local(name)?;
+        //     let primitive: Primitive = deleted.0.clone();
+
+        //     ctx.push(primitive);
+
+        //     Ok(())
+        // }
     }
 
     instruction! {
-        len(ctx=ctx) {
-            let Some(top) = ctx.pop() else {
-                bail!("len requires an item on the local stack")
-            };
+        // typecmp(ctx=ctx) {
+        //     if ctx.stack_size() != 2 {
+        //         bail!("typecmp requires only 2 items in the local stack")
+        //     }
 
-            let result = match top {
-                Primitive::Vector(v) => int!(v.len().try_into()?),
-                Primitive::Str(s) => int!(s.len().try_into()?),
-                _ => bail!("cannot get the raw length of a non-string/vector"),
-            };
+        //     let first = ctx.pop().unwrap();
+        //     let second = ctx.pop().unwrap();
 
-            ctx.push(result);
+        //     let cmp = first.ty() == second.ty();
 
-            Ok(())
-        }
+        //     ctx.push(bool!(cmp));
 
-        void(ctx=ctx) {
-            ctx.clear_stack();
-            Ok(())
-        }
+        //     Ok(())
+        // }
+
+        // strict_equ(ctx=ctx) {
+        //     if ctx.stack_size() != 2 {
+        //         bail!("equ requires only 2 items in the local stack")
+        //     }
+
+        //     let first = ctx.pop().unwrap();
+        //     let second = ctx.pop().unwrap();
+
+        //     let result = first == second;
+
+        //     ctx.push(bool!(result));
+
+        //     Ok(())
+        // }
+
+        // equ(ctx=ctx) {
+        //     if ctx.stack_size() != 2 {
+        //         bail!("equ requires only 2 items in the local stack")
+        //     }
+
+        //     let first = ctx.pop().unwrap();
+        //     let second = ctx.pop().unwrap();
+
+        //     let result = first.equals(&second)?;
+
+        //     ctx.push(bool!(result));
+
+        //     Ok(())
+        // }
+
+        // neq(ctx=ctx) {
+        //     if ctx.stack_size() != 2 {
+        //         bail!("equ requires only 2 items in the local stack")
+        //     }
+
+        //     let first = ctx.pop().unwrap();
+        //     let second = ctx.pop().unwrap();
+
+        //     let result = !first.equals(&second)?;
+
+        //     ctx.push(bool!(result));
+
+        //     Ok(())
+        // }
     }
 
     instruction! {
-        breakpoint(ctx, args) {
-            print!("[!!] BREAKPOINT\n[!!] options\n[!!] - continue\n[!!] - dump\n[!!] Enter Option: ");
+        // if_stmt(ctx, args) {
+        //     if ctx.stack_size() == 0 {
+        //         bail!("if statements require at least one entry in the local stack")
+        //     }
 
-            let mut buf = String::new();
-            stdout().flush()?;
-            stdin().read_line(&mut buf)?;
+        //     let item = ctx.pop().unwrap();
+        //     ctx.clear_stack();
 
-            match buf.trim_end() {
-                "continue" => Ok(()),
-                "dump" => {
-                    stack_dump(ctx, args)
-                }
-                buf => {
-                    println!("[!!]\n[!!] BREAKPOINT\n[!!] '{buf}' is not a valid option.\n[!!]");
-                    breakpoint(ctx, args)
-                }
-            }
-        }
+        //     let Primitive::Bool(b) = item else {
+        //         bail!("if statement can only test booleans")
+        //     };
+
+        //     let Some(offset) = args.first() else {
+        //         bail!("if statements require an argument to instruct where to jump if falsey")
+        //     };
+
+        //     if !b {
+        //         ctx.signal(InstructionExitState::Goto(offset.parse::<isize>()?));
+        //     } else {
+        //         ctx.signal(InstructionExitState::PushScope(SpecialScope::If));
+        //     }
+
+        //     Ok(())
+        // }
+
+        // while_loop(ctx, args) {
+        //     if ctx.stack_size() == 0 {
+        //         bail!("while statements require at least one entry in the local stack")
+        //     }
+
+        //     let item = ctx.pop().unwrap();
+        //     ctx.clear_stack();
+
+        //     let Primitive::Bool(b) = item else {
+        //         bail!("while statement can only test booleans")
+        //     };
+
+        //     let Some(offset) = args.first() else {
+        //         bail!("while statements require an argument to instruct where to jump if falsey")
+        //     };
+
+        //     if !b {
+        //         ctx.signal(InstructionExitState::Goto(offset.parse::<isize>()?));
+        //     } else {
+        //         ctx.signal(InstructionExitState::PushScope(SpecialScope::WhileLoop))
+        //     }
+
+        //     Ok(())
+        // }
+
+        // jmp(ctx, args) {
+        //     let Some(offset) = args.first() else {
+        //         bail!("jmp statements require an argument to instruct where to jump")
+        //     };
+
+        //     ctx.signal(InstructionExitState::Goto(offset.parse::<isize>()?));
+
+        //     Ok(())
+        // }
+
+        // jmp_pop(ctx, args) {
+        //     let Some(offset) = args.first() else {
+        //         bail!("jmp_pop statements require an argument to instruct where to jump")
+        //     };
+
+        //     let frames_to_pop = args.get(1).map_or_else(|| Ok(1), |frames_to_pop| frames_to_pop.parse::<usize>())?;
+
+        //     ctx.signal(InstructionExitState::GotoPopScope(offset.parse::<isize>()?, frames_to_pop));
+
+        //     Ok(())
+        // }
+
+        // done(ctx, _args) {
+        //     ctx.signal(InstructionExitState::PopScope);
+
+        //     Ok(())
+        // }
+
+        // else_stmt(ctx, _args) {
+        //     ctx.signal(InstructionExitState::PushScope(SpecialScope::Else));
+
+        //     Ok(())
+        // }
     }
 
     instruction! {
-        ret(ctx=ctx) {
-            if ctx.stack_size() > 1 {
-                bail!("ret can only return a single item");
-            }
-
-            let var = ctx.pop();
-
-            let ret = if let Some(primitive) = var {
-                ReturnValue::Value(primitive)
-            } else {
-                ReturnValue::NoValue
-            };
-
-            ctx.signal(InstructionExitState::ReturnValue(ret));
-
-            Ok(())
-        }
-    }
-
-    make_type!(make_bool);
-    make_type!(make_int);
-    make_type!(make_float);
-    make_type!(make_byte);
-    make_type!(make_bigint);
-
-    instruction! {
-        make_str(ctx, args) {
-            let raw_str = match args.len() {
-                0 => "",
-                1 => &args[0],
-                _ => bail!("make_str requires 0 arguments (empty string) or one argument (the string)")
-            };
-
-            let var = crate::string!(raw raw_str);
-
-            ctx.push(var);
-
-            Ok(())
-        }
-
-        make_function(ctx, args) {
-            let Some(location) = args.first() else {
-                bail!("making a function pointer requires a path to find it")
-            };
-
-            let len = args.len();
-            let callback_state = if len != 1 {
-                let mut arguments = HashMap::with_capacity(len - 1); // maybe len
-                for var_name in &args[1..] {
-                    let Some(var) = ctx.load_variable(var_name) else {
-                        bail!("{var_name} is not in scope")
-                    };
-
-                    arguments.insert(var_name.clone(), var.clone());
-                }
-
-                Some(Rc::new(arguments.into()))
-            } else {
-                None
-            };
-
-            ctx.push(function!(PrimitiveFunction::new(location.into(), callback_state)));
-
-            Ok(())
-        }
-
-        make_object(ctx, args) {
-            if !args.is_empty() {
-                bail!("`make_object` does not require arguments")
-            }
-
-            let object_variables = Rc::new(ctx.get_frame_variables().clone());
-
-            let function = ctx.owner();
-            let name = Rc::new(function.name().clone());
-
-            let obj = unsafe {
-                if !OBJECT_BUILDER.has_class_been_registered(&name) {
-                    let location = &function.location();
-                    let object_path = format!("{}#{name}$", location.path());
-
-                    let object_functions = rc_to_ref(location).get_object_functions(&object_path)?;
-
-                    let mut mapping: HashSet<String> = HashSet::new();
-
-                    for func in object_functions {
-                        mapping.insert(func.get_qualified_name());
-                    }
-
-                    OBJECT_BUILDER.register_class(Rc::clone(&name), mapping);
-                }
-
-                OBJECT_BUILDER.name(Rc::clone(&name)).object_variables(object_variables).build()
-            };
-
-            ctx.push(object!(Rc::new(obj)));
-
-            Ok(())
-        }
-
-        make_vector(ctx, args) {
-            if args.len() > 1 {
-                bail!("`make_vector` instruction requires 1 argument (capacity) or none (initializes with contents of local operating stack)")
-            }
-
-            let Some(arg) = args.first() else {
-                let vec = ctx.get_local_operating_stack();
-                // ^^ new capacity = old length
-
-                ctx.clear_stack();
-                ctx.push(vector!(raw vec));
-
-                return Ok(())
-            };
-
-            let capacity = arg.parse::<usize>().context("argument must be of type usize")?;
-
-            let vec = vector!(raw Vec::with_capacity(capacity));
-
-            ctx.push(vec);
-
-            Ok(())
-        }
-    }
-
-    instruction! {
-        printn(ctx, args) {
-            let Some(arg) = args.first() else {
-                bail!("expected 1 parameter (index into local operating stack), or * to print all");
-            };
-
-            if arg == "*" {
-                let Some(first) = ctx.get_nth_op_item(0) else {
-                    println!();
-                    return Ok(())
-                };
-
-                log::warn!("The `printn` instruction should not be used. Favor the standard library instead.");
-
-                print!("{first}");
-                let operating_stack = ctx.get_local_operating_stack();
-
-                for var in operating_stack.iter().skip(1) {
-                    print!(", {var}")
-                }
-
-                #[cfg(feature = "debug")]
-                stdout().flush()?;
-
-                println!();
-
-                return Ok(());
-            }
-
-            let arg = arg.parse::<usize>().context("argument must be of type usize")?;
-
-            println!("{}", ctx.get_nth_op_item(arg).context("nothing at index")?);
-
-            Ok(())
-        }
-    }
-
-    instruction! {
-        call_object(ctx, args) {
-            let path = args.last().context("missing method name argument")?;
-
-            let Some(first) = ctx.get_nth_op_item(0) else {
-                bail!("there is no item in the local stack")
-            };
-
-            let Primitive::Object(o) = first else {
-                bail!("last item in the local stack {first:?} is not an object.")
-            };
-
-            let callback_state = Some(o.object_variables.clone());
-
-            let arguments = ctx.get_local_operating_stack();
-            ctx.clear_stack();
-
-            ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
-                destination: JumpRequestDestination::Standard(path.clone()),
-                callback_state,
-                stack: ctx.rced_call_stack(),
-                arguments,
-            }));
-
-            Ok(())
-        }
-
-        mutate(ctx, args) {
-            let var_name = args.first().context("object mutation requires a name argument")?;
-
-            if ctx.stack_size() != 2 {
-                bail!("mutating an object requires two items in the local operating stack (obj, data)")
-            }
-
-            let new_item: Primitive = ctx.pop().context("could not pop first item")?;
-
-            let Some(Primitive::Object(o)) = ctx.get_last_op_item_mut() else {
-                bail!("Cannot perform an object mutation on a non-object")
-            };
-
-            // this bypass of Rc protections is messy and should be refactored.
-            let var = rc_to_ref(o).has_variable(var_name).context("variable does not exist on object")?;
-
-            if var.0.ty() != new_item.ty() {
-                bail!("mismatched types in assignment ({:?} & {:?})", var.0.ty(), new_item.ty())
-            }
-
-            // let () = rc_to_ref(&var.0);
-            let x = &mut rc_to_ref(&var).0;
-            *x = new_item;
-            // var.0 = new_item;
-
-            Ok(())
-        }
-
-        call(ctx, args) {
-            // This never needs to re-allocate, but does need to do O(n) data movement
-            // if the circular buffer doesn’t happen to be at the beginning of the
-            // allocation (https://doc.rust-lang.org/std/collections/vec_deque/struct.VecDeque.html)
-            let arguments = ctx.get_local_operating_stack();
-
-            let Some(first) = args.first() else {
-                let last = ctx.pop();
-
-                let Some(Primitive::Function(f)) = last else {
-                    bail!("missing argument, and the last item in the local stack {last:?} is not a function.")
-                };
-
-                ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
-                    destination: JumpRequestDestination::Standard(f.location().clone()),
-                    callback_state: f.callback_state().clone(),
-                    stack: ctx.rced_call_stack(),
-                    arguments,
-                }));
-
-                ctx.clear_stack();
-
-                return Ok(())
-            };
-
-            ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
-                destination: JumpRequestDestination::Standard(first.clone()),
-                callback_state: None,
-                stack: ctx.rced_call_stack(),
-                arguments,
-            }));
-
-            ctx.clear_stack();
-
-            Ok(())
-        }
-
-        call_self(ctx, _args) {
-            let arguments = ctx.get_local_operating_stack();
-
-            let callback_state = ctx.get_callback_variables();
-
-            let stack = ctx.rced_call_stack();
-            let name = stack.get_executing_function_label().context("not run in a function")?;
-
-            ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
-                destination: JumpRequestDestination::Standard(name.clone()),
-                callback_state,
-                stack,
-                arguments
-            }));
-
-            ctx.clear_stack();
-
-            Ok(())
-        }
-
-        arg(ctx, args) {
-            let Some(first) = args.first() else {
-                bail!("expected one argument")
-            };
-
-            let n = first.parse::<usize>().context("argument must be of type usize")?;
-
-            let Some(nth_arg) = ctx.nth_arg(n) else {
-                bail!("#{n} argument does not exist (range 0..{})", ctx.argc())
-            };
-
-            ctx.push(nth_arg.clone()); // 4/4/2023: why do we need to clone here? maybe re-work this.
-
-            Ok(())
-        }
-    }
-
-    instruction! {
-        stack_size(ctx=ctx) {
-            let size = int!(ctx.frames_count().try_into()?);
-            ctx.push(size);
-
-            Ok(())
-        }
-    }
-
-    instruction! {
-        store(ctx, args) {
-            let Some(name) = args.first() else {
-                bail!("store requires a name")
-            };
-
-            if ctx.stack_size() != 1 {
-                bail!("store can only store a single item");
-            }
-
-            let arg = ctx.pop().unwrap().move_out_of_heap_primitive();
-
-            ctx.register_variable(name.clone(), arg)?;
-
-            Ok(())
-        }
-
-        store_fast(ctx, args) {
-            let Some(name) = args.first() else {
-                bail!("store requires a name")
-            };
-
-            if ctx.stack_size() != 1 {
-                bail!("store can only store a single item");
-            }
-
-            let arg = ctx.pop().unwrap().move_out_of_heap_primitive();
-
-            ctx.register_variable_local(name.clone(), arg)?;
-
-            Ok(())
-        }
-
-        store_object(ctx, args) {
-            let Some(name) = args.first() else {
-                bail!("store_object requires a name")
-            };
-
-            if ctx.stack_size() != 1 {
-                bail!("store can only store a single item");
-            }
-
-            let arg = ctx.pop().unwrap().move_out_of_heap_primitive();
-
-            ctx.update_callback_variable(name, arg)?;
-
-            Ok(())
-        }
-
-        store_skip(ctx, args) {
-            let Some([name, predicate, lines_to_jump]) = args.get(0..=2) else {
-                bail!("store_skip: name:str predicate:u8(1/0) lines_to_jump:isize")
-            };
-
-            let predicate = predicate.parse::<u8>().context("store_skip needs predicate: u8")?;
-            let lines_to_jump = lines_to_jump.parse::<isize>().context("store_skip needs lines_to_jump: isize")?;
-
-            if lines_to_jump.is_negative() {
-                bail!("store_skip can only skip forwards");
-            }
-
-            if ctx.stack_size() != 1 {
-                bail!("store_skip can only store a single item");
-            }
-
-            let arg = ctx.get_last_op_item().unwrap();
-
-            let Primitive::Bool(val) = arg else {
-                bail!("store_skip can only operate on bool (found {arg})");
-            };
-
-            if predicate == 1 {
-                // skip if true
-                if *val {
-                    ctx.signal(InstructionExitState::Goto(lines_to_jump));
-                    return Ok(())
-                }
-
-            } else {
-                // skip if false
-                if !val {
-                    ctx.signal(InstructionExitState::Goto(lines_to_jump));
-                    return Ok(())
-                }
-            }
-
-            let arg = ctx.pop().unwrap().move_out_of_heap_primitive();
-            ctx.register_variable_local(name.clone(), arg)?;
-
-            Ok(())
-        }
-
-        fast_rev2(ctx, _args) {
-            if ctx.stack_size() != 2 {
-                bail!("fast_rev2 requires a stack size of 2");
-            }
-
-            let Some([first, second]) = ctx.get_many_op_items_mut(0..2) else {
-                bail!("could not get op items");
-            };
-
-            let first_cloned = first.clone();
-            *first = second.clone();
-            *second = first_cloned;
-
-            Ok(())
-        }
-
-        load(ctx, args) {
-            let Some(name) = args.first() else {
-                bail!("load requires a name")
-            };
-
-            let Some(var) = ctx.load_variable(name) else {
-                bail!("load before store (`{name}` not in scope)")
-            };
-
-            ctx.push(var.0.clone());
-
-            Ok(())
-        }
-
-        load_fast(ctx, args) {
-            let Some(name) = args.first() else {
-                bail!("load requires a name")
-            };
-
-            let Some(var) = ctx.load_local(name) else {
-                bail!("load before store (`{name}` not in this stack frame)\nframe `{}`'s variables:\n{}", ctx.rced_call_stack().get_frame_label(), ctx.get_frame_variables())
-            };
-
-            ctx.push(var.0.clone());
-
-            Ok(())
-        }
-
-        load_callback(ctx, args) {
-            let Some(name) = args.first() else {
-                bail!("loading a callback variable requires one parameter: (name)")
-            };
-
-            let var = ctx.load_callback_variable(name)?;
-
-            ctx.push(var.0.clone());
-
-            Ok(())
-        }
-
-        delete_name_scoped(ctx, args) {
-            if args.is_empty() {
-                bail!("delete_name_scoped requires names to delete")
-            };
-
-            for name in args {
-                ctx.delete_variable_local(name)?;
-            }
-
-            Ok(())
-        }
-
-        delete_name_reference_scoped(ctx, args) {
-            if args.len() != 1 {
-                bail!("delete_name_reference_scoped can only delete to retrieve one name");
-            }
-
-            let name = args.first().unwrap();
-
-            let deleted: Rc<(Primitive, VariableFlags)> = ctx.delete_variable_local(name)?;
-            let primitive: Primitive = deleted.0.clone();
-
-            ctx.push(primitive);
-
-            Ok(())
-        }
-    }
-
-    instruction! {
-        typecmp(ctx=ctx) {
-            if ctx.stack_size() != 2 {
-                bail!("typecmp requires only 2 items in the local stack")
-            }
-
-            let first = ctx.pop().unwrap();
-            let second = ctx.pop().unwrap();
-
-            let cmp = first.ty() == second.ty();
-
-            ctx.push(bool!(cmp));
-
-            Ok(())
-        }
-
-        strict_equ(ctx=ctx) {
-            if ctx.stack_size() != 2 {
-                bail!("equ requires only 2 items in the local stack")
-            }
-
-            let first = ctx.pop().unwrap();
-            let second = ctx.pop().unwrap();
-
-            let result = first == second;
-
-            ctx.push(bool!(result));
-
-            Ok(())
-        }
-
-        equ(ctx=ctx) {
-            if ctx.stack_size() != 2 {
-                bail!("equ requires only 2 items in the local stack")
-            }
-
-            let first = ctx.pop().unwrap();
-            let second = ctx.pop().unwrap();
-
-            let result = first.equals(&second)?;
-
-            ctx.push(bool!(result));
-
-            Ok(())
-        }
-
-        neq(ctx=ctx) {
-            if ctx.stack_size() != 2 {
-                bail!("equ requires only 2 items in the local stack")
-            }
-
-            let first = ctx.pop().unwrap();
-            let second = ctx.pop().unwrap();
-
-            let result = !first.equals(&second)?;
-
-            ctx.push(bool!(result));
-
-            Ok(())
-        }
-    }
-
-    instruction! {
-        if_stmt(ctx, args) {
-            if ctx.stack_size() == 0 {
-                bail!("if statements require at least one entry in the local stack")
-            }
-
-            let item = ctx.pop().unwrap();
-            ctx.clear_stack();
-
-            let Primitive::Bool(b) = item else {
-                bail!("if statement can only test booleans")
-            };
-
-            let Some(offset) = args.first() else {
-                bail!("if statements require an argument to instruct where to jump if falsey")
-            };
-
-            if !b {
-                ctx.signal(InstructionExitState::Goto(offset.parse::<isize>()?));
-            } else {
-                ctx.signal(InstructionExitState::PushScope(SpecialScope::If));
-            }
-
-            Ok(())
-        }
-
-        while_loop(ctx, args) {
-            if ctx.stack_size() == 0 {
-                bail!("while statements require at least one entry in the local stack")
-            }
-
-            let item = ctx.pop().unwrap();
-            ctx.clear_stack();
-
-            let Primitive::Bool(b) = item else {
-                bail!("while statement can only test booleans")
-            };
-
-            let Some(offset) = args.first() else {
-                bail!("while statements require an argument to instruct where to jump if falsey")
-            };
-
-            /*
-            if !b {
-                ctx.signal(InstructionExitState::Goto(offset.parse::<isize>()?));
-            } else {
-                ctx.signal(InstructionExitState::PushScope(SpecialScope::WhileLoop))
-            }
-             */
-
-            if !b {
-                ctx.signal(InstructionExitState::Goto(offset.parse::<isize>()?));
-            } else {
-                ctx.signal(InstructionExitState::PushScope(SpecialScope::WhileLoop))
-            }
-
-            Ok(())
-        }
-
-        jmp(ctx, args) {
-            let Some(offset) = args.first() else {
-                bail!("jmp statements require an argument to instruct where to jump")
-            };
-
-            ctx.signal(InstructionExitState::Goto(offset.parse::<isize>()?));
-
-            Ok(())
-        }
-
-        jmp_pop(ctx, args) {
-            let Some(offset) = args.first() else {
-                bail!("jmp_pop statements require an argument to instruct where to jump")
-            };
-
-            let frames_to_pop = args.get(1).map_or_else(|| Ok(1), |frames_to_pop| frames_to_pop.parse::<usize>())?;
-
-            ctx.signal(InstructionExitState::GotoPopScope(offset.parse::<isize>()?, frames_to_pop));
-
-            Ok(())
-        }
-
-        done(ctx, _args) {
-            ctx.signal(InstructionExitState::PopScope);
-
-            Ok(())
-        }
-
-        else_stmt(ctx, _args) {
-            ctx.signal(InstructionExitState::PushScope(SpecialScope::Else));
-
-            Ok(())
-        }
-    }
-
-    instruction! {
-        call_lib(ctx, args) {
-            let (Some(lib_name), Some(func_name)) = (args.get(0), args.get(1)) else {
-                bail!("expected syntax: call_lib path/to/lib.dll function_name")
-            };
-
-            let arguments = ctx.get_local_operating_stack();
-
-            ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
-                destination: JumpRequestDestination::Library {
-                    lib_name: lib_name.clone(),
-                    func_name: func_name.clone(),
-                },
-                // destination_label: JumpRequestDestination::Standard(first.clone()),
-                callback_state: None,
-                stack: ctx.rced_call_stack(),
-                arguments,
-            }));
-
-            ctx.clear_stack();
-            Ok(())
-        }
+        // call_lib(ctx, args) {
+        //     let (Some(lib_name), Some(func_name)) = (args.get(0), args.get(1)) else {
+        //         bail!("expected syntax: call_lib path/to/lib.dll function_name")
+        //     };
+
+        //     let arguments = ctx.get_local_operating_stack();
+
+        //     ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
+        //         destination: JumpRequestDestination::Library {
+        //             lib_name: lib_name.clone(),
+        //             func_name: func_name.clone(),
+        //         },
+        //         // destination_label: JumpRequestDestination::Standard(first.clone()),
+        //         callback_state: None,
+        //         stack: ctx.rced_call_stack(),
+        //         arguments,
+        //     }));
+
+        //     ctx.clear_stack();
+        //     Ok(())
+        // }
     }
 }
 
 /// Get a function pointer to the bytecode instruction associated with a byte.
-pub fn query(byte: u8) -> InstructionSignature {
-    instruction_constants::FUNCTION_POINTER_LOOKUP[byte as usize]
-}
+// pub fn query(byte: u8) -> InstructionSignature {
+//     instruction_constants::FUNCTION_POINTER_LOOKUP[byte as usize]
+// }
 
 /// Run an instruction.
-#[inline(always)]
-pub fn run_instruction(ctx: &mut Ctx, instruction: &Instruction) -> Result<()> {
-    let instruction_fn = query(instruction.id);
-    instruction_fn(ctx, &instruction.arguments)?;
-    Ok(())
-}
+// #[inline(always)]
+// pub fn run_instruction(ctx: &mut Ctx, instruction: &Instruction) -> Result<()> {
+//     let instruction_fn = query(instruction.id);
+//     instruction_fn(ctx, &instruction.arguments)?;
+//     Ok(())
+// }
 
 /// Parse a string into tokens based on preset rules.
 ///
@@ -1211,28 +1247,28 @@ pub struct JumpRequest {
     pub arguments: Vec<Primitive>,
 }
 
-/// A wrapper for a bytecode instruction.
-/// In bytecode format, will look like:
-///
-/// `{BYTE} (SP {ARG})* NUL`
-///
-/// Where:
-/// * BYTE = Instruction#id
-/// * SP = 0x20
-/// * NUL = 0x00
-/// * ARG = "argument" | argument | "with spaces" | {LITERAL}
-#[derive(Debug)]
-pub struct Instruction {
-    /// This instruction's identity. See the [static instruction array](crate::instruction_constants::FUNCTION_POINTER_LOOKUP)
-    /// for valid identities.
-    pub id: u8,
-    /// The arguments to the instruction.
-    arguments: Box<[String]>,
-}
+// / A wrapper for a bytecode instruction.
+// / In bytecode format, will look like:
+// /
+// / `{BYTE} (SP {ARG})* NUL`
+// /
+// / Where:
+// / * BYTE = Instruction#id
+// / * SP = 0x20
+// / * NUL = 0x00
+// / * ARG = "argument" | argument | "with spaces" | {LITERAL}
+// #[derive(Debug)]
+// pub struct Instruction {
+//     /// This instruction's identity. See the [static instruction array](crate::instruction_constants::FUNCTION_POINTER_LOOKUP)
+//     /// for valid identities.
+//     pub id: u8,
+//     /// The arguments to the instruction.
+//     arguments: Box<[String]>,
+// }
 
-impl Instruction {
-    /// Simple constructor
-    pub fn new(id: u8, arguments: Box<[String]>) -> Self {
-        Instruction { id, arguments }
-    }
-}
+// impl Instruction {
+//     /// Simple constructor
+//     pub fn new(id: u8, arguments: Box<[String]>) -> Self {
+//         Instruction { id, arguments }
+//     }
+// }

@@ -9,10 +9,10 @@ use std::fmt::{Debug, Display};
 use std::path::Path;
 use std::rc::Rc;
 
-use crate::compilation_lookups::raw_byte_instruction_to_string_representation;
+// use crate::compilation_lookups::raw_byte_instruction_to_string_representation;
 use crate::context::{Ctx, SpecialScope};
 use crate::file::MScriptFile;
-use crate::instruction::{run_instruction, Instruction};
+use crate::instruction::Instruction;
 use crate::rc_to_ref;
 
 use super::instruction::JumpRequest;
@@ -193,8 +193,10 @@ pub enum InstructionExitState {
     ///
     /// This is the standard exit state. The interpreter will move on to the next instruction
     /// if it encounters this variant.
-    NoExit,
+    Processed,
 }
+
+use serde_derive::{Serialize, Deserialize};
 
 /// This is MScript's main unit of executing instructions.
 ///
@@ -204,11 +206,12 @@ pub enum InstructionExitState {
 ///
 /// In essense, this struct exposes an interface that allows users to
 /// run raw bytecode. (See `Function::run()`)
+#[derive(Serialize, Deserialize, PartialEq)]
 pub struct Function {
     /// A shared reference to the file of origin.
-    location: Rc<MScriptFile>,
+    // location: Rc<MScriptFile>,
     /// A list of the instructions this subroutine consists of.
-    instructions: Box<[Instruction]>,
+    instructions: Vec<Box<dyn Instruction>>,
     /// The name of this function.
     name: String,
 }
@@ -231,7 +234,7 @@ impl Function {
     pub(crate) fn new(
         location: Rc<MScriptFile>,
         name: String,
-        instructions: Box<[Instruction]>,
+        instructions: Box<[Box<dyn Instruction>]>,
     ) -> Self {
         Self {
             location,
@@ -385,7 +388,7 @@ impl Function {
                         context.pop_frame();
                     }
                 }
-                InstructionExitState::NoExit => (),
+                InstructionExitState::Processed => (),
             }
 
             context.clear_signal();

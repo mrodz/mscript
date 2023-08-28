@@ -64,9 +64,9 @@ pub struct Ctx<'a> {
     function: &'a Function,
     /// A shared reference to the interpreter's function stack trace.
     call_stack: Rc<Stack>,
-    /// This field is checked after executing each instruction. While private, it can
-    /// be modified via the [`Ctx::signal`] and [`Ctx::clear_signal`] methods.
-    exit_state: InstructionExitState,
+    // /// This field is checked after executing each instruction. While private, it can
+    // /// be modified via the [`Ctx::signal`] and [`Ctx::clear_signal`] methods.
+    // exit_state: InstructionExitState,
     /// The arguments to the function.
     args: Cow<'a, Vec<Primitive>>,
     /// A separate variable mapping for closures and objects. If `None`, this function is neither.
@@ -96,7 +96,7 @@ impl<'a> Ctx<'a> {
             stack: Vec::new(),
             function,
             call_stack,
-            exit_state: InstructionExitState::NoExit,
+            // exit_state: InstructionExitState::Processed,
             args,
             callback_state,
             special_scopes: None,
@@ -215,18 +215,24 @@ impl<'a> Ctx<'a> {
     /// // Ask the interpreter to jump forward +5 instructions once this instruction finishes.
     /// ctx.signal(InstructionExitState::Goto(5))
     /// ```
+    #[deprecated]
     pub(crate) fn signal(&mut self, exit_state: InstructionExitState) {
-        self.exit_state = exit_state;
+        unimplemented!();
+        // self.exit_state = exit_state;
     }
 
+    #[deprecated]
     /// Get the [`InstructionExitState`] stored in the [`Ctx`]
     pub(crate) fn poll(&self) -> &InstructionExitState {
-        &self.exit_state
+        unimplemented!();
+        // &self.exit_state
     }
 
+    #[deprecated]
     /// Reset [`Ctx::exit_state`]
     pub(crate) fn clear_signal(&mut self) {
-        self.exit_state = InstructionExitState::NoExit;
+        unimplemented!()
+        // self.exit_state = InstructionExitState::Processed;
     }
 
     /// Add a new stack frame with a given label.
@@ -254,6 +260,12 @@ impl<'a> Ctx<'a> {
     pub(crate) fn clear_and_set_stack(&mut self, var: Primitive) {
         self.stack.clear();
         self.stack.push(var);
+    }
+
+    pub(crate) fn clear_and_get_stack(&mut self) -> Vec<Primitive> {
+        let mut result = Vec::with_capacity(self.stack_size());
+        result.append(&mut self.stack);
+        result
     }
 
     /// Get how many items are in the local operating stack.
