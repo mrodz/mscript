@@ -142,3 +142,64 @@ pub static FUNCTION_POINTER_LOOKUP: [InstructionSignature; INSTRUCTION_COUNT] = 
     implementations::delete_name_reference_scoped,
     implementations::vec_mut,
 ];
+
+pub mod id {
+    const NOP: u8 = 0;
+    const CONSTEXPR: u8 = 1;
+    const STACK_DUMP: u8 = 2;
+    const POP: u8 = 3;
+    const BIN_OP: u8 = 4;
+    const VEC_OP: u8 = 5;
+    const BOOL: u8 = 6;
+    const STRING: u8 = 7;
+    const BIGINT: u8 = 8;
+    const INT: u8 = 9;
+    const FLOAT: u8 = 10;
+    #[deprecated]
+    const CHAR: u8 = 11;
+    const BYTE: u8 = 12;
+    const MAKE_FUNCTION: u8 = 13;
+    const MAKE_OBJECT: u8 = 14;
+    const MAKE_VECTOR: u8 = 15;
+    const VOID: u8 = 16;
+    const BREAKPOINT: u8 = 17;
+    const RET: u8 = 18;
+    const PRINT: u8 = 19;
+    const CALL: u8 = 20;
+    const CALL_OBJECT: u8 = 21;
+    const STACK_SIZE: u8 = 22;
+    const STORE: u8 = 23;
+    const STORE_OBJECT: u8 = 24;
+    const LOAD: u8 = 25;
+    const LOAD_FAST: u8 = 26;
+    const TYPECMP: u8 = 27;
+    const IF: u8 = 28;
+    const JMP: u8 = 29;
+    #[deprecated]
+    const ENDIF: u8 = 30;
+    const STRICT_EQU: u8 = 31;
+    const EQU: u8 = 32;
+    const ARG: u8 = 33;
+    const MUTATE: u8 = 34;
+    const LOAD_CALLBACK: u8 = 35;
+    const LOAD_OBJECT: u8 = 36;
+    const CALL_LIB: u8 = 37;
+    const LEN: u8 = 38;
+    const DONE: u8 = 39;
+    #[deprecated]
+    const UPDATE: u8 = 40;
+    const SCOPE: u8 = 41;
+    const ELSE: u8 = 42;
+    const NEG: u8 = 43;
+    const NEQ: u8 = 44;
+    const NOT: u8 = 45;
+    const CALL_SELF: u8 = 46;
+    const STORE_SKIP: u8 = 47;
+    const FAST_REV2: u8 = 48;
+    const WHILE_LOOP: u8 = 49;
+    const JMP_POP: u8 = 50;
+    const STORE_FAST: u8 = 51;
+    const DELETE_NAME_SCOPED: u8 = 52;
+    const DELETE_NAME_REFERENCE_SCOPE: u8 = 53;
+    const VEC_MUT: u8 = 54;
+}

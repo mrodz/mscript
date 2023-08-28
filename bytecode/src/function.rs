@@ -222,7 +222,7 @@ impl Debug for Function {
 
 impl Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} function {}", self.location.path(), self.name,)
+        write!(f, "{} function {}", self.location.path(), self.name)
     }
 }
 
@@ -414,7 +414,7 @@ impl Function {
 
 /// A map of a function's name to the function struct.
 #[derive(Debug)]
-pub(crate) struct Functions {
+pub struct Functions {
     map: HashMap<Rc<String>, Function>,
 }
 
@@ -422,6 +422,18 @@ impl<'a> Functions {
     /// Initialize a [`Functions`] map given its fields.
     pub(crate) fn new(map: HashMap<Rc<String>, Function>) -> Self {
         Self { map }
+    }
+
+    pub(crate) fn new_empty() -> Self {
+        Self { map: HashMap::new() }
+    }
+
+    pub(crate) fn add_function(&mut self, file: Rc<MScriptFile>, name: String, bytecode: Box<[Instruction]>) -> Option<Function> {
+        let function = Function::new(file, name.clone(), bytecode);
+
+        // TODO: If Rc<name> == self.map.name, we can change Function::name to be the same Rc.
+
+        self.map.insert(Rc::new(name), function)
     }
 
     /// Get all functions whose name starts with `name`

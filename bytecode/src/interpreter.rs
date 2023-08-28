@@ -36,7 +36,7 @@ impl Program {
         T: Into<String>,
     {
         let path = path.into();
-        let main_file = MScriptFile::open(&path)?;
+        let main_file = MScriptFile::open(path.clone())?;
         let entrypoint = Rc::new(path.clone());
         let mut files_in_use = HashMap::with_capacity(1);
         files_in_use.insert(path, main_file);
@@ -60,14 +60,14 @@ impl Program {
     ///
     /// # Errors
     /// If opening a `.mmm` file fails, the error will be passed up.
-    fn add_file(&mut self, path: &String) -> Result<bool> {
-        if self.files_in_use.contains_key(path) {
+    fn add_file(&mut self, path: String) -> Result<bool> {
+        if self.files_in_use.contains_key(&path) {
             return Ok(false);
         }
 
-        let new_file = MScriptFile::open(path)?;
+        let new_file = MScriptFile::open(path.clone())?;
 
-        self.files_in_use.insert(path.to_string(), new_file);
+        self.files_in_use.insert(path, new_file);
 
         Ok(true)
     }
@@ -114,9 +114,11 @@ impl Program {
         let path = path.to_string();
         let symbol = &symbol[1..];
 
-        rc_to_ref(&rc_of_self).add_file(&path)?;
+        let path_ref = &path;
 
-        let file = Self::get_file(rc_of_self.clone(), &path)?;
+        rc_to_ref(&rc_of_self).add_file(path.clone())?;
+
+        let file = Self::get_file(rc_of_self.clone(), path_ref)?;
 
         let Some(function) = rc_to_ref(&file).get_function(symbol) else {
             bail!("could not find function (missing `{symbol}`)")
