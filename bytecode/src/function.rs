@@ -7,9 +7,8 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::path::Path;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
-use crate::compilation_lookups::raw_byte_instruction_to_string_representation;
 use crate::context::{Ctx, SpecialScope};
 use crate::file::MScriptFile;
 use crate::instruction::{run_instruction, Instruction};
@@ -206,7 +205,7 @@ pub enum InstructionExitState {
 /// run raw bytecode. (See `Function::run()`)
 pub struct Function {
     /// A shared reference to the file of origin.
-    location: Rc<MScriptFile>,
+    location: Weak<MScriptFile>,
     /// A list of the instructions this subroutine consists of.
     instructions: Box<[Instruction]>,
     /// The name of this function.
@@ -222,14 +221,14 @@ impl Debug for Function {
 
 impl Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} function {}", self.location.path(), self.name,)
+        write!(f, "{} function {}", self.location.upgrade().unwrap().path(), self.name)
     }
 }
 
 impl Function {
     /// Initialize a [`Function`] given its fields.
     pub(crate) fn new(
-        location: Rc<MScriptFile>,
+        location: Weak<MScriptFile>,
         name: String,
         instructions: Box<[Instruction]>,
     ) -> Self {
@@ -255,7 +254,7 @@ impl Function {
     /// ```
     #[inline]
     pub(crate) fn get_qualified_name(&self) -> String {
-        format!("{}#{}", self.location.path(), self.name)
+        format!("{}#{}", self.location.upgrade().unwrap().path(), self.name)
     }
 
     /// This is the backbone of the interpreter. This function creates the main event
@@ -304,6 +303,8 @@ impl Function {
             run_instruction(&mut context, instruction)
                 .context("failed to run instruction")
                 .with_context(|| {
+                    use crate::compilation_bridge::raw_byte_instruction_to_string_representation;
+
                     let instruction_as_str =
                         raw_byte_instruction_to_string_representation(instruction.id)
                             .unwrap_or(Cow::Borrowed("Unknown Instruction"));
@@ -407,14 +408,14 @@ impl Function {
     }
 
     /// Get a function's location.
-    pub(crate) fn location(&self) -> &Rc<MScriptFile> {
-        &self.location
+    pub(crate) fn location(&self) -> Weak<MScriptFile> {
+        Weak::clone(&self.location)
     }
 }
 
 /// A map of a function's name to the function struct.
 #[derive(Debug)]
-pub(crate) struct Functions {
+pub struct Functions {
     map: HashMap<Rc<String>, Function>,
 }
 
@@ -422,6 +423,18 @@ impl<'a> Functions {
     /// Initialize a [`Functions`] map given its fields.
     pub(crate) fn new(map: HashMap<Rc<String>, Function>) -> Self {
         Self { map }
+    }
+
+    pub(crate) fn new_empty() -> Self {
+        Self { map: HashMap::new() }
+    }
+
+    pub(crate) fn add_function(&mut self, file: Weak<MScriptFile>, name: String, bytecode: Box<[Instruction]>) -> Option<Function> {
+        let function = Function::new(file, name.clone(), bytecode);
+
+        // TODO: If Rc<name> == self.map.name, we can change Function::name to be the same Rc.
+
+        self.map.insert(Rc::new(name), function)
     }
 
     /// Get all functions whose name starts with `name`

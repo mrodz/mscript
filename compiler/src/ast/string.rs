@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use anyhow::Result;
 
 use crate::{
@@ -47,15 +49,8 @@ impl Compile for AstString {
 impl Parser {
     pub fn string(input: Node) -> Result<AstString> {
         let as_str = input.as_str();
-        // let len = as_str.len();
+        let encoded = bytecode::compilation_bridge::split_string(Cow::Borrowed(as_str))?[0].clone();
 
-        // assert!(len >= 3);
-
-        // let as_str = as_str
-        // 	.get(1..len - 1)
-        // 	.unwrap()
-        // 	.to_owned();
-
-        Ok(AstString::Plain(as_str.to_string()))
+        Ok(AstString::Plain(encoded))
     }
 }

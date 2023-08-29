@@ -9,6 +9,7 @@ pub(crate) mod instruction;
 pub(crate) mod instruction_constants;
 pub(crate) mod interpreter;
 pub(crate) mod stack;
+
 mod variables;
 
 // Alternate naming to make writing FFI functions simpler.
@@ -19,16 +20,19 @@ pub use variables::Primitive as BytecodePrimitive;
 pub use interpreter::Program;
 
 /// Useful functions that make `bytecode -> ir`, `mscript -> bytecode`, and `bytecode -> ir` conversions easier.
-pub mod compilation_lookups {
+pub mod compilation_bridge {
     use std::borrow::Cow;
+    use crate::instruction_constants::{BIN_TO_REPR, REPR_TO_BIN};
 
     pub use crate::instruction::split_string;
-    use crate::instruction_constants::{BIN_TO_REPR, REPR_TO_BIN};
+
+    pub use crate::instruction::Instruction;
+    pub use crate::file::{MScriptFile, MScriptFileBuilder};
 
     /// From a string, get an instruction's corresponding byte.
     ///
     /// ```
-    /// use bytecode::compilation_lookups::string_instruction_representation_to_byte;
+    /// use bytecode::compilation_bridge::string_instruction_representation_to_byte;
     ///
     /// let printn = string_instruction_representation_to_byte("printn").unwrap();
     /// let if_stmt = string_instruction_representation_to_byte("if").unwrap();
@@ -44,7 +48,7 @@ pub mod compilation_lookups {
 
     /// Reverse an instruction from its byte to its name.
     /// ```
-    /// use bytecode::compilation_lookups::raw_byte_instruction_to_string_representation;
+    /// use bytecode::compilation_bridge::raw_byte_instruction_to_string_representation;
     /// use std::borrow::Cow;
     ///
     /// let printn = raw_byte_instruction_to_string_representation(0x13).unwrap();

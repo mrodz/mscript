@@ -1,5 +1,5 @@
 use anyhow::{bail, Result};
-use bytecode::compilation_lookups::*;
+use bytecode::compilation_bridge::*;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::borrow::Cow;
 use std::fs::File;

@@ -47,7 +47,7 @@ use crate::{
 };
 
 use super::{
-    boolean::boolean_from_str, new_err, r#type::IntoType, string::AstString, Compile, CompiledItem,
+    boolean::boolean_from_str, new_err, r#type::IntoType, Compile, CompiledItem,
     Dependencies, Dependency, Value, TemporaryRegister, CompileTimeEvaluate, TypeLayout, function::FunctionType, FunctionArguments, list::Index,
 };
 
@@ -420,8 +420,8 @@ fn parse_expr(
                         Expr::Value(Value::Number(number))
                     }
                     Rule::string => {
-                        let raw_string = primary.as_str();
-                        Expr::Value(Value::String(AstString::Plain(raw_string.to_owned())))
+                        let ast_string = Parser::string(Node::new_with_user_data(primary, user_data.clone())).to_err_vec()?;
+                        Expr::Value(Value::String(ast_string))
                     }
                     Rule::ident => {
                         let raw_string = primary.as_str();

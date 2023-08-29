@@ -18,11 +18,37 @@ use super::rc_to_ref;
 pub struct MScriptFile {
     /// A shared reference to the path to the file, used for debug and identification purposes.
     path: Rc<String>,
-    /// A handle to the file that is kept for the duration of the interpreter.
-    handle: Rc<File>,
     /// The functions in the file. Even though it is an `Option`, by the time an [`MScriptFile`]
     /// is initialized, this field will be propagated.
     functions: Option<Functions>,
+}
+
+#[derive(Debug)]
+pub struct MScriptFileBuilder {
+    building: Rc<MScriptFile>,
+}
+
+impl MScriptFileBuilder {
+    pub fn new(path_to_file: String) -> Self {
+        Self {
+            building: Rc::new(MScriptFile {
+                path: Rc::new(path_to_file),
+                functions: Some(Functions::new_empty()),
+            }),
+        }
+    }
+
+    pub fn add_function(&mut self, name: String, bytecode: Box<[Instruction]>) -> Option<Function> {
+        let Some(ref mut functions) = rc_to_ref(&self.building).functions else {
+            unreachable!()
+        };
+        
+        functions.add_function(Rc::downgrade(&self.building), name, bytecode)
+    }
+
+    pub fn build(self) -> Rc<MScriptFile> {
+        self.building
+    }
 }
 
 /// Return how many lines (identified by ASCII newlines) are found between a
@@ -80,12 +106,9 @@ impl MScriptFile {
     /// * `path` - The path to the file. This function _does not_ validate the extension.
     ///
     /// # Errors
-    pub fn open(path: &String) -> Result<Rc<Self>> {
+    pub fn open(path: Rc<String>) -> Result<Rc<Self>> {
         let new_uninit = Rc::new(Self {
-            handle: Rc::new(
-                File::open(path).with_context(|| format!("failed opening file `{path}`"))?,
-            ),
-            path: Rc::new(path.clone()),
+            path,
             functions: None,
         });
 
@@ -96,11 +119,18 @@ impl MScriptFile {
         Ok(new_uninit)
     }
 
+    pub fn new(functions: Functions, path: String) -> Rc<Self> {
+        Rc::new(Self {
+            functions: Some(functions),
+            path: Rc::new(path),
+        })
+    }
+
     /// Searches for a function given its name.
     pub fn get_function(&mut self, name: &str) -> Option<&mut Function> {
-        let name = format!("{}#{name}", self.path);
+        // let name = format!("{}#{name}", self.path);
 
-        let function = self.functions.as_mut().unwrap().get_mut(&name);
+        let function = self.functions.as_mut().unwrap().get_mut(&name.to_owned());
 
         function.ok()
     }
@@ -108,6 +138,11 @@ impl MScriptFile {
     /// Get the path of the file.
     pub fn path(&self) -> &String {
         &self.path
+    }
+
+    /// Get a shared reference to the underlying path pointer.
+    pub fn path_shared(&self) -> Rc<String> {
+        self.path.clone()
     }
 
     /// Get the functions associated with an object mapped as `name`.
@@ -130,7 +165,10 @@ impl MScriptFile {
     /// the parser encounters has a name that's non-UTF-8. Errors in
     /// a function's layout are also problematic.
     fn get_functions(rc_of_self: &Rc<Self>) -> Result<Functions> {
-        let mut reader = BufReader::new(rc_of_self.handle.as_ref());
+        let path = rc_of_self.path();
+        let mut reader = BufReader::new(
+            File::open(path).with_context(|| format!("failed opening file `{path}`"))?,
+        );
         let mut buffer = Vec::new();
 
         let mut in_function = false;
@@ -165,7 +203,7 @@ impl MScriptFile {
                         .context("found `end` outside of a function")?;
 
                     let function = Function::new(
-                        rc_of_self.clone(),
+                        Rc::downgrade(rc_of_self),
                         current_function_name,
                         instruction_buffer.into_boxed_slice(),
                     );

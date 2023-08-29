@@ -52,7 +52,7 @@ pub(crate) use r#type::shorthands::{
 };
 
 use anyhow::{anyhow, bail, Context, Error, Result};
-use bytecode::compilation_lookups::raw_byte_instruction_to_string_representation;
+use bytecode::compilation_bridge::{raw_byte_instruction_to_string_representation, Instruction};
 use pest::Span;
 use std::{
     borrow::Cow,
@@ -147,6 +147,16 @@ impl Display for CompiledFunctionId {
             CompiledFunctionId::Custom(string) => write!(f, "{string}"),
             CompiledFunctionId::Generated(id) => write!(f, "{}", name_from_function_id(*id)),
         }
+    }
+}
+
+impl From<CompiledItem> for Instruction {
+    fn from(value: CompiledItem) -> Self {
+        let CompiledItem::Instruction { id, arguments } = value else {
+            panic!("not an instruction: {value:?}");
+        };
+            
+        Instruction::new(id, arguments)
     }
 }
 
@@ -263,7 +273,7 @@ macro_rules! instruction {
     ($name:tt $($arg:tt)*) => {{
         use $crate::ast::*;
 
-        let id = bytecode::compilation_lookups::string_instruction_representation_to_byte(stringify!($name))
+        let id = bytecode::compilation_bridge::string_instruction_representation_to_byte(stringify!($name))
             .expect("instruction does not exist");
 
         let arguments = vec![

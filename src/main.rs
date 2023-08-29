@@ -2,31 +2,33 @@ mod cli;
 
 use anyhow::{bail, Context, Result};
 use colored::*;
-use bytecode::Program;
+use bytecode::{Program, compilation_bridge::MScriptFile};
 use clap::Parser;
 use cli::{Args, Commands};
 use compiler::compile as compile_file;
 use log::{Level, LevelFilter, Metadata, Record};
 use std::{
     path::{Path, PathBuf},
-    thread, sync::Mutex,
+    thread, sync::Mutex, rc::Rc,
 };
 
 use crate::cli::CompilationTargets;
 
-fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<()> {
-    if let Err(errors) = compile_file(path_str, output_bin, verbose) {
-        let cerr = errors.len();
-        for error in &errors {
-            println!("{error:?}")
+fn compile(path_str: &str, output_bin: bool, verbose: bool, output_to_file: bool) -> Result<Option<Rc<MScriptFile>>> {
+    let compilation = compile_file(path_str, output_bin, verbose, output_to_file);
+    match compilation {
+        Err(errors) => {
+            let cerr = errors.len();
+            for error in &errors {
+                println!("{error:?}")
+            }
+    
+            let plural_char = if cerr > 1 { "s" } else { "" };
+    
+            bail!("Did not compile successfully ({cerr} Error{plural_char})")
         }
-
-        let plural_char = if cerr > 1 { "s" } else { "" };
-
-        bail!("Did not compile successfully ({cerr} Error{plural_char})")
+        Ok(product) => Ok(product),
     }
-
-    Ok(())
 }
 
 fn transpile_command(path: &String) -> Result<Box<str>> {
@@ -43,29 +45,6 @@ fn transpile_command(path: &String) -> Result<Box<str>> {
     bytecode_dev_transpiler::transpile_file(path, new_path).context("Could not transpile file")?;
 
     Ok(new_path.into())
-}
-
-fn execute_command(path: String, stack_size: usize, transpile_first: bool) -> Result<()> {
-    let builder = thread::Builder::new()
-        .name("Main".into())
-        .stack_size(stack_size);
-
-    let handler = builder.spawn(move || -> Result<()> {
-        let program = if transpile_first {
-            println!("=======================\n");
-            let new_path = transpile_command(&path)?;
-            println!("\nRunning the outputted file...\n=======================\n");
-            Program::new(new_path)?
-        } else {
-            Program::new(path)?
-        };
-
-        program.execute()?;
-
-        Ok(())
-    })?;
-
-    handler.join().unwrap()
 }
 
 pub fn is_path_source(input: &String) -> Result<PathBuf> {
@@ -147,16 +126,49 @@ fn main() -> Result<()> {
                 bail!("Error initializing logger: {err:?}")
             };
         
-            let output_path = is_path_source(&path)?;
-            compile(&path, true, !quick)?;
-            println!("Running...\n");
-            execute_command(output_path.to_string_lossy().to_string(), stack_size, false)?
+            // let output_path = is_path_source(&path)?;
+
+            let builder = thread::Builder::new()
+                .name("Main".into())
+                .stack_size(stack_size);
+
+            let main_thread = builder.spawn(move || -> Result<()> {
+                let Some(product) = compile(&path, true, !quick, false)? else {
+                    unreachable!();
+                };
+    
+                println!("Running...\n");
+    
+                let program = Program::new_from_file(product)?;
+                program.execute()
+            })?;
+
+            main_thread.join().unwrap()?;
         }
         Commands::Execute {
             path,
             stack_size,
             transpile_first,
-        } => execute_command(path, stack_size, transpile_first)?,
+        } => {
+            let builder = thread::Builder::new()
+                .name("Main".into())
+                .stack_size(stack_size);
+
+            let main_thread = builder.spawn(move || -> Result<()> {
+                let program = if transpile_first {
+                    println!("=======================\n");
+                    let new_path = transpile_command(&path)?;
+                    println!("\nRunning the outputted file...\n=======================\n");
+                    Program::new(new_path)?
+                } else {
+                    Program::new(path)?
+                };
+
+                program.execute()
+            })?;
+
+            main_thread.join().unwrap()?;
+        },
         Commands::Transpile { path } => {
             transpile_command(&path)?;
         }
@@ -166,7 +178,8 @@ fn main() -> Result<()> {
             verbose,
             quick,
         } => {
-            if verbose && !quick {
+            let should_log = verbose && !quick;
+            if should_log {
                 LOGGER.set_verbose();
             }
 
@@ -175,7 +188,7 @@ fn main() -> Result<()> {
             };
 
             let output_bin = matches!(output_format, CompilationTargets::Binary);
-            compile(&path, output_bin, !quick)?;
+            compile(&path, output_bin, !quick, true)?;
         }
     }
 
