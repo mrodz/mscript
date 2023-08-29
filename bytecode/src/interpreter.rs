@@ -36,7 +36,7 @@ impl Program {
     where
         T: Into<String>,
     {
-        let path = path.into();
+        let path = path.into().replace('\\', "/");
         let entrypoint = Rc::new(path);
 
         let main_file = MScriptFile::open(Rc::clone(&entrypoint))?;
@@ -118,11 +118,11 @@ impl Program {
 
         let path_ref = &path;
 
-        rc_to_ref(&rc_of_self).add_file(Rc::new(path.clone()))?;
+        rc_to_ref(&rc_of_self).add_file(Rc::new(path.replace('\\', "/")))?;
 
         let file = Self::get_file(rc_of_self.clone(), path_ref)?;
 
-        let Some(function) = rc_to_ref(&file).get_function(destination_label) else {
+        let Some(function) = rc_to_ref(&file).get_function(&symbol.to_owned()) else {
             bail!("could not find function (missing `{symbol}`, searching in {file:?})")
         };
 
@@ -212,8 +212,8 @@ impl Program {
 
         // let module_function = format!("{}#main", entrypoint.path());
 
-        let Some(function) = rc_to_ref(&entrypoint).get_function("main") else {
-            bail!("could not find entrypoint (hint: try adding `function main`. Searching in {:?})", entrypoint)
+        let Some(function) = rc_to_ref(&entrypoint).get_function(&"__module__".to_owned()) else {
+            bail!("could not find entrypoint (hint: try adding `function __module__`. Searching in {:?})", entrypoint)
         };
 
         log::debug!("Spawning interpreter...");

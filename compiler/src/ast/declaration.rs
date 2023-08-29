@@ -10,7 +10,7 @@ use crate::{
 
 use super::{
     Assignment, Break, Compile, CompiledItem, Continue, Dependencies, Dependency, Expr,
-    IfStatement, NumberLoop, PrintStatement, Reassignment, ReturnStatement, WhileLoop,
+    IfStatement, NumberLoop, PrintStatement, Reassignment, ReturnStatement, WhileLoop, Assertion,
 };
 
 #[derive(Debug)]
@@ -18,7 +18,6 @@ pub(crate) enum Declaration {
     Assignment(Assignment),
     Reassignment(Reassignment),
     Expr(Expr),
-    // Callable(Callable),
     PrintStatement(PrintStatement),
     ReturnStatement(ReturnStatement),
     IfStatement(IfStatement),
@@ -26,6 +25,7 @@ pub(crate) enum Declaration {
     NumberLoop(NumberLoop),
     Continue(Continue),
     Break(Break),
+    Assertion(Assertion),
 }
 
 impl Dependencies for Declaration {
@@ -38,6 +38,7 @@ impl Dependencies for Declaration {
             Self::IfStatement(if_statement) => if_statement.supplies(),
             Self::WhileLoop(while_loop) => while_loop.supplies(),
             Self::NumberLoop(number_loop) => number_loop.supplies(),
+            Self::Assertion(assertion) => assertion.supplies(),
             Self::Reassignment(_) | Self::Continue(_) | Self::Break(_) => vec![],
         }
     }
@@ -52,6 +53,7 @@ impl Dependencies for Declaration {
             Self::WhileLoop(while_loop) => while_loop.net_dependencies(),
             Self::NumberLoop(number_loop) => number_loop.net_dependencies(),
             Self::Reassignment(reassignment) => reassignment.net_dependencies(),
+            Self::Assertion(assertion) => assertion.net_dependencies(),
             Self::Continue(_) | Self::Break(_) => vec![],
         }
     }
@@ -74,6 +76,7 @@ impl Compile for Declaration {
             Self::Continue(x) => x.compile(function_buffer),
             Self::Break(x) => x.compile(function_buffer),
             Self::NumberLoop(x) => x.compile(function_buffer),
+            Self::Assertion(x) => x.compile(function_buffer),
         }
     }
 }
@@ -101,6 +104,7 @@ impl Parser {
             Rule::number_loop => Declaration::NumberLoop(Self::number_loop(declaration)?),
             Rule::math_expr => Declaration::Expr(Expr::parse(input)?),
             Rule::reassignment => Declaration::Reassignment(Self::reassignment(declaration)?),
+            Rule::assertion => Declaration::Assertion(Self::assertion(declaration)?),
             x => unreachable!("{x:?} is not supported"),
         };
 

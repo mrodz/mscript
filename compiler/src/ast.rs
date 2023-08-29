@@ -1,3 +1,4 @@
+mod assertion;
 mod assignment;
 mod assignment_no_type;
 mod assignment_type;
@@ -25,6 +26,7 @@ mod r#type;
 mod value;
 mod while_loop;
 
+pub(crate) use assertion::Assertion;
 pub(crate) use assignment::Assignment;
 pub(crate) use callable::Callable;
 pub(crate) use declaration::Declaration;

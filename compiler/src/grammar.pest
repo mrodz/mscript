@@ -12,7 +12,8 @@ keywords = _{
     "modify" |
     "const" |
     "self" | 
-    "while"
+    "while" |
+    "assert"
 }
 
 integer = @{ '0'..'9' ~ ('0'..'9' | ("_" ~ ('0'..'9')))* }
@@ -124,10 +125,11 @@ continue_statement = { "continue" }
 break_statement = { "break" }
 
 print_statement = { "print " ~ value }
+assertion = { "assert" ~  value }
 
 return_statement = { "return " ~ value? }
 
-declaration = { assignment | reassignment | print_statement | return_statement | continue_statement | break_statement | if_statement | while_loop | number_loop | math_expr }
+declaration = { assignment | reassignment | print_statement | assertion | return_statement | continue_statement | break_statement | if_statement | while_loop | number_loop | math_expr }
 
 file = {
     SOI ~

@@ -365,7 +365,7 @@ impl Compile<Vec<anyhow::Error>> for File {
         global_scope_code.push(instruction!(ret));
 
         let main_function = CompiledItem::Function {
-            id: CompiledFunctionId::Custom("main".to_owned()),
+            id: CompiledFunctionId::Custom("__module__".to_owned()),
             content: Some(global_scope_code),
             location: self.location.clone(),
         };

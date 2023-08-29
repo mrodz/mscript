@@ -22,7 +22,7 @@ pub static REPR_TO_BIN: Lazy<HashMap<&[u8], u8>> = Lazy::new(|| {
 ///
 /// Saving this as a constant makes it harder for the arrays to fall out of sync
 /// by requiring that they both take the same size.
-pub const INSTRUCTION_COUNT: usize = 55;
+pub const INSTRUCTION_COUNT: usize = 56;
 
 /// This is an array that provides O(1) lookups of names from bytes.
 pub static BIN_TO_REPR: [&[u8]; INSTRUCTION_COUNT] = [
@@ -81,6 +81,7 @@ pub static BIN_TO_REPR: [&[u8]; INSTRUCTION_COUNT] = [
     /* 0x34 [52] */ b"delete_name_scoped",
     /* 0x35 [53] */ b"delete_name_reference_scoped",
     /* 0x36 [54] */ b"vec_mut",
+    /* 0x37 [55] */ b"assert",
 ];
 
 /// Similar to [`BIN_TO_REPR`][crate::instruction_constants::BIN_TO_REPR],
@@ -141,6 +142,7 @@ pub static FUNCTION_POINTER_LOOKUP: [InstructionSignature; INSTRUCTION_COUNT] = 
     implementations::delete_name_scoped,
     implementations::delete_name_reference_scoped,
     implementations::vec_mut,
+    implementations::assert,
 ];
 
 pub mod id {
@@ -202,4 +204,5 @@ pub mod id {
     const DELETE_NAME_SCOPED: u8 = 52;
     const DELETE_NAME_REFERENCE_SCOPE: u8 = 53;
     const VEC_MUT: u8 = 54;
+    const ASSERT: u8 = 55;
 }

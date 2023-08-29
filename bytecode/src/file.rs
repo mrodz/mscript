@@ -32,7 +32,7 @@ impl MScriptFileBuilder {
     pub fn new(path_to_file: String) -> Self {
         Self {
             building: Rc::new(MScriptFile {
-                path: Rc::new(path_to_file),
+                path: Rc::new(path_to_file.replace('\\', "/")),
                 functions: Some(Functions::new_empty()),
             }),
         }
@@ -122,15 +122,15 @@ impl MScriptFile {
     pub fn new(functions: Functions, path: String) -> Rc<Self> {
         Rc::new(Self {
             functions: Some(functions),
-            path: Rc::new(path),
+            path: Rc::new(path.replace('\\', "/")),
         })
     }
 
     /// Searches for a function given its name.
-    pub fn get_function(&mut self, name: &str) -> Option<&mut Function> {
+    pub fn get_function(&mut self, name: &String) -> Option<&mut Function> {
         // let name = format!("{}#{name}", self.path);
 
-        let function = self.functions.as_mut().unwrap().get_mut(&name.to_owned());
+        let function = self.functions.as_mut().unwrap().get_mut(name);
 
         function.ok()
     }
