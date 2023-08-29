@@ -32,7 +32,7 @@ pub mod compilation_bridge {
     /// From a string, get an instruction's corresponding byte.
     ///
     /// ```
-    /// use bytecode::compilation_lookups::string_instruction_representation_to_byte;
+    /// use bytecode::compilation_bridge::string_instruction_representation_to_byte;
     ///
     /// let printn = string_instruction_representation_to_byte("printn").unwrap();
     /// let if_stmt = string_instruction_representation_to_byte("if").unwrap();
@@ -48,7 +48,7 @@ pub mod compilation_bridge {
 
     /// Reverse an instruction from its byte to its name.
     /// ```
-    /// use bytecode::compilation_lookups::raw_byte_instruction_to_string_representation;
+    /// use bytecode::compilation_bridge::raw_byte_instruction_to_string_representation;
     /// use std::borrow::Cow;
     ///
     /// let printn = raw_byte_instruction_to_string_representation(0x13).unwrap();

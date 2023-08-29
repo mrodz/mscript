@@ -14,14 +14,6 @@ use std::collections::HashMap;
 use std::panic;
 use std::rc::{Rc, Weak};
 
-/// This struct represents an entire MScript program, from start to finish.
-///
-/// ```
-/// use bytecode::Program;
-///
-/// let program = Program::new("../examples/bytecode/hello_world/hello_world.mmm").unwrap();
-/// program.execute().unwrap();
-/// ```
 pub struct Program {
     /// Keeps track of from where the program was called.
     entrypoint: Weak<String>,
