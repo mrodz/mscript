@@ -489,9 +489,9 @@ pub mod implementations {
             let obj = unsafe {
                 if !OBJECT_BUILDER.has_class_been_registered(&name) {
                     let location = &function.location();
-                    let object_path = format!("{}#{name}$", location.path());
+                    let object_path = format!("{}#{name}$", location.upgrade().unwrap().path());
 
-                    let object_functions = rc_to_ref(location).get_object_functions(&object_path)?;
+                    let object_functions = rc_to_ref(&location.upgrade().unwrap()).get_object_functions(&object_path)?;
 
                     let mut mapping: HashSet<String> = HashSet::new();
 

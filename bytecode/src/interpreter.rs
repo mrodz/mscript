@@ -12,7 +12,7 @@ use anyhow::{bail, Context, Result};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::panic;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
 /// This struct represents an entire MScript program, from start to finish.
 ///
@@ -24,25 +24,35 @@ use std::rc::Rc;
 /// ```
 pub struct Program {
     /// Keeps track of from where the program was called.
-    entrypoint: Rc<String>,
+    entrypoint: Weak<String>,
     /// Keeps a record of the `.mmm` files in use.
-    files_in_use: HashMap<String, Rc<MScriptFile>>,
+    files_in_use: HashMap<Rc<String>, Rc<MScriptFile>>,
 }
 
 impl Program {
+    pub fn new_from_file(entrypoint: Rc<MScriptFile>) -> Result<Self> {
+        let file_path = entrypoint.path_shared();
+
+        Ok(Self {
+            entrypoint: Rc::downgrade(&file_path),
+            files_in_use: HashMap::from([(file_path, entrypoint)]),
+        })
+    }
+
     /// Create a new program given a path.
     pub fn new<T>(path: T) -> Result<Self>
     where
         T: Into<String>,
     {
         let path = path.into();
-        let main_file = MScriptFile::open(path.clone())?;
-        let entrypoint = Rc::new(path.clone());
+        let entrypoint = Rc::new(path);
+
+        let main_file = MScriptFile::open(Rc::clone(&entrypoint))?;
         let mut files_in_use = HashMap::with_capacity(1);
-        files_in_use.insert(path, main_file);
+        files_in_use.insert(Rc::clone(&entrypoint), main_file);
 
         Ok(Self {
-            entrypoint,
+            entrypoint: Rc::downgrade(&entrypoint),
             files_in_use,
         })
     }
@@ -60,12 +70,12 @@ impl Program {
     ///
     /// # Errors
     /// If opening a `.mmm` file fails, the error will be passed up.
-    fn add_file(&mut self, path: String) -> Result<bool> {
+    fn add_file(&mut self, path: Rc<String>) -> Result<bool> {
         if self.files_in_use.contains_key(&path) {
             return Ok(false);
         }
-
-        let new_file = MScriptFile::open(path.clone())?;
+        
+        let new_file = MScriptFile::open(Rc::clone(&path))?;
 
         self.files_in_use.insert(path, new_file);
 
@@ -116,12 +126,12 @@ impl Program {
 
         let path_ref = &path;
 
-        rc_to_ref(&rc_of_self).add_file(path.clone())?;
+        rc_to_ref(&rc_of_self).add_file(Rc::new(path.clone()))?;
 
         let file = Self::get_file(rc_of_self.clone(), path_ref)?;
 
-        let Some(function) = rc_to_ref(&file).get_function(symbol) else {
-            bail!("could not find function (missing `{symbol}`)")
+        let Some(function) = rc_to_ref(&file).get_function(destination_label) else {
+            bail!("could not find function (missing `{symbol}`, searching in {file:?})")
         };
 
         let callback_state = request.callback_state.as_ref().cloned();
@@ -198,7 +208,7 @@ impl Program {
     pub fn execute(self) -> Result<()> {
         let rc_of_self = Rc::new(self);
 
-        let path = &*rc_of_self.entrypoint;
+        let path = &*rc_of_self.entrypoint.upgrade().unwrap();
 
         log::debug!("Loading instructions from file...");
         let entrypoint = Self::get_file(rc_of_self.clone(), path)?;
@@ -208,8 +218,10 @@ impl Program {
         let stack = Rc::new(Stack::new());
         log::debug!("Created call stack");
 
+        // let module_function = format!("{}#main", entrypoint.path());
+
         let Some(function) = rc_to_ref(&entrypoint).get_function("main") else {
-            bail!("could not find entrypoint (hint: try adding `function main`)")
+            bail!("could not find entrypoint (hint: try adding `function main`. Searching in {:?})", entrypoint)
         };
 
         log::debug!("Spawning interpreter...");

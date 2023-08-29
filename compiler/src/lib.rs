@@ -12,8 +12,9 @@ use std::path::Path;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use ast::Compile;
+use bytecode::compilation_bridge::{Instruction, MScriptFile, MScriptFileBuilder};
 use indicatif::{MultiProgress, ProgressBar, ProgressFinish, ProgressStyle};
 
 use once_cell::sync::Lazy;
@@ -125,6 +126,27 @@ pub(crate) fn compile_str(
     )
 }
 
+pub(crate) fn seal_compiled_items(
+    output_path: &Path,
+    compiled_items: Vec<CompiledItem>,
+) -> Result<Rc<MScriptFile>> {
+    let output_path_owned = output_path.to_string_lossy().into_owned();
+    let mut file_builder = MScriptFileBuilder::new(output_path_owned);
+
+    for compiled_item in compiled_items.into_iter() {
+        let CompiledItem::Function { id, content: Some(content), .. } = compiled_item else {
+            bail!("Encountered a non-function when packaging compiled items: {compiled_item:?}");
+        };
+
+        file_builder.add_function(
+            id.to_string(),
+            content.into_iter().map(Into::<Instruction>::into).collect(),
+        );
+    }
+
+    Ok(file_builder.build())
+}
+
 pub(crate) fn compile_from_str(
     logger: &VerboseLogger,
     input_path: &Path,
@@ -155,48 +177,13 @@ pub(crate) fn compile_from_str(
     Ok(function_buffer)
 }
 
-pub fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<(), Vec<anyhow::Error>> {
-    let start_time = Instant::now();
-
-    let input_path = Path::new(path_str);
-
-    let Some(ext) = input_path.extension() else {
-        return Err(anyhow!("no file extension")).to_err_vec();
-    };
-
-    if !ext.eq_ignore_ascii_case("ms") {
-        return Err(anyhow!(
-            "MScript uses `.ms` file extensions. Please check your file extensions."
-        ))
-        .to_err_vec();
-    }
-
-    let output_path = input_path.with_extension("mmm");
-
-    let file = File::open(input_path)
-        .map_err(|e| vec![anyhow!(e).context("Could not open file for parsing :(")])?;
-
-    let mut reader = BufReader::new(file);
-
-    let mut buffer = String::new();
-
-    reader
-        .read_to_string(&mut buffer)
-        .map_err(|e| vec![anyhow!(e)])?;
-
-    let logger = VerboseLogger::new(verbose);
-
-    let function_buffer = compile_from_str(&logger, input_path, &output_path, &buffer)?;
-
-    logger.wrap_in_spinner(format!("Optimizing ({path_str}):"), || Ok(()))?;
-
+fn perform_file_io(output_path: &Path, logger: &VerboseLogger, function_buffer: Vec<CompiledItem>, output_bin: bool, ) -> Result<()> {
     let mut new_file = File::options()
         .create(true)
         .read(true)
         .write(true)
         .truncate(true)
-        .open(output_path)
-        .map_err(|e| vec![anyhow!(e)])?;
+        .open(output_path)?;
 
     let writing_pb = logger.add(|| {
         let template =
@@ -233,14 +220,12 @@ pub fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<(), Ve
     if let Some(ref writing_pb) = writing_pb {
         for x in writing_pb.wrap_iter(iter) {
             for_each(x)
-                .with_context(|| format!("{function_buffer:#?}"))
-                .to_err_vec()?;
+                .with_context(|| format!("{function_buffer:#?}"))?;
         }
     } else {
         for x in iter {
             for_each(x)
-                .with_context(|| format!("{function_buffer:#?}"))
-                .to_err_vec()?;
+                .with_context(|| format!("{function_buffer:#?}"))?;
         }
     }
 
@@ -248,15 +233,70 @@ pub fn compile(path_str: &str, output_bin: bool, verbose: bool) -> Result<(), Ve
         writing_pb.finish_with_message(format!("Done in {} ms", writing_pb.elapsed().as_millis()))
     });
 
-    if verbose {
-        print!("\n\n");
+    Ok(())
+}
+
+pub fn compile(
+    path_str: &str,
+    output_bin: bool,
+    verbose: bool,
+    output_to_file: bool,
+) -> Result<Option<Rc<MScriptFile>>, Vec<anyhow::Error>> {
+    let start_time = Instant::now();
+
+    let input_path = Path::new(path_str);
+
+    let Some(ext) = input_path.extension() else {
+        return Err(anyhow!("no file extension")).to_err_vec();
+    };
+
+    if !ext.eq_ignore_ascii_case("ms") {
+        return Err(anyhow!(
+            "MScript uses `.ms` file extensions. Please check your file extensions."
+        ))
+        .to_err_vec();
     }
 
-    println!(
-        "Compiled in {:?}{}",
-        start_time.elapsed(),
-        if verbose { " ✔️" } else { "" }
-    );
+    let output_path = input_path.with_extension("mmm");
 
-    Ok(())
+    let file = File::open(input_path)
+        .map_err(|e| vec![anyhow!(e).context("Could not open file for parsing :(")])?;
+
+    let mut reader = BufReader::new(file);
+
+    let mut buffer = String::new();
+
+    reader
+        .read_to_string(&mut buffer)
+        .map_err(|e| vec![anyhow!(e)])?;
+
+    let logger = VerboseLogger::new(verbose);
+
+    let function_buffer = compile_from_str(&logger, input_path, &output_path, &buffer)?;
+
+    logger.wrap_in_spinner(format!("Optimizing ({path_str}):"), || Ok(()))?;
+
+    if output_to_file {
+        perform_file_io(&output_path, &logger, function_buffer, output_bin).to_err_vec()?;
+
+        if verbose {
+            print!("\n\n");
+        }
+
+        println!(
+            "Compiled in {:?}{}",
+            start_time.elapsed(),
+            if verbose { " ✔️" } else { "" }
+        );
+
+        Ok(None)
+    } else {
+        println!(
+            "Compiled in {:?}{}",
+            start_time.elapsed(),
+            if verbose { " ✔️" } else { "" }
+        );
+
+        Ok(Some(seal_compiled_items(&output_path, function_buffer).to_err_vec()?))
+    }    
 }

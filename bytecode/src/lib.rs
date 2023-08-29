@@ -9,6 +9,7 @@ pub(crate) mod instruction;
 pub(crate) mod instruction_constants;
 pub(crate) mod interpreter;
 pub(crate) mod stack;
+
 mod variables;
 
 // Alternate naming to make writing FFI functions simpler.
@@ -19,11 +20,14 @@ pub use variables::Primitive as BytecodePrimitive;
 pub use interpreter::Program;
 
 /// Useful functions that make `bytecode -> ir`, `mscript -> bytecode`, and `bytecode -> ir` conversions easier.
-pub mod compilation_lookups {
+pub mod compilation_bridge {
     use std::borrow::Cow;
+    use crate::instruction_constants::{BIN_TO_REPR, REPR_TO_BIN};
 
     pub use crate::instruction::split_string;
-    use crate::instruction_constants::{BIN_TO_REPR, REPR_TO_BIN};
+
+    pub use crate::instruction::Instruction;
+    pub use crate::file::{MScriptFile, MScriptFileBuilder};
 
     /// From a string, get an instruction's corresponding byte.
     ///

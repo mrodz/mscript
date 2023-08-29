@@ -43,7 +43,7 @@ impl MScriptFileBuilder {
             unreachable!()
         };
         
-        functions.add_function(self.building.clone(), name, bytecode)
+        functions.add_function(Rc::downgrade(&self.building), name, bytecode)
     }
 
     pub fn build(self) -> Rc<MScriptFile> {
@@ -106,9 +106,9 @@ impl MScriptFile {
     /// * `path` - The path to the file. This function _does not_ validate the extension.
     ///
     /// # Errors
-    pub fn open(path: String) -> Result<Rc<Self>> {
+    pub fn open(path: Rc<String>) -> Result<Rc<Self>> {
         let new_uninit = Rc::new(Self {
-            path: Rc::new(path),
+            path,
             functions: None,
         });
 
@@ -128,9 +128,9 @@ impl MScriptFile {
 
     /// Searches for a function given its name.
     pub fn get_function(&mut self, name: &str) -> Option<&mut Function> {
-        let name = format!("{}#{name}", self.path);
+        // let name = format!("{}#{name}", self.path);
 
-        let function = self.functions.as_mut().unwrap().get_mut(&name);
+        let function = self.functions.as_mut().unwrap().get_mut(&name.to_owned());
 
         function.ok()
     }
@@ -138,6 +138,11 @@ impl MScriptFile {
     /// Get the path of the file.
     pub fn path(&self) -> &String {
         &self.path
+    }
+
+    /// Get a shared reference to the underlying path pointer.
+    pub fn path_shared(&self) -> Rc<String> {
+        self.path.clone()
     }
 
     /// Get the functions associated with an object mapped as `name`.
@@ -198,7 +203,7 @@ impl MScriptFile {
                         .context("found `end` outside of a function")?;
 
                     let function = Function::new(
-                        rc_of_self.clone(),
+                        Rc::downgrade(rc_of_self),
                         current_function_name,
                         instruction_buffer.into_boxed_slice(),
                     );
