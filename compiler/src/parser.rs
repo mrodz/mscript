@@ -8,7 +8,7 @@ use pest_consume::Parser as ParserDerive;
 
 use crate::ast::{
     Compile, CompiledFunctionId, CompiledItem, Declaration, Dependencies, FunctionParameters,
-    Ident, TypeLayout,
+    Ident, TypeLayout, CompilationState,
 };
 use crate::instruction;
 use crate::scope::{Scope, ScopeHandle, ScopeIter, ScopeReturnStatus, ScopeType, Scopes};
@@ -345,14 +345,14 @@ impl Dependencies for File {
 impl Compile<Vec<anyhow::Error>> for File {
     fn compile(
         &self,
-        function_buffer: &mut Vec<CompiledItem>,
+        state: &mut CompilationState,
     ) -> Result<Vec<CompiledItem>, Vec<anyhow::Error>> {
         let mut global_scope_code = vec![];
 
         let mut errors = vec![];
 
         for declaration in &self.declarations {
-            match declaration.compile(function_buffer) {
+            match declaration.compile(state) {
                 Ok(mut compiled) => global_scope_code.append(&mut compiled),
                 Err(e) => errors.push(e),
             }
@@ -370,7 +370,7 @@ impl Compile<Vec<anyhow::Error>> for File {
             location: self.location.clone(),
         };
 
-        function_buffer.push(main_function);
+        state.push_function(main_function);
 
         Ok(vec![])
     }

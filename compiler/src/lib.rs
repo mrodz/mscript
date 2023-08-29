@@ -15,7 +15,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context, Result};
-use ast::Compile;
+use ast::{Compile, CompilationState};
 use bytecode::Program;
 use bytecode::compilation_bridge::{Instruction, MScriptFile, MScriptFileBuilder};
 use indicatif::{MultiProgress, ProgressBar, ProgressFinish, ProgressStyle};
@@ -173,14 +173,15 @@ pub(crate) fn compile_from_str(
         Parser::file(input)
     })?;
 
-    let mut function_buffer = vec![];
+    let mut state: CompilationState = CompilationState::new();
+
     logger.wrap_in_spinner(format!("Validating AST ({input_path_str}):"), || {
-        file.compile(&mut function_buffer)?;
+        file.compile(&mut state)?;
 
         Ok(())
     })?;
 
-    Ok(function_buffer)
+    Ok(state.into_function_buffer())
 }
 
 fn perform_file_io(

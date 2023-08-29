@@ -60,6 +60,8 @@ use std::{
     sync::{Arc, RwLock}, ops::{AddAssign, SubAssign},
 };
 
+use self::number_loop::NumberLoopRegister;
+
 static mut REGISTER_COUNT: RwLock<usize> = RwLock::new(0);
 
 pub struct TemporaryRegister(usize, bool);
@@ -150,10 +152,9 @@ pub(crate) enum CompiledFunctionId {
 
 impl Display for CompiledFunctionId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use function::name_from_function_id;
         match self {
             CompiledFunctionId::Custom(string) => write!(f, "{string}"),
-            CompiledFunctionId::Generated(id) => write!(f, "{}", name_from_function_id(*id)),
+            CompiledFunctionId::Generated(id) => write!(f, "__fn{id}"),
         }
     }
 }
@@ -234,12 +235,7 @@ impl CompiledItem {
                     result += &item.repr(use_string_version)?;
                 }
 
-                let func_name = match id {
-                    CompiledFunctionId::Generated(id) => {
-                        Cow::Owned(function::name_from_function_id(*id))
-                    }
-                    CompiledFunctionId::Custom(str) => Cow::Borrowed(str),
-                };
+                let func_name = id.to_string();
 
                 let (sep, f, e) = if use_string_version {
                     ('\n', "function", "end")
@@ -297,8 +293,54 @@ macro_rules! instruction {
     }};
 }
 
+pub(crate) struct CompilationState {
+    function_buffer: Vec<CompiledItem>,
+    function_id_c: isize,
+    loop_register_c: usize,
+}
+
+impl CompilationState {
+    pub fn new() -> Self {
+        Self {
+            function_buffer: Vec::with_capacity(1),
+            function_id_c: 0,
+            loop_register_c: 0,
+        }
+    }
+
+    pub fn poll_function_id(&mut self) -> CompiledFunctionId {
+        let result = CompiledFunctionId::Generated(self.function_id_c);
+
+        self.function_id_c += 1;
+
+        result
+    }
+
+    pub fn poll_loop_register(&mut self) -> NumberLoopRegister {
+        self.loop_register_c += 1;
+        NumberLoopRegister::Generated(self.loop_register_c)
+    }
+
+    pub fn free_loop_register(&mut self, register: NumberLoopRegister) {
+        if let NumberLoopRegister::Generated(id) = register {
+            assert!(self.loop_register_c == id);
+
+            self.loop_register_c -= 1;
+        }
+    }
+
+    pub fn into_function_buffer(self) -> Vec<CompiledItem> {
+        self.function_buffer
+    }
+
+    pub fn push_function(&mut self, compiled_function: CompiledItem) {
+        assert!(matches!(compiled_function, CompiledItem::Function { .. }), "Attempting to push a non-function to the function buffer");
+        self.function_buffer.push(compiled_function)
+    }
+}
+
 pub(crate) trait Compile<E = anyhow::Error> {
-    fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>, E>;
+    fn compile(&self, state: &mut CompilationState) -> Result<Vec<CompiledItem>, E>;
 }
 
 pub(crate) trait Optimize {}

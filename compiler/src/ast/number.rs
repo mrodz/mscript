@@ -5,7 +5,7 @@ use anyhow::{bail, Result};
 use crate::instruction;
 use crate::parser::{Node, Parser, Rule};
 
-use super::CompiledItem;
+use super::{CompiledItem, CompilationState};
 use super::{
     r#type::{IntoType, NativeType},
     Compile, Dependencies, TypeLayout,
@@ -133,7 +133,7 @@ impl IntoType for Number {
 }
 
 impl Compile for Number {
-    fn compile(&self, _: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>> {
+    fn compile(&self, _: &mut CompilationState) -> Result<Vec<CompiledItem>> {
         let matched = match self {
             Number::Byte(val) => vec![instruction!(byte val)],
             Number::Float(val) => vec![instruction!(float val)],

@@ -3,7 +3,7 @@ use std::{borrow::Cow, fmt::Display, sync::Arc};
 use anyhow::{anyhow, Result};
 
 use crate::{
-    ast::{new_err, CompiledFunctionId},
+    ast::new_err,
     instruction,
     parser::{Node, Parser, Rule},
     scope::ScopeReturnStatus,
@@ -11,15 +11,9 @@ use crate::{
 };
 
 use super::{
-    r#type::IntoType, Block, Compile, CompiledItem, Dependencies, Dependency, FunctionParameters,
-    TypeLayout,
+    r#type::IntoType, Block, CompilationState, Compile, CompiledItem, Dependencies, Dependency,
+    FunctionParameters, TypeLayout,
 };
-
-pub static mut FUNCTION_ID: isize = 0;
-
-pub fn name_from_function_id(id: isize) -> String {
-    format!("__fn{id}")
-}
 
 #[derive(Debug)]
 pub(crate) struct Function {
@@ -138,10 +132,10 @@ impl Dependencies for Function {
 impl Function {
     pub fn in_place_compile_for_value(
         &self,
-        function_buffer: &mut Vec<CompiledItem>,
+        state: &mut CompilationState,
     ) -> Result<Vec<CompiledItem>> {
         // adds the real function to the function buffer, and returns a shadow function without a body.
-        let shadow_function = self.compile(function_buffer)?.remove(0);
+        let shadow_function = self.compile(state)?.remove(0);
 
         let CompiledItem::Function { id, location, .. } = shadow_function else {
             unreachable!()
@@ -174,9 +168,9 @@ impl Function {
 }
 
 impl Compile for Function {
-    fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>> {
-        let mut args = self.parameters.compile(function_buffer)?;
-        let mut body = self.body.compile(function_buffer)?;
+    fn compile(&self, state: &mut CompilationState) -> Result<Vec<CompiledItem>> {
+        let mut args = self.parameters.compile(state)?;
+        let mut body = self.body.compile(state)?;
 
         if let Some(CompiledItem::Instruction { id: RET, .. }) = body.last() {
             // nothing! the function returns by itself
@@ -189,25 +183,21 @@ impl Compile for Function {
 
         const RET: u8 = 0x12;
 
-        unsafe {
-            let id = CompiledFunctionId::Generated(FUNCTION_ID);
-            let x = CompiledItem::Function {
-                id: id.clone(),
-                content: Some(args),
-                location: self.path_str.clone(),
-            };
+        let id = state.poll_function_id();
 
-            FUNCTION_ID += 1;
+        let x = CompiledItem::Function {
+            id: id.clone(),
+            content: Some(args),
+            location: self.path_str.clone(),
+        };
 
-            function_buffer.push(x);
+        state.push_function(x);
 
-            Ok(vec![CompiledItem::Function {
-                id,
-                content: None,
-                location: self.path_str.clone(),
-            }])
-            // Ok(vec![x])
-        }
+        Ok(vec![CompiledItem::Function {
+            id,
+            content: None,
+            location: self.path_str.clone(),
+        }])
     }
 }
 
@@ -227,9 +217,15 @@ impl Parser {
             // We are reading parameters without pushing the function frame,
             // so the parameters MUST never be used. Essentially, we are just
             // syntax checks.
-            let parameters = Self::function_parameters(parameters, false).map_err(|e| vec![anyhow!(e)])?;
+            let parameters =
+                Self::function_parameters(parameters, false).map_err(|e| vec![anyhow!(e)])?;
 
-            return Ok(Function::new(Arc::new(parameters), Block::empty_body(), ScopeReturnStatus::Void, path_str));
+            return Ok(Function::new(
+                Arc::new(parameters),
+                Block::empty_body(),
+                ScopeReturnStatus::Void,
+                path_str,
+            ));
         };
 
         let (body, return_type) = if matches!(next.as_rule(), Rule::function_return_type) {

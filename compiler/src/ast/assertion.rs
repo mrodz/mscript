@@ -6,7 +6,7 @@ use crate::{
     VecErr,
 };
 
-use super::{new_err, r#type::IntoType, Compile, CompiledItem, Dependencies, Value};
+use super::{new_err, r#type::IntoType, Compile, CompiledItem, Dependencies, Value, CompilationState};
 
 #[derive(Debug)]
 pub struct Assertion {
@@ -18,9 +18,9 @@ pub struct Assertion {
 impl Compile for Assertion {
     fn compile(
         &self,
-        function_buffer: &mut Vec<CompiledItem>,
+        state: &mut CompilationState,
     ) -> Result<Vec<CompiledItem>, anyhow::Error> {
-        let mut result = self.value.compile(function_buffer)?;
+        let mut result = self.value.compile(state)?;
 
 		let start = self.start;
 		let end = self.end;

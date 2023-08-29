@@ -3,12 +3,12 @@ use crate::{
     parser::{Node, Parser},
 };
 
-use super::{r#type::IntoType, Compile, Dependencies};
+use super::{r#type::IntoType, Compile, Dependencies, CompilationState};
 
 impl Compile for bool {
     fn compile(
         &self,
-        _: &mut Vec<super::CompiledItem>,
+        _: &mut CompilationState,
     ) -> anyhow::Result<Vec<super::CompiledItem>> {
         Ok(vec![instruction!(bool self)])
     }

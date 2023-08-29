@@ -10,7 +10,7 @@ use crate::{
 
 use super::{
     Assignment, Break, Compile, CompiledItem, Continue, Dependencies, Dependency, Expr,
-    IfStatement, NumberLoop, PrintStatement, Reassignment, ReturnStatement, WhileLoop, Assertion,
+    IfStatement, NumberLoop, PrintStatement, Reassignment, ReturnStatement, WhileLoop, Assertion, CompilationState,
 };
 
 #[derive(Debug)]
@@ -60,23 +60,23 @@ impl Dependencies for Declaration {
 }
 
 impl Compile for Declaration {
-    fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>> {
+    fn compile(&self, state: &mut CompilationState) -> Result<Vec<CompiledItem>> {
         match self {
-            Self::PrintStatement(x) => x.compile(function_buffer),
+            Self::PrintStatement(x) => x.compile(state),
             Self::Expr(x) => {
-                let mut expr_compiled = x.compile(function_buffer)?;
+                let mut expr_compiled = x.compile(state)?;
                 expr_compiled.push(instruction!(void));
                 Ok(expr_compiled)
             }
-            Self::Assignment(x) => x.compile(function_buffer),
-            Self::Reassignment(x) => x.compile(function_buffer),
-            Self::ReturnStatement(x) => x.compile(function_buffer),
-            Self::IfStatement(x) => x.compile(function_buffer),
-            Self::WhileLoop(x) => x.compile(function_buffer),
-            Self::Continue(x) => x.compile(function_buffer),
-            Self::Break(x) => x.compile(function_buffer),
-            Self::NumberLoop(x) => x.compile(function_buffer),
-            Self::Assertion(x) => x.compile(function_buffer),
+            Self::Assignment(x) => x.compile(state),
+            Self::Reassignment(x) => x.compile(state),
+            Self::ReturnStatement(x) => x.compile(state),
+            Self::IfStatement(x) => x.compile(state),
+            Self::WhileLoop(x) => x.compile(state),
+            Self::Continue(x) => x.compile(state),
+            Self::Break(x) => x.compile(state),
+            Self::NumberLoop(x) => x.compile(state),
+            Self::Assertion(x) => x.compile(state),
         }
     }
 }

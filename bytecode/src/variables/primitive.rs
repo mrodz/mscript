@@ -219,17 +219,13 @@ impl Primitive {
 
         Ok(())
     }
-}
 
-impl Display for Primitive {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt_recursive(&self, f: &mut std::fmt::Formatter, mut depth: u8) -> std::fmt::Result {
         use Primitive::*;
-
-        static mut NESTED_DEPTH: u8 = 0;
 
         match self {
             Bool(b) => write!(f, "{}", *b),
-            Str(s) if unsafe { NESTED_DEPTH != 0 } => write!(f, "\"{s}\""),
+            Str(s) if depth != 0 => write!(f, "\"{s}\""),
             Str(s) => write!(f, "{s}"),
             Int(n) => write!(f, "{n}"),
             BigInt(n) => write!(f, "{n}"),
@@ -240,20 +236,15 @@ impl Display for Primitive {
                 write!(f, "[")?;
                 let mut iter = l.iter();
 
-                unsafe {
-                    NESTED_DEPTH += 1;
-                }
+                depth += 1;
 
                 if let Some(first) = iter.next() {
-                    write!(f, "{first}")?;
+                    first.fmt_recursive(f, depth)?;
                 }
 
                 for value in iter {
-                    write!(f, ", {value}")?;
-                }
-
-                unsafe {
-                    NESTED_DEPTH -= 1;
+                    write!(f, ", ")?;
+                    value.fmt_recursive(f, depth)?;
                 }
 
                 write!(f, "]")
@@ -267,6 +258,12 @@ impl Display for Primitive {
             Object(o) => write!(f, "{o}"),
         }
     }
+}
+
+impl Display for Primitive {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.fmt_recursive(f, 0)
+    }   
 }
 
 impl From<String> for Primitive {

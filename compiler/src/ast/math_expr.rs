@@ -53,7 +53,7 @@ use crate::{
 use super::{
     boolean::boolean_from_str, function::FunctionType, list::Index, new_err, r#type::IntoType,
     Compile, CompileTimeEvaluate, CompiledItem, Dependencies, Dependency, FunctionArguments,
-    TemporaryRegister, TypeLayout, Value,
+    TemporaryRegister, TypeLayout, Value, CompilationState,
 };
 
 pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
@@ -292,11 +292,11 @@ impl Dependencies for Expr {
 
 fn compile_depth(
     expr: &Expr,
-    function_buffer: &mut Vec<CompiledItem>,
+    state: &mut CompilationState,
     depth: TemporaryRegister,
 ) -> Result<Vec<CompiledItem>> {
     match expr {
-        Expr::Value(val) => val.compile(function_buffer),
+        Expr::Value(val) => val.compile(state),
         Expr::UnaryNot(expr) => {
             if let Expr::Value(value) = expr.as_ref() {
                 let ty = value.for_type()?;
@@ -306,7 +306,7 @@ fn compile_depth(
                 }
             }
 
-            let mut eval = expr.compile(function_buffer)?;
+            let mut eval = expr.compile(state)?;
 
             eval.push(instruction!(not));
 
@@ -326,15 +326,15 @@ fn compile_depth(
                 }
             }
 
-            let mut eval = expr.compile(function_buffer)?;
+            let mut eval = expr.compile(state)?;
 
             eval.push(instruction!(neg));
 
             Ok(eval)
         }
         Expr::BinOp { lhs, op, rhs } => {
-            let mut lhs = compile_depth(lhs, function_buffer, TemporaryRegister::new())?;
-            let mut rhs = compile_depth(rhs, function_buffer, TemporaryRegister::new())?;
+            let mut lhs = compile_depth(lhs, state, TemporaryRegister::new())?;
+            let mut rhs = compile_depth(rhs, state, TemporaryRegister::new())?;
 
             lhs.reserve(rhs.len() + 4);
 
@@ -380,14 +380,14 @@ fn compile_depth(
         Expr::Callable(CallableContents::Standard {
             lhs_raw, arguments, ..
         }) => {
-            let mut lhs_compiled = lhs_raw.compile(function_buffer)?;
+            let mut lhs_compiled = lhs_raw.compile(state)?;
             let lhs_register = TemporaryRegister::new();
 
             lhs_compiled.push(instruction!(store_fast lhs_register));
 
             let callable = Callable::new(arguments, move || instruction!(load_fast lhs_register));
 
-            lhs_compiled.append(&mut callable.compile(function_buffer)?);
+            lhs_compiled.append(&mut callable.compile(state)?);
 
             Ok(lhs_compiled)
         }
@@ -395,19 +395,19 @@ fn compile_depth(
         Expr::Callable(CallableContents::ToSelf { arguments, .. }) => {
             let callable = Callable::new_recursive_call(arguments);
 
-            callable.compile(function_buffer)
+            callable.compile(state)
         }
         Expr::Index { lhs_raw, index } => {
-            let mut result = lhs_raw.compile(function_buffer)?;
-            result.append(&mut index.compile(function_buffer)?);
+            let mut result = lhs_raw.compile(state)?;
+            result.append(&mut index.compile(state)?);
             Ok(result)
         }
     }
 }
 
 impl Compile for Expr {
-    fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<super::CompiledItem>> {
-        compile_depth(self, function_buffer, TemporaryRegister::new())
+    fn compile(&self, state: &mut CompilationState) -> Result<Vec<super::CompiledItem>> {
+        compile_depth(self, state, TemporaryRegister::new())
     }
 }
 

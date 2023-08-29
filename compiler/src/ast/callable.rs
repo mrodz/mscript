@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::instruction;
 
-use super::{Compile, CompiledItem, FunctionArguments, TemporaryRegister};
+use super::{Compile, CompiledItem, FunctionArguments, TemporaryRegister, CompilationState};
 
 enum CallableDestination {
     Standard {
@@ -38,7 +38,7 @@ impl<'a> Callable<'a> {
 }
 
 impl Compile for Callable<'_> {
-    fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>> {
+    fn compile(&self, state: &mut CompilationState) -> Result<Vec<CompiledItem>> {
         let mut register_start = None;
         let mut register_count = 0;
 
@@ -46,7 +46,7 @@ impl Compile for Callable<'_> {
             .function_arguments
             .iter()
             .flat_map(|x| {
-                let mut value_init = x.compile(function_buffer).unwrap();
+                let mut value_init = x.compile(state).unwrap();
 
                 let argument_register = TemporaryRegister::new_require_explicit_drop();
                 value_init.push(instruction!(store_fast argument_register));

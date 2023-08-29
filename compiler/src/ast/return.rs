@@ -9,7 +9,7 @@ use crate::{
     VecErr,
 };
 
-use super::{Compile, Dependencies, Value};
+use super::{Compile, Dependencies, Value, CompilationState};
 
 #[derive(Debug)]
 pub(crate) struct ReturnStatement(Option<Value>);
@@ -17,13 +17,13 @@ pub(crate) struct ReturnStatement(Option<Value>);
 impl Compile for ReturnStatement {
     fn compile(
         &self,
-        function_buffer: &mut Vec<super::CompiledItem>,
+        state: &mut CompilationState,
     ) -> Result<Vec<super::CompiledItem>> {
         let Some(ref return_value) = self.0 else {
 			return Ok(vec![instruction!(ret)])
 		};
 
-        let mut value_init = return_value.compile(function_buffer)?;
+        let mut value_init = return_value.compile(state)?;
         value_init.push(instruction!(ret));
         Ok(value_init)
     }

@@ -11,7 +11,7 @@ use crate::{
 
 use super::{
     map_err, r#type::IntoType, value::ValToUsize, Compile, ConstexprEvaluation, Dependencies,
-    TypeLayout, Value,
+    TypeLayout, Value, CompilationState,
 };
 
 #[derive(Debug)]
@@ -34,7 +34,7 @@ impl List {
 impl Compile for List {
     fn compile(
         &self,
-        function_buffer: &mut Vec<super::CompiledItem>,
+        state: &mut CompilationState,
     ) -> Result<Vec<super::CompiledItem>, anyhow::Error> {
         let initial_capacity = self.values.len();
 
@@ -48,7 +48,7 @@ impl Compile for List {
         ];
 
         for value in &self.values {
-            let mut value_init = value.compile(function_buffer)?;
+            let mut value_init = value.compile(state)?;
             result.append(&mut value_init);
             result.push(instruction!(vec_op vec_op_str));
         }
@@ -447,7 +447,7 @@ impl CompileTimeEvaluate for Index {
 impl Compile for Index {
     fn compile(
         &self,
-        function_buffer: &mut Vec<super::CompiledItem>,
+        state: &mut CompilationState,
     ) -> Result<Vec<super::CompiledItem>, anyhow::Error> {
         let value = self.try_constexpr_eval()?;
 
@@ -466,7 +466,7 @@ impl Compile for Index {
             result.push(instruction!(store_fast lhs_register));
             let index_temp_register = TemporaryRegister::new();
 
-            let mut val_init = self.parts[i].compile(function_buffer)?;
+            let mut val_init = self.parts[i].compile(state)?;
             result.append(&mut val_init);
 
             let instruction_str = format!("[{index_temp_register}]");

@@ -9,7 +9,7 @@ use crate::{
 
 use super::{
     math_expr::Expr, new_err, r#type::IntoType, string::AstString, Compile, CompiledItem,
-    Dependencies, Dependency, Function, Ident, List, Number, TypeLayout,
+    Dependencies, Dependency, Function, Ident, List, Number, TypeLayout, CompilationState,
 };
 
 #[derive(Debug)]
@@ -315,16 +315,15 @@ impl Dependencies for Value {
 }
 
 impl Compile for Value {
-    fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>> {
+    fn compile(&self, state: &mut CompilationState) -> Result<Vec<CompiledItem>> {
         match self {
-            Self::Function(function) => function.in_place_compile_for_value(function_buffer),
-            Self::Ident(ident) => ident.compile(function_buffer),
-            Self::Number(number) => number.compile(function_buffer),
-            Self::String(string) => string.compile(function_buffer),
-            Self::MathExpr(math_expr) => math_expr.compile(function_buffer),
-            // Self::Callable(callable) => callable.compile(function_buffer),
-            Self::Boolean(boolean) => boolean.compile(function_buffer),
-            Self::List(list) => list.compile(function_buffer),
+            Self::Function(function) => function.in_place_compile_for_value(state),
+            Self::Ident(ident) => ident.compile(state),
+            Self::Number(number) => number.compile(state),
+            Self::String(string) => string.compile(state),
+            Self::MathExpr(math_expr) => math_expr.compile(state),
+            Self::Boolean(boolean) => boolean.compile(state),
+            Self::List(list) => list.compile(state),
         }
     }
 }
