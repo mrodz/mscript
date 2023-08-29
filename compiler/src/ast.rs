@@ -57,10 +57,10 @@ use pest::Span;
 use std::{
     borrow::Cow,
     fmt::{Debug, Display},
-    sync::Arc,
+    sync::{Arc, RwLock}, ops::{AddAssign, SubAssign},
 };
 
-static mut REGISTER_COUNT: usize = 0;
+static mut REGISTER_COUNT: RwLock<usize> = RwLock::new(0);
 
 pub struct TemporaryRegister(usize, bool);
 
@@ -72,38 +72,44 @@ impl TemporaryRegister {
 
     pub fn new() -> Self {
         unsafe {
-            REGISTER_COUNT += 1;
+            let mut x = REGISTER_COUNT.write().unwrap();
+            x.add_assign(1);
 
-            log::trace!("reg. -n--- {REGISTER_COUNT}");
+            log::trace!("reg. -n--- {x}");
 
-            Self(REGISTER_COUNT, true)
+            Self(*x, true)
         }
     }
 
     pub fn new_require_explicit_drop() -> Self {
         unsafe {
-            REGISTER_COUNT += 1;
+            let mut x = REGISTER_COUNT.write().unwrap();
+            
+            x.add_assign(1);
 
-            log::trace!("reg. -n-e- {REGISTER_COUNT}");
+            log::trace!("reg. -n-e- {x}");
 
-            Self(REGISTER_COUNT, false)
+            Self(*x, false)
         }
     }
 
     pub fn free(self) {
         unsafe {
-            if self.0 != REGISTER_COUNT {
+            let mut count = REGISTER_COUNT.write().unwrap();
+            if self.0 != *count {
                 unreachable!("dropped out of order");
             }
 
-            log::trace!("reg. F--e- {REGISTER_COUNT}");
+            log::trace!("reg. F--e- {count}");
 
-            REGISTER_COUNT -= 1;
+            count.sub_assign(1);
         }
     }
 
     pub unsafe fn free_many(count: usize) {
-        REGISTER_COUNT = REGISTER_COUNT
+        let mut x = REGISTER_COUNT.write().unwrap();
+
+        *x = x
             .checked_sub(count)
             .expect("dropped too many registers");
 
@@ -124,11 +130,13 @@ impl Drop for TemporaryRegister {
         }
 
         unsafe {
-            if self.0 == REGISTER_COUNT {
-                log::trace!("reg. F---- {REGISTER_COUNT}");
-                REGISTER_COUNT -= 1;
-            } else if self.0 - 1 != REGISTER_COUNT {
-                unreachable!("dropped out of order {} {REGISTER_COUNT}", self.0)
+            let mut x = REGISTER_COUNT.write().unwrap();
+
+            if self.0 == *x {
+                log::trace!("reg. F---- {x}");
+                x.sub_assign(1);
+            } else if self.0 - 1 != *x {
+                unreachable!("dropped out of order {} {x}", self.0)
             }
         }
     }

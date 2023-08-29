@@ -4,6 +4,8 @@ extern crate alloc;
 mod ast;
 mod parser;
 mod scope;
+#[cfg(test)]
+mod tests;
 
 use std::borrow::Cow;
 use std::fs::File;
@@ -14,6 +16,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context, Result};
 use ast::Compile;
+use bytecode::Program;
 use bytecode::compilation_bridge::{Instruction, MScriptFile, MScriptFileBuilder};
 use indicatif::{MultiProgress, ProgressBar, ProgressFinish, ProgressStyle};
 
@@ -106,24 +109,27 @@ impl<T> VecErr<T> for Result<T> {
     }
 }
 
-/// # Todo
-/// Unit tests can use this function
-#[allow(unused)]
-pub(crate) fn compile_str(
-    mscript_code: &str,
-    unit_name: &str,
-) -> Result<Vec<CompiledItem>, Vec<anyhow::Error>> {
+pub fn eval(mscript_code: &str) -> Result<(), Vec<anyhow::Error>> {
     let logger = VerboseLogger::new(false);
 
-    let input_path = format!("{unit_name}.ms");
-    let output_path = format!("{unit_name}.mmm");
 
-    compile_from_str(
+    let input_path = "$__EVAL_ENV__.ms";
+    let output_path = "$__EVAL_ENV__.mmm";
+
+    let compiled_items = compile_from_str(
         &logger,
         Path::new(&input_path),
         Path::new(&output_path),
         mscript_code,
-    )
+    )?;
+    
+    let eval_environment: Rc<MScriptFile> = seal_compiled_items(Path::new(output_path), compiled_items).to_err_vec()?;
+
+    let executable = Program::new_from_file(eval_environment).to_err_vec()?;
+
+    executable.execute().to_err_vec()?;
+
+    Ok(())
 }
 
 pub(crate) fn seal_compiled_items(
