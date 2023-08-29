@@ -21,13 +21,13 @@ pub use interpreter::Program;
 
 /// Useful functions that make `bytecode -> ir`, `mscript -> bytecode`, and `bytecode -> ir` conversions easier.
 pub mod compilation_bridge {
-    use std::borrow::Cow;
     use crate::instruction_constants::{BIN_TO_REPR, REPR_TO_BIN};
+    use std::borrow::Cow;
 
     pub use crate::instruction::split_string;
 
-    pub use crate::instruction::Instruction;
     pub use crate::file::{MScriptFile, MScriptFileBuilder};
+    pub use crate::instruction::Instruction;
 
     /// From a string, get an instruction's corresponding byte.
     ///

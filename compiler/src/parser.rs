@@ -1,16 +1,17 @@
 use std::borrow::Cow;
-use std::cell::{RefMut, Ref};
-use std::sync::Arc;
+use std::cell::{Ref, RefMut};
 use std::rc::Rc;
+use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Result};
 use pest_consume::Parser as ParserDerive;
 
 use crate::ast::{
-    Compile, CompiledFunctionId, CompiledItem, Declaration, FunctionParameters, Ident, TypeLayout, Dependencies,
+    Compile, CompiledFunctionId, CompiledItem, Declaration, Dependencies, FunctionParameters,
+    Ident, TypeLayout,
 };
 use crate::instruction;
-use crate::scope::{Scope, ScopeReturnStatus, ScopeType, Scopes, ScopeIter, ScopeHandle};
+use crate::scope::{Scope, ScopeHandle, ScopeIter, ScopeReturnStatus, ScopeType, Scopes};
 
 #[allow(unused)]
 pub(crate) type Node<'i> = pest_consume::Node<'i, Rule, Rc<AssocFileData>>;
@@ -97,7 +98,9 @@ impl AssocFileData {
         self.push_scope_typed(ScopeType::NumberLoop, yields)
     }
 
-    pub fn get_current_executing_function(&self) -> Option<(Ref<Scope>, Ref<Arc<FunctionParameters>>)> {
+    pub fn get_current_executing_function(
+        &self,
+    ) -> Option<(Ref<Scope>, Ref<Arc<FunctionParameters>>)> {
         let mut iter = self.scopes.iter();
 
         iter.find(|x| x.is_function()).map(|scope| {
@@ -106,9 +109,14 @@ impl AssocFileData {
 
                 let ScopeType::Function(parameters) = ty else {
                     unreachable!()
-                };  
+                };
 
-                (scope, parameters.as_ref().expect("function parameters should have been initialized"))
+                (
+                    scope,
+                    parameters
+                        .as_ref()
+                        .expect("function parameters should have been initialized"),
+                )
             })
         })
     }
@@ -182,7 +190,10 @@ impl AssocFileData {
         Ref::filter_map(scope, |scope| scope.contains(dependency)).ok()
     }
 
-    pub fn get_dependency_flags_from_name(&self, dependency: &String) -> Option<(Ref<Ident>, bool)> {
+    pub fn get_dependency_flags_from_name(
+        &self,
+        dependency: &String,
+    ) -> Option<(Ref<Ident>, bool)> {
         let scopes = self.scopes.iter();
         self.get_dependency_flags_from_name_and_scopes_plus_skip(dependency, scopes, 0)
     }
@@ -192,7 +203,7 @@ impl AssocFileData {
         dependency: &String,
         skip: usize,
     ) -> Option<(Ref<Ident>, bool)> {
-        let scopes =self.scopes.iter();
+        let scopes = self.scopes.iter();
         self.get_dependency_flags_from_name_and_scopes_plus_skip(dependency, scopes, skip)
     }
 
@@ -207,7 +218,10 @@ impl AssocFileData {
         // let mut c = 0;
 
         for (count, scope) in scopes.enumerate() {
-            if let (true, Ok(flags)) = (count >= skip, Ref::filter_map(Ref::clone(&scope), |scope| scope.contains(dependency))) {
+            if let (true, Ok(flags)) = (
+                count >= skip,
+                Ref::filter_map(Ref::clone(&scope), |scope| scope.contains(dependency)),
+            ) {
                 return Some((flags, is_callback));
             }
 
@@ -280,7 +294,8 @@ pub(crate) mod util {
         input_str: &str,
         user_data: D,
     ) -> Result<Nodes<Rule, D>, Box<pest_consume::Error<Rule>>> {
-        <Parser as pest_consume::Parser>::parse_with_userdata(rule, input_str, user_data).map_err(Box::new)
+        <Parser as pest_consume::Parser>::parse_with_userdata(rule, input_str, user_data)
+            .map_err(Box::new)
     }
 
     pub(crate) fn parse(
@@ -352,7 +367,7 @@ impl Compile<Vec<anyhow::Error>> for File {
         let main_function = CompiledItem::Function {
             id: CompiledFunctionId::Custom("main".to_owned()),
             content: Some(global_scope_code),
-            location: self.location.clone()
+            location: self.location.clone(),
         };
 
         function_buffer.push(main_function);

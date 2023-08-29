@@ -126,7 +126,7 @@ pub static FUNCTION_POINTER_LOOKUP: [InstructionSignature; INSTRUCTION_COUNT] = 
     implementations::call_lib,
     implementations::len,
     implementations::done,
-    implementations::nop, // @ DEPRECATED
+    implementations::nop,       // @ DEPRECATED
     implementations::else_stmt, // Same as `else`
     implementations::else_stmt, // Same as `scope`
     implementations::neg,

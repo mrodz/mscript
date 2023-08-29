@@ -66,7 +66,7 @@ impl Program {
         if self.files_in_use.contains_key(&path) {
             return Ok(false);
         }
-        
+
         let new_file = MScriptFile::open(Rc::clone(&path))?;
 
         self.files_in_use.insert(path, new_file);

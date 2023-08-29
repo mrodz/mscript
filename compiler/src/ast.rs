@@ -47,9 +47,7 @@ pub(crate) use value::{CompileTimeEvaluate, ConstexprEvaluation, Value};
 pub(crate) use while_loop::WhileLoop;
 
 #[allow(unused_imports)]
-pub(crate) use r#type::shorthands::{
-    BIGINT_TYPE, BOOL_TYPE, BYTE_TYPE, FLOAT_TYPE, INT_TYPE,
-};
+pub(crate) use r#type::shorthands::{BIGINT_TYPE, BOOL_TYPE, BYTE_TYPE, FLOAT_TYPE, INT_TYPE};
 
 use anyhow::{anyhow, bail, Context, Error, Result};
 use bytecode::compilation_bridge::{raw_byte_instruction_to_string_representation, Instruction};
@@ -155,7 +153,7 @@ impl From<CompiledItem> for Instruction {
         let CompiledItem::Instruction { id, arguments } = value else {
             panic!("not an instruction: {value:?}");
         };
-            
+
         Instruction::new(id, arguments)
     }
 }

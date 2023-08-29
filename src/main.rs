@@ -1,20 +1,27 @@
 mod cli;
 
 use anyhow::{bail, Context, Result};
-use colored::*;
-use bytecode::{Program, compilation_bridge::MScriptFile};
+use bytecode::{compilation_bridge::MScriptFile, Program};
 use clap::Parser;
 use cli::{Args, Commands};
+use colored::*;
 use compiler::compile as compile_file;
 use log::{Level, LevelFilter, Metadata, Record};
 use std::{
     path::{Path, PathBuf},
-    thread, sync::Mutex, rc::Rc,
+    rc::Rc,
+    sync::Mutex,
+    thread,
 };
 
 use crate::cli::CompilationTargets;
 
-fn compile(path_str: &str, output_bin: bool, verbose: bool, output_to_file: bool) -> Result<Option<Rc<MScriptFile>>> {
+fn compile(
+    path_str: &str,
+    output_bin: bool,
+    verbose: bool,
+    output_to_file: bool,
+) -> Result<Option<Rc<MScriptFile>>> {
     let compilation = compile_file(path_str, output_bin, verbose, output_to_file);
     match compilation {
         Err(errors) => {
@@ -22,9 +29,9 @@ fn compile(path_str: &str, output_bin: bool, verbose: bool, output_to_file: bool
             for error in &errors {
                 println!("{error:?}")
             }
-    
+
             let plural_char = if cerr > 1 { "s" } else { "" };
-    
+
             bail!("Did not compile successfully ({cerr} Error{plural_char})")
         }
         Ok(product) => Ok(product),
@@ -72,8 +79,7 @@ impl GlobalLogger {
     pub fn is_verbose(&self) -> bool {
         let lock = self.0.lock().unwrap();
         *lock
-    } 
-
+    }
 }
 
 impl log::Log for GlobalLogger {
@@ -91,13 +97,9 @@ impl log::Log for GlobalLogger {
                 Level::Trace => "[ Trace ]".on_green(),
             }
         }
-    
+
         if self.enabled(record.metadata()) {
-            println!(
-                "{} {}",
-                level_format(&record.level()),
-                record.args()
-            );
+            println!("{} {}", level_format(&record.level()), record.args());
         }
     }
 
@@ -116,16 +118,18 @@ fn main() -> Result<()> {
             path,
             stack_size,
             verbose,
-            quick
+            quick,
         } => {
             if verbose && !quick {
                 LOGGER.set_verbose();
             }
 
-            if let Err(err) = log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Trace)) {
+            if let Err(err) =
+                log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Trace))
+            {
                 bail!("Error initializing logger: {err:?}")
             };
-        
+
             // let output_path = is_path_source(&path)?;
 
             let builder = thread::Builder::new()
@@ -136,9 +140,9 @@ fn main() -> Result<()> {
                 let Some(product) = compile(&path, true, !quick, false)? else {
                     unreachable!();
                 };
-    
+
                 println!("Running...\n");
-    
+
                 let program = Program::new_from_file(product)?;
                 program.execute()
             })?;
@@ -168,7 +172,7 @@ fn main() -> Result<()> {
             })?;
 
             main_thread.join().unwrap()?;
-        },
+        }
         Commands::Transpile { path } => {
             transpile_command(&path)?;
         }
@@ -183,7 +187,9 @@ fn main() -> Result<()> {
                 LOGGER.set_verbose();
             }
 
-            if let Err(err) = log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Trace)) {
+            if let Err(err) =
+                log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Trace))
+            {
                 bail!("Error initializing logger: {err:?}")
             };
 

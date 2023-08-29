@@ -45,7 +45,8 @@ impl PartialEq for Ident {
 
 pub static KEYWORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
     HashSet::from_iter([
-        "fn", "obj", "print", "return", "if", "else", "true", "false", "modify", "const", "self", "while", "continue", "break", "from", 
+        "fn", "obj", "print", "return", "if", "else", "true", "false", "modify", "const", "self",
+        "while", "continue", "break", "from",
     ])
 });
 
@@ -155,7 +156,8 @@ impl Ident {
         user_data: &AssocFileData,
         ty: Option<Cow<'static, TypeLayout>>,
     ) -> Result<bool> {
-        let ident: Option<(Ref<Ident>, bool)> = user_data.get_dependency_flags_from_name(&self.name);
+        let ident: Option<(Ref<Ident>, bool)> =
+            user_data.get_dependency_flags_from_name(&self.name);
 
         let inherited: bool = if let Some((ident, is_callback)) = ident {
             let new_ty = ident.ty.clone().map(|x| {

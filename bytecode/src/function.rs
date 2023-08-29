@@ -221,7 +221,12 @@ impl Debug for Function {
 
 impl Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} function {}", self.location.upgrade().unwrap().path(), self.name)
+        write!(
+            f,
+            "{} function {}",
+            self.location.upgrade().unwrap().path(),
+            self.name
+        )
     }
 }
 
@@ -426,10 +431,17 @@ impl<'a> Functions {
     }
 
     pub(crate) fn new_empty() -> Self {
-        Self { map: HashMap::new() }
+        Self {
+            map: HashMap::new(),
+        }
     }
 
-    pub(crate) fn add_function(&mut self, file: Weak<MScriptFile>, name: String, bytecode: Box<[Instruction]>) -> Option<Function> {
+    pub(crate) fn add_function(
+        &mut self,
+        file: Weak<MScriptFile>,
+        name: String,
+        bytecode: Box<[Instruction]>,
+    ) -> Option<Function> {
         let function = Function::new(file, name.clone(), bytecode);
 
         // TODO: If Rc<name> == self.map.name, we can change Function::name to be the same Rc.

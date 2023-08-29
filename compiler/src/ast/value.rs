@@ -8,8 +8,8 @@ use crate::{
 };
 
 use super::{
-    math_expr::Expr, new_err, r#type::IntoType, string::AstString, Compile,
-    CompiledItem, Dependencies, Dependency, Function, Ident, List, Number, TypeLayout,
+    math_expr::Expr, new_err, r#type::IntoType, string::AstString, Compile, CompiledItem,
+    Dependencies, Dependency, Function, Ident, List, Number, TypeLayout,
 };
 
 #[derive(Debug)]
@@ -26,7 +26,7 @@ pub(crate) enum Value {
 pub(crate) enum ValToUsize {
     Ok(usize),
     NotConstexpr,
-    NaN
+    NaN,
 }
 
 impl Value {
@@ -37,7 +37,7 @@ impl Value {
             return Ok(ValToUsize::NotConstexpr);
         }
 
-        let number = maybe_evaluable.as_ref().unwrap(); 
+        let number = maybe_evaluable.as_ref().unwrap();
 
         let Value::Number(number) = number else {
             return Ok(ValToUsize::NaN);
@@ -121,7 +121,6 @@ pub(crate) enum ValueChainType {
     #[allow(unused)]
     Dot(Dot), // todo
 }
-
 
 #[cfg(not)]
 impl CompileTimeEvaluate for Value {
@@ -279,7 +278,7 @@ impl Value {
             Value::List(ref list) => {
                 let ty = list.for_type_force_mixed()?;
                 ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
-            }            
+            }
         }
 
         Ok(())

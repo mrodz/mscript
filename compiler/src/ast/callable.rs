@@ -17,9 +17,7 @@ pub(crate) struct Callable<'a> {
 }
 
 impl<'a> Callable<'a> {
-    pub fn new_recursive_call(
-        arguments: &'a FunctionArguments,
-    ) -> Self {
+    pub fn new_recursive_call(arguments: &'a FunctionArguments) -> Self {
         Self {
             destination: CallableDestination::ToSelf,
             function_arguments: arguments,

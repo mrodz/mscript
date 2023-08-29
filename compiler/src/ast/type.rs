@@ -172,7 +172,7 @@ impl TypeLayout {
             Self::List(list) => Some(list.upper_bound()),
             Self::Native(NativeType::Str(StrWrapper(Some(len)))) => Some(ListBound::Numeric(*len)),
             Self::Native(NativeType::Str(StrWrapper(None))) => Some(ListBound::Infinite),
-            _ => None
+            _ => None,
         }
     }
 
@@ -216,7 +216,7 @@ impl TypeLayout {
                     return Ok(Cow::Owned(native_type));
                 }
                 ValToUsize::NotConstexpr => (),
-                ValToUsize::NaN => bail!("str cannot be indexed by a non-int")
+                ValToUsize::NaN => bail!("str cannot be indexed by a non-int"),
             }
         }
 
@@ -232,7 +232,11 @@ impl TypeLayout {
                     _ => bail!("not indexable"),
                 }
             }
-            ValToUsize::NaN => bail!("List index must be an integer between {} and {:#}", usize::MIN, usize::MAX),
+            ValToUsize::NaN => bail!(
+                "List index must be an integer between {} and {:#}",
+                usize::MIN,
+                usize::MAX
+            ),
             ValToUsize::NotConstexpr => (),
         }
 
@@ -335,7 +339,9 @@ impl TypeLayout {
             //======================
             (x, Byte, ..) => *x, // byte will always get overshadowed.
             //======================
-            (Str(StrWrapper(Some(len1))), Str(StrWrapper(Some(len2))), Add) => Str(StrWrapper(Some(len1 + len2))),
+            (Str(StrWrapper(Some(len1))), Str(StrWrapper(Some(len2))), Add) => {
+                Str(StrWrapper(Some(len1 + len2)))
+            }
             (Str(_), _, Add) => Str(StrWrapper(None)),
             (_, Str(_), Add) => Str(StrWrapper(None)),
             (Str(_), Int | BigInt, Multiply) => Str(StrWrapper(None)),
@@ -474,7 +480,7 @@ impl Parser {
         Ok(ListType::Open {
             types: vec![],
             spread: Box::new(ty),
-            len_at_init: None
+            len_at_init: None,
         })
     }
 
@@ -498,7 +504,6 @@ impl Parser {
                     open_ended_type = Some(ty);
                 }
                 other_rule => unreachable!("{other_rule:?}"),
-
             }
         }
 
@@ -510,7 +515,7 @@ impl Parser {
             return Ok(ListType::Open {
                 types: type_vec,
                 spread: Box::new(open_ended_type),
-                len_at_init: None
+                len_at_init: None,
             });
         }
 

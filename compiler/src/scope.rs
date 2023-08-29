@@ -132,19 +132,20 @@ pub(crate) struct ScopeHandle<'a> {
     consumed: bool,
 }
 
-impl <'a>ScopeHandle<'a> {
+impl<'a> ScopeHandle<'a> {
     pub(crate) fn new(depth_at_init: usize, belongs_to: &'a Scopes) -> Self {
         Self {
             depth_at_init,
             parent: belongs_to,
             consumed: false,
         }
-    }    
+    }
 
     pub(crate) fn consume(mut self) -> ScopeReturnStatus {
         self.consumed = true;
 
-        self.parent.pop()
+        self.parent
+            .pop()
             .expect("pop without scope")
             .get_yields_value()
     }
@@ -155,10 +156,8 @@ impl Drop for ScopeHandle<'_> {
         if self.consumed {
             return;
         }
-        
-        let scopes_in_parent = {
-            self.parent.0.borrow().len()
-        };
+
+        let scopes_in_parent = { self.parent.0.borrow().len() };
 
         if self.depth_at_init == scopes_in_parent {
             self.parent.pop();
@@ -285,7 +284,7 @@ impl Scope {
 
     fn add_dependency(&mut self, dependency: &Ident) {
         log::trace!("+ {dependency}");
-    
+
         self.variables.insert(dependency.clone());
     }
 

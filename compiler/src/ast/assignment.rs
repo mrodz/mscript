@@ -38,7 +38,11 @@ impl Assignment {
     }
 
     pub fn new_multi(idents: Box<[Ident]>, value: Value) -> Self {
-        Self::Multiple { idents, value, flags: AssignmentFlag::default() }
+        Self::Multiple {
+            idents,
+            value,
+            flags: AssignmentFlag::default(),
+        }
     }
 
     #[inline]
@@ -91,7 +95,7 @@ impl Dependencies for Assignment {
     fn supplies(&self) -> Vec<Dependency> {
         if let Self::Single { ident, .. } = self {
             if !self.flags().contains(AssignmentFlag::modify()) {
-                return vec![Dependency::new(Cow::Borrowed(ident))]
+                return vec![Dependency::new(Cow::Borrowed(ident))];
             }
         }
 
@@ -135,7 +139,6 @@ impl Dependencies for Assignment {
 
 impl Compile for Assignment {
     fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<super::CompiledItem>> {
-
         // let name = self.ident.name();
 
         let maybe_constexpr_eval = self.value().try_constexpr_eval()?;
@@ -168,19 +171,19 @@ impl Compile for Assignment {
                 } else {
                     instruction!(store name)
                 };
-        
+
                 value_init.push(store_instruction);
             }
-            Self::Multiple { idents, ..} => {
+            Self::Multiple { idents, .. } => {
                 let indexable = TemporaryRegister::new();
                 value_init.push(instruction!(store_fast indexable));
-                    
+
                 for (idx, ident) in idents.iter().enumerate() {
                     let name = ident.name();
 
                     value_init.append(&mut vec![
                         instruction!(load_fast indexable),
-                        instruction!(vec_op (format!("[{idx}]"))),
+                        instruction!(vec_op(format!("[{idx}]"))),
                         instruction!(store name),
                     ])
                 }
@@ -188,8 +191,6 @@ impl Compile for Assignment {
                 value_init.push(instruction!(delete_name_scoped indexable));
             }
         }
-
-        
 
         Ok(value_init)
     }
@@ -357,7 +358,7 @@ impl Parser {
                 &user_data.get_source_file_name(),
                 "this assignment contains the \"modify\" attribute, which is used to mutate a variable from a higher scope".to_owned(),
             ).to_err_vec()?;
-    
+
             if requires_check && !can_modify_if_applicable {
                 return Err(vec![new_err(
                     assignment_span,

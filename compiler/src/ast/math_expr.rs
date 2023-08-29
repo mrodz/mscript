@@ -33,22 +33,27 @@
 //!
 //! END LICENSE
 
-use std::{rc::Rc, borrow::Cow, sync::Arc};
+use std::{borrow::Cow, rc::Rc, sync::Arc};
 
 use anyhow::{bail, Context, Result};
 use once_cell::sync::Lazy;
-use pest::{iterators::{Pairs, Pair}, pratt_parser::PrattParser, Span};
+use pest::{
+    iterators::{Pair, Pairs},
+    pratt_parser::PrattParser,
+    Span,
+};
 
 use crate::{
-    ast::{number, ConstexprEvaluation, Callable},
+    ast::{number, Callable, ConstexprEvaluation},
     instruction,
     parser::{AssocFileData, Node, Parser, Rule},
     VecErr,
 };
 
 use super::{
-    boolean::boolean_from_str, new_err, r#type::IntoType, Compile, CompiledItem,
-    Dependencies, Dependency, Value, TemporaryRegister, CompileTimeEvaluate, TypeLayout, function::FunctionType, FunctionArguments, list::Index,
+    boolean::boolean_from_str, function::FunctionType, list::Index, new_err, r#type::IntoType,
+    Compile, CompileTimeEvaluate, CompiledItem, Dependencies, Dependency, FunctionArguments,
+    TemporaryRegister, TypeLayout, Value,
 };
 
 pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
@@ -64,7 +69,6 @@ pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
             | Op::infix(gte, Left)
             | Op::infix(eq, Left)
             | Op::infix(neq, Left))
-        
         .op(Op::prefix(not))
         .op(Op::infix(add, Left) | Op::infix(subtract, Left))
         .op(Op::infix(multiply, Left) | Op::infix(divide, Left) | Op::infix(modulo, Left))
@@ -107,7 +111,7 @@ impl Op {
             Neq => "!=",
             And => "&&",
             Or => "||",
-            Xor => "^"
+            Xor => "^",
         }
     }
 }
@@ -122,7 +126,7 @@ pub(crate) enum CallableContents {
         lhs_raw: Box<Expr>,
         function: Arc<FunctionType>,
         arguments: FunctionArguments,
-    }
+    },
 }
 
 #[derive(Debug)]
@@ -185,7 +189,7 @@ impl CompileTimeEvaluate for Expr {
                 if !constexpr_eval.for_type()?.supports_negate() {
                     let val = constexpr_eval.try_negate()?;
                     if let Some(val) = val {
-                        return Ok(ConstexprEvaluation::Owned(val))
+                        return Ok(ConstexprEvaluation::Owned(val));
                     }
                 }
 
@@ -205,13 +209,13 @@ impl CompileTimeEvaluate for Expr {
                     Op::Multiply => lhs * rhs,
                     Op::Divide => lhs / rhs,
                     Op::Modulo => lhs % rhs,
-                    _ => return Ok(ConstexprEvaluation::Impossible)
+                    _ => return Ok(ConstexprEvaluation::Impossible),
                 };
 
                 Ok(ConstexprEvaluation::Owned(Value::Number(bin_op_applied?)))
             }
             Self::ReferenceToSelf => Ok(ConstexprEvaluation::Impossible),
-            Self::Callable {..} => Ok(ConstexprEvaluation::Impossible),
+            Self::Callable { .. } => Ok(ConstexprEvaluation::Impossible),
             Self::Index { .. } => Ok(ConstexprEvaluation::Impossible),
         }
     }
@@ -235,7 +239,10 @@ impl IntoType for Expr {
             }
             Expr::UnaryMinus(val) | Expr::UnaryNot(val) => val.for_type(),
             Expr::Callable(CallableContents::Standard { function, .. }) => {
-                let return_type = function.return_type().get_type().context("function returns void")?;
+                let return_type = function
+                    .return_type()
+                    .get_type()
+                    .context("function returns void")?;
                 Ok(return_type.clone().into_owned())
             }
             Expr::Callable(CallableContents::ToSelf { return_type, .. }) => {
@@ -246,7 +253,7 @@ impl IntoType for Expr {
                 Ok(return_type.clone().into_owned())
             }
             Expr::ReferenceToSelf => bail!("`self` is a keyword and does not have a type"),
-            Expr::Index{ index, .. } => index.for_type(),
+            Expr::Index { index, .. } => index.for_type(),
         }
     }
 }
@@ -266,7 +273,9 @@ impl Dependencies for Expr {
                 lhs_dep
             }
             Callable(CallableContents::ToSelf { arguments, .. }) => arguments.net_dependencies(),
-            Callable(CallableContents::Standard { lhs_raw, arguments, .. }) => {
+            Callable(CallableContents::Standard {
+                lhs_raw, arguments, ..
+            }) => {
                 let mut lhs_deps = lhs_raw.net_dependencies();
                 lhs_deps.append(&mut arguments.net_dependencies());
                 lhs_deps
@@ -276,7 +285,7 @@ impl Dependencies for Expr {
                 lhs_deps.append(&mut index.net_dependencies());
                 lhs_deps
             }
-            x => unimplemented!("{x:?}")
+            x => unimplemented!("{x:?}"),
         }
     }
 }
@@ -342,7 +351,7 @@ fn compile_depth(
                 return Ok(lhs);
             }
 
-            if op == &Op::Or { 
+            if op == &Op::Or {
                 let rhs_len = rhs.len() + 3;
                 lhs.push(instruction!(store_skip depth "1" rhs_len));
                 lhs.append(&mut rhs);
@@ -381,18 +390,18 @@ fn compile_depth(
             lhs_compiled.append(&mut callable.compile(function_buffer)?);
 
             Ok(lhs_compiled)
-        },
+        }
         Expr::ReferenceToSelf => Ok(vec![]),
         Expr::Callable(CallableContents::ToSelf { arguments, .. }) => {
             let callable = Callable::new_recursive_call(arguments);
 
             callable.compile(function_buffer)
-        },
-        Expr::Index{ lhs_raw, index } => {
+        }
+        Expr::Index { lhs_raw, index } => {
             let mut result = lhs_raw.compile(function_buffer)?;
             result.append(&mut index.compile(function_buffer)?);
             Ok(result)
-        },
+        }
     }
 }
 
@@ -536,7 +545,7 @@ fn parse_expr(
                     let arguments: FunctionArguments = Parser::function_arguments(function_arguments, &parameters)?;
 
 
-                    return Ok((Expr::Callable(CallableContents::ToSelf { return_type, arguments }), None))    
+                    return Ok((Expr::Callable(CallableContents::ToSelf { return_type, arguments }), None))
                 }
 
                 let lhs_ty = lhs.for_type().to_err_vec()?;

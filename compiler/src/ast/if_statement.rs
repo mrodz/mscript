@@ -3,7 +3,7 @@ use anyhow::Result;
 use crate::{
     instruction,
     parser::{Node, Parser, Rule},
-    scope::{ScopeReturnStatus, ScopeHandle},
+    scope::{ScopeHandle, ScopeReturnStatus},
     VecErr,
 };
 
@@ -20,7 +20,7 @@ impl Dependencies for IfStatement {
     fn dependencies(&self) -> Vec<super::Dependency> {
         let mut value_deps = self.value.net_dependencies();
         value_deps.append(&mut self.body.net_dependencies());
-        
+
         if let Some(ref else_statement) = self.else_statement {
             value_deps.append(&mut else_statement.net_dependencies());
         }
@@ -36,7 +36,7 @@ impl Compile for IfStatement {
         let mut value_init = self.value.compile(function_buffer)?;
         result.append(&mut value_init);
 
-        // result: 
+        // result:
         //  - init value
 
         let mut body_init = self.body.compile(function_buffer)?;
@@ -183,13 +183,9 @@ impl Parser {
         if do_all_if_branches_return
             && (do_all_else_branches_return || can_determine_is_if_branch_truthy)
         {
-            let mut return_type = input
-                .user_data()
-                .get_return_type_mut();
+            let mut return_type = input.user_data().get_return_type_mut();
 
-            return_type 
-                .mark_should_return_as_completed()
-                .to_err_vec()?;
+            return_type.mark_should_return_as_completed().to_err_vec()?;
         }
 
         Ok(IfStatement {

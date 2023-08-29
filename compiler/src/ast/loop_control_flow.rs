@@ -54,7 +54,7 @@ impl Parser {
         // TODO: check if is in loop
         let frames_since_loop = input.user_data().scopes_since_loop();
 
-		let frames_since_loop = map_err(
+        let frames_since_loop = map_err(
             frames_since_loop,
             input.as_span(),
             &input.user_data().get_source_file_name(),

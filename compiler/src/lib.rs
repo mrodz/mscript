@@ -177,7 +177,12 @@ pub(crate) fn compile_from_str(
     Ok(function_buffer)
 }
 
-fn perform_file_io(output_path: &Path, logger: &VerboseLogger, function_buffer: Vec<CompiledItem>, output_bin: bool, ) -> Result<()> {
+fn perform_file_io(
+    output_path: &Path,
+    logger: &VerboseLogger,
+    function_buffer: Vec<CompiledItem>,
+    output_bin: bool,
+) -> Result<()> {
     let mut new_file = File::options()
         .create(true)
         .read(true)
@@ -219,13 +224,11 @@ fn perform_file_io(output_path: &Path, logger: &VerboseLogger, function_buffer: 
 
     if let Some(ref writing_pb) = writing_pb {
         for x in writing_pb.wrap_iter(iter) {
-            for_each(x)
-                .with_context(|| format!("{function_buffer:#?}"))?;
+            for_each(x).with_context(|| format!("{function_buffer:#?}"))?;
         }
     } else {
         for x in iter {
-            for_each(x)
-                .with_context(|| format!("{function_buffer:#?}"))?;
+            for_each(x).with_context(|| format!("{function_buffer:#?}"))?;
         }
     }
 
@@ -297,6 +300,8 @@ pub fn compile(
             if verbose { " ✔️" } else { "" }
         );
 
-        Ok(Some(seal_compiled_items(&output_path, function_buffer).to_err_vec()?))
-    }    
+        Ok(Some(
+            seal_compiled_items(&output_path, function_buffer).to_err_vec()?,
+        ))
+    }
 }

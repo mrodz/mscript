@@ -6,8 +6,7 @@ use crate::{
 };
 
 use super::{
-    new_err, r#type::IntoType, Value, Dependencies, Dependency,
-    FunctionParameters, TypeLayout,
+    new_err, r#type::IntoType, Dependencies, Dependency, FunctionParameters, TypeLayout, Value,
 };
 
 #[derive(Debug)]
@@ -47,7 +46,6 @@ impl Parser {
 
             let user_gave = arg_ty.get_type_recursively();
 
-
             if !user_gave.eq(expected_ty_at_idx) {
                 let argument_number = idx + 1;
                 let error_message = format!("type mismatch when calling function (argument #{argument_number} was expected to be `{expected_ty_at_idx}` based on type signature, instead found `{user_gave}`)");
@@ -56,7 +54,7 @@ impl Parser {
                     &input.user_data().get_source_file_name(),
                     error_message,
                 ));
-                
+
                 continue;
             }
 
@@ -64,7 +62,7 @@ impl Parser {
         }
 
         if !errors.is_empty() {
-            return Err(errors)
+            return Err(errors);
         }
 
         Ok(FunctionArguments(result))

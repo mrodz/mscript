@@ -31,7 +31,9 @@ impl Dependencies for AstString {
 impl IntoType for AstString {
     fn for_type(&self) -> Result<super::TypeLayout> {
         match self {
-            AstString::Plain(str) => Ok(TypeLayout::Native(NativeType::Str(StrWrapper(Some(str.len()))))),
+            AstString::Plain(str) => Ok(TypeLayout::Native(NativeType::Str(StrWrapper(Some(
+                str.len(),
+            ))))),
             AstString::FormattedString() => todo!(),
         }
     }

@@ -1,17 +1,17 @@
 use std::{borrow::Cow, fmt::Display};
 
-use anyhow::{Result, bail, Context};
+use anyhow::{bail, Context, Result};
 
 use crate::{
-    ast::{CompileTimeEvaluate, TemporaryRegister, new_err},
+    ast::{new_err, CompileTimeEvaluate, TemporaryRegister},
     instruction,
-    parser::{Node, Parser}, VecErr,
+    parser::{Node, Parser},
+    VecErr,
 };
 
 use super::{
-    r#type::IntoType,
-    ConstexprEvaluation,
-    Compile, Dependencies, TypeLayout, Value, map_err, value::ValToUsize
+    map_err, r#type::IntoType, value::ValToUsize, Compile, ConstexprEvaluation, Dependencies,
+    TypeLayout, Value,
 };
 
 #[derive(Debug)]
@@ -74,7 +74,9 @@ impl CompileTimeEvaluate for List {
             result.push(value);
         }
 
-        Ok(ConstexprEvaluation::Owned(Value::List(List { values: result })))
+        Ok(ConstexprEvaluation::Owned(Value::List(List {
+            values: result,
+        })))
     }
 }
 
@@ -128,7 +130,7 @@ impl ListBound {
 
                 Ok(true)
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 }
@@ -180,7 +182,7 @@ impl ListType {
     pub fn lower_bound(&self) -> ListBound {
         match self {
             Self::Empty => ListBound::NotIndexable,
-            _ => ListBound::Numeric(0)
+            _ => ListBound::Numeric(0),
         }
     }
 
@@ -188,7 +190,7 @@ impl ListType {
         match self {
             Self::Empty => ListBound::NotIndexable,
             Self::Open { .. } => ListBound::Infinite,
-            Self::Mixed(types) => ListBound::Numeric(types.len() - 1)
+            Self::Mixed(types) => ListBound::Numeric(types.len() - 1),
         }
     }
 
@@ -208,7 +210,10 @@ impl ListType {
     pub fn get_type_at_known_index(&self, index: usize) -> Result<&TypeLayout> {
         match self {
             Self::Empty => bail!("empty list"),
-            Self::Mixed(types) => types.get(index).map(Cow::as_ref).context("there is no value at the specified index"),
+            Self::Mixed(types) => types
+                .get(index)
+                .map(Cow::as_ref)
+                .context("there is no value at the specified index"),
             Self::Open { types, spread, .. } => Ok(if let Some(ty) = types.get(index) {
                 ty.as_ref()
             } else {
@@ -255,11 +260,26 @@ impl PartialEq for ListType {
             (Empty, Empty) => true,
             (Empty, _) | (_, Empty) => false,
             (Mixed(t1), Mixed(t2)) => t1 == t2,
-            (Open { types, spread, len_at_init }, other) | (other, Open { types, spread, len_at_init }) => match other {
+            (
+                Open {
+                    types,
+                    spread,
+                    len_at_init,
+                },
+                other,
+            )
+            | (
+                other,
+                Open {
+                    types,
+                    spread,
+                    len_at_init,
+                },
+            ) => match other {
                 Open {
                     types: t2,
                     spread: s2,
-                    len_at_init: len_at_init2
+                    len_at_init: len_at_init2,
                 } => {
                     if let (Some(len1), Some(len2)) = (len_at_init, len_at_init2) {
                         if len1 != len2 {
@@ -299,7 +319,7 @@ impl PartialEq for ListType {
                             return false;
                         }
                     }
-                    
+
                     for (idx, ty2) in t2.iter().enumerate() {
                         let ty1 = types.get(idx).unwrap_or(spread);
 
@@ -391,7 +411,10 @@ pub(crate) struct Index {
 
 impl Dependencies for Index {
     fn dependencies(&self) -> Vec<super::Dependency> {
-        self.parts.iter().flat_map(Value::net_dependencies).collect()
+        self.parts
+            .iter()
+            .flat_map(Value::net_dependencies)
+            .collect()
     }
 }
 
@@ -448,12 +471,11 @@ impl Compile for Index {
 
             let instruction_str = format!("[{index_temp_register}]");
 
-
             result.append(&mut vec![
                 instruction!(store_fast index_temp_register),
                 instruction!(delete_name_reference_scoped lhs_register),
                 instruction!(vec_op instruction_str),
-                instruction!(delete_name_scoped index_temp_register)
+                instruction!(delete_name_scoped index_temp_register),
             ]);
 
             index_temp_register.free();
@@ -462,16 +484,16 @@ impl Compile for Index {
 
         // un-comment
 
-    //     result.append(&mut self.0.compile(function_buffer)?);
+        //     result.append(&mut self.0.compile(function_buffer)?);
 
-    //     let index_temp_register = TemporaryRegister::new();
+        //     let index_temp_register = TemporaryRegister::new();
 
-    //     let instruction_str = format!("[{index_temp_register}]");
+        //     let instruction_str = format!("[{index_temp_register}]");
 
-    //    ;
+        //    ;
 
-    //     index_temp_register.free();
-    //     vec_temp_register.free();
+        //     index_temp_register.free();
+        //     vec_temp_register.free();
 
         Ok(result)
     }
@@ -503,24 +525,33 @@ impl Parser {
             let value_span = value.as_span();
             let value = Self::value(value)?;
             let value_ty = value.for_type().to_err_vec()?;
-            
+
             let Some(expected_type_for_value) = last_ty.supports_index() else {
                 return Err(vec![new_err(value_span, file_name, format!("`{last_ty}` does not support indexing, yet here `{value_ty}` is used"))]);
             };
 
-            if !expected_type_for_value.contains(&value, value_span, file_name).to_err_vec()? {
+            if !expected_type_for_value
+                .contains(&value, value_span, file_name)
+                .to_err_vec()?
+            {
                 return Err(vec![new_err(value_span, file_name, format!("`{last_ty}` does not support indexing for `{value_ty}` (Hint: this type does support indexes of types {expected_type_for_value})"))]);
             }
 
-            let index_output_ty = map_err(last_ty.get_output_type_from_index(&value), value_span, file_name, format!("invalid index into `{last_ty}`")).to_err_vec()?;
-            
+            let index_output_ty = map_err(
+                last_ty.get_output_type_from_index(&value),
+                value_span,
+                file_name,
+                format!("invalid index into `{last_ty}`"),
+            )
+            .to_err_vec()?;
+
             last_ty = index_output_ty.into_owned();
             values.push(value);
         }
 
         Ok(Index {
             parts: values.into_boxed_slice(),
-            final_output_type: last_ty
+            final_output_type: last_ty,
         })
     }
 }

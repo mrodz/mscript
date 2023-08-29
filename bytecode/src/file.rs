@@ -42,7 +42,7 @@ impl MScriptFileBuilder {
         let Some(ref mut functions) = rc_to_ref(&self.building).functions else {
             unreachable!()
         };
-        
+
         functions.add_function(Rc::downgrade(&self.building), name, bytecode)
     }
 

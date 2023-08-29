@@ -3,13 +3,14 @@ use std::fmt::Debug;
 use anyhow::Result;
 
 use crate::{
+    instruction,
     parser::{Node, Parser, Rule},
-    VecErr, instruction,
+    VecErr,
 };
 
 use super::{
-    Expr, Assignment, Break, Compile, CompiledItem, Continue, Dependencies,
-    Dependency, IfStatement, NumberLoop, PrintStatement, ReturnStatement, WhileLoop, Reassignment,
+    Assignment, Break, Compile, CompiledItem, Continue, Dependencies, Dependency, Expr,
+    IfStatement, NumberLoop, PrintStatement, Reassignment, ReturnStatement, WhileLoop,
 };
 
 #[derive(Debug)]
@@ -64,7 +65,7 @@ impl Compile for Declaration {
                 let mut expr_compiled = x.compile(function_buffer)?;
                 expr_compiled.push(instruction!(void));
                 Ok(expr_compiled)
-            },
+            }
             Self::Assignment(x) => x.compile(function_buffer),
             Self::Reassignment(x) => x.compile(function_buffer),
             Self::ReturnStatement(x) => x.compile(function_buffer),

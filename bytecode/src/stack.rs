@@ -206,7 +206,8 @@ impl Stack {
         let popped = self.0.drain(size - c..);
 
         log::trace!(
-            "{}", popped.fold("Stack --POP".to_owned(), |str, frame| str
+            "{}",
+            popped.fold("Stack --POP".to_owned(), |str, frame| str
                 + " "
                 + frame.label.as_str())
         );
@@ -254,8 +255,9 @@ impl Stack {
     pub fn delete_variable_local(&mut self, name: &str) -> Result<Rc<(Primitive, VariableFlags)>> {
         let frame = self.0.last_mut().expect("no stack frame");
 
-        frame.variables.0.remove(name)
-            .ok_or(anyhow!("{name} has not been mapped at this scope, and cannot be deleted"))
+        frame.variables.0.remove(name).ok_or(anyhow!(
+            "{name} has not been mapped at this scope, and cannot be deleted"
+        ))
     }
 
     /// Add a `name -> variable` mapping to the current stack frame, with special flags.

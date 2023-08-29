@@ -14,7 +14,7 @@ use crate::{
 use super::{
     new_err,
     r#type::{IntoType, NativeType},
-    BinaryOperation, Compile, Dependencies, TypeLayout, FLOAT_TYPE, INT_TYPE, Value,
+    BinaryOperation, Compile, Dependencies, TypeLayout, Value, FLOAT_TYPE, INT_TYPE,
 };
 
 #[derive(Debug)]

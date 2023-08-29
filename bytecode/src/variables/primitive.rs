@@ -112,20 +112,17 @@ impl Primitive {
         matches!(self.ty(), Int | Float | Byte | BigInt)
     }
 
-    
     /// This function *must* be called before storing a primitive to any sort of
     /// long-term storage, as [`Primitive::HeapPrimitive`]s are inherently dangerous
     /// and should only be used for optimization/temporary register purposes.
-    /// 
-    /// This code will blow up the VM if the HP ptr is not valid. If this happens, though, 
-    /// it is a bug with the compiler. Users will NEVER encounter a stale mutable pointer on 
+    ///
+    /// This code will blow up the VM if the HP ptr is not valid. If this happens, though,
+    /// it is a bug with the compiler. Users will NEVER encounter a stale mutable pointer on
     /// their own, as it is a private type known only to the compiler used for array tricks.
     pub fn move_out_of_heap_primitive(self) -> Self {
         if let Self::HeapPrimitive(primitive) = self {
             log::trace!("Heap clone @ {:#X}", primitive as usize);
-            unsafe {
-                (*primitive).clone()
-            }
+            unsafe { (*primitive).clone() }
         } else {
             self
         }
@@ -143,7 +140,7 @@ impl Primitive {
             Primitive::Byte(byte) => *byte as usize,
             Primitive::BigInt(bigint) => *bigint as usize,
             Primitive::Int(int) => *int as usize,
-            other => bail!("cannot index with {other}")
+            other => bail!("cannot index with {other}"),
         })
     }
 
@@ -260,8 +257,8 @@ impl Display for Primitive {
                 }
 
                 write!(f, "]")
-            },
-            // For all intents and purposes, this code is safe. We assume that if this code blows up, 
+            }
+            // For all intents and purposes, this code is safe. We assume that if this code blows up,
             // something went SERIOUSLY wrong with the MScript compiler.
             #[cfg(feature = "debug")]
             HeapPrimitive(hp) => unsafe { write!(f, "*mut {:#X} -> {}", *hp as usize, **hp) },
