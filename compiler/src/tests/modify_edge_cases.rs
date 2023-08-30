@@ -2,7 +2,8 @@ use crate::eval;
 
 #[test]
 fn crud() {
-	eval(r#"
+    eval(
+        r#"
 		a = 5
 
 		increment_a = fn() {
@@ -23,12 +24,15 @@ fn crud() {
 		}
 	
 		assert test2() == 105
-	"#).unwrap();
+	"#,
+    )
+    .unwrap();
 }
 
 #[test]
 fn closures() {
-	eval(r#"
+    eval(
+        r#"
 		x = 5
 
 		adder = fn(b: int) -> (fn(int) -> int) {
@@ -39,5 +43,7 @@ fn closures() {
 
 		add_twenty = adder(20)
 		assert add_twenty(5) == 25
-	"#).unwrap();
+	"#,
+    )
+    .unwrap();
 }

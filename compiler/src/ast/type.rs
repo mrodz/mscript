@@ -154,8 +154,8 @@ impl TypeLayout {
     }
 
     pub fn get_error_hint_between_types(&self, incompatible: &Self) -> Option<&'static str> {
-        use TypeLayout::*;
         use NativeType::*;
+        use TypeLayout::*;
         Some(match (self, incompatible) {
             (Native(BigInt), Native(Int)) => "try adding 'B' before a number to convert it to a bigint, eg. `99` -> `B99` or `0x6` -> `B0x6`",
             (Native(Int), Native(Float)) => "cast this floating point value to an integer",

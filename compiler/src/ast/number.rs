@@ -165,7 +165,9 @@ pub fn number_from_string(string: &str, rule: Rule) -> Result<Number> {
 
             Number::Integer(as_hex)
         }
-        Rule::float if as_str.ends_with(['F', 'f']) => Number::Float(as_str[..as_str.len() - 1].to_owned()),
+        Rule::float if as_str.ends_with(['F', 'f']) => {
+            Number::Float(as_str[..as_str.len() - 1].to_owned())
+        }
         Rule::float => Number::Float(as_str),
         Rule::byte => Number::Byte(as_str),
         _ => bail!("non-number rule"),

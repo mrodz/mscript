@@ -47,7 +47,7 @@ macro_rules! apply_math_bin_op_if_applicable {
             (Byte(x), Int(y)) => Some(int!(*x as i32 $symbol *y)),
             (Byte(x), BigInt(y)) => Some(bigint!(*x as i128 $symbol *y)),
             (Byte(x), Float(y)) => Some(float!(*x as f64 $symbol *y)),
-            
+
             _ => None
         }
     }}
