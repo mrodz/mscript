@@ -35,11 +35,16 @@ impl Parser {
 
         if let Ok(ref assignment_ty) = value.for_type() {
             if ty.as_ref() != assignment_ty {
+                let hint = ty.get_error_hint_between_types(assignment_ty).map_or_else(
+                    || Cow::Borrowed(""),
+                    |str| Cow::Owned(format!("\n\t- hint: {str}")),
+                );
+
                 let message = if value.is_callable().to_err_vec()? {
-                    format!("declaration wanted {ty}, but value is a function that returns {assignment_ty}")
+                    format!("declaration wanted {ty}, but value is a function that returns {assignment_ty}{hint}")
                 } else {
                     // TODO: special check for function types.
-                    format!("declaration wanted {ty}, but value is {assignment_ty}")
+                    format!("declaration wanted {ty}, but value is {assignment_ty}{hint}")
                 };
 
                 return Err(vec![new_err(

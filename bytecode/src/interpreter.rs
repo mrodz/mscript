@@ -11,6 +11,7 @@ use crate::BytecodePrimitive;
 use anyhow::{bail, Context, Result};
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::io::{stdout, Write};
 use std::panic;
 use std::rc::{Rc, Weak};
 
@@ -36,7 +37,7 @@ impl Program {
     where
         T: Into<String>,
     {
-        let path = path.into();
+        let path = path.into().replace('\\', "/");
         let entrypoint = Rc::new(path);
 
         let main_file = MScriptFile::open(Rc::clone(&entrypoint))?;
@@ -118,11 +119,11 @@ impl Program {
 
         let path_ref = &path;
 
-        rc_to_ref(&rc_of_self).add_file(Rc::new(path.clone()))?;
+        rc_to_ref(&rc_of_self).add_file(Rc::new(path.replace('\\', "/")))?;
 
         let file = Self::get_file(rc_of_self.clone(), path_ref)?;
 
-        let Some(function) = rc_to_ref(&file).get_function(destination_label) else {
+        let Some(function) = rc_to_ref(&file).get_function(&symbol.to_owned()) else {
             bail!("could not find function (missing `{symbol}`, searching in {file:?})")
         };
 
@@ -212,8 +213,8 @@ impl Program {
 
         // let module_function = format!("{}#main", entrypoint.path());
 
-        let Some(function) = rc_to_ref(&entrypoint).get_function("main") else {
-            bail!("could not find entrypoint (hint: try adding `function main`. Searching in {:?})", entrypoint)
+        let Some(function) = rc_to_ref(&entrypoint).get_function(&"__module__".to_owned()) else {
+            bail!("could not find entrypoint (hint: try adding `function __module__`. Searching in {:?})", entrypoint)
         };
 
         log::debug!("Spawning interpreter...");
@@ -223,11 +224,15 @@ impl Program {
         });
 
         if let Err(e) = main_ret {
+            stdout().lock().flush()?;
+
             eprintln!("\n******* MSCRIPT INTERPRETER FATAL RUNTIME ERROR *******\nCall stack trace:\n{e:?}\n\nPlease report this at https://github.com/mrodz/mscript-lang/issues/new\n");
             bail!("Interpreter crashed")
         }
 
         if stack.size() != 0 {
+            stdout().lock().flush()?;
+
             eprintln!("\n******* MSCRIPT INTERPRETER STACK MISMATCH *******\nFound:\n{stack}\n\n... When the program should have unwinded its stack completely. This is most likely a flaw with the compiler.\n\nPlease report this at https://github.com/mrodz/mscript-lang/issues/new\n");
             bail!("Program exited in a confused state, execution integrity has been compromised.")
         }

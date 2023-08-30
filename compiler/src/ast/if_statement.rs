@@ -7,7 +7,9 @@ use crate::{
     VecErr,
 };
 
-use super::{new_err, r#type::IntoType, Block, Compile, CompiledItem, Dependencies, Value};
+use super::{
+    new_err, r#type::IntoType, Block, CompilationState, Compile, CompiledItem, Dependencies, Value,
+};
 
 #[derive(Debug)]
 pub struct IfStatement {
@@ -30,16 +32,16 @@ impl Dependencies for IfStatement {
 }
 
 impl Compile for IfStatement {
-    fn compile(&self, function_buffer: &mut Vec<super::CompiledItem>) -> Result<Vec<CompiledItem>> {
+    fn compile(&self, state: &CompilationState) -> Result<Vec<CompiledItem>> {
         let mut result = vec![];
 
-        let mut value_init = self.value.compile(function_buffer)?;
+        let mut value_init = self.value.compile(state)?;
         result.append(&mut value_init);
 
         // result:
         //  - init value
 
-        let mut body_init = self.body.compile(function_buffer)?;
+        let mut body_init = self.body.compile(state)?;
         body_init.push(instruction!(done));
 
         // result:
@@ -60,7 +62,7 @@ impl Compile for IfStatement {
         //  - done
 
         if let Some(ref else_statement) = self.else_statement {
-            let mut compiled = else_statement.compile(function_buffer)?;
+            let mut compiled = else_statement.compile(state)?;
 
             let len = compiled.len();
             body_init.push(instruction!(jmp len));
@@ -98,10 +100,10 @@ impl Dependencies for ElseStatement {
 }
 
 impl Compile for ElseStatement {
-    fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>> {
+    fn compile(&self, state: &CompilationState) -> Result<Vec<CompiledItem>> {
         let mut content = match self {
-            Self::Block(block) => block.compile(function_buffer),
-            Self::IfStatement(if_statement) => if_statement.compile(function_buffer),
+            Self::Block(block) => block.compile(state),
+            Self::IfStatement(if_statement) => if_statement.compile(state),
         }?;
 
         content.insert(0, instruction!(else));

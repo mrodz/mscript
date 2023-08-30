@@ -9,8 +9,9 @@ use crate::{
 };
 
 use super::{
-    Assignment, Break, Compile, CompiledItem, Continue, Dependencies, Dependency, Expr,
-    IfStatement, NumberLoop, PrintStatement, Reassignment, ReturnStatement, WhileLoop,
+    Assertion, Assignment, Break, CompilationState, Compile, CompiledItem, Continue, Dependencies,
+    Dependency, Expr, IfStatement, NumberLoop, PrintStatement, Reassignment, ReturnStatement,
+    WhileLoop,
 };
 
 #[derive(Debug)]
@@ -18,7 +19,6 @@ pub(crate) enum Declaration {
     Assignment(Assignment),
     Reassignment(Reassignment),
     Expr(Expr),
-    // Callable(Callable),
     PrintStatement(PrintStatement),
     ReturnStatement(ReturnStatement),
     IfStatement(IfStatement),
@@ -26,6 +26,7 @@ pub(crate) enum Declaration {
     NumberLoop(NumberLoop),
     Continue(Continue),
     Break(Break),
+    Assertion(Assertion),
 }
 
 impl Dependencies for Declaration {
@@ -38,6 +39,7 @@ impl Dependencies for Declaration {
             Self::IfStatement(if_statement) => if_statement.supplies(),
             Self::WhileLoop(while_loop) => while_loop.supplies(),
             Self::NumberLoop(number_loop) => number_loop.supplies(),
+            Self::Assertion(assertion) => assertion.supplies(),
             Self::Reassignment(_) | Self::Continue(_) | Self::Break(_) => vec![],
         }
     }
@@ -52,28 +54,30 @@ impl Dependencies for Declaration {
             Self::WhileLoop(while_loop) => while_loop.net_dependencies(),
             Self::NumberLoop(number_loop) => number_loop.net_dependencies(),
             Self::Reassignment(reassignment) => reassignment.net_dependencies(),
+            Self::Assertion(assertion) => assertion.net_dependencies(),
             Self::Continue(_) | Self::Break(_) => vec![],
         }
     }
 }
 
 impl Compile for Declaration {
-    fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>> {
+    fn compile(&self, state: &CompilationState) -> Result<Vec<CompiledItem>> {
         match self {
-            Self::PrintStatement(x) => x.compile(function_buffer),
+            Self::PrintStatement(x) => x.compile(state),
             Self::Expr(x) => {
-                let mut expr_compiled = x.compile(function_buffer)?;
+                let mut expr_compiled = x.compile(state)?;
                 expr_compiled.push(instruction!(void));
                 Ok(expr_compiled)
             }
-            Self::Assignment(x) => x.compile(function_buffer),
-            Self::Reassignment(x) => x.compile(function_buffer),
-            Self::ReturnStatement(x) => x.compile(function_buffer),
-            Self::IfStatement(x) => x.compile(function_buffer),
-            Self::WhileLoop(x) => x.compile(function_buffer),
-            Self::Continue(x) => x.compile(function_buffer),
-            Self::Break(x) => x.compile(function_buffer),
-            Self::NumberLoop(x) => x.compile(function_buffer),
+            Self::Assignment(x) => x.compile(state),
+            Self::Reassignment(x) => x.compile(state),
+            Self::ReturnStatement(x) => x.compile(state),
+            Self::IfStatement(x) => x.compile(state),
+            Self::WhileLoop(x) => x.compile(state),
+            Self::Continue(x) => x.compile(state),
+            Self::Break(x) => x.compile(state),
+            Self::NumberLoop(x) => x.compile(state),
+            Self::Assertion(x) => x.compile(state),
         }
     }
 }
@@ -101,6 +105,7 @@ impl Parser {
             Rule::number_loop => Declaration::NumberLoop(Self::number_loop(declaration)?),
             Rule::math_expr => Declaration::Expr(Expr::parse(input)?),
             Rule::reassignment => Declaration::Reassignment(Self::reassignment(declaration)?),
+            Rule::assertion => Declaration::Assertion(Self::assertion(declaration)?),
             x => unreachable!("{x:?} is not supported"),
         };
 

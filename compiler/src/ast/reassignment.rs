@@ -12,7 +12,7 @@ use crate::{
 };
 
 use super::{
-    list::Index, r#type::IntoType, Compile, Dependencies, Ident, TemporaryRegister, TypeLayout,
+    list::Index, r#type::IntoType, CompilationState, Compile, Dependencies, Ident, TypeLayout,
     Value,
 };
 
@@ -34,16 +34,13 @@ pub(crate) enum ReassignmentPath {
 }
 
 impl Compile for ReassignmentPath {
-    fn compile(
-        &self,
-        function_buffer: &mut Vec<super::CompiledItem>,
-    ) -> Result<Vec<super::CompiledItem>, anyhow::Error> {
+    fn compile(&self, state: &CompilationState) -> Result<Vec<super::CompiledItem>, anyhow::Error> {
         match self {
-            ReassignmentPath::Ident(ident) => ident.compile(function_buffer),
+            ReassignmentPath::Ident(ident) => ident.compile(state),
             ReassignmentPath::ReferenceToSelf(_) => unimplemented!(),
             ReassignmentPath::Index { lhs, index } => {
-                let mut result = lhs.compile(function_buffer)?;
-                result.append(&mut index.compile(function_buffer)?);
+                let mut result = lhs.compile(state)?;
+                result.append(&mut index.compile(state)?);
                 Ok(result)
             }
         }
@@ -70,18 +67,15 @@ pub(crate) struct Reassignment {
 }
 
 impl Compile for Reassignment {
-    fn compile(
-        &self,
-        function_buffer: &mut Vec<super::CompiledItem>,
-    ) -> Result<Vec<super::CompiledItem>, anyhow::Error> {
+    fn compile(&self, state: &CompilationState) -> Result<Vec<super::CompiledItem>, anyhow::Error> {
         // todo!();
-        let mut result = self.value.compile(function_buffer)?;
+        let mut result = self.value.compile(state)?;
 
-        let val_register = TemporaryRegister::new();
+        let val_register = state.poll_temporary_register();
 
         result.push(instruction!(store val_register));
 
-        result.append(&mut self.path.compile(function_buffer)?);
+        result.append(&mut self.path.compile(state)?);
 
         result.append(&mut vec![
             instruction!(load_fast val_register),

@@ -5,11 +5,11 @@ use anyhow::{bail, Result};
 use crate::instruction;
 use crate::parser::{Node, Parser, Rule};
 
-use super::CompiledItem;
 use super::{
     r#type::{IntoType, NativeType},
     Compile, Dependencies, TypeLayout,
 };
+use super::{CompilationState, CompiledItem};
 
 #[derive(Debug, Clone)]
 pub enum Number {
@@ -133,7 +133,7 @@ impl IntoType for Number {
 }
 
 impl Compile for Number {
-    fn compile(&self, _: &mut Vec<CompiledItem>) -> Result<Vec<CompiledItem>> {
+    fn compile(&self, _: &CompilationState) -> Result<Vec<CompiledItem>> {
         let matched = match self {
             Number::Byte(val) => vec![instruction!(byte val)],
             Number::Float(val) => vec![instruction!(float val)],
@@ -149,13 +149,28 @@ pub fn number_from_string(string: &str, rule: Rule) -> Result<Number> {
     let as_str: String = string.chars().filter(|x| x != &'_').collect();
 
     let matched = match rule {
+        Rule::bigint => {
+            let no_prefix = &string[1..];
+            if let Some(hex_part) = no_prefix.strip_prefix("0x") {
+                let as_hex = i128::from_str_radix(hex_part, 16)?;
+                Number::BigInt(as_hex.to_string())
+            } else {
+                Number::BigInt(no_prefix.to_owned())
+            }
+        }
         Rule::integer => Number::Integer(as_str),
         Rule::hex_int => {
             let as_hex = i128::from_str_radix(&as_str[2..], 16)?.to_string();
 
-            Number::BigInt(as_hex)
+            Number::Integer(as_hex)
         }
-        Rule::float => Number::Float(as_str),
+        Rule::float => {
+            if let Some(float_of_int) = as_str.strip_suffix(['F', 'f']) {
+                Number::Float(float_of_int.to_owned())
+            } else {
+                Number::Float(as_str)
+            }
+        }
         Rule::byte => Number::Byte(as_str),
         _ => bail!("non-number rule"),
     };

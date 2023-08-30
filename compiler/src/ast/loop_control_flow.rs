@@ -5,7 +5,7 @@ use crate::{
     parser::{Node, Parser},
 };
 
-use super::{Compile, CompiledItem};
+use super::{CompilationState, Compile, CompiledItem};
 
 #[derive(Debug)]
 pub(crate) struct Continue {
@@ -18,19 +18,13 @@ pub(crate) struct Break {
 }
 
 impl Compile for Continue {
-    fn compile(
-        &self,
-        _function_buffer: &mut Vec<CompiledItem>,
-    ) -> Result<Vec<CompiledItem>, anyhow::Error> {
+    fn compile(&self, _: &CompilationState) -> Result<Vec<CompiledItem>, anyhow::Error> {
         Ok(vec![CompiledItem::Continue(self.frames_since_loop)])
     }
 }
 
 impl Compile for Break {
-    fn compile(
-        &self,
-        _function_buffer: &mut Vec<CompiledItem>,
-    ) -> Result<Vec<CompiledItem>, anyhow::Error> {
+    fn compile(&self, _: &CompilationState) -> Result<Vec<CompiledItem>, anyhow::Error> {
         Ok(vec![CompiledItem::Break(self.frames_since_loop)])
     }
 }

@@ -884,6 +884,25 @@ pub mod implementations {
 
             Ok(())
         }
+
+        assert(ctx, args) {
+            if ctx.stack_size() != 1 {
+                bail!("assert can only operate on a single item");
+            }
+
+            let item = ctx.pop().unwrap();
+
+            let result = item.equals(&bool!(true))?;
+
+            if !result {
+                let start = &args[0];
+                let end = &args[1];
+
+                bail!("An explicit assertion (start: Pos {start}, end: Pos {end}) failed in this program.");
+            }
+
+            Ok(())
+        }
     }
 
     instruction! {
@@ -934,7 +953,7 @@ pub mod implementations {
 
         neq(ctx=ctx) {
             if ctx.stack_size() != 2 {
-                bail!("equ requires only 2 items in the local stack")
+                bail!("equ requires only 2 items in the local stack");
             }
 
             let first = ctx.pop().unwrap();

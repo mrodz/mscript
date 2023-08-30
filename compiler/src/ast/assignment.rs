@@ -3,15 +3,14 @@ use std::{borrow::Cow, fmt::Debug};
 use anyhow::{bail, Context, Result};
 
 use crate::{
-    ast::CompiledItem,
     instruction,
     parser::{AssocFileData, Node, Parser, Rule},
     VecErr,
 };
 
 use super::{
-    map_err, new_err, value::Value, Compile, CompileTimeEvaluate, ConstexprEvaluation,
-    Dependencies, Dependency, Ident, TemporaryRegister,
+    map_err, new_err, value::Value, CompilationState, Compile, CompileTimeEvaluate,
+    ConstexprEvaluation, Dependencies, Dependency, Ident,
 };
 
 #[derive(Debug)]
@@ -138,24 +137,22 @@ impl Dependencies for Assignment {
 }
 
 impl Compile for Assignment {
-    fn compile(&self, function_buffer: &mut Vec<CompiledItem>) -> Result<Vec<super::CompiledItem>> {
+    fn compile(&self, state: &CompilationState) -> Result<Vec<super::CompiledItem>> {
         // let name = self.ident.name();
 
         let maybe_constexpr_eval = self.value().try_constexpr_eval()?;
 
         let mut value_init = if let ConstexprEvaluation::Owned(value) = maybe_constexpr_eval {
-            value.compile(function_buffer)?
+            value.compile(state)?
         } else {
             match &self.value() {
-                Value::Ident(ident) => ident.compile(function_buffer)?,
-                Value::Function(function) => {
-                    function.in_place_compile_for_value(function_buffer)?
-                }
-                Value::Number(number) => number.compile(function_buffer)?,
-                Value::String(string) => string.compile(function_buffer)?,
-                Value::MathExpr(math_expr) => math_expr.compile(function_buffer)?,
-                Value::Boolean(boolean) => boolean.compile(function_buffer)?,
-                Value::List(list) => list.compile(function_buffer)?,
+                Value::Ident(ident) => ident.compile(state)?,
+                Value::Function(function) => function.in_place_compile_for_value(state)?,
+                Value::Number(number) => number.compile(state)?,
+                Value::String(string) => string.compile(state)?,
+                Value::MathExpr(math_expr) => math_expr.compile(state)?,
+                Value::Boolean(boolean) => boolean.compile(state)?,
+                Value::List(list) => list.compile(state)?,
             }
         };
 
@@ -175,7 +172,7 @@ impl Compile for Assignment {
                 value_init.push(store_instruction);
             }
             Self::Multiple { idents, .. } => {
-                let indexable = TemporaryRegister::new();
+                let indexable = state.poll_temporary_register();
                 value_init.push(instruction!(store_fast indexable));
 
                 for (idx, ident) in idents.iter().enumerate() {

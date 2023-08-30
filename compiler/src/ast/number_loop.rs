@@ -14,7 +14,8 @@ use crate::{
 use super::{
     new_err,
     r#type::{IntoType, NativeType},
-    BinaryOperation, Compile, Dependencies, TypeLayout, Value, FLOAT_TYPE, INT_TYPE,
+    BinaryOperation, CompilationState, Compile, Dependencies, TypeLayout, Value, FLOAT_TYPE,
+    INT_TYPE,
 };
 
 #[derive(Debug)]
@@ -53,38 +54,27 @@ impl Dependencies for NumberLoop {
     }
 }
 
-static mut REGISTER_COUNT: usize = 0;
-
 #[derive(Debug)]
-enum NumberLoopRegister<'a> {
+pub(crate) enum NumberLoopRegister<'a> {
     Named(&'a str),
     Generated(usize),
 }
 
 impl<'a> NumberLoopRegister<'a> {
-    pub fn new() -> Self {
-        unsafe {
-            REGISTER_COUNT += 1;
-            Self::Generated(REGISTER_COUNT)
-        }
-    }
-
     /// Mangles `option` and saves it as a register.
-    pub fn from_option(option: Option<&'a Ident>) -> NumberLoopRegister<'a> {
+    pub fn from_option(
+        option: Option<&'a Ident>,
+        state: &'a CompilationState,
+    ) -> NumberLoopRegister<'a> {
         if let Some(ident) = option {
             Self::Named(ident.name())
         } else {
-            Self::new()
+            state.poll_loop_register()
         }
     }
 
-    pub fn free(self) {
-        unsafe {
-            if let Self::Generated(id) = self {
-                assert!(REGISTER_COUNT == id);
-                REGISTER_COUNT -= 1;
-            }
-        }
+    pub fn free(self, state: &CompilationState) {
+        state.free_loop_register(self);
     }
 }
 
@@ -98,17 +88,14 @@ impl Display for NumberLoopRegister<'_> {
 }
 
 impl Compile for NumberLoop {
-    fn compile(
-        &self,
-        function_buffer: &mut Vec<super::CompiledItem>,
-    ) -> Result<Vec<super::CompiledItem>> {
+    fn compile(&self, state: &CompilationState) -> Result<Vec<super::CompiledItem>> {
         // let mangled = self.name.as_ref().map(|x| x.mangle());
-        let loop_identity = NumberLoopRegister::from_option(self.name.as_ref());
+        let loop_identity = NumberLoopRegister::from_option(self.name.as_ref(), state);
 
         let mut result = vec![];
 
-        let mut val_start = self.val_start.compile(function_buffer)?;
-        let mut val_end = self.val_end.compile(function_buffer)?;
+        let mut val_start = self.val_start.compile(state)?;
+        let mut val_end = self.val_end.compile(state)?;
 
         result.append(&mut val_start);
 
@@ -116,7 +103,7 @@ impl Compile for NumberLoop {
 
         result.append(&mut val_end);
 
-        let end_loop_register = NumberLoopRegister::new();
+        let end_loop_register = state.poll_loop_register();
 
         result.push(instruction!(store_fast end_loop_register));
 
@@ -133,12 +120,12 @@ impl Compile for NumberLoop {
 
         // ^^^ condition
 
-        let mut body_compiled = self.body.compile(function_buffer)?;
+        let mut body_compiled = self.body.compile(state)?;
 
         let mut step_compiled = vec![instruction!(load loop_identity)];
 
         if let Some(ref step) = self.step {
-            step_compiled.append(&mut step.compile(function_buffer)?)
+            step_compiled.append(&mut step.compile(state)?)
         } else {
             step_compiled.push(CompiledItem::Instruction {
                 id: 0x09,
@@ -199,8 +186,8 @@ impl Compile for NumberLoop {
             result.push(instruction!(delete_name_scoped loop_identity end_loop_register));
         }
 
-        end_loop_register.free();
-        loop_identity.free();
+        end_loop_register.free(state);
+        loop_identity.free(state);
 
         Ok(result)
     }
