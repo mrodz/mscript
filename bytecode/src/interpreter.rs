@@ -11,6 +11,7 @@ use crate::BytecodePrimitive;
 use anyhow::{bail, Context, Result};
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::io::{stdout, Write};
 use std::panic;
 use std::rc::{Rc, Weak};
 
@@ -223,11 +224,15 @@ impl Program {
         });
 
         if let Err(e) = main_ret {
+            stdout().lock().flush()?;
+
             eprintln!("\n******* MSCRIPT INTERPRETER FATAL RUNTIME ERROR *******\nCall stack trace:\n{e:?}\n\nPlease report this at https://github.com/mrodz/mscript-lang/issues/new\n");
             bail!("Interpreter crashed")
         }
 
         if stack.size() != 0 {
+            stdout().lock().flush()?;
+
             eprintln!("\n******* MSCRIPT INTERPRETER STACK MISMATCH *******\nFound:\n{stack}\n\n... When the program should have unwinded its stack completely. This is most likely a flaw with the compiler.\n\nPlease report this at https://github.com/mrodz/mscript-lang/issues/new\n");
             bail!("Program exited in a confused state, execution integrity has been compromised.")
         }

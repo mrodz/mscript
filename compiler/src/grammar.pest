@@ -22,9 +22,10 @@ hex_digit = _{ '0'..'9' | 'a'..'f' | 'A'..'F' }
 hex_int = @{ "0x" ~ (hex_digit ~ (hex_digit | ("_" ~ (hex_digit)))*) }
 
 byte = @{ "0b" ~ ('0'..'1' ~ ('0'..'1' | ("_" ~ ('0'..'1')))*) }
-float = @{ integer ~ "." ~ integer }
+float = @{ (integer ~ "." ~ integer) | (integer ~ ("f" | "F")) }
+bigint = @{ "B" ~ (hex_int | integer) }
 
-number = { hex_int | byte | float | integer }
+number = { bigint | hex_int | byte | float | integer }
 boolean = { "true" | "false" }
 
 unary_minus = { "-" }

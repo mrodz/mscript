@@ -51,9 +51,9 @@ use crate::{
 };
 
 use super::{
-    boolean::boolean_from_str, function::FunctionType, list::Index, new_err, r#type::IntoType,
-    CompilationState, Compile, CompileTimeEvaluate, CompiledItem, Dependencies, Dependency,
-    FunctionArguments, TemporaryRegister, TypeLayout, Value,
+    boolean::boolean_from_str, function::FunctionType, list::Index, map_err, new_err,
+    r#type::IntoType, CompilationState, Compile, CompileTimeEvaluate, CompiledItem, Dependencies,
+    Dependency, FunctionArguments, TemporaryRegister, TypeLayout, Value,
 };
 
 pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
@@ -423,8 +423,7 @@ fn parse_expr(
                     Rule::number => {
                         let raw_string = primary.as_str();
                         let child = primary.into_inner().next().unwrap();
-                        let number =
-                            number::number_from_string(raw_string, child.as_rule()).unwrap();
+                        let number = map_err(number::number_from_string(raw_string, child.as_rule()), primary_span, &user_data.get_file_name(), "MScript does not recognize this number".to_owned()).to_err_vec()?;
 
                         Expr::Value(Value::Number(number))
                     }

@@ -153,6 +153,19 @@ impl TypeLayout {
         matches!(me, TypeLayout::Native(NativeType::Bool))
     }
 
+    pub fn get_error_hint_between_types(&self, incompatible: &Self) -> Option<&'static str> {
+        use TypeLayout::*;
+        use NativeType::*;
+        Some(match (self, incompatible) {
+            (Native(BigInt), Native(Int)) => "try adding 'B' before a number to convert it to a bigint, eg. `99` -> `B99` or `0x6` -> `B0x6`",
+            (Native(Int), Native(Float)) => "cast this floating point value to an integer",
+            (Native(Float), Native(Int | BigInt | Byte)) => "cast this integer type to a floating point",
+            (Native(Str(..)), _) => "call `.to_str()` on this item to convert it into a str",
+            (Function(..), Function(..)) => "check the function type that you provided",
+            _ => return None,
+        })
+    }
+
     pub fn is_list(&self) -> Option<&ListType> {
         let me = self.get_type_recursively();
 
@@ -338,6 +351,7 @@ impl TypeLayout {
             (BigInt, Float, ..) => Float,
             //======================
             (x, Byte, ..) => *x, // byte will always get overshadowed.
+            (Byte, Int, Add) => Byte,
             //======================
             (Str(StrWrapper(Some(len1))), Str(StrWrapper(Some(len2))), Add) => {
                 Str(StrWrapper(Some(len1 + len2)))

@@ -149,12 +149,23 @@ pub fn number_from_string(string: &str, rule: Rule) -> Result<Number> {
     let as_str: String = string.chars().filter(|x| x != &'_').collect();
 
     let matched = match rule {
+        Rule::bigint => {
+            let no_prefix = &string[1..];
+            if no_prefix.starts_with("0x") {
+                let hex_part = &no_prefix[2..];
+                let as_hex = i128::from_str_radix(hex_part, 16)?;
+                Number::BigInt(as_hex.to_string())
+            } else {
+                Number::BigInt(no_prefix.to_owned())
+            }
+        }
         Rule::integer => Number::Integer(as_str),
         Rule::hex_int => {
             let as_hex = i128::from_str_radix(&as_str[2..], 16)?.to_string();
 
-            Number::BigInt(as_hex)
+            Number::Integer(as_hex)
         }
+        Rule::float if as_str.ends_with(['F', 'f']) => Number::Float(as_str[..as_str.len() - 1].to_owned()),
         Rule::float => Number::Float(as_str),
         Rule::byte => Number::Byte(as_str),
         _ => bail!("non-number rule"),

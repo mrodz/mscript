@@ -47,6 +47,8 @@ pub fn binary_operations() {
 		assert 0b1111 == 15
 
 		assert true
+
+		assert 0b101 == 0x5 && 0x5 == B5 && B5 == 5f && 5F == 5 && B0x5 == 0b101
 	"#,
     )
     .unwrap()
