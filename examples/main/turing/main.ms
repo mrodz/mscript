@@ -1,13 +1,6 @@
-a = true
-
-change_a = fn(new_val: bool) {
-    modify a = new_val
+add = fn(x: int, y: int) -> int {
+	return x + y
 }
 
-print a
-change_a(false)
-print a
-a = true
-print a
-change_a(true)
-print a
+assert add(1, 2) == 3
+assert add(5, -2) == 3

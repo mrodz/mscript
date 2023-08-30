@@ -263,7 +263,7 @@ impl Primitive {
 impl Display for Primitive {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.fmt_recursive(f, 0)
-    }   
+    }
 }
 
 impl From<String> for Primitive {

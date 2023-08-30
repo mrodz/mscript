@@ -132,7 +132,7 @@ impl Dependencies for Function {
 impl Function {
     pub fn in_place_compile_for_value(
         &self,
-        state: &mut CompilationState,
+        state: &CompilationState,
     ) -> Result<Vec<CompiledItem>> {
         // adds the real function to the function buffer, and returns a shadow function without a body.
         let shadow_function = self.compile(state)?.remove(0);
@@ -168,7 +168,7 @@ impl Function {
 }
 
 impl Compile for Function {
-    fn compile(&self, state: &mut CompilationState) -> Result<Vec<CompiledItem>> {
+    fn compile(&self, state: &CompilationState) -> Result<Vec<CompiledItem>> {
         let mut args = self.parameters.compile(state)?;
         let mut body = self.body.compile(state)?;
 

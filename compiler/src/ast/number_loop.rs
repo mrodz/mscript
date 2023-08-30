@@ -14,7 +14,8 @@ use crate::{
 use super::{
     new_err,
     r#type::{IntoType, NativeType},
-    BinaryOperation, Compile, Dependencies, TypeLayout, Value, FLOAT_TYPE, INT_TYPE, CompilationState,
+    BinaryOperation, CompilationState, Compile, Dependencies, TypeLayout, Value, FLOAT_TYPE,
+    INT_TYPE,
 };
 
 #[derive(Debug)]
@@ -53,8 +54,6 @@ impl Dependencies for NumberLoop {
     }
 }
 
-// static mut REGISTER_COUNT: usize = 0;
-
 #[derive(Debug)]
 pub(crate) enum NumberLoopRegister<'a> {
     Named(&'a str),
@@ -63,7 +62,10 @@ pub(crate) enum NumberLoopRegister<'a> {
 
 impl<'a> NumberLoopRegister<'a> {
     /// Mangles `option` and saves it as a register.
-    pub fn from_option(option: Option<&'a Ident>, state: &mut CompilationState) -> NumberLoopRegister<'a> {
+    pub fn from_option(
+        option: Option<&'a Ident>,
+        state: &'a CompilationState,
+    ) -> NumberLoopRegister<'a> {
         if let Some(ident) = option {
             Self::Named(ident.name())
         } else {
@@ -71,7 +73,7 @@ impl<'a> NumberLoopRegister<'a> {
         }
     }
 
-    pub fn free(self, state: &mut CompilationState) {
+    pub fn free(self, state: &CompilationState) {
         state.free_loop_register(self);
     }
 }
@@ -86,10 +88,7 @@ impl Display for NumberLoopRegister<'_> {
 }
 
 impl Compile for NumberLoop {
-    fn compile(
-        &self,
-        state: &mut CompilationState,
-    ) -> Result<Vec<super::CompiledItem>> {
+    fn compile(&self, state: &CompilationState) -> Result<Vec<super::CompiledItem>> {
         // let mangled = self.name.as_ref().map(|x| x.mangle());
         let loop_identity = NumberLoopRegister::from_option(self.name.as_ref(), state);
 
@@ -187,7 +186,6 @@ impl Compile for NumberLoop {
             result.push(instruction!(delete_name_scoped loop_identity end_loop_register));
         }
 
-        
         end_loop_register.free(state);
         loop_identity.free(state);
 

@@ -3,15 +3,15 @@ use std::{borrow::Cow, fmt::Display};
 use anyhow::{bail, Context, Result};
 
 use crate::{
-    ast::{new_err, CompileTimeEvaluate, TemporaryRegister},
+    ast::{new_err, CompileTimeEvaluate},
     instruction,
     parser::{Node, Parser},
     VecErr,
 };
 
 use super::{
-    map_err, r#type::IntoType, value::ValToUsize, Compile, ConstexprEvaluation, Dependencies,
-    TypeLayout, Value, CompilationState,
+    map_err, r#type::IntoType, value::ValToUsize, CompilationState, Compile, ConstexprEvaluation,
+    Dependencies, TypeLayout, Value,
 };
 
 #[derive(Debug)]
@@ -32,13 +32,10 @@ impl List {
 }
 
 impl Compile for List {
-    fn compile(
-        &self,
-        state: &mut CompilationState,
-    ) -> Result<Vec<super::CompiledItem>, anyhow::Error> {
+    fn compile(&self, state: &CompilationState) -> Result<Vec<super::CompiledItem>, anyhow::Error> {
         let initial_capacity = self.values.len();
 
-        let vec_init_register = TemporaryRegister::new();
+        let vec_init_register = state.poll_temporary_register();
 
         let vec_op_str = "+".to_owned() + &vec_init_register.to_string();
 
@@ -55,7 +52,7 @@ impl Compile for List {
 
         result.push(instruction!(delete_name_reference_scoped vec_init_register));
 
-        vec_init_register.free();
+        state.free_temporary_register(vec_init_register);
 
         Ok(result)
     }
@@ -445,10 +442,7 @@ impl CompileTimeEvaluate for Index {
 }
 
 impl Compile for Index {
-    fn compile(
-        &self,
-        state: &mut CompilationState,
-    ) -> Result<Vec<super::CompiledItem>, anyhow::Error> {
+    fn compile(&self, state: &CompilationState) -> Result<Vec<super::CompiledItem>, anyhow::Error> {
         let value = self.try_constexpr_eval()?;
 
         // faster lookup if the value is already known.
@@ -462,9 +456,9 @@ impl Compile for Index {
 
         let mut result = vec![];
         for i in 0..registerc {
-            let lhs_register = TemporaryRegister::new(); // TemporaryRegister::reserve_many(registerc);
+            let lhs_register = state.poll_temporary_register(); // TemporaryRegister::reserve_many(registerc);
             result.push(instruction!(store_fast lhs_register));
-            let index_temp_register = TemporaryRegister::new();
+            let index_temp_register = state.poll_temporary_register();
 
             let mut val_init = self.parts[i].compile(state)?;
             result.append(&mut val_init);
@@ -478,8 +472,8 @@ impl Compile for Index {
                 instruction!(delete_name_scoped index_temp_register),
             ]);
 
-            index_temp_register.free();
-            lhs_register.free();
+            state.free_temporary_register(index_temp_register);
+            state.free_temporary_register(lhs_register);
         }
 
         // un-comment

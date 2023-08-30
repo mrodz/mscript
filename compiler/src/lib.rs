@@ -15,9 +15,9 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context, Result};
-use ast::{Compile, CompilationState};
-use bytecode::Program;
+use ast::{CompilationState, Compile};
 use bytecode::compilation_bridge::{Instruction, MScriptFile, MScriptFileBuilder};
+use bytecode::Program;
 use indicatif::{MultiProgress, ProgressBar, ProgressFinish, ProgressStyle};
 
 use once_cell::sync::Lazy;
@@ -112,7 +112,6 @@ impl<T> VecErr<T> for Result<T> {
 pub fn eval(mscript_code: &str) -> Result<(), Vec<anyhow::Error>> {
     let logger = VerboseLogger::new(false);
 
-
     let input_path = "$__EVAL_ENV__.ms";
     let output_path = "$__EVAL_ENV__.mmm";
 
@@ -122,8 +121,9 @@ pub fn eval(mscript_code: &str) -> Result<(), Vec<anyhow::Error>> {
         Path::new(&output_path),
         mscript_code,
     )?;
-    
-    let eval_environment: Rc<MScriptFile> = seal_compiled_items(Path::new(output_path), compiled_items).to_err_vec()?;
+
+    let eval_environment: Rc<MScriptFile> =
+        seal_compiled_items(Path::new(output_path), compiled_items).to_err_vec()?;
 
     let executable = Program::new_from_file(eval_environment).to_err_vec()?;
 
@@ -173,10 +173,10 @@ pub(crate) fn compile_from_str(
         Parser::file(input)
     })?;
 
-    let mut state: CompilationState = CompilationState::new();
+    let state: CompilationState = CompilationState::new();
 
     logger.wrap_in_spinner(format!("Validating AST ({input_path_str}):"), || {
-        file.compile(&mut state)?;
+        file.compile(&state)?;
 
         Ok(())
     })?;

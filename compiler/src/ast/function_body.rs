@@ -2,7 +2,9 @@ use anyhow::Result;
 
 use crate::parser::{Node, Parser};
 
-use super::{get_net_dependencies, Compile, Declaration, Dependencies, Dependency, CompilationState};
+use super::{
+    get_net_dependencies, CompilationState, Compile, Declaration, Dependencies, Dependency,
+};
 
 #[derive(Debug)]
 pub struct Block(Vec<Declaration>);
@@ -30,7 +32,7 @@ impl Dependencies for Block {
 }
 
 impl Compile for Block {
-    fn compile(&self, state: &mut CompilationState) -> Result<Vec<super::CompiledItem>> {
+    fn compile(&self, state: &CompilationState) -> Result<Vec<super::CompiledItem>> {
         let compiled_body: Vec<super::CompiledItem> = self
             .0
             .iter()

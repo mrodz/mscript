@@ -10,7 +10,7 @@ use once_cell::sync::Lazy;
 use crate::parser::{AssocFileData, Node, Parser};
 
 use super::r#type::TypeLayout;
-use super::{new_err, Compile, CompiledItem, Dependencies, Dependency, CompilationState};
+use super::{new_err, CompilationState, Compile, CompiledItem, Dependencies, Dependency};
 
 #[derive(Debug, Clone, Eq)]
 pub(crate) struct Ident {
@@ -20,7 +20,7 @@ pub(crate) struct Ident {
 }
 
 impl Compile for Ident {
-    fn compile(&self, _: &mut CompilationState) -> Result<Vec<CompiledItem>> {
+    fn compile(&self, _: &CompilationState) -> Result<Vec<CompiledItem>> {
         let ty = self.ty()?;
         let (_, id) = TypeLayout::get_load_instruction(ty);
 

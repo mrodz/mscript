@@ -9,16 +9,13 @@ use crate::{
     VecErr,
 };
 
-use super::{Compile, Dependencies, Value, CompilationState};
+use super::{CompilationState, Compile, Dependencies, Value};
 
 #[derive(Debug)]
 pub(crate) struct ReturnStatement(Option<Value>);
 
 impl Compile for ReturnStatement {
-    fn compile(
-        &self,
-        state: &mut CompilationState,
-    ) -> Result<Vec<super::CompiledItem>> {
+    fn compile(&self, state: &CompilationState) -> Result<Vec<super::CompiledItem>> {
         let Some(ref return_value) = self.0 else {
 			return Ok(vec![instruction!(ret)])
 		};

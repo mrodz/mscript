@@ -9,8 +9,9 @@ use crate::{
 };
 
 use super::{
-    Assignment, Break, Compile, CompiledItem, Continue, Dependencies, Dependency, Expr,
-    IfStatement, NumberLoop, PrintStatement, Reassignment, ReturnStatement, WhileLoop, Assertion, CompilationState,
+    Assertion, Assignment, Break, CompilationState, Compile, CompiledItem, Continue, Dependencies,
+    Dependency, Expr, IfStatement, NumberLoop, PrintStatement, Reassignment, ReturnStatement,
+    WhileLoop,
 };
 
 #[derive(Debug)]
@@ -60,7 +61,7 @@ impl Dependencies for Declaration {
 }
 
 impl Compile for Declaration {
-    fn compile(&self, state: &mut CompilationState) -> Result<Vec<CompiledItem>> {
+    fn compile(&self, state: &CompilationState) -> Result<Vec<CompiledItem>> {
         match self {
             Self::PrintStatement(x) => x.compile(state),
             Self::Expr(x) => {

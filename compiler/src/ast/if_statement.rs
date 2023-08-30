@@ -7,7 +7,9 @@ use crate::{
     VecErr,
 };
 
-use super::{new_err, r#type::IntoType, Block, Compile, CompiledItem, Dependencies, Value, CompilationState};
+use super::{
+    new_err, r#type::IntoType, Block, CompilationState, Compile, CompiledItem, Dependencies, Value,
+};
 
 #[derive(Debug)]
 pub struct IfStatement {
@@ -30,7 +32,7 @@ impl Dependencies for IfStatement {
 }
 
 impl Compile for IfStatement {
-    fn compile(&self, state: &mut CompilationState) -> Result<Vec<CompiledItem>> {
+    fn compile(&self, state: &CompilationState) -> Result<Vec<CompiledItem>> {
         let mut result = vec![];
 
         let mut value_init = self.value.compile(state)?;
@@ -98,7 +100,7 @@ impl Dependencies for ElseStatement {
 }
 
 impl Compile for ElseStatement {
-    fn compile(&self, state: &mut CompilationState) -> Result<Vec<CompiledItem>> {
+    fn compile(&self, state: &CompilationState) -> Result<Vec<CompiledItem>> {
         let mut content = match self {
             Self::Block(block) => block.compile(state),
             Self::IfStatement(if_statement) => if_statement.compile(state),

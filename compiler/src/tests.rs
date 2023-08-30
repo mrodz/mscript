@@ -1,2 +1,3 @@
-mod math;
+mod assertions;
 mod functions;
+mod math;

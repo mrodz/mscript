@@ -2,19 +2,23 @@ use crate::eval;
 
 #[test]
 fn make_function() {
-	eval(r#"
+    eval(
+        r#"
 		add = fn(x: int, y: int) -> int {
 			return x + y
 		}
 
 		assert add(1, 2) == 3
 		assert add(5, -2) == 3
-	"#).unwrap()
+	"#,
+    )
+    .unwrap()
 }
 
 #[test]
 fn capture_outside() {
-	eval(r#"
+    eval(
+        r#"
 		my_favorite_number = 17
 
 		fmt_fav_number = fn() -> str {
@@ -26,12 +30,15 @@ fn capture_outside() {
 		my_favorite_number = 2
 
 		assert fmt_fav_number() == "Your favorite number is 2"
-	"#).unwrap()
+	"#,
+    )
+    .unwrap()
 }
 
 #[test]
 fn false_modify() {
-	eval(r#"
+    eval(
+        r#"
 		my_favorite_number = 17
 
 		change_favorite_number = fn() {
@@ -44,12 +51,15 @@ fn false_modify() {
 		change_favorite_number()
 
 		assert my_favorite_number == 17
-	"#).unwrap()
+	"#,
+    )
+    .unwrap()
 }
 
 #[test]
 fn successful_modify() {
-	eval(r#"
+    eval(
+        r#"
 		my_favorite_number = 17
 
 		change_favorite_number = fn() {
@@ -62,5 +72,7 @@ fn successful_modify() {
 		change_favorite_number()
 
 		assert my_favorite_number == 2
-	"#).unwrap()
+	"#,
+    )
+    .unwrap()
 }

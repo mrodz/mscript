@@ -2,7 +2,8 @@ use crate::eval;
 
 #[test]
 pub fn binary_operations() {
-	eval(r#"
+    eval(
+        r#"
 		a = 5
 		b = 10
 		assert a + b == 15
@@ -46,5 +47,7 @@ pub fn binary_operations() {
 		assert 0b1111 == 15
 
 		assert true
-	"#).unwrap()
+	"#,
+    )
+    .unwrap()
 }

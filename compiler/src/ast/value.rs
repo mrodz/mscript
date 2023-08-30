@@ -8,8 +8,8 @@ use crate::{
 };
 
 use super::{
-    math_expr::Expr, new_err, r#type::IntoType, string::AstString, Compile, CompiledItem,
-    Dependencies, Dependency, Function, Ident, List, Number, TypeLayout, CompilationState,
+    math_expr::Expr, new_err, r#type::IntoType, string::AstString, CompilationState, Compile,
+    CompiledItem, Dependencies, Dependency, Function, Ident, List, Number, TypeLayout,
 };
 
 #[derive(Debug)]
@@ -315,7 +315,7 @@ impl Dependencies for Value {
 }
 
 impl Compile for Value {
-    fn compile(&self, state: &mut CompilationState) -> Result<Vec<CompiledItem>> {
+    fn compile(&self, state: &CompilationState) -> Result<Vec<CompiledItem>> {
         match self {
             Self::Function(function) => function.in_place_compile_for_value(state),
             Self::Ident(ident) => ident.compile(state),

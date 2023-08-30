@@ -6,7 +6,7 @@ use crate::{
     VecErr,
 };
 
-use super::{new_err, r#type::IntoType, Block, Compile, Dependencies, Value, CompilationState};
+use super::{new_err, r#type::IntoType, Block, CompilationState, Compile, Dependencies, Value};
 
 #[derive(Debug)]
 pub struct WhileLoop {
@@ -17,7 +17,7 @@ pub struct WhileLoop {
 impl Compile for WhileLoop {
     fn compile(
         &self,
-        state: &mut CompilationState,
+        state: &CompilationState,
     ) -> anyhow::Result<Vec<super::CompiledItem>, anyhow::Error> {
         let mut condition_compiled = self.condition.compile(state)?;
         let mut body_compiled = self.body.compile(state)?;

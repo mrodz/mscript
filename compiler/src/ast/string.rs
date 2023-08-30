@@ -9,7 +9,7 @@ use crate::{
 
 use super::{
     r#type::{IntoType, NativeType, StrWrapper},
-    Compile, CompiledItem, Dependencies, Dependency, TypeLayout, CompilationState,
+    CompilationState, Compile, CompiledItem, Dependencies, Dependency, TypeLayout,
 };
 
 #[derive(Debug, Clone)]
@@ -40,7 +40,7 @@ impl IntoType for AstString {
 }
 
 impl Compile for AstString {
-    fn compile(&self, _: &mut CompilationState) -> Result<Vec<CompiledItem>> {
+    fn compile(&self, _: &CompilationState) -> Result<Vec<CompiledItem>> {
         match self {
             AstString::Plain(content) => Ok(vec![instruction!(string content)]),
             AstString::FormattedString() => todo!(),

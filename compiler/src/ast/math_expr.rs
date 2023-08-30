@@ -52,8 +52,8 @@ use crate::{
 
 use super::{
     boolean::boolean_from_str, function::FunctionType, list::Index, new_err, r#type::IntoType,
-    Compile, CompileTimeEvaluate, CompiledItem, Dependencies, Dependency, FunctionArguments,
-    TemporaryRegister, TypeLayout, Value, CompilationState,
+    CompilationState, Compile, CompileTimeEvaluate, CompiledItem, Dependencies, Dependency,
+    FunctionArguments, TemporaryRegister, TypeLayout, Value,
 };
 
 pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
@@ -292,7 +292,7 @@ impl Dependencies for Expr {
 
 fn compile_depth(
     expr: &Expr,
-    state: &mut CompilationState,
+    state: &CompilationState,
     depth: TemporaryRegister,
 ) -> Result<Vec<CompiledItem>> {
     match expr {
@@ -333,8 +333,8 @@ fn compile_depth(
             Ok(eval)
         }
         Expr::BinOp { lhs, op, rhs } => {
-            let mut lhs = compile_depth(lhs, state, TemporaryRegister::new())?;
-            let mut rhs = compile_depth(rhs, state, TemporaryRegister::new())?;
+            let mut lhs = compile_depth(lhs, state, state.poll_temporary_register())?;
+            let mut rhs = compile_depth(rhs, state, state.poll_temporary_register())?;
 
             lhs.reserve(rhs.len() + 4);
 
@@ -381,11 +381,11 @@ fn compile_depth(
             lhs_raw, arguments, ..
         }) => {
             let mut lhs_compiled = lhs_raw.compile(state)?;
-            let lhs_register = TemporaryRegister::new();
+            let lhs_register = state.poll_temporary_register();
 
             lhs_compiled.push(instruction!(store_fast lhs_register));
 
-            let callable = Callable::new(arguments, move || instruction!(load_fast lhs_register));
+            let callable = Callable::new(arguments, instruction!(load_fast lhs_register));
 
             lhs_compiled.append(&mut callable.compile(state)?);
 
@@ -406,8 +406,8 @@ fn compile_depth(
 }
 
 impl Compile for Expr {
-    fn compile(&self, state: &mut CompilationState) -> Result<Vec<super::CompiledItem>> {
-        compile_depth(self, state, TemporaryRegister::new())
+    fn compile(&self, state: &CompilationState) -> Result<Vec<super::CompiledItem>> {
+        compile_depth(self, state, state.poll_temporary_register())
     }
 }
 

@@ -9,8 +9,8 @@ use crate::{
 };
 
 use super::{
-    map_err, new_err, value::Value, Compile, CompileTimeEvaluate, ConstexprEvaluation,
-    Dependencies, Dependency, Ident, TemporaryRegister, CompilationState,
+    map_err, new_err, value::Value, CompilationState, Compile, CompileTimeEvaluate,
+    ConstexprEvaluation, Dependencies, Dependency, Ident,
 };
 
 #[derive(Debug)]
@@ -137,7 +137,7 @@ impl Dependencies for Assignment {
 }
 
 impl Compile for Assignment {
-    fn compile(&self, state: &mut CompilationState) -> Result<Vec<super::CompiledItem>> {
+    fn compile(&self, state: &CompilationState) -> Result<Vec<super::CompiledItem>> {
         // let name = self.ident.name();
 
         let maybe_constexpr_eval = self.value().try_constexpr_eval()?;
@@ -147,9 +147,7 @@ impl Compile for Assignment {
         } else {
             match &self.value() {
                 Value::Ident(ident) => ident.compile(state)?,
-                Value::Function(function) => {
-                    function.in_place_compile_for_value(state)?
-                }
+                Value::Function(function) => function.in_place_compile_for_value(state)?,
                 Value::Number(number) => number.compile(state)?,
                 Value::String(string) => string.compile(state)?,
                 Value::MathExpr(math_expr) => math_expr.compile(state)?,
@@ -174,7 +172,7 @@ impl Compile for Assignment {
                 value_init.push(store_instruction);
             }
             Self::Multiple { idents, .. } => {
-                let indexable = TemporaryRegister::new();
+                let indexable = state.poll_temporary_register();
                 value_init.push(instruction!(store_fast indexable));
 
                 for (idx, ident) in idents.iter().enumerate() {

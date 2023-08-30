@@ -6,24 +6,23 @@ use crate::{
     VecErr,
 };
 
-use super::{new_err, r#type::IntoType, Compile, CompiledItem, Dependencies, Value, CompilationState};
+use super::{
+    new_err, r#type::IntoType, CompilationState, Compile, CompiledItem, Dependencies, Value,
+};
 
 #[derive(Debug)]
 pub struct Assertion {
-	value: Value,
-	start: usize,
-	end: usize,
+    value: Value,
+    start: usize,
+    end: usize,
 }
 
 impl Compile for Assertion {
-    fn compile(
-        &self,
-        state: &mut CompilationState,
-    ) -> Result<Vec<CompiledItem>, anyhow::Error> {
+    fn compile(&self, state: &CompilationState) -> Result<Vec<CompiledItem>, anyhow::Error> {
         let mut result = self.value.compile(state)?;
 
-		let start = self.start;
-		let end = self.end;
+        let start = self.start;
+        let end = self.end;
 
         result.push(instruction!(assert start end));
         Ok(result)
@@ -51,12 +50,12 @@ impl Parser {
             )]);
         }
 
-		let input_span = input.as_span();
+        let input_span = input.as_span();
 
         Ok(Assertion {
-			value,
-			start: input_span.start(),
-			end: input_span.end(),
-		})
+            value,
+            start: input_span.start(),
+            end: input_span.end(),
+        })
     }
 }

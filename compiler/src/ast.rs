@@ -56,89 +56,89 @@ use bytecode::compilation_bridge::{raw_byte_instruction_to_string_representation
 use pest::Span;
 use std::{
     borrow::Cow,
+    cell::{Cell, UnsafeCell},
     fmt::{Debug, Display},
-    sync::{Arc, RwLock}, ops::{AddAssign, SubAssign},
+    ops::SubAssign,
+    sync::Arc,
 };
 
 use self::number_loop::NumberLoopRegister;
 
-static mut REGISTER_COUNT: RwLock<usize> = RwLock::new(0);
-
-pub struct TemporaryRegister(usize, bool);
+#[derive(Debug)]
+pub struct TemporaryRegister {
+    id: usize,
+    in_use: bool,
+    cleanup_pointer: Option<*mut usize>,
+}
 
 impl TemporaryRegister {
-    pub unsafe fn new_ghost_register(mock_count: usize) -> Self {
+    #[inline]
+    unsafe fn new_ghost_register(mock_count: usize) -> Self {
         log::trace!("reg. -G--m {mock_count}");
-        Self(mock_count, false)
-    }
-
-    pub fn new() -> Self {
-        unsafe {
-            let mut x = REGISTER_COUNT.write().unwrap();
-            x.add_assign(1);
-
-            log::trace!("reg. -n--- {x}");
-
-            Self(*x, true)
+        Self {
+            id: mock_count,
+            in_use: false,
+            cleanup_pointer: None,
         }
     }
 
-    pub fn new_require_explicit_drop() -> Self {
-        unsafe {
-            let mut x = REGISTER_COUNT.write().unwrap();
-            
-            x.add_assign(1);
-
-            log::trace!("reg. -n-e- {x}");
-
-            Self(*x, false)
+    #[inline]
+    fn new(id: usize, cleanup_ptr: *mut usize) -> Self {
+        log::trace!("reg. -n--- {id}");
+        Self {
+            id,
+            in_use: true,
+            cleanup_pointer: Some(cleanup_ptr),
         }
     }
 
-    pub fn free(self) {
-        unsafe {
-            let mut count = REGISTER_COUNT.write().unwrap();
-            if self.0 != *count {
-                unreachable!("dropped out of order");
-            }
+    #[inline]
+    #[allow(unused)]
+    fn new_require_explicit_drop(id: usize) -> Self {
+        log::trace!("reg. -n-e- {id}");
 
-            log::trace!("reg. F--e- {count}");
-
-            count.sub_assign(1);
+        Self {
+            id,
+            in_use: true,
+            cleanup_pointer: None,
         }
     }
 
-    pub unsafe fn free_many(count: usize) {
-        let mut x = REGISTER_COUNT.write().unwrap();
+    fn free(mut self, current_count: usize) {
+        if self.id != current_count {
+            unreachable!("dropped out of order");
+        }
 
-        *x = x
-            .checked_sub(count)
-            .expect("dropped too many registers");
+        self.in_use = false;
 
+        log::trace!("reg. F--e- {}", self.id);
+    }
+
+    #[inline]
+    unsafe fn free_many(count: usize) {
         log::trace!("reg. F--em {count}");
     }
 }
 
 impl Display for TemporaryRegister {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "#{}", self.0)
+        write!(f, "#{}", self.id)
     }
 }
 
 impl Drop for TemporaryRegister {
     fn drop(&mut self) {
-        if !self.1 {
-            return;
-        }
+        if self.in_use {
+            if let Some(cleanup_ptr) = self.cleanup_pointer {
+                unsafe {
+                    if self.id != *cleanup_ptr - 1 {
+                        panic!("dropped out of order: {self} / {}", *cleanup_ptr)
+                    }
 
-        unsafe {
-            let mut x = REGISTER_COUNT.write().unwrap();
-
-            if self.0 == *x {
-                log::trace!("reg. F---- {x}");
-                x.sub_assign(1);
-            } else if self.0 - 1 != *x {
-                unreachable!("dropped out of order {} {x}", self.0)
+                    (*cleanup_ptr).sub_assign(1);
+                }
+            } else {
+                panic!("{self:?} leaked")
             }
         }
     }
@@ -169,7 +169,7 @@ impl From<CompiledItem> for Instruction {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) enum CompiledItem {
     Function {
         id: CompiledFunctionId,
@@ -294,53 +294,117 @@ macro_rules! instruction {
 }
 
 pub(crate) struct CompilationState {
-    function_buffer: Vec<CompiledItem>,
-    function_id_c: isize,
-    loop_register_c: usize,
+    /// We use `UnsafeCell` for performance reasons. Normal `RefCell` is 20% slower, based on quick tests.
+    function_buffer: UnsafeCell<Vec<CompiledItem>>,
+    function_id_c: Cell<isize>,
+    loop_register_c: Cell<usize>,
+    temporary_register_c: Cell<usize>,
 }
 
 impl CompilationState {
     pub fn new() -> Self {
         Self {
-            function_buffer: Vec::with_capacity(1),
-            function_id_c: 0,
-            loop_register_c: 0,
+            function_buffer: UnsafeCell::new(Vec::with_capacity(1)),
+            function_id_c: Cell::new(0),
+            loop_register_c: Cell::new(0),
+            temporary_register_c: Cell::new(0),
         }
     }
 
-    pub fn poll_function_id(&mut self) -> CompiledFunctionId {
-        let result = CompiledFunctionId::Generated(self.function_id_c);
+    #[inline]
+    pub fn poll_function_id(&self) -> CompiledFunctionId {
+        let id = self.function_id_c.get();
+        let result = CompiledFunctionId::Generated(id);
 
-        self.function_id_c += 1;
+        self.function_id_c.set(id + 1);
 
         result
     }
 
-    pub fn poll_loop_register(&mut self) -> NumberLoopRegister {
-        self.loop_register_c += 1;
-        NumberLoopRegister::Generated(self.loop_register_c)
+    #[inline]
+    pub fn poll_loop_register(&self) -> NumberLoopRegister {
+        let id = self.loop_register_c.get();
+        self.loop_register_c.set(id + 1);
+        NumberLoopRegister::Generated(id + 1)
     }
 
-    pub fn free_loop_register(&mut self, register: NumberLoopRegister) {
+    #[inline]
+    pub fn free_loop_register(&self, register: NumberLoopRegister) {
         if let NumberLoopRegister::Generated(id) = register {
-            assert!(self.loop_register_c == id);
+            assert!(self.loop_register_c.get() == id);
 
-            self.loop_register_c -= 1;
+            self.loop_register_c.set(id - 1);
         }
     }
 
-    pub fn into_function_buffer(self) -> Vec<CompiledItem> {
-        self.function_buffer
+    // fn remove_register_internal(&self, count: usize) {
+    //     let state = self.temporary_register_c.get();
+    //     if state == count {
+    //         log::trace!("reg. F---- {state}");
+    //         self.temporary_register_c.set(state - 1);
+    //     } else if state - 1 != count {
+    //         unreachable!("dropped out of order {count} {state}")
+    //     }
+    // }
+    #[inline]
+    pub fn poll_temporary_register(&self) -> TemporaryRegister {
+        let c = self.temporary_register_c.get();
+        let result: TemporaryRegister =
+            TemporaryRegister::new(c, self.temporary_register_c.as_ptr());
+        self.temporary_register_c.set(c + 1);
+        result
     }
 
-    pub fn push_function(&mut self, compiled_function: CompiledItem) {
-        assert!(matches!(compiled_function, CompiledItem::Function { .. }), "Attempting to push a non-function to the function buffer");
-        self.function_buffer.push(compiled_function)
+    #[allow(unused)]
+    pub fn poll_temporary_register_explicit_drop(&self) -> TemporaryRegister {
+        let c = self.temporary_register_c.get();
+        let result: TemporaryRegister = TemporaryRegister::new_require_explicit_drop(c);
+        self.temporary_register_c.set(c + 1);
+        result
+    }
+
+    /// No AutoDrop, but advances the counter. Use in conjunction with `free_many`.
+    #[inline]
+    pub unsafe fn poll_temporary_register_ghost(&self) -> TemporaryRegister {
+        let c = self.temporary_register_c.get();
+        let result: TemporaryRegister = TemporaryRegister::new_ghost_register(c);
+        self.temporary_register_c.set(c + 1);
+        result
+    }
+
+    #[inline]
+    pub fn free_temporary_register(&self, reg: TemporaryRegister) {
+        let c = self.temporary_register_c.get();
+        self.temporary_register_c.set(c - 1);
+        reg.free(c - 1);
+    }
+
+    #[inline]
+    pub unsafe fn free_many_temporary_registers(&self, count: usize) {
+        TemporaryRegister::free_many(count);
+        self.temporary_register_c
+            .set(self.temporary_register_c.get() - count);
+    }
+
+    pub fn into_function_buffer(self) -> Vec<CompiledItem> {
+        unsafe { (*self.function_buffer.get()).clone() }
+    }
+
+    pub fn push_function(&self, compiled_function: CompiledItem) {
+        assert!(
+            matches!(compiled_function, CompiledItem::Function { .. }),
+            "Attempting to push a non-function to the function buffer"
+        );
+        unsafe {
+            let function_buffer = self.function_buffer.get();
+
+            (*function_buffer).push(compiled_function);
+        }
     }
 }
 
 pub(crate) trait Compile<E = anyhow::Error> {
-    fn compile(&self, state: &mut CompilationState) -> Result<Vec<CompiledItem>, E>;
+    fn compile(&self, state: &CompilationState) -> Result<Vec<CompiledItem>, E>;
 }
 
 pub(crate) trait Optimize {}
