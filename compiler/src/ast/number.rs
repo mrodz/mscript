@@ -151,8 +151,7 @@ pub fn number_from_string(string: &str, rule: Rule) -> Result<Number> {
     let matched = match rule {
         Rule::bigint => {
             let no_prefix = &string[1..];
-            if no_prefix.starts_with("0x") {
-                let hex_part = &no_prefix[2..];
+            if let Some(hex_part) = no_prefix.strip_prefix("0x") {
                 let as_hex = i128::from_str_radix(hex_part, 16)?;
                 Number::BigInt(as_hex.to_string())
             } else {
@@ -165,10 +164,13 @@ pub fn number_from_string(string: &str, rule: Rule) -> Result<Number> {
 
             Number::Integer(as_hex)
         }
-        Rule::float if as_str.ends_with(['F', 'f']) => {
-            Number::Float(as_str[..as_str.len() - 1].to_owned())
+        Rule::float => {
+            if let Some(float_of_int) = as_str.strip_suffix(['F', 'f']) {
+                Number::Float(float_of_int.to_owned())
+            } else {
+                Number::Float(as_str)
+            }
         }
-        Rule::float => Number::Float(as_str),
         Rule::byte => Number::Byte(as_str),
         _ => bail!("non-number rule"),
     };
