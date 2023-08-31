@@ -15,19 +15,30 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context, Result};
-use ast::{CompilationState, Compile};
+use ast::{map_err, CompilationState, Compile};
 use bytecode::compilation_bridge::{Instruction, MScriptFile, MScriptFileBuilder};
 use bytecode::Program;
 use indicatif::{MultiProgress, ProgressBar, ProgressFinish, ProgressStyle};
 
 use once_cell::sync::Lazy;
 use parser::AssocFileData;
+use pest::Span;
 
 use crate::ast::CompiledItem;
 use crate::parser::{root_node_from_str, Parser};
 
 struct VerboseLogger {
     progress_bars: Option<MultiProgress>,
+}
+
+pub(crate) trait CompilationError {
+    fn details(self, span: Span, file_name: &str, message: impl Into<String>) -> Self;
+}
+
+impl<T> CompilationError for Result<T> {
+    fn details(self, span: Span, file_name: &str, message: impl Into<String>) -> Self {
+        map_err(self, span, file_name, message.into())
+    }
 }
 
 static SPINNER_STYLE: Lazy<ProgressStyle> = Lazy::new(|| {

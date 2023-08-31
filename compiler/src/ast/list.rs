@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt::Display};
+use std::{borrow::Cow, fmt::Display, hash::Hash};
 
 use anyhow::{bail, Context, Result};
 
@@ -97,7 +97,7 @@ pub(crate) enum ListType {
     Empty,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum ListBound {
     Numeric(usize),
     NotIndexable,
@@ -329,6 +329,34 @@ impl PartialEq for ListType {
                 }
                 _ => unreachable!(),
             },
+        }
+    }
+}
+
+impl Hash for ListType {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        use ListType::*;
+
+        match self {
+            Empty => (),
+            Mixed(types) => {
+                if types.windows(2).all(|w| w[0] == w[1]) {
+                    types[0].hash(state);
+                } else {
+                    types.hash(state);
+                }
+            }
+            Open { types, spread, .. } => {
+                if types.windows(2).all(|w| w[0] == w[1]) {
+                    types[0].hash(state);
+
+                    if spread.as_ref() != &types[0] {
+                        spread.hash(state)
+                    }
+                } else {
+                    types.hash(state);
+                }
+            }
         }
     }
 }

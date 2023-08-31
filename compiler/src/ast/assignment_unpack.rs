@@ -6,7 +6,11 @@ use crate::{
     VecErr,
 };
 
-use super::{list::ListBound, r#type::IntoType, Assignment, Number, Value, INT_TYPE};
+use super::{
+    list::ListBound,
+    r#type::{IntoType, NativeType},
+    Assignment, Number, TypeLayout, Value,
+};
 
 impl Parser {
     pub fn assignment_unpack(
@@ -66,7 +70,7 @@ impl Parser {
 			return Err(vec![new_err(value_span, file_name, format!("cannot unpack a value of `{ty}`, which does not support indexing"))])
 		};
 
-        if value_ty.contains_raw_type(&INT_TYPE) {
+        if value_ty.contains_raw_type(&TypeLayout::Native(NativeType::Int)) {
             return Err(vec![new_err(
                 value_span,
                 file_name,

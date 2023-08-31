@@ -1,16 +1,19 @@
 use std::{
     borrow::{Borrow, Cow},
     cell::{Ref, RefCell, RefMut},
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fmt::Display,
     sync::Arc,
 };
 
 use anyhow::{bail, Result};
 
-use crate::ast::{FunctionParameters, Ident, TypeLayout};
+use crate::ast::{
+    FunctionParameters, Ident, TypeLayout, BIGINT_TYPE, BOOL_TYPE, BYTE_TYPE, FLOAT_TYPE, INT_TYPE,
+    STR_TYPE,
+};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash)]
 pub(crate) enum ScopeType {
     File,
     Function(Option<Arc<FunctionParameters>>),
@@ -69,6 +72,80 @@ impl<'a> ScopeIter<'a> {
     }
 }
 
+#[derive(Clone, Debug)]
+pub(crate) enum TypeSearchResult<'a> {
+    Ok(SuccessTypeSearchResult<'a>),
+    NotFound,
+}
+
+#[derive(Debug)]
+pub(crate) enum SuccessTypeSearchResult<'a> {
+    Primitive(&'static TypeLayout),
+    Owned(TypeLayout),
+    InScope(Ref<'a, TypeLayout>),
+}
+
+impl TypeSearchResult<'_> {
+    #[allow(unused)]
+    pub fn try_unwrap(&self) -> Result<&SuccessTypeSearchResult> {
+        if let Self::Ok(success) = self {
+            return Ok(success);
+        }
+
+        bail!("type not found")
+    }
+}
+
+impl Clone for SuccessTypeSearchResult<'_> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Primitive(x) => Self::Primitive(x),
+            Self::Owned(x) => Self::Owned(x.clone()),
+            Self::InScope(x) => Self::Owned((*x).clone()),
+        }
+    }
+}
+
+impl SuccessTypeSearchResult<'_> {
+    pub fn into_cow(self) -> Cow<'static, TypeLayout> {
+        match self {
+            Self::Primitive(x) => Cow::Borrowed(x),
+            Self::Owned(x) => Cow::Owned(x),
+            Self::InScope(x) => Cow::Owned(x.clone()),
+        }
+    }
+
+    #[allow(unused)]
+    pub fn unwrap(self) -> TypeLayout {
+        match self {
+            Self::Primitive(x) => x.to_owned(),
+            Self::Owned(x) => x,
+            Self::InScope(x) => x.clone(),
+        }
+    }
+}
+
+impl<'a> std::ops::Deref for TypeSearchResult<'a> {
+    type Target = SuccessTypeSearchResult<'a>;
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Ok(x) => x,
+            Self::NotFound => panic!("cannot deref NotFound"),
+        }
+    }
+}
+
+impl<'a> std::ops::Deref for SuccessTypeSearchResult<'a> {
+    type Target = TypeLayout;
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::InScope(x) => x,
+            Self::Owned(x) => x,
+            Self::Primitive(x) => x.borrow(),
+        }
+    }
+}
+
 impl Scopes {
     pub(crate) fn new() -> Self {
         log::trace!("INIT Virtual Stack at MODULE");
@@ -111,6 +188,40 @@ impl Scopes {
 
     pub(crate) fn add_variable(&self, dependency: &Ident) {
         self.last_mut().add_dependency(dependency);
+    }
+
+    #[allow(unused)]
+    pub(crate) fn add_type(&self, name: Box<str>, ty: TypeLayout) {
+        self.last_mut().add_type(name, ty);
+    }
+
+    pub(crate) fn get_type_from_str(&self, str: &str) -> TypeSearchResult {
+        use SuccessTypeSearchResult::*;
+        match str {
+            "int" => return TypeSearchResult::Ok(Primitive(&INT_TYPE)),
+            "str" => return TypeSearchResult::Ok(Primitive(&STR_TYPE)),
+            "float" => return TypeSearchResult::Ok(Primitive(&FLOAT_TYPE)),
+            "bool" => return TypeSearchResult::Ok(Primitive(&BOOL_TYPE)),
+            "bigint" => return TypeSearchResult::Ok(Primitive(&BIGINT_TYPE)),
+            "byte" => return TypeSearchResult::Ok(Primitive(&BYTE_TYPE)),
+            _ => (),
+        }
+
+        for scope in self.iter() {
+            let maybe_ty = Ref::filter_map(scope, |scope| {
+                if let Some(ty) = scope.get_type(str) {
+                    return Some(ty);
+                }
+                None
+            })
+            .ok();
+
+            if let Some(ty) = maybe_ty {
+                return TypeSearchResult::Ok(InScope(ty));
+            }
+        }
+
+        TypeSearchResult::NotFound
     }
 }
 
@@ -168,7 +279,7 @@ impl Drop for ScopeHandle<'_> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum ScopeReturnStatus {
     No,
     Void,
@@ -225,6 +336,7 @@ impl ScopeReturnStatus {
 #[derive(Debug)]
 pub(crate) struct Scope {
     variables: HashSet<Ident>,
+    types: HashMap<Box<str>, TypeLayout>,
     ty: ScopeType,
     yields: ScopeReturnStatus,
 }
@@ -242,25 +354,27 @@ impl Display for Scope {
 }
 
 impl Scope {
-    pub fn new_file() -> Self {
-        Self::new_with_ty_yields(ScopeType::File, ScopeReturnStatus::No)
-    }
-
-    pub fn new_with_ty_yields(ty: ScopeType, yields: ScopeReturnStatus) -> Self {
+    fn new(
+        variables: HashSet<Ident>,
+        types: HashMap<Box<str>, TypeLayout>,
+        ty: ScopeType,
+        yields: ScopeReturnStatus,
+    ) -> Self {
         Self {
-            variables: HashSet::new(),
+            variables,
+            types,
             ty,
             yields,
         }
     }
 
-    // pub fn add_parameters(&mut self, parameters: Arc<FunctionParameters>) {
-    //     let ScopeType::Function(ref mut parameters_option @ None) = self.ty else {
-    //         unreachable!("either not a function, or parameters have already been set");
-    //     };
+    pub fn new_file() -> Self {
+        Self::new_with_ty_yields(ScopeType::File, ScopeReturnStatus::No)
+    }
 
-    //     *parameters_option = Some(parameters)
-    // }
+    pub fn new_with_ty_yields(ty: ScopeType, yields: ScopeReturnStatus) -> Self {
+        Self::new(HashSet::new(), HashMap::new(), ty, yields)
+    }
 
     pub fn peek_yields_value(&self) -> &ScopeReturnStatus {
         &self.yields
@@ -286,6 +400,15 @@ impl Scope {
         log::trace!("+ {dependency}");
 
         self.variables.insert(dependency.clone());
+    }
+
+    #[allow(unused)]
+    fn add_type(&mut self, name: Box<str>, ty: TypeLayout) {
+        self.types.insert(name, ty);
+    }
+
+    fn get_type(&self, value: &str) -> Option<&TypeLayout> {
+        self.types.get(value)
     }
 
     pub fn ty_ref(&self) -> &ScopeType {

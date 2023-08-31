@@ -33,7 +33,7 @@
 //!
 //! END LICENSE
 
-use std::{borrow::Cow, rc::Rc, sync::Arc};
+use std::{borrow::Cow, rc::Rc};
 
 use anyhow::{bail, Context, Result};
 use once_cell::sync::Lazy;
@@ -124,7 +124,7 @@ pub(crate) enum CallableContents {
     },
     Standard {
         lhs_raw: Box<Expr>,
-        function: Arc<FunctionType>,
+        function: FunctionType,
         arguments: FunctionArguments,
     },
 }
@@ -549,8 +549,8 @@ fn parse_expr(
 
                 let lhs_ty = lhs.for_type().to_err_vec()?;
 
-                let Some(function_type) = lhs_ty.is_function() else {
-                    return Err(vec![new_err(l_span.unwrap(), &user_data.get_source_file_name(), format!("`{lhs_ty}` is not callable"))]);
+                let Some(function_type) = lhs_ty.get_function() else {
+                    return Err(vec![new_err(l_span.unwrap(), &user_data.get_source_file_name(), "this is not callable".to_owned())]);
                 };
 
                 let function_arguments: Pair<Rule> = op.into_inner().next().unwrap();

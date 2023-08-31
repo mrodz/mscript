@@ -15,7 +15,7 @@ use super::{
     Ident,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum FunctionParameters {
     Named(Vec<Ident>),
     TypesOnly(Vec<Cow<'static, TypeLayout>>),

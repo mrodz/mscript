@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt::Display, sync::Arc};
+use std::{borrow::Cow, fmt::Display, hash::Hash, sync::Arc};
 
 use anyhow::{anyhow, Result};
 
@@ -60,6 +60,109 @@ impl PartialEq for FunctionType {
     }
 }
 
+impl Hash for FunctionType {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.parameters.to_types().hash(state);
+
+        if let Some(return_type) = self.return_type.get_type() {
+            return_type.hash(state);
+        };
+    }
+}
+
+#[cfg(test)]
+pub mod eq_hash_test {
+    use crate::{assert_proper_eq_hash, ast::*};
+
+    use super::*;
+
+    #[test]
+    fn names_names() {
+        let lhs = FunctionType::new(
+            Arc::new(FunctionParameters::Named(vec![Ident::new(
+                "a".into(),
+                Some(Cow::Borrowed(&INT_TYPE)),
+                false,
+            )])),
+            ScopeReturnStatus::Void,
+        );
+        let rhs = FunctionType::new(
+            Arc::new(FunctionParameters::Named(vec![Ident::new(
+                "a".into(),
+                Some(Cow::Borrowed(&INT_TYPE)),
+                false,
+            )])),
+            ScopeReturnStatus::Void,
+        );
+
+        assert_proper_eq_hash!(lhs, rhs);
+    }
+
+    #[test]
+    fn types_names() {
+        let lhs = FunctionType::new(
+            Arc::new(FunctionParameters::TypesOnly(vec![Cow::Borrowed(
+                &INT_TYPE,
+            )])),
+            ScopeReturnStatus::Void,
+        );
+        let rhs = FunctionType::new(
+            Arc::new(FunctionParameters::Named(vec![Ident::new(
+                "a".into(),
+                Some(Cow::Borrowed(&INT_TYPE)),
+                false,
+            )])),
+            ScopeReturnStatus::Void,
+        );
+
+        assert_proper_eq_hash!(lhs, rhs);
+    }
+
+    #[test]
+    fn different_names_same_types() {
+        let lhs = FunctionType::new(
+            Arc::new(FunctionParameters::Named(vec![Ident::new(
+                "a".into(),
+                Some(Cow::Borrowed(&INT_TYPE)),
+                false,
+            )])),
+            ScopeReturnStatus::Void,
+        );
+        let rhs = FunctionType::new(
+            Arc::new(FunctionParameters::Named(vec![Ident::new(
+                "b".into(),
+                Some(Cow::Borrowed(&INT_TYPE)),
+                false,
+            )])),
+            ScopeReturnStatus::Void,
+        );
+
+        assert_proper_eq_hash!(lhs, rhs);
+    }
+
+    #[test]
+    fn return_types_at_different_stages() {
+        let lhs = FunctionType::new(
+            Arc::new(FunctionParameters::Named(vec![Ident::new(
+                "a".into(),
+                Some(Cow::Borrowed(&INT_TYPE)),
+                false,
+            )])),
+            ScopeReturnStatus::Should(Cow::Borrowed(&BOOL_TYPE)),
+        );
+        let rhs = FunctionType::new(
+            Arc::new(FunctionParameters::Named(vec![Ident::new(
+                "b".into(),
+                Some(Cow::Borrowed(&INT_TYPE)),
+                false,
+            )])),
+            ScopeReturnStatus::Did(Cow::Borrowed(&BOOL_TYPE)),
+        );
+
+        assert_proper_eq_hash!(lhs, rhs);
+    }
+}
+
 impl FunctionType {
     pub fn new(parameters: Arc<FunctionParameters>, return_type: ScopeReturnStatus) -> Self {
         Self {
@@ -112,10 +215,10 @@ impl Function {
 impl IntoType for Function {
     /// unimplemented
     fn for_type(&self) -> Result<TypeLayout> {
-        Ok(TypeLayout::Function(Arc::new(FunctionType::new(
+        Ok(TypeLayout::Function(FunctionType::new(
             self.parameters.clone(),
             self.return_type.clone(),
-        ))))
+        )))
     }
 }
 

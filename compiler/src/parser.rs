@@ -11,7 +11,9 @@ use crate::ast::{
     FunctionParameters, Ident, TypeLayout,
 };
 use crate::instruction;
-use crate::scope::{Scope, ScopeHandle, ScopeIter, ScopeReturnStatus, ScopeType, Scopes};
+use crate::scope::{
+    Scope, ScopeHandle, ScopeIter, ScopeReturnStatus, ScopeType, Scopes, TypeSearchResult,
+};
 
 #[allow(unused)]
 pub(crate) type Node<'i> = pest_consume::Node<'i, Rule, Rc<AssocFileData>>;
@@ -22,7 +24,8 @@ pub(crate) struct Parser;
 
 #[derive(Debug)]
 pub(crate) struct AssocFileData {
-    scopes: Scopes,
+    /// Scopes is cloned ON EVERY SINGLE child node walk... uh oh BIG TIME!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    scopes: Arc<Scopes>,
     file_name: Arc<String>, // last_arg_type: Rc<RefCell<Vec<IdentType>>>
     source_name: Arc<String>,
 }
@@ -38,7 +41,7 @@ impl AssocFileData {
         };
 
         Self {
-            scopes: Scopes::new(),
+            scopes: Arc::new(Scopes::new()),
             file_name: Arc::new(destination_name), // last_arg_type: Rc::new(RefCell::new(vec![]))
             source_name: Arc::new(source_name),
         }
@@ -68,6 +71,10 @@ impl AssocFileData {
         }
 
         bail!("no loop found")
+    }
+
+    pub fn get_type_from_str(&self, ty: &str) -> TypeSearchResult {
+        self.scopes.get_type_from_str(ty)
     }
 
     pub fn get_return_type_mut(&self) -> RefMut<ScopeReturnStatus> {

@@ -67,7 +67,7 @@ escape_sequence = @{ "\\" ~ escape_character }
 string = @{ "\"" ~ (("\\\"") | (!("\"") ~ ANY))* ~ "\"" }
 
 
-ident_chars = _{ (('a'..'z') | ('0'..'9') | "_") }
+ident_chars = _{ (('a'..'z') | ('0'..'9') | ('A'..'Z') | "_") }
 
 ident = @{ !('0'..'9') ~ ident_chars+ }
 type = { function_type | list_type_open_only | list_type | ident }
@@ -130,7 +130,17 @@ assertion = { "assert" ~  value }
 
 return_statement = { "return " ~ value? }
 
-declaration = { assignment | reassignment | print_statement | assertion | return_statement | continue_statement | break_statement | if_statement | while_loop | number_loop | math_expr }
+class_variable = { assignment_flags? ~ ident ~ ":" ~ type }
+class_constructor = { "constructor" ~ "(" ~ function_parameters ~ ")" ~ block }
+class_bound_function = { "fn" ~ ident ~ "(" ~ function_parameters ~ ")" ~ block }
+
+class_feature = _{ class_constructor | class_bound_function | class_variable }
+
+class_body = { "{" ~ class_feature*  ~ "}" }
+
+class = { "class" ~ ident ~ class_body }
+
+declaration = { class | assignment | reassignment | print_statement | assertion | return_statement | continue_statement | break_statement | if_statement | while_loop | number_loop | math_expr }
 
 file = {
     SOI ~
