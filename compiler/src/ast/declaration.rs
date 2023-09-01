@@ -11,7 +11,7 @@ use crate::{
 use super::{
     Assertion, Assignment, Break, CompilationState, Compile, CompiledItem, Continue, Dependencies,
     Dependency, Expr, IfStatement, NumberLoop, PrintStatement, Reassignment, ReturnStatement,
-    WhileLoop,
+    WhileLoop, class::Class,
 };
 
 #[derive(Debug)]
@@ -27,6 +27,7 @@ pub(crate) enum Declaration {
     Continue(Continue),
     Break(Break),
     Assertion(Assertion),
+    Class(Class),
 }
 
 impl Dependencies for Declaration {
@@ -40,6 +41,7 @@ impl Dependencies for Declaration {
             Self::WhileLoop(while_loop) => while_loop.supplies(),
             Self::NumberLoop(number_loop) => number_loop.supplies(),
             Self::Assertion(assertion) => assertion.supplies(),
+            Self::Class(class) => class.supplies(),
             Self::Reassignment(_) | Self::Continue(_) | Self::Break(_) => vec![],
         }
     }
@@ -55,6 +57,7 @@ impl Dependencies for Declaration {
             Self::NumberLoop(number_loop) => number_loop.net_dependencies(),
             Self::Reassignment(reassignment) => reassignment.net_dependencies(),
             Self::Assertion(assertion) => assertion.net_dependencies(),
+            Self::Class(class) => class.net_dependencies(),
             Self::Continue(_) | Self::Break(_) => vec![],
         }
     }
@@ -78,6 +81,7 @@ impl Compile for Declaration {
             Self::Break(x) => x.compile(state),
             Self::NumberLoop(x) => x.compile(state),
             Self::Assertion(x) => x.compile(state),
+            Self::Class(x) => x.compile(state),
         }
     }
 }
@@ -106,6 +110,7 @@ impl Parser {
             Rule::math_expr => Declaration::Expr(Expr::parse(input)?),
             Rule::reassignment => Declaration::Reassignment(Self::reassignment(declaration)?),
             Rule::assertion => Declaration::Assertion(Self::assertion(declaration)?),
+            Rule::class => Declaration::Class(Self::class(declaration)?),
             x => unreachable!("{x:?} is not supported"),
         };
 

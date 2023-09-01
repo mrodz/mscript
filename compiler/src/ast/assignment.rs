@@ -1,3 +1,7 @@
+mod assignment_no_type;
+mod assignment_type;
+mod assignment_unpack;
+
 use std::{borrow::Cow, fmt::Debug};
 
 use anyhow::{bail, Context, Result};

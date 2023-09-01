@@ -1,12 +1,12 @@
 use std::borrow::Cow;
 
 use crate::{
-    ast::new_err,
     parser::{Node, Parser, Rule},
     VecErr,
 };
 
-use super::{
+use crate::ast::{
+    new_err,
     list::ListBound,
     r#type::{IntoType, NativeType},
     Assignment, Number, TypeLayout, Value,

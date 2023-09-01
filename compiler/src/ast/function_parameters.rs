@@ -102,6 +102,10 @@ impl Parser {
 
         let file_name = input.user_data().get_source_file_name();
 
+        input.user_data().add_dependency(dependency)
+
+        let mut argc = 0;
+
         loop {
             let Some(ident_node) = children.next() else {
                 break;

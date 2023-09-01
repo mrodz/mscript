@@ -14,7 +14,7 @@ use super::{
     list::{ListBound, ListType},
     map_err,
     math_expr::Op,
-    FunctionParameters, Value,
+    FunctionParameters, Value, class::ClassType,
 };
 
 pub(crate) struct SupportedTypesWrapper(Box<[Cow<'static, TypeLayout>]>);
@@ -160,6 +160,7 @@ pub(crate) enum TypeLayout {
     Native(NativeType),
     List(ListType),
     ValidIndexes(ListBound, ListBound),
+    Class(ClassType)
 }
 
 impl Display for TypeLayout {
@@ -170,6 +171,7 @@ impl Display for TypeLayout {
             Self::Native(native) => write!(f, "{native}"),
             Self::List(list) => write!(f, "{list}"),
             Self::ValidIndexes(lower, upper) => write!(f, "B({lower}..{upper})"),
+            Self::Class(class_type) => write!(f, "{class_type}"),
         }
     }
 }

@@ -5,7 +5,7 @@ use crate::{
     VecErr,
 };
 
-use super::{map_err_messages, Assignment};
+use crate::ast::{map_err_messages, Assignment};
 
 impl Parser {
     pub fn assignment_no_type(

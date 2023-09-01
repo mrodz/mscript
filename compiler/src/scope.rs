@@ -10,7 +10,7 @@ use anyhow::{bail, Result};
 
 use crate::ast::{
     FunctionParameters, Ident, TypeLayout, BIGINT_TYPE, BOOL_TYPE, BYTE_TYPE, FLOAT_TYPE, INT_TYPE,
-    STR_TYPE,
+    STR_TYPE, ClassType,
 };
 
 #[derive(Debug, Clone, PartialEq, Hash)]
@@ -21,6 +21,7 @@ pub(crate) enum ScopeType {
     ElseBlock,
     WhileLoop,
     NumberLoop,
+    Class(ClassType),
 }
 
 impl Display for ScopeType {
@@ -33,6 +34,7 @@ impl Display for ScopeType {
             ScopeType::Function(None) => write!(f, "fn(???)"),
             ScopeType::NumberLoop => write!(f, "Number Loop"),
             ScopeType::WhileLoop => write!(f, "While Loop"),
+            ScopeType::Class(class_type) => write!(f, "Class {}", class_type.name()),
         }
     }
 }
@@ -390,6 +392,10 @@ impl Scope {
 
     pub fn is_function(&self) -> bool {
         matches!(self.ty, ScopeType::Function(..))
+    }
+
+    pub fn is_class(&self) -> bool {
+        matches!(self.ty, ScopeType::Class(..))
     }
 
     pub fn is_loop(&self) -> bool {

@@ -130,7 +130,7 @@ assertion = { "assert" ~  value }
 
 return_statement = { "return " ~ value? }
 
-class_variable = { assignment_flags? ~ ident ~ ":" ~ type }
+class_variable = { assignment_flags? ~ ident ~ (":" ~ type)? }
 class_constructor = { "constructor" ~ "(" ~ function_parameters ~ ")" ~ block }
 class_bound_function = { "fn" ~ ident ~ "(" ~ function_parameters ~ ")" ~ block }
 

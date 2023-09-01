@@ -8,7 +8,7 @@ use pest_consume::Parser as ParserDerive;
 
 use crate::ast::{
     CompilationState, Compile, CompiledFunctionId, CompiledItem, Declaration, Dependencies,
-    FunctionParameters, Ident, TypeLayout,
+    FunctionParameters, Ident, TypeLayout, ClassType,
 };
 use crate::instruction;
 use crate::scope::{
@@ -25,7 +25,7 @@ pub(crate) struct Parser;
 #[derive(Debug)]
 pub(crate) struct AssocFileData {
     /// Scopes is cloned ON EVERY SINGLE child node walk... uh oh BIG TIME!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    scopes: Arc<Scopes>,
+    scopes: Scopes,
     file_name: Arc<String>, // last_arg_type: Rc<RefCell<Vec<IdentType>>>
     source_name: Arc<String>,
 }
@@ -41,7 +41,7 @@ impl AssocFileData {
         };
 
         Self {
-            scopes: Arc::new(Scopes::new()),
+            scopes: Scopes::new(),
             file_name: Arc::new(destination_name), // last_arg_type: Rc::new(RefCell::new(vec![]))
             source_name: Arc::new(source_name),
         }
@@ -103,6 +103,10 @@ impl AssocFileData {
 
     pub fn push_number_loop(&self, yields: ScopeReturnStatus) -> ScopeHandle {
         self.push_scope_typed(ScopeType::NumberLoop, yields)
+    }
+
+    pub fn push_class(&self, class_type: ClassType) -> ScopeHandle {
+        self.push_scope_typed(ScopeType::Class(class_type), ScopeReturnStatus::No)
     }
 
     pub fn get_current_executing_function(
@@ -195,6 +199,17 @@ impl AssocFileData {
         let scope = self.scopes.last();
 
         Ref::filter_map(scope, |scope| scope.contains(dependency)).ok()
+    }
+
+    pub fn is_function_a_class_method(&self) -> bool {
+        let mut iter = self.scopes.iter();
+
+        // skip this stack frame
+        iter.next().unwrap();
+
+        let parent_scope = iter.next().unwrap();
+
+        parent_scope.is_class()
     }
 
     pub fn get_dependency_flags_from_name(
