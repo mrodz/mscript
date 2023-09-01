@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt::Display, hash::Hash, sync::Arc};
+use std::{borrow::Cow, fmt::{Display, write}, hash::Hash, sync::Arc};
 
 use crate::{
     ast::value::ValToUsize,
@@ -26,6 +26,7 @@ pub(crate) static FLOAT_TYPE: TypeLayout = TypeLayout::Native(NativeType::Float)
 pub(crate) static INT_TYPE: TypeLayout = TypeLayout::Native(NativeType::Int);
 pub(crate) static STR_TYPE: TypeLayout =
     TypeLayout::Native(NativeType::Str(StrWrapper::unknown_size()));
+pub(crate) static SELF_TYPE: TypeLayout = TypeLayout::ClassSelf;
 
 impl Display for SupportedTypesWrapper {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -160,7 +161,8 @@ pub(crate) enum TypeLayout {
     Native(NativeType),
     List(ListType),
     ValidIndexes(ListBound, ListBound),
-    Class(ClassType)
+    Class(ClassType),
+    ClassSelf,
 }
 
 impl Display for TypeLayout {
@@ -172,6 +174,7 @@ impl Display for TypeLayout {
             Self::List(list) => write!(f, "{list}"),
             Self::ValidIndexes(lower, upper) => write!(f, "B({lower}..{upper})"),
             Self::Class(class_type) => write!(f, "{class_type}"),
+            Self::ClassSelf => write!(f, "self"),
         }
     }
 }

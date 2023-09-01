@@ -21,7 +21,7 @@ pub(crate) enum ScopeType {
     ElseBlock,
     WhileLoop,
     NumberLoop,
-    Class(ClassType),
+    Class(Option<ClassType>),
 }
 
 impl Display for ScopeType {
@@ -34,7 +34,7 @@ impl Display for ScopeType {
             ScopeType::Function(None) => write!(f, "fn(???)"),
             ScopeType::NumberLoop => write!(f, "Number Loop"),
             ScopeType::WhileLoop => write!(f, "While Loop"),
-            ScopeType::Class(class_type) => write!(f, "Class {}", class_type.name()),
+            ScopeType::Class(class_type) => write!(f, "Class {}", class_type.as_ref().map_or_else(|| "<UNKNOWN>", |x| x.name())),
         }
     }
 }
@@ -419,6 +419,10 @@ impl Scope {
 
     pub fn ty_ref(&self) -> &ScopeType {
         &self.ty
+    }
+
+    pub fn ty_ref_mut(&mut self) -> &mut ScopeType {
+        &mut self.ty
     }
 
     // pub fn ty_ref_mut(&mut self) -> &mut ScopeType {

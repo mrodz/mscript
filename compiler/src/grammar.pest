@@ -131,8 +131,8 @@ assertion = { "assert" ~  value }
 return_statement = { "return " ~ value? }
 
 class_variable = { assignment_flags? ~ ident ~ (":" ~ type)? }
-class_constructor = { "constructor" ~ "(" ~ function_parameters ~ ")" ~ block }
-class_bound_function = { "fn" ~ ident ~ "(" ~ function_parameters ~ ")" ~ block }
+class_constructor = { "constructor" ~ "(" ~ function_parameters ~ ")" ~ function_return_type? ~ block }
+class_bound_function = { "fn" ~ ident ~ "(" ~ function_parameters ~ ")" ~ function_return_type? ~ block }
 
 class_feature = _{ class_constructor | class_bound_function | class_variable }
 

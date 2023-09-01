@@ -105,8 +105,24 @@ impl AssocFileData {
         self.push_scope_typed(ScopeType::NumberLoop, yields)
     }
 
+    pub fn push_class_unknown_self(&self) -> ScopeHandle {
+        self.push_scope_typed(ScopeType::Class(None), ScopeReturnStatus::No)
+    }
+
     pub fn push_class(&self, class_type: ClassType) -> ScopeHandle {
-        self.push_scope_typed(ScopeType::Class(class_type), ScopeReturnStatus::No)
+        self.push_scope_typed(ScopeType::Class(Some(class_type)), ScopeReturnStatus::No)
+    }
+
+    pub fn set_self_type_of_class(&self, new_class_type: ClassType) {
+        let mut last = self.scopes.last_mut();
+
+        assert!(last.is_class());
+
+        let ScopeType::Class(ref mut class_type) = last.ty_ref_mut() else {
+            unreachable!()
+        };
+
+        *class_type = Some(new_class_type);
     }
 
     pub fn get_current_executing_function(
@@ -202,6 +218,7 @@ impl AssocFileData {
     }
 
     pub fn is_function_a_class_method(&self) -> bool {
+        println!("\n\n\n{}\n", self.scopes);
         let mut iter = self.scopes.iter();
 
         // skip this stack frame

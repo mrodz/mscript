@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use anyhow::Result;
+use anyhow::{Result, Context};
 
 use crate::{
     ast::{assignment::AssignmentFlag, new_err, Ident, Dependencies, Dependency},
@@ -8,10 +8,36 @@ use crate::{
     VecErr,
 };
 
+use super::WalkForType;
+
 #[derive(Debug)]
 pub(crate) struct MemberVariable {
     flags: AssignmentFlag,
     ident: Ident,
+}
+
+impl WalkForType for MemberVariable {
+    fn type_from_node(input: &Node) -> Result<Ident> {
+        let mut children = input.children();
+
+        let maybe_ident = children.next().unwrap();
+
+        let ident_node = if maybe_ident.as_rule() == Rule::ident  {
+            maybe_ident
+        } else {
+            children.next().unwrap()
+        };
+
+        let ty_node = children.next().context("no type")?;
+
+        let mut ident = Parser::ident(ident_node)?;
+
+        let ty = Parser::r#type(ty_node)?;
+
+        ident.link_force_no_inherit(input.user_data(), ty);
+
+        Ok(ident)
+    }
 }
 
 impl MemberVariable {

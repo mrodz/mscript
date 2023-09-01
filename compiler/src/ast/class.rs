@@ -13,9 +13,13 @@ pub(crate) use constructor::Constructor;
 pub(crate) use member_function::MemberFunction;
 pub(crate) use member_variable::MemberVariable;
 
-use crate::{parser::{Parser, Node}, VecErr, ast::TypeLayout};
+use crate::{parser::{Parser, Node, Rule}, VecErr, ast::TypeLayout};
 
 use super::{Dependencies, Ident, Dependency, r#type::IntoType, Compile};
+
+pub(in crate::ast::class) trait WalkForType {
+	fn type_from_node(input: &Node) -> Result<Ident>;
+}
 
 #[derive(Debug)]
 pub struct Class {
@@ -79,20 +83,24 @@ impl Parser {
 
 		let body_node = children.next().unwrap();
 
-		// let name = name_node.as_str().to_owned();
+		let class_scope = input.user_data().push_class_unknown_self();
+
+		let fields = ClassBody::get_members(&body_node).to_err_vec()?;
+
+		let class_type = ClassType {
+			fields,
+			name: Arc::new(ident.name().to_owned())
+		};
+
+		ident.link_force_no_inherit(input.user_data(), Cow::Owned(TypeLayout::Class(class_type.clone()))).to_err_vec()?;
 
 		log::trace!("+class {}", ident.name());
 
-		let class_scope = input
+		input
             .user_data()
-            .push_class();
+            .set_self_type_of_class(class_type);
 
 		let body = Self::class_body(body_node)?;
-
-		let fields: Arc<[Ident]> = body.into_idents().into();
-		let class_type = ClassType { name: Arc::new(ident.name().to_owned()), fields };
-
-		ident.link_force_no_inherit(input.user_data(), Cow::Owned(TypeLayout::Class(class_type))).to_err_vec()?;
 
 		let result = Class { ident, body };
 

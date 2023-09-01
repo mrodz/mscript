@@ -1,7 +1,9 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::Arc};
+
+use anyhow::Result;
 
 use crate::{
-    ast::{get_net_dependencies, new_err, r#type::IntoType, Dependencies, Dependency, Ident},
+    ast::{get_net_dependencies, new_err, r#type::IntoType, Dependencies, Dependency, Ident, class::WalkForType},
     parser::{Node, Parser, Rule},
 };
 
@@ -11,6 +13,23 @@ use super::class_feature::ClassFeature;
 pub(crate) struct ClassBody(Vec<ClassFeature>);
 
 impl ClassBody {
+    pub fn new(features: Vec<ClassFeature>) -> Self {
+        Self(features)
+    }
+
+    pub fn get_members(input: &Node) -> Result<Arc<[Ident]>> {
+        let mut features = input.children();
+
+        let mut fields = vec![];
+
+        for member in features {
+            let ty = ClassFeature::type_from_node(&member)?;
+            fields.push(ty);
+        }
+
+        Ok(fields.into())
+    }
+
     pub fn into_idents(&self) -> Vec<Ident> {
         use ClassFeature as CF;
         let mut result = vec![];
@@ -53,16 +72,8 @@ impl Dependencies for ClassBody {
     }
 }
 
-pub(crate) struct UnfinishedClassBody(Vec<Ident>);
-
-impl UnfinishedClassBody {
-    pub fn new(fields: Vec<Ident>) -> Self {
-        Self(fields)
-    }
-}
-
 impl Parser {
-    pub fn class_body(input: Node) -> Result<UnfinishedClassBody, Vec<anyhow::Error>> {
+    pub fn class_body(input: Node) -> Result<ClassBody, Vec<anyhow::Error>> {
         let class_features_node = input.children();
 
         let mut has_constructor = false;
@@ -95,6 +106,6 @@ impl Parser {
             }
         }
 
-        Ok(UnfinishedClassBody::new(class_features))
+        Ok(ClassBody::new(class_features))
     }
 }

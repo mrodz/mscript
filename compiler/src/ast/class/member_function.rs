@@ -1,12 +1,42 @@
+use std::{sync::Arc, borrow::Cow};
+
 use anyhow::Result;
 
-use crate::{ast::{Ident, FunctionParameters, Block, Dependencies}, parser::{Parser, Node}, VecErr};
+use crate::{ast::{Ident, FunctionParameters, Block, Dependencies, function::FunctionType, TypeLayout}, parser::{Parser, Node, Rule}, VecErr, scope::ScopeReturnStatus};
+
+use super::WalkForType;
 
 #[derive(Debug)]
 pub(crate) struct MemberFunction {
 	ident: Ident,
 	parameters: FunctionParameters,
 	body: Block,
+}
+
+impl WalkForType for MemberFunction {
+	fn type_from_node(input: &Node) -> Result<Ident> {
+		let mut children = input.children();
+
+		let ident_node = children.next().unwrap();
+		let mut ident = Parser::ident(ident_node)?;
+
+		let parameters_node = children.next().unwrap();
+		let parameters = Parser::function_parameters(parameters_node, false)?;
+
+		let maybe_return_type_node = children.next().unwrap();
+
+		let return_type = if maybe_return_type_node.as_rule() == Rule::function_return_type {
+			ScopeReturnStatus::Should(Parser::function_return_type(maybe_return_type_node)?)
+		} else {
+			ScopeReturnStatus::Void
+		};
+
+		let function_type = FunctionType::new(Arc::new(parameters), return_type);
+
+		ident.link_force_no_inherit(input.user_data(), Cow::Owned(TypeLayout::Function(function_type)))?;
+
+		Ok(ident)
+	}
 }
 
 impl MemberFunction {
