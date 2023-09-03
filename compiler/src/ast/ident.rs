@@ -86,7 +86,7 @@ impl Ident {
         &self.name
     }
 
-    pub fn ty(&self) -> Result<&Cow<TypeLayout>> {
+    pub fn ty(&self) -> Result<&Cow<'static, TypeLayout>> {
         if let Some(ref ty) = self.ty {
             Ok(ty)
         } else {

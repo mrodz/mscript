@@ -5,20 +5,26 @@ use anyhow::{Result, Context};
 use crate::{
     ast::{assignment::AssignmentFlag, new_err, Ident, Dependencies, Dependency, Compile, CompilationState, CompiledItem},
     parser::{Node, Parser, Rule},
-    VecErr,
+    VecErr, instruction,
 };
 
 use super::WalkForType;
 
 #[derive(Debug)]
 pub(crate) struct MemberVariable {
+    #[allow(unused)]
     flags: AssignmentFlag,
     ident: Ident,
 }
 
 impl Compile for MemberVariable {
-    fn compile(&self, _state: &CompilationState) -> Result<Vec<CompiledItem>, anyhow::Error> {
-        todo!()
+    fn compile(&self, _: &CompilationState) -> Result<Vec<CompiledItem>, anyhow::Error> {
+        let name = self.ident().name();
+        
+        Ok(vec![
+            instruction!(reserve_primitive),
+            instruction!(store name)
+        ])
     }
 }
 

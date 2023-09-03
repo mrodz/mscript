@@ -434,6 +434,12 @@ pub(crate) struct Index {
     final_output_type: TypeLayout,
 }
 
+impl Index {
+    pub fn final_output_type(&self) -> &TypeLayout {
+        &self.final_output_type
+    }
+}
+
 impl Dependencies for Index {
     fn dependencies(&self) -> Vec<super::Dependency> {
         self.parts

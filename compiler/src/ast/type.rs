@@ -2,6 +2,7 @@ use std::{borrow::Cow, fmt::Display, hash::Hash, sync::Arc};
 
 use crate::{
     ast::value::ValToUsize,
+    instruction,
     parser::{Node, Parser, Rule},
     scope::{ScopeReturnStatus, SuccessTypeSearchResult, TypeSearchResult},
     CompilationError,
@@ -10,11 +11,12 @@ use anyhow::{bail, Result};
 use pest::Span;
 
 use super::{
+    class::ClassType,
     function::FunctionType,
     list::{ListBound, ListType},
     map_err,
     math_expr::Op,
-    FunctionParameters, Value, class::ClassType,
+    CompiledItem, FunctionParameters, Value, Ident,
 };
 
 pub(crate) struct SupportedTypesWrapper(Box<[Cow<'static, TypeLayout>]>);
@@ -253,6 +255,18 @@ impl TypeLayout {
         };
 
         Some(f)
+    }
+
+    pub fn get_property_type<'a>(&'a self, property_name: &str) -> Option<&'a TypeLayout> {
+        match self {
+            Self::Class(class_type) => {
+                let ident = class_type.get_property(property_name)?;
+                let property_type: &'a Cow<'static, TypeLayout> = ident.ty().ok()?;
+
+                Some(&property_type)
+            }
+            _ => None,
+        }
     }
 
     pub fn can_be_used_as_list_index(&self) -> bool {

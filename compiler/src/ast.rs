@@ -4,6 +4,7 @@ mod boolean;
 mod callable;
 mod class;
 mod declaration;
+mod dot_lookup;
 mod function;
 mod function_arguments;
 mod function_body;

@@ -143,6 +143,21 @@ macro_rules! object {
     }};
 }
 
+/// Create a bytecode optional primitive
+#[macro_export]
+macro_rules! optional {
+    (empty) => {{
+        use $crate::BytecodePrimitive;
+
+        BytecodePrimitive::Optional(None)
+    }};
+    ($data:expr) => {{
+        use $crate::BytecodePrimitive;
+
+        BytecodePrimitive::Optional(Some(Box::new($data)))
+    }};
+}
+
 #[cfg(test)]
 mod test {
     use crate::{BytecodePrimitive, *};

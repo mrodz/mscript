@@ -54,6 +54,8 @@ primitive! {
     Vector(std::rc::Rc<Vec<crate::variables::Primitive>>),
     HeapPrimitive(*mut crate::variables::Primitive),
     Object(std::rc::Rc<crate::variables::Object>),
+    // Supports Lazy Allocation
+    Optional(Option<Box<crate::variables::Primitive>>),
 }
 
 impl Primitive {
@@ -256,6 +258,8 @@ impl Primitive {
             #[cfg(not(feature = "debug"))]
             HeapPrimitive(hp) => unsafe { write!(f, "&{}", **hp) },
             Object(o) => write!(f, "{o}"),
+            Optional(Some(primitive)) => write!(f, "{primitive}"),
+            Optional(None) => write!(f, "none"),
         }
     }
 }

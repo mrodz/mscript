@@ -36,7 +36,7 @@ impl Compile for Class {
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct ClassType {
+pub(crate) struct ClassType {
 	name: Arc<String>,
 	fields: Arc<[Ident]>,
 	id: usize,
@@ -47,8 +47,26 @@ impl ClassType {
 		&self.name
 	}
 
-	pub fn arced_name(&self) -> Arc<String> {
+	pub(crate) fn arced_name(&self) -> Arc<String> {
 		Arc::clone(&self.name)
+	}
+
+	pub fn fields(&self) -> &[Ident] {
+		&self.fields
+	}
+
+	pub(crate) fn arced_fields(&self) -> Arc<[Ident]> {
+		Arc::clone(&self.fields)
+	}
+
+	pub fn get_property<'a>(&'a self, name: &str) -> Option<&'a Ident> {
+		for field in self.fields.iter() {
+			if field.name() == name {
+				return Some(field);
+			}
+		}
+
+		None
 	}
 }
 

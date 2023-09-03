@@ -129,7 +129,7 @@ pub mod implementations {
     use super::*;
     use crate::context::SpecialScope;
     use crate::function::{PrimitiveFunction, ReturnValue};
-    use crate::rc_to_ref;
+    use crate::{rc_to_ref, optional};
     use crate::stack::VariableFlags;
     use crate::{bool, function, int, object, vector};
     use std::collections::HashMap;
@@ -705,6 +705,14 @@ pub mod implementations {
         stack_size(ctx=ctx) {
             let size = int!(ctx.frames_count().try_into()?);
             ctx.push(size);
+
+            Ok(())
+        }
+    }
+
+    instruction! {
+        reserve_primitive(ctx=ctx) {
+            ctx.push(optional!(empty));
 
             Ok(())
         }

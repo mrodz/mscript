@@ -105,7 +105,10 @@ assignment = { (assignment_flags ~ assignment_variant) | assignment_variant }
 
 reassignment_primary = _{ ident | "(" ~ reassignment_expr ~ ")" }
 
-dot_chain = { ("." ~ value)+ }
+dot_name_lookup = { ident }
+dot_function_call = { ident ~ callable }
+dot_chain_option = _{ dot_function_call | dot_name_lookup }
+dot_chain = { ("." ~ dot_chain_option)+ }
 
 reassignment_postfix = _{ list_index | dot_chain }
 reassignment_expr = { reassignment_primary ~ reassignment_postfix }

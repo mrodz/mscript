@@ -168,7 +168,7 @@ impl Scopes {
         })
     }
 
-    pub(crate) fn mark_should_return_as_completed(&self) {
+    pub(crate) fn mark_should_return_as_completed(&self) -> bool {
         let mut x = self.0.borrow_mut();
         x.last_mut().unwrap().mark_should_return_as_completed()
     }
@@ -245,8 +245,6 @@ impl Scopes {
     pub(crate) fn get_type_of_executing_class(&self) -> Option<Ref<ClassType>> {
         Ref::filter_map(self.0.borrow(), |scopes| {
             let second_to_last = &scopes[scopes.len() - 2];
-
-            dbg!(second_to_last);
 
             let ScopeType::Class(Some(ref class_type)) = second_to_last.ty else {
                 return None;
@@ -455,8 +453,8 @@ impl Scope {
         &mut self.ty
     }
 
-    pub fn mark_should_return_as_completed(&mut self) {
-        self.yields.mark_should_return_as_completed();
+    pub fn mark_should_return_as_completed(&mut self) -> bool {
+        self.yields.mark_should_return_as_completed().is_ok()
     }
 
     /// able to be improved
