@@ -1,12 +1,14 @@
-use std::{sync::Arc, borrow::Cow};
+use std::{borrow::Cow, sync::Arc};
 
 use anyhow::Result;
+use bytecode::compilation_bridge::id::RET;
 
 use crate::{
     ast::{
-        function::FunctionType, r#type::IntoType, Block, Dependencies, FunctionParameters,
-        TypeLayout, Ident,
+        function::FunctionType, r#type::IntoType, Block, CompilationState, Compile,
+        CompiledFunctionId, CompiledItem, Dependencies, FunctionParameters, Ident, TypeLayout,
     },
+    instruction,
     parser::{Node, Parser},
     scope::ScopeReturnStatus,
     VecErr,
@@ -18,6 +20,47 @@ use super::WalkForType;
 pub struct Constructor {
     parameters: FunctionParameters,
     body: Block,
+    path_str: Arc<String>,
+    class_name: Arc<String>,
+    class_id: usize,
+}
+
+impl Constructor {
+    pub fn symbolic_id(&self) -> String {
+        format!("{}_{}::$constructor", self.class_name, self.class_id)
+    }
+}
+
+impl Compile for Constructor {
+    fn compile(&self, state: &CompilationState) -> Result<Vec<CompiledItem>, anyhow::Error> {
+        let mut args = self.parameters.compile(state)?;
+        let mut body = self.body.compile(state)?;
+
+        if let Some(CompiledItem::Instruction { id: RET, .. }) = body.last() {
+            // nothing! the function returns by itself
+        } else {
+            body.push(instruction!(void));
+            body.push(instruction!(ret));
+        }
+
+        args.append(&mut body);
+
+        let id = CompiledFunctionId::Custom(self.symbolic_id());
+
+        let real_function = CompiledItem::Function {
+            content: Some(args),
+            location: self.path_str.clone(),
+            id: id.clone(),
+        };
+
+        state.push_function(real_function);
+
+        Ok(vec![CompiledItem::Function {
+            id,
+            content: None,
+            location: self.path_str.clone(),
+        }])
+    }
 }
 
 impl WalkForType for Constructor {
@@ -27,7 +70,11 @@ impl WalkForType for Constructor {
 
         let function_type = FunctionType::new(Arc::new(parameters), ScopeReturnStatus::Void);
 
-        let ident = Ident::new("$constructor".to_owned(), Some(Cow::Owned(TypeLayout::Function(function_type))), true);
+        let ident = Ident::new(
+            "$constructor".to_owned(),
+            Some(Cow::Owned(TypeLayout::Function(function_type))),
+            true,
+        );
 
         Ok(ident)
     }
@@ -56,11 +103,27 @@ impl Parser {
     pub fn constructor(input: Node) -> Result<Constructor, Vec<anyhow::Error>> {
         let mut children = input.children();
         let parameters = children.next().unwrap();
+
+        
+		// We need to keep the handle alive so that it is dropped at the end of this scope.
+		// Using "_" or not saving it as a variable causes the scope to pop instantly.
+        let _scope_handle = input.user_data().push_function(ScopeReturnStatus::Void);
+
         let parameters = Self::function_parameters(parameters, true).to_err_vec()?;
 
         let body = children.next().unwrap();
         let body = Self::block(body)?;
 
-        Ok(Constructor { parameters, body })
+        let class_type = input.user_data().get_type_of_executing_class().unwrap();
+
+        let path_str = input.user_data().get_file_name();
+
+        Ok(Constructor {
+            parameters,
+            body,
+            path_str,
+            class_name: class_type.arced_name(),
+            class_id: class_type.id,
+        })
     }
 }

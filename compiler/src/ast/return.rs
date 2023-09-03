@@ -39,10 +39,7 @@ impl Dependencies for ReturnStatement {
 impl Parser {
     pub fn return_statement(input: Node) -> Result<ReturnStatement, Vec<anyhow::Error>> {
         {
-            let mut expected_return_type = input.user_data().get_return_type_mut();
-            expected_return_type
-                .mark_should_return_as_completed()
-                .to_err_vec()?;
+            input.user_data().mark_should_return_as_completed();
         };
 
         let value_node = input.children().next();

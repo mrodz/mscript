@@ -104,7 +104,10 @@ assignment_variant = _{ assignment_no_type | assignment_type | assignment_unpack
 assignment = { (assignment_flags ~ assignment_variant) | assignment_variant }
 
 reassignment_primary = _{ ident | "(" ~ reassignment_expr ~ ")" }
-reassignment_postfix = _{ list_index }
+
+dot_chain = { ("." ~ value)+ }
+
+reassignment_postfix = _{ list_index | dot_chain }
 reassignment_expr = { reassignment_primary ~ reassignment_postfix }
 reassignment = { reassignment_expr ~ "=" ~ value }
 
@@ -140,7 +143,7 @@ class_body = { "{" ~ class_feature*  ~ "}" }
 
 class = { "class" ~ ident ~ class_body }
 
-declaration = { class | assignment | reassignment | print_statement | assertion | return_statement | continue_statement | break_statement | if_statement | while_loop | number_loop | math_expr }
+declaration = { class | reassignment | assignment | print_statement | assertion | return_statement | continue_statement | break_statement | if_statement | while_loop | number_loop | math_expr }
 
 file = {
     SOI ~

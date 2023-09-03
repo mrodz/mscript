@@ -1,6 +1,7 @@
 use std::{borrow::Cow, fmt::Display, hash::Hash, sync::Arc};
 
 use anyhow::{anyhow, Result};
+use bytecode::compilation_bridge::id::RET;
 
 use crate::{
     ast::new_err,
@@ -283,8 +284,6 @@ impl Compile for Function {
         }
 
         args.append(&mut body);
-
-        const RET: u8 = 0x12;
 
         let id = state.poll_function_id();
 

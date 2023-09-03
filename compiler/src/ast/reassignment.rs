@@ -18,11 +18,12 @@ use super::{
 
 pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
     use pest::pratt_parser::Op;
-    use Rule::*;
+    use Rule as R;
 
-    PrattParser::new().op(Op::postfix(list_index))
+    PrattParser::new().op(Op::postfix(R::list_index) | Op::postfix(R::dot_chain))
 });
 
+#[allow(unused)]
 #[derive(Debug)]
 pub(crate) enum ReassignmentPath {
     Ident(Ident),
@@ -31,6 +32,10 @@ pub(crate) enum ReassignmentPath {
         lhs: Box<ReassignmentPath>,
         index: Index,
     },
+    DotLookup {
+        lhs: Box<ReassignmentPath>,
+        dot_lookup: ()
+    }
 }
 
 impl Compile for ReassignmentPath {
@@ -43,6 +48,7 @@ impl Compile for ReassignmentPath {
                 result.append(&mut index.compile(state)?);
                 Ok(result)
             }
+            ReassignmentPath::DotLookup { .. } => todo!(),
         }
     }
 }
@@ -56,6 +62,7 @@ impl IntoType for ReassignmentPath {
             Self::ReferenceToSelf(None) => {
                 bail!("`self` does not have a writable type in this context")
             }
+            Self::DotLookup { .. } => todo!()
         }
     }
 }
@@ -141,6 +148,9 @@ fn parse_path(
                     lhs: Box::new(lhs),
                     index,
                 })
+            }
+            Rule::dot_chain => {
+                Ok(ReassignmentPath::DotLookup { lhs: Box::new(lhs?), dot_lookup: () })
             }
             other => unimplemented!("{other:?}"),
         })

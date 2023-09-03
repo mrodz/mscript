@@ -251,14 +251,14 @@ impl Display for ListType {
 
 impl PartialEq for ListType {
     fn eq(&self, other: &Self) -> bool {
-        use ListType::*;
+        use ListType as E;
 
         match (self, other) {
-            (Empty, Empty) => true,
-            (Empty, _) | (_, Empty) => false,
-            (Mixed(t1), Mixed(t2)) => t1 == t2,
+            (E::Empty, E::Empty) => true,
+            (E::Empty, _) | (_, E::Empty) => false,
+            (E::Mixed(t1), E::Mixed(t2)) => t1 == t2,
             (
-                Open {
+                E::Open {
                     types,
                     spread,
                     len_at_init,
@@ -267,13 +267,13 @@ impl PartialEq for ListType {
             )
             | (
                 other,
-                Open {
+                E::Open {
                     types,
                     spread,
                     len_at_init,
                 },
             ) => match other {
-                Open {
+                E::Open {
                     types: t2,
                     spread: s2,
                     len_at_init: len_at_init2,
@@ -310,7 +310,7 @@ impl PartialEq for ListType {
 
                     lhs_all_the_same && rhs_all_the_same
                 }
-                Mixed(t2) => {
+                E::Mixed(t2) => {
                     if let Some(len) = len_at_init {
                         if *len != t2.len() {
                             return false;

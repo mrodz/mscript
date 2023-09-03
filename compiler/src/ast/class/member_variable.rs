@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use anyhow::{Result, Context};
 
 use crate::{
-    ast::{assignment::AssignmentFlag, new_err, Ident, Dependencies, Dependency},
+    ast::{assignment::AssignmentFlag, new_err, Ident, Dependencies, Dependency, Compile, CompilationState, CompiledItem},
     parser::{Node, Parser, Rule},
     VecErr,
 };
@@ -14,6 +14,12 @@ use super::WalkForType;
 pub(crate) struct MemberVariable {
     flags: AssignmentFlag,
     ident: Ident,
+}
+
+impl Compile for MemberVariable {
+    fn compile(&self, _state: &CompilationState) -> Result<Vec<CompiledItem>, anyhow::Error> {
+        todo!()
+    }
 }
 
 impl WalkForType for MemberVariable {
@@ -34,7 +40,7 @@ impl WalkForType for MemberVariable {
 
         let ty = Parser::r#type(ty_node)?;
 
-        ident.link_force_no_inherit(input.user_data(), ty);
+        ident.link_force_no_inherit(input.user_data(), ty)?;
 
         Ok(ident)
     }

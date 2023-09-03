@@ -13,7 +13,7 @@ pub(crate) use constructor::Constructor;
 pub(crate) use member_function::MemberFunction;
 pub(crate) use member_variable::MemberVariable;
 
-use crate::{parser::{Parser, Node, Rule}, VecErr, ast::TypeLayout};
+use crate::{parser::{Parser, Node}, VecErr, ast::TypeLayout};
 
 use super::{Dependencies, Ident, Dependency, r#type::IntoType, Compile};
 
@@ -29,7 +29,9 @@ pub struct Class {
 
 impl Compile for Class {
 	fn compile(&self, state: &super::CompilationState) -> Result<Vec<super::CompiledItem>, anyhow::Error> {
-		todo!()
+		let mut _body_compiled = self.body.compile(state);
+
+		todo!();
 	}
 }
 
@@ -37,23 +39,34 @@ impl Compile for Class {
 pub struct ClassType {
 	name: Arc<String>,
 	fields: Arc<[Ident]>,
+	id: usize,
 }
 
 impl ClassType {
 	pub fn name(&self) -> &str {
 		&self.name
 	}
+
+	pub fn arced_name(&self) -> Arc<String> {
+		Arc::clone(&self.name)
+	}
 }
 
 impl Display for ClassType {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		let mut builder = f.debug_struct(&("class ".to_owned() + &self.name));
+		write!(f, "class {} {{ ", self.name())?;
 
-		for field in self.fields.iter() {
-			builder.field(&field.name(), field.ty().unwrap());
+		let mut fields = self.fields.iter();
+
+		if let Some(field) = fields.next() {
+			write!(f, "{}", field)?;
 		}
 
-		builder.finish()
+		for field in fields {
+			write!(f, ", {field}")?;
+		}
+
+		write!(f, " }}")
 	}
 }
 
@@ -83,13 +96,14 @@ impl Parser {
 
 		let body_node = children.next().unwrap();
 
-		let class_scope = input.user_data().push_class_unknown_self();
+		let _class_scope = input.user_data().push_class_unknown_self();
 
 		let fields = ClassBody::get_members(&body_node).to_err_vec()?;
 
 		let class_type = ClassType {
 			fields,
-			name: Arc::new(ident.name().to_owned())
+			name: Arc::new(ident.name().to_owned()),
+			id: input.user_data().request_class_id()
 		};
 
 		ident.link_force_no_inherit(input.user_data(), Cow::Owned(TypeLayout::Class(class_type.clone()))).to_err_vec()?;

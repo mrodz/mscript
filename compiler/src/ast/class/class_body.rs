@@ -3,7 +3,7 @@ use std::{borrow::Cow, sync::Arc};
 use anyhow::Result;
 
 use crate::{
-    ast::{get_net_dependencies, new_err, r#type::IntoType, Dependencies, Dependency, Ident, class::WalkForType},
+    ast::{get_net_dependencies, new_err, r#type::IntoType, Dependencies, Dependency, Ident, class::WalkForType, Compile, CompilationState, CompiledItem},
     parser::{Node, Parser, Rule},
 };
 
@@ -12,13 +12,25 @@ use super::class_feature::ClassFeature;
 #[derive(Debug)]
 pub(crate) struct ClassBody(Vec<ClassFeature>);
 
+impl Compile for ClassBody {
+    fn compile(&self, state: &CompilationState) -> Result<Vec<CompiledItem>, anyhow::Error> {
+        let mut result = vec![];
+
+        for feature in &self.0 {
+            result.append(&mut feature.compile(state)?);
+        }
+
+        Ok(result)
+    }
+}
+
 impl ClassBody {
     pub fn new(features: Vec<ClassFeature>) -> Self {
         Self(features)
     }
 
     pub fn get_members(input: &Node) -> Result<Arc<[Ident]>> {
-        let mut features = input.children();
+        let features = input.children();
 
         let mut fields = vec![];
 
@@ -30,6 +42,7 @@ impl ClassBody {
         Ok(fields.into())
     }
 
+    #[allow(unused)]
     pub fn into_idents(&self) -> Vec<Ident> {
         use ClassFeature as CF;
         let mut result = vec![];

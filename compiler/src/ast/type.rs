@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt::{Display, write}, hash::Hash, sync::Arc};
+use std::{borrow::Cow, fmt::Display, hash::Hash, sync::Arc};
 
 use crate::{
     ast::value::ValToUsize,
@@ -148,8 +148,14 @@ pub enum NativeType {
 
 impl Display for NativeType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let name = format!("{self:?}").to_ascii_lowercase();
-        write!(f, "{name}")
+        match self {
+            Self::Str(..) => write!(f, "str"),
+            Self::Bool => write!(f, "bool"),
+            Self::Int => write!(f, "int"),
+            Self::BigInt => write!(f, "bigint"),
+            Self::Float => write!(f, "float"),
+            Self::Byte => write!(f, "byte"),
+        }
     }
 }
 

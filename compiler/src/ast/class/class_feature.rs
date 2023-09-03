@@ -1,8 +1,6 @@
-use std::borrow::Cow;
-
 use anyhow::Result;
 
-use crate::{ast::{Dependencies, r#type::IntoType, TypeLayout, Ident}, parser::{Node, Rule}};
+use crate::{ast::{Dependencies, Ident, Compile, CompilationState, CompiledItem}, parser::{Node, Rule}};
 
 use super::{Constructor, MemberFunction, MemberVariable, WalkForType};
 
@@ -11,6 +9,16 @@ pub(crate) enum ClassFeature {
 	Constructor(Constructor),
 	Function(MemberFunction),
 	Variable(MemberVariable),
+}
+
+impl Compile for ClassFeature {
+	fn compile(&self, state: &CompilationState) -> Result<Vec<CompiledItem>, anyhow::Error> {
+		match self {
+			Self::Constructor(x) => x.compile(state),
+			Self::Function(x) => x.compile(state),
+			Self::Variable(x) => x.compile(state),
+		}
+	}
 }
 
 impl WalkForType for ClassFeature {

@@ -73,7 +73,7 @@ pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
         .op(Op::infix(add, Left) | Op::infix(subtract, Left))
         .op(Op::infix(multiply, Left) | Op::infix(divide, Left) | Op::infix(modulo, Left))
         .op(Op::prefix(unary_minus))
-        .op(Op::postfix(list_index) | Op::postfix(callable))
+        .op(Op::postfix(list_index) | Op::postfix(callable) | Op::postfix(dot_chain))
 });
 
 #[derive(Debug, Clone, PartialEq)]

@@ -168,10 +168,24 @@ impl Scopes {
         })
     }
 
-    pub(crate) fn last_mut(&self) -> RefMut<Scope> {
-        RefMut::map(self.0.borrow_mut(), |scopes| {
-            scopes.last_mut().expect("scopes was empty")
-        })
+    pub(crate) fn mark_should_return_as_completed(&self) {
+        let mut x = self.0.borrow_mut();
+        x.last_mut().unwrap().mark_should_return_as_completed()
+    }
+
+    pub(crate) fn set_self_type_of_class(&self, new_class_type: ClassType) {
+        let mut x = self.0.borrow_mut();
+
+        let last = x.last_mut().unwrap();
+
+        assert!(last.is_class());
+
+        let ScopeType::Class(ref mut class_type) = last.ty else {
+            unreachable!()
+        };
+
+        *class_type = Some(new_class_type);
+    
     }
 
     /// Returns the depth at which the stack is expected to be once the added frame is cleaned up.
@@ -189,12 +203,14 @@ impl Scopes {
     }
 
     pub(crate) fn add_variable(&self, dependency: &Ident) {
-        self.last_mut().add_dependency(dependency);
+        let mut x = self.0.borrow_mut();
+        x.last_mut().unwrap().add_dependency(dependency);
     }
 
-    #[allow(unused)]
     pub(crate) fn add_type(&self, name: Box<str>, ty: TypeLayout) {
-        self.last_mut().add_type(name, ty);
+        let mut x = self.0.borrow_mut();
+
+        x.last_mut().unwrap().add_type(name, ty);
     }
 
     pub(crate) fn get_type_from_str(&self, str: &str) -> TypeSearchResult {
@@ -224,6 +240,20 @@ impl Scopes {
         }
 
         TypeSearchResult::NotFound
+    }
+
+    pub(crate) fn get_type_of_executing_class(&self) -> Option<Ref<ClassType>> {
+        Ref::filter_map(self.0.borrow(), |scopes| {
+            let second_to_last = &scopes[scopes.len() - 2];
+
+            dbg!(second_to_last);
+
+            let ScopeType::Class(Some(ref class_type)) = second_to_last.ty else {
+                return None;
+            };
+    
+            Some(class_type)
+        }).ok()
     }
 }
 
@@ -425,9 +455,9 @@ impl Scope {
         &mut self.ty
     }
 
-    // pub fn ty_ref_mut(&mut self) -> &mut ScopeType {
-    //     &mut self.ty
-    // }
+    pub fn mark_should_return_as_completed(&mut self) {
+        self.yields.mark_should_return_as_completed();
+    }
 
     /// able to be improved
     pub fn contains(&self, dependency: &String) -> Option<&Ident> {
