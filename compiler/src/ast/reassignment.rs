@@ -35,7 +35,7 @@ pub(crate) enum ReassignmentPath {
     DotLookup {
         lhs: Box<ReassignmentPath>,
         dot_chain: DotChain,
-        expected_type: TypeLayout
+        expected_type: TypeLayout,
     },
 }
 
@@ -43,13 +43,18 @@ impl Compile for ReassignmentPath {
     fn compile(&self, state: &CompilationState) -> Result<Vec<super::CompiledItem>, anyhow::Error> {
         match self {
             ReassignmentPath::Ident(ident) => ident.compile(state),
-            ReassignmentPath::ReferenceToSelf(_) => unimplemented!(),
+            ReassignmentPath::ReferenceToSelf(_) => Ok(vec![instruction!(load_fast "self")]),
             ReassignmentPath::Index { lhs, index } => {
                 let mut result = lhs.compile(state)?;
                 result.append(&mut index.compile(state)?);
                 Ok(result)
             }
-            ReassignmentPath::DotLookup { lhs, dot_chain, expected_type } => todo!(),
+            ReassignmentPath::DotLookup { lhs, dot_chain, .. } => {
+                let mut result = lhs.compile(state)?;
+
+                result.append(&mut dot_chain.compile(state)?);
+                Ok(result)
+            }
         }
     }
 }
@@ -87,7 +92,7 @@ impl Compile for Reassignment {
 
         result.append(&mut vec![
             instruction!(load_fast val_register),
-            instruction!(vec_mut),
+            instruction!(ptr_mut),
             instruction!(delete_name_scoped val_register),
         ]);
 
@@ -161,6 +166,7 @@ fn parse_path(
                 let lhs = lhs?;
 
                 let lhs_ty = lhs.for_type().to_err_vec()?;
+                let lhs_ty = lhs_ty.assume_type_of_self(&user_data);
 
                 let (dot_chain, expected_type) = Parser::dot_chain(
                     Node::new_with_user_data(op, Rc::clone(&user_data)),
@@ -215,7 +221,11 @@ impl Parser {
         let expected_ty = path.expected_type();
 
         if &value_ty != expected_ty {
-            return Err(vec![new_err(path_span, &input.user_data().get_source_file_name(), format!("type mismatch: cannot assign `{value_ty}` to `{expected_ty}`"))])
+            return Err(vec![new_err(
+                path_span,
+                &input.user_data().get_source_file_name(),
+                format!("type mismatch: cannot assign `{value_ty}` to `{expected_ty}`"),
+            )]);
         }
 
         Ok(Reassignment { path, value })

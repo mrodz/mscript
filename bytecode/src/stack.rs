@@ -19,7 +19,7 @@ pub(crate) mod flag_constants {
 }
 
 #[derive(PartialEq, Clone)]
-pub struct VariableFlags(u8);
+pub struct VariableFlags(pub(crate) u8);
 
 impl VariableFlags {
     #[inline(always)]
@@ -109,6 +109,10 @@ impl From<HashMap<String, Rc<(Primitive, VariableFlags)>>> for VariableMapping {
 impl VariableMapping {
     pub fn get(&self, key: &str) -> Option<Rc<(Primitive, VariableFlags)>> {
         self.0.get(key).cloned()
+    }
+
+    pub fn contains(&self, key: &str) -> bool {
+        self.0.contains_key(key)
     }
 
     /// Update the value of a variable that has already been registered.

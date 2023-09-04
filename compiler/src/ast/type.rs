@@ -2,8 +2,7 @@ use std::{borrow::Cow, fmt::Display, hash::Hash, sync::Arc};
 
 use crate::{
     ast::value::ValToUsize,
-    instruction,
-    parser::{Node, Parser, Rule},
+    parser::{AssocFileData, Node, Parser, Rule},
     scope::{ScopeReturnStatus, SuccessTypeSearchResult, TypeSearchResult},
     CompilationError,
 };
@@ -16,7 +15,7 @@ use super::{
     list::{ListBound, ListType},
     map_err,
     math_expr::Op,
-    CompiledItem, FunctionParameters, Value, Ident,
+    FunctionParameters, Value,
 };
 
 pub(crate) struct SupportedTypesWrapper(Box<[Cow<'static, TypeLayout>]>);
@@ -171,6 +170,7 @@ pub(crate) enum TypeLayout {
     ValidIndexes(ListBound, ListBound),
     Class(ClassType),
     ClassSelf,
+    Void,
 }
 
 impl Display for TypeLayout {
@@ -183,6 +183,7 @@ impl Display for TypeLayout {
             Self::ValidIndexes(lower, upper) => write!(f, "B({lower}..{upper})"),
             Self::Class(class_type) => write!(f, "{class_type}"),
             Self::ClassSelf => write!(f, "self"),
+            Self::Void => write!(f, "void"),
         }
     }
 }
@@ -237,6 +238,24 @@ impl TypeLayout {
         }
     }
 
+    pub fn owned_is_function(self) -> Option<FunctionType> {
+        let me = self.get_owned_type_recursively();
+
+        let TypeLayout::Function(f) = me else {
+            return None;
+        };
+
+        Some(f)
+    }
+
+    pub fn assume_type_of_self(self, user_data: &AssocFileData) -> TypeLayout {
+        if matches!(self, TypeLayout::ClassSelf) {
+            TypeLayout::Class(user_data.get_type_of_executing_class().unwrap().clone())
+        } else {
+            self
+        }
+    }
+
     pub fn is_function(&self) -> Option<&FunctionType> {
         let me = self.get_type_recursively();
 
@@ -248,13 +267,33 @@ impl TypeLayout {
     }
 
     pub fn get_function(self) -> Option<FunctionType> {
-        let me = self.get_owned_type_recursively();
+        match self.get_owned_type_recursively() {
+            TypeLayout::Function(f) => Some(f),
+            TypeLayout::Class(class_ty) => {
+                let constructor = class_ty.constructor();
 
-        let TypeLayout::Function(f) = me else {
-            return None;
-        };
+                Some(FunctionType::new(
+                    constructor.arced_parameters(),
+                    ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Class(class_ty))),
+                ))
 
-        Some(f)
+                // let params = constructor.parameters().clone();
+                // let return_type = constructor.return_type();
+
+                // let types = params.to_types();
+
+                // let no_self = types.get(1..).unwrap_or(&[]);
+
+                // let params = FunctionParameters::TypesOnly(no_self.into());
+                // let params = Arc::new(params);
+
+                // let return_type = return_type.clone();
+
+                // todo!();
+                // Some(FunctionType::new(params, return_type))
+            }
+            _ => None,
+        }
     }
 
     pub fn get_property_type<'a>(&'a self, property_name: &str) -> Option<&'a TypeLayout> {
@@ -263,10 +302,65 @@ impl TypeLayout {
                 let ident = class_type.get_property(property_name)?;
                 let property_type: &'a Cow<'static, TypeLayout> = ident.ty().ok()?;
 
-                Some(&property_type)
+                Some(property_type)
             }
             _ => None,
         }
+    }
+
+    pub fn get_addressable_properties(&self) -> Vec<String> {
+        match self {
+            Self::Class(class_type) => {
+                let fields = class_type.arced_fields();
+                let fields = fields.iter();
+
+                let mut result = vec![];
+
+                // let fields = fields.map(|x| x.).collect();
+
+                for field in fields {
+                    result.push(field.name().clone());
+                }
+
+                result
+
+                // fields
+            }
+            _ => vec![],
+        }
+    }
+
+    pub fn get_property_hint_from_input_no_lookup(&self) -> String {
+        let visible_properties = self.get_addressable_properties();
+
+        let mut property_iter = visible_properties.iter();
+
+        let mut result = String::new();
+
+        if let Some(first) = property_iter.next() {
+            result.push_str(first);
+        }
+
+        const LIMIT: usize = 7;
+
+        let mut remaining = 0;
+
+        for (idx, property) in property_iter.enumerate() {
+            if idx > LIMIT {
+                remaining += 1;
+                continue;
+            }
+            result.push_str(", ");
+            result.push_str(property);
+        }
+
+        let remaining_message = if remaining != 0 {
+            Cow::Owned(format!(" (+{remaining} remaining)"))
+        } else {
+            Cow::Borrowed("")
+        };
+
+        format!(" Available properties: {result}{remaining_message}")
     }
 
     pub fn can_be_used_as_list_index(&self) -> bool {

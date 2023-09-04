@@ -1,32 +1,48 @@
-use std::{borrow::Cow, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::Result;
 
 use crate::{
-    ast::{get_net_dependencies, new_err, r#type::IntoType, Dependencies, Dependency, Ident, class::WalkForType, Compile, CompilationState, CompiledItem},
+    ast::{
+        class::WalkForType, get_net_dependencies, new_err, CompilationState, Compile, CompiledItem,
+        Dependencies, Dependency, Ident,
+    },
+    instruction,
     parser::{Node, Parser, Rule},
 };
 
-use super::class_feature::ClassFeature;
+use super::{class_feature::ClassFeature, Constructor};
 
 #[derive(Debug)]
-pub(crate) struct ClassBody(Vec<ClassFeature>);
+pub(crate) struct ClassBody {
+    features: Vec<ClassFeature>,
+    constructor: Option<Constructor>,
+}
 
 impl Compile for ClassBody {
     fn compile(&self, state: &CompilationState) -> Result<Vec<CompiledItem>, anyhow::Error> {
         let mut result = vec![];
 
-        for feature in &self.0 {
+        for feature in &self.features {
             result.append(&mut feature.compile(state)?);
         }
+
+        if let Some(ref constructor) = self.constructor {
+            result.append(&mut constructor.compile(state)?);
+        }
+
+        result.push(instruction!(ret));
 
         Ok(result)
     }
 }
 
 impl ClassBody {
-    pub fn new(features: Vec<ClassFeature>) -> Self {
-        Self(features)
+    pub fn new(features: Vec<ClassFeature>, constructor: Option<Constructor>) -> Self {
+        Self {
+            features,
+            constructor,
+        }
     }
 
     pub fn get_members(input: &Node) -> Result<Arc<[Ident]>> {
@@ -41,41 +57,30 @@ impl ClassBody {
 
         Ok(fields.into())
     }
-
-    #[allow(unused)]
-    pub fn into_idents(&self) -> Vec<Ident> {
-        use ClassFeature as CF;
-        let mut result = vec![];
-
-        for feature in &self.0 {
-            match feature {
-                CF::Constructor(constructor) => {
-                    let constructor_type = constructor.for_type().unwrap();
-
-                    let ident = Ident::new(
-                        "$constructor".to_owned(),
-                        Some(Cow::Owned(constructor_type)),
-                        true,
-                    );
-
-					result.push(ident);
-                }
-				CF::Function(function) => result.push(function.ident().to_owned()),
-				CF::Variable(variable) => result.push(variable.ident().to_owned()),
-            }
-        }
-
-		result
-    }
 }
 
 impl Dependencies for ClassBody {
     fn supplies(&self) -> Vec<Dependency> {
-        self.0.iter().flat_map(|x| x.supplies()).collect()
+        let mut features_sup: Vec<Dependency> =
+            self.features.iter().flat_map(|x| x.supplies()).collect();
+
+        if let Some(ref constructor) = self.constructor {
+            features_sup.append(&mut constructor.supplies());
+        }
+
+        features_sup
     }
 
     fn dependencies(&self) -> Vec<Dependency> {
-        let block_dependencies = self.0.iter().flat_map(|x| x.net_dependencies()).collect();
+        let mut block_dependencies: Vec<Dependency> = self
+            .features
+            .iter()
+            .flat_map(|x| x.net_dependencies())
+            .collect();
+
+        if let Some(ref constructor) = self.constructor {
+            block_dependencies.append(&mut constructor.net_dependencies());
+        }
 
         block_dependencies
     }
@@ -89,7 +94,7 @@ impl Parser {
     pub fn class_body(input: Node) -> Result<ClassBody, Vec<anyhow::Error>> {
         let class_features_node = input.children();
 
-        let mut has_constructor = false;
+        let mut constructor: Option<Constructor> = None;
 
         let mut class_features = vec![];
 
@@ -97,9 +102,7 @@ impl Parser {
             use ClassFeature as CF;
             match feature_node.as_rule() {
                 Rule::class_constructor => {
-                    if !has_constructor {
-                        has_constructor = true;
-                    } else {
+                    if constructor.is_some() {
                         return Err(vec![new_err(
                             feature_node.as_span(),
                             &input.user_data().get_file_name(),
@@ -107,7 +110,9 @@ impl Parser {
                         )]);
                     }
 
-                    class_features.push(CF::Constructor(Self::constructor(feature_node)?));
+                    constructor = Some(Self::constructor(feature_node)?);
+
+                    // class_features.push(CF::Constructor());
                 }
                 Rule::class_bound_function => {
                     class_features.push(CF::Function(Self::class_bound_function(feature_node)?));
@@ -119,6 +124,6 @@ impl Parser {
             }
         }
 
-        Ok(ClassBody::new(class_features))
+        Ok(ClassBody::new(class_features, constructor))
     }
 }

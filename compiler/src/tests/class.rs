@@ -1,4 +1,10 @@
-class Person {
+use crate::eval;
+
+#[test]
+fn person_class() {
+    eval(
+        r#"
+		class Person {
 			first_name: str
 			last_name: str
 			age: int
@@ -25,4 +31,7 @@ class Person {
 		assert me.age == 17
 	
 		assert me.full_name() == "Mateo Rodriguez"
-	
+	"#,
+    )
+    .unwrap()
+}

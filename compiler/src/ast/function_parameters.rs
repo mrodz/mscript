@@ -30,7 +30,7 @@ impl FunctionParameters {
         }
     }
 
-    pub fn to_types(&self) -> Cow<Vec<Cow<TypeLayout>>> {
+    pub fn to_types(&self) -> Cow<'_, Vec<Cow<'static, TypeLayout>>> {
         match self {
             FunctionParameters::Named(names) => {
                 Cow::Owned(names.iter().map(|x| x.ty().unwrap().clone()).collect())

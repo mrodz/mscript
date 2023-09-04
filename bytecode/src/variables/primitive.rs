@@ -1,9 +1,9 @@
 //! The interpreter's primitive datatypes.
 //! Every "value" in the interpreter is a primitive.
 
-use crate::{bigint, bool, byte, float, int, string};
+use crate::{bigint, bool, byte, float, int, rc_to_ref, stack::VariableFlags, string};
 use anyhow::{bail, Result};
-use std::fmt::Display;
+use std::{fmt::Display, rc::Rc};
 
 /// This macro allows easy recursion over variants.
 macro_rules! primitive {
@@ -50,7 +50,8 @@ primitive! {
     BigInt(i128),
     Float(f64),
     Byte(u8),
-    Function(std::rc::Rc<crate::function::PrimitiveFunction>),
+    // We don't need reference counting because cloning a primitive function is cheap
+    Function(crate::function::PrimitiveFunction),
     Vector(std::rc::Rc<Vec<crate::variables::Primitive>>),
     HeapPrimitive(*mut crate::variables::Primitive),
     Object(std::rc::Rc<crate::variables::Object>),
@@ -127,6 +128,17 @@ impl Primitive {
             unsafe { (*primitive).clone() }
         } else {
             self
+        }
+    }
+
+    pub fn lookup(&self, property: &str) -> Option<Rc<(Primitive, VariableFlags)>> {
+        use Primitive as P;
+        match self {
+            P::Object(obj) => {
+                let property = rc_to_ref(obj).get_property(property, true)?;
+                Some(property)
+            }
+            _ => None,
         }
     }
 

@@ -15,7 +15,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context, Result};
-use ast::{map_err, CompilationState, Compile, new_err};
+use ast::{map_err, new_err, CompilationState, Compile};
 use bytecode::compilation_bridge::{Instruction, MScriptFile, MScriptFileBuilder};
 use bytecode::Program;
 use indicatif::{MultiProgress, ProgressBar, ProgressFinish, ProgressStyle};
@@ -34,12 +34,31 @@ struct VerboseLogger {
 pub(crate) trait CompilationError {
     type Output;
     fn details(self, span: Span, file_name: &str, message: impl Into<String>) -> Self::Output;
+    fn details_lazy_message(
+        self,
+        span: Span,
+        file_name: &str,
+        message: impl Fn() -> String,
+    ) -> Self::Output;
 }
 
 impl<T> CompilationError for Result<T> {
     type Output = Self;
     fn details(self, span: Span, file_name: &str, message: impl Into<String>) -> Self::Output {
         map_err(self, span, file_name, message.into())
+    }
+
+    fn details_lazy_message(
+        self,
+        span: Span,
+        file_name: &str,
+        message: impl Fn() -> String,
+    ) -> Self::Output {
+        if self.is_err() {
+            self.details(span, file_name, message())
+        } else {
+            self
+        }
     }
 }
 
@@ -51,6 +70,19 @@ impl<T> CompilationError for Option<T> {
         }
 
         Err(new_err(span, file_name, message.into()))
+    }
+
+    fn details_lazy_message(
+        self,
+        span: Span,
+        file_name: &str,
+        message: impl Fn() -> String,
+    ) -> Self::Output {
+        if let Some(x) = self {
+            Ok(x)
+        } else {
+            self.details(span, file_name, message())
+        }
     }
 }
 

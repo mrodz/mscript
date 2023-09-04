@@ -5,7 +5,10 @@ use crate::instruction;
 use super::{CompilationState, Compile, CompiledItem, FunctionArguments, TemporaryRegister};
 
 enum CallableDestination {
-    Standard { load_instruction: CompiledItem },
+    Standard {
+        load_instruction: CompiledItem,
+        self_register: Option<String>,
+    },
     ToSelf,
 }
 
@@ -22,9 +25,16 @@ impl<'a> Callable<'a> {
         }
     }
 
-    pub fn new(arguments: &'a FunctionArguments, load_instruction: CompiledItem) -> Self {
+    pub fn new(
+        arguments: &'a FunctionArguments,
+        load_instruction: CompiledItem,
+        self_register: Option<String>,
+    ) -> Self {
         Self {
-            destination: CallableDestination::Standard { load_instruction },
+            destination: CallableDestination::Standard {
+                load_instruction,
+                self_register,
+            },
             function_arguments: arguments,
         }
     }
@@ -68,12 +78,16 @@ impl Compile for Callable<'_> {
             state.free_many_temporary_registers(register_count);
         }
 
-        let CallableDestination::Standard { load_instruction } = &self.destination else {
+        let CallableDestination::Standard { load_instruction, self_register } = &self.destination else {
             // let CallableDestination::ToSelf { return_type }
             args_init.push(instruction!(call_self));
 
             return Ok(args_init);
         };
+
+        if let Some(name) = self_register {
+            args_init.insert(0, instruction!(load_fast name));
+        }
 
         // let func_name = ident.name();
 

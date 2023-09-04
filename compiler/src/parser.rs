@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::cell::{Ref, RefMut};
+use std::cell::Ref;
 use std::rc::Rc;
 use std::sync::{Arc, RwLock};
 
@@ -7,8 +7,8 @@ use anyhow::{anyhow, bail, Result};
 use pest_consume::Parser as ParserDerive;
 
 use crate::ast::{
-    CompilationState, Compile, CompiledFunctionId, CompiledItem, Declaration, Dependencies,
-    FunctionParameters, Ident, TypeLayout, ClassType,
+    ClassType, CompilationState, Compile, CompiledFunctionId, CompiledItem, Declaration,
+    Dependencies, FunctionParameters, Ident, TypeLayout,
 };
 use crate::instruction;
 use crate::scope::{

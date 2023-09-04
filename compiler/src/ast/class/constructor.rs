@@ -1,7 +1,7 @@
 use std::{borrow::Cow, sync::Arc};
 
 use anyhow::Result;
-use bytecode::compilation_bridge::id::RET;
+use bytecode::compilation_bridge::id::{MAKE_FUNCTION, RET};
 
 use crate::{
     ast::{
@@ -55,11 +55,47 @@ impl Compile for Constructor {
 
         state.push_function(real_function);
 
-        Ok(vec![CompiledItem::Function {
-            id,
-            content: None,
-            location: self.path_str.clone(),
-        }])
+        let dependencies = self.net_dependencies();
+
+        let mut arguments = Vec::with_capacity(dependencies.len() + 1);
+
+        let x = self.path_str.replace('\\', "/");
+
+        arguments.push(format!("{x}#{id}"));
+
+        for dependency in dependencies {
+            arguments.push(dependency.name().clone());
+        }
+
+        let arguments = arguments.into_boxed_slice();
+
+        let make_function_instruction = CompiledItem::Instruction {
+            id: MAKE_FUNCTION,
+            arguments,
+        };
+
+        let constructor_register = state.poll_temporary_register();
+        let obj_register = state.poll_temporary_register();
+        let mut result = vec![
+            instruction!(make_object),
+            instruction!(store_fast obj_register),
+            make_function_instruction,
+            instruction!(store_fast constructor_register),
+            instruction!(load_fast obj_register),
+        ];
+
+        for i in 0..self.parameters.len() - 1 {
+            result.push(instruction!(arg i))
+        }
+
+        result.extend_from_slice(&[
+            instruction!(load_fast constructor_register),
+            instruction!(call),
+            instruction!(delete_name_scoped constructor_register),
+            instruction!(load_fast obj_register),
+        ]);
+
+        Ok(result)
     }
 }
 
@@ -104,9 +140,8 @@ impl Parser {
         let mut children = input.children();
         let parameters = children.next().unwrap();
 
-        
-		// We need to keep the handle alive so that it is dropped at the end of this scope.
-		// Using "_" or not saving it as a variable causes the scope to pop instantly.
+        // We need to keep the handle alive so that it is dropped at the end of this scope.
+        // Using "_" or not saving it as a variable causes the scope to pop instantly.
         let _scope_handle = input.user_data().push_function(ScopeReturnStatus::Void);
 
         let parameters = Self::function_parameters(parameters, true).to_err_vec()?;

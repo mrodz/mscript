@@ -1,11 +1,15 @@
 use std::borrow::Cow;
 
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 
 use crate::{
-    ast::{assignment::AssignmentFlag, new_err, Ident, Dependencies, Dependency, Compile, CompilationState, CompiledItem},
+    ast::{
+        assignment::AssignmentFlag, new_err, CompilationState, Compile, CompiledItem, Dependencies,
+        Dependency, Ident,
+    },
+    instruction,
     parser::{Node, Parser, Rule},
-    VecErr, instruction,
+    VecErr,
 };
 
 use super::WalkForType;
@@ -20,10 +24,10 @@ pub(crate) struct MemberVariable {
 impl Compile for MemberVariable {
     fn compile(&self, _: &CompilationState) -> Result<Vec<CompiledItem>, anyhow::Error> {
         let name = self.ident().name();
-        
+
         Ok(vec![
             instruction!(reserve_primitive),
-            instruction!(store name)
+            instruction!(store_fast name),
         ])
     }
 }
@@ -34,7 +38,7 @@ impl WalkForType for MemberVariable {
 
         let maybe_ident = children.next().unwrap();
 
-        let ident_node = if maybe_ident.as_rule() == Rule::ident  {
+        let ident_node = if maybe_ident.as_rule() == Rule::ident {
             maybe_ident
         } else {
             children.next().unwrap()
@@ -59,9 +63,9 @@ impl MemberVariable {
 }
 
 impl Dependencies for MemberVariable {
-	fn supplies(&self) -> Vec<crate::ast::Dependency> {
-		vec![Dependency::new(Cow::Borrowed(&self.ident))]
-	}
+    fn supplies(&self) -> Vec<crate::ast::Dependency> {
+        vec![Dependency::new(Cow::Borrowed(&self.ident))]
+    }
 }
 
 impl Parser {
@@ -91,13 +95,11 @@ impl Parser {
 
         let ty = Self::r#type(ty_node).to_err_vec()?;
 
-		// link type to ident
-		ident.link_force_no_inherit(input.user_data(), ty).to_err_vec()?;
+        // link type to ident
+        ident
+            .link_force_no_inherit(input.user_data(), ty)
+            .to_err_vec()?;
 
-		Ok(MemberVariable {
-			flags,
-			ident
-		})
-
+        Ok(MemberVariable { flags, ident })
     }
 }

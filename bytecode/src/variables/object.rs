@@ -1,10 +1,8 @@
 use super::Primitive;
-use crate::context::Ctx;
-use crate::function::InstructionExitState;
-use crate::instruction::JumpRequest;
+use crate::function::PrimitiveFunction;
 use crate::rc_to_ref;
-use crate::stack::{VariableFlags, VariableMapping};
-use anyhow::{Context, Result};
+use crate::stack::{flag_constants, VariableFlags, VariableMapping};
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::rc::Rc;
@@ -49,12 +47,12 @@ impl ObjectBuilder {
 
     pub fn build(&'static mut self) -> Object {
         let name = self.name.clone().unwrap();
-        let functions = self.functions.get(&name).expect("no functions");
+        // let functions = self.functions.get(&name).expect("no functions");
 
         Object {
             name,
             object_variables: self.object_variables.clone().expect("no name"),
-            functions,
+            // functions,
         }
     }
 }
@@ -64,7 +62,7 @@ impl ObjectBuilder {
 pub struct Object {
     pub name: Rc<String>,
     pub object_variables: Rc<VariableMapping>,
-    pub functions: &'static HashSet<String>,
+    // pub functions: &'static HashSet<String>,
 }
 
 impl PartialOrd for Object {
@@ -82,49 +80,97 @@ impl PartialEq for Object {
 impl Object {
     pub fn new(
         name: Rc<String>,
-        functions: &'static HashSet<String>,
+        // functions: &'static HashSet<String>,
         object_variables: Rc<VariableMapping>,
     ) -> Self {
         Self {
             name,
-            functions,
+            // functions,
             object_variables,
         }
     }
 
-    pub fn has_variable(&mut self, variable_name: &str) -> Option<Rc<(Primitive, VariableFlags)>> {
+    pub fn get_property(
+        &mut self,
+        property_name: &str,
+        include_functions: bool,
+    ) -> Option<Rc<(Primitive, VariableFlags)>> {
+        let maybe_property = self.has_variable(property_name);
+
+        if maybe_property.is_some() {
+            return maybe_property;
+        }
+
+        let include_class_name = if include_functions {
+            Some(self.name.as_str())
+        } else {
+            None
+        };
+
+        let is_function = self.has_function(property_name, include_class_name);
+
+        if let Some(path_to_use) = is_function {
+            let function = PrimitiveFunction::new(path_to_use.into_owned(), None);
+            Some(Rc::new((
+                Primitive::Function(function),
+                VariableFlags(flag_constants::READ_ONLY),
+            )))
+        } else {
+            None
+        }
+    }
+
+    pub fn has_variable(&self, variable_name: &str) -> Option<Rc<(Primitive, VariableFlags)>> {
         rc_to_ref(&self.object_variables).get(variable_name)
     }
 
-    pub fn has_function(&self, function_name: &String) -> bool {
-        self.functions.contains(function_name)
-    }
-
-    pub fn get_assoc_function_name(&self, name: &String) -> Result<&String> {
-        let x = self
-            .functions
-            .get(name)
-            .with_context(|| format!("Object {} does not have method {name}", self.name))?;
-        Ok(x)
-    }
-
-    pub fn call_fn(
+    pub fn has_function<'a>(
         &self,
-        function_name: &String,
-        arguments: Vec<Primitive>,
-        ctx: &mut Ctx,
-    ) -> Result<()> {
-        let destination = self.get_assoc_function_name(function_name)?.clone();
+        function_name: &'a str,
+        include_class_name: Option<&str>,
+    ) -> Option<Cow<'a, str>> {
+        if let Some(class_name) = include_class_name {
+            let joined_name = class_name.to_owned() + "::" + function_name;
+            let maybe_function_ptr = self.object_variables.get(&joined_name);
+            if let Some(bundle) = maybe_function_ptr {
+                if let Primitive::Function(function_ptr) = &bundle.0 {
+                    return Some(Cow::Owned(function_ptr.location().clone()));
+                }
+            }
+        }
 
-        ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
-            destination: crate::instruction::JumpRequestDestination::Standard(destination),
-            callback_state: Some(Rc::clone(&self.object_variables)),
-            stack: ctx.rced_call_stack(),
-            arguments,
-        }));
-
-        Ok(())
+        if self.object_variables.contains(function_name) {
+            Some(Cow::Borrowed(function_name))
+        } else {
+            None
+        }
     }
+
+    // pub fn get_assoc_function_name(&self, name: &String) -> Result<&String> {
+    //     let x = self
+    //         .functions
+    //         .get(name)
+    //         .with_context(|| format!("Object {} does not have method {name}", self.name))?;
+    //     Ok(x)
+    // }
+
+    // pub fn call_fn(
+    //     &self,
+    //     function_name: &String,
+    //     arguments: Vec<Primitive>,
+    //     ctx: &mut Ctx,
+    // ) -> Result<()> {
+    //     let destination = self.get_assoc_function_name(function_name)?.clone();
+
+    //     ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
+    //         destination: crate::instruction::JumpRequestDestination::Standard(destination),
+    //         callback_state: Some(Rc::clone(&self.object_variables)),
+    //         stack: ctx.rced_call_stack(),
+    //         arguments,
+    //     }));
+
+    //     Ok(())
+    // }
 }
 
 impl Display for Object {

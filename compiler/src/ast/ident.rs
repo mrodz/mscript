@@ -86,6 +86,14 @@ impl Ident {
         &self.name
     }
 
+    pub fn ty_owned(self) -> Result<Cow<'static, TypeLayout>> {
+        if let Some(ty) = self.ty {
+            Ok(ty)
+        } else {
+            bail!("trying to get the type of an identifier that is typeless")
+        }
+    }
+
     pub fn ty(&self) -> Result<&Cow<'static, TypeLayout>> {
         if let Some(ref ty) = self.ty {
             Ok(ty)
@@ -122,6 +130,10 @@ impl Ident {
         self.ty = Some(ident.ty.clone().context("no type")?);
 
         Ok(())
+    }
+
+    pub fn set_type_no_link(&mut self, ty: Cow<'static, TypeLayout>) {
+        self.ty = Some(ty);
     }
 
     pub fn link_from_pointed_type_with_lookup(&mut self, user_data: &AssocFileData) -> Result<()> {

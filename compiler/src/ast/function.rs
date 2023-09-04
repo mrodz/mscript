@@ -1,7 +1,7 @@
 use std::{borrow::Cow, fmt::Display, hash::Hash, sync::Arc};
 
 use anyhow::{anyhow, Result};
-use bytecode::compilation_bridge::id::RET;
+use bytecode::compilation_bridge::id::{MAKE_FUNCTION, RET};
 
 use crate::{
     ast::new_err,
@@ -37,6 +37,10 @@ impl FunctionType {
 
     pub fn parameters(&self) -> &FunctionParameters {
         &self.parameters
+    }
+
+    pub(crate) fn arced_parameters(&self) -> Arc<FunctionParameters> {
+        Arc::clone(&self.parameters)
     }
 }
 
@@ -258,9 +262,6 @@ impl Function {
         }
 
         let arguments = arguments.into_boxed_slice();
-
-        // as per `bytecode/src/instruction_constants.rs`
-        const MAKE_FUNCTION: u8 = 0x0D;
 
         let make_function_instruction = CompiledItem::Instruction {
             id: MAKE_FUNCTION,

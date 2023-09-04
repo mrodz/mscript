@@ -1,6 +1,6 @@
 use std::{
     borrow::{Borrow, Cow},
-    cell::{Ref, RefCell, RefMut},
+    cell::{Ref, RefCell},
     collections::{HashMap, HashSet},
     fmt::Display,
     sync::Arc,
@@ -9,8 +9,8 @@ use std::{
 use anyhow::{bail, Result};
 
 use crate::ast::{
-    FunctionParameters, Ident, TypeLayout, BIGINT_TYPE, BOOL_TYPE, BYTE_TYPE, FLOAT_TYPE, INT_TYPE,
-    STR_TYPE, ClassType,
+    ClassType, FunctionParameters, Ident, TypeLayout, BIGINT_TYPE, BOOL_TYPE, BYTE_TYPE,
+    FLOAT_TYPE, INT_TYPE, STR_TYPE,
 };
 
 #[derive(Debug, Clone, PartialEq, Hash)]
@@ -34,7 +34,13 @@ impl Display for ScopeType {
             ScopeType::Function(None) => write!(f, "fn(???)"),
             ScopeType::NumberLoop => write!(f, "Number Loop"),
             ScopeType::WhileLoop => write!(f, "While Loop"),
-            ScopeType::Class(class_type) => write!(f, "Class {}", class_type.as_ref().map_or_else(|| "<UNKNOWN>", |x| x.name())),
+            ScopeType::Class(class_type) => write!(
+                f,
+                "Class {}",
+                class_type
+                    .as_ref()
+                    .map_or_else(|| "<UNKNOWN>", |x| x.name())
+            ),
         }
     }
 }
@@ -185,7 +191,6 @@ impl Scopes {
         };
 
         *class_type = Some(new_class_type);
-    
     }
 
     /// Returns the depth at which the stack is expected to be once the added frame is cleaned up.
@@ -207,6 +212,7 @@ impl Scopes {
         x.last_mut().unwrap().add_dependency(dependency);
     }
 
+    #[allow(unused)]
     pub(crate) fn add_type(&self, name: Box<str>, ty: TypeLayout) {
         let mut x = self.0.borrow_mut();
 
@@ -249,9 +255,10 @@ impl Scopes {
             let ScopeType::Class(Some(ref class_type)) = second_to_last.ty else {
                 return None;
             };
-    
+
             Some(class_type)
-        }).ok()
+        })
+        .ok()
     }
 }
 
@@ -410,10 +417,6 @@ impl Scope {
         &self.yields
     }
 
-    pub fn peek_yields_value_mut(&mut self) -> &mut ScopeReturnStatus {
-        &mut self.yields
-    }
-
     pub fn get_yields_value(self) -> ScopeReturnStatus {
         self.yields
     }
@@ -447,10 +450,6 @@ impl Scope {
 
     pub fn ty_ref(&self) -> &ScopeType {
         &self.ty
-    }
-
-    pub fn ty_ref_mut(&mut self) -> &mut ScopeType {
-        &mut self.ty
     }
 
     pub fn mark_should_return_as_completed(&mut self) -> bool {

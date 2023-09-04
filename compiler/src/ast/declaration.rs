@@ -9,9 +9,9 @@ use crate::{
 };
 
 use super::{
-    Assertion, Assignment, Break, CompilationState, Compile, CompiledItem, Continue, Dependencies,
-    Dependency, Expr, IfStatement, NumberLoop, PrintStatement, Reassignment, ReturnStatement,
-    WhileLoop, class::Class,
+    class::Class, Assertion, Assignment, Break, CompilationState, Compile, CompiledItem, Continue,
+    Dependencies, Dependency, Expr, IfStatement, NumberLoop, PrintStatement, Reassignment,
+    ReturnStatement, WhileLoop,
 };
 
 #[derive(Debug)]

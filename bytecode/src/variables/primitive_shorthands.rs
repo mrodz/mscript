@@ -94,7 +94,7 @@ macro_rules! function {
     ($data:expr) => {{
         use $crate::BytecodePrimitive;
 
-        BytecodePrimitive::Function(std::rc::Rc::new($data))
+        BytecodePrimitive::Function($data)
     }};
 }
 

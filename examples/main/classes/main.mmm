@@ -1,0 +1,89 @@
+function Person_0::grow_up
+	arg 0
+	store self
+	load_fast self
+	lookup age
+	store_fast #0
+	int 1
+	load_fast #0
+	fast_rev2
+	bin_op +
+	store #0
+	load_fast self
+	lookup age
+	load_fast #0
+	ptr_mut
+	delete_name_scoped #0
+	void
+	ret
+end
+function Person_0::$constructor
+	arg 0
+	store self
+	arg 1
+	store name
+	arg 2
+	store age
+	load name
+	store #0
+	load_fast self
+	lookup name
+	load_fast #0
+	ptr_mut
+	delete_name_scoped #0
+	int 16
+	store #0
+	load_fast self
+	lookup age
+	load_fast #0
+	ptr_mut
+	delete_name_scoped #0
+	void
+	ret
+end
+function Person_0
+	reserve_primitive
+	store_fast name
+	reserve_primitive
+	store_fast age
+	make_function ./main.mmm#Person_0::grow_up
+	store_fast Person_0::grow_up
+	reserve_primitive
+	store_fast gender
+	make_object
+	store_fast #1
+	make_function ./main.mmm#Person_0::$constructor
+	store_fast #0
+	load_fast #1
+	arg 0
+	arg 1
+	load_fast #0
+	call
+	delete_name_scoped #0
+	load_fast #1
+	ret
+end
+function __module__
+	make_function .\main.mmm#Person_0
+	store_fast Person
+	load Person
+	store_fast #1
+	string Mateo
+	store_fast #2
+	int 16
+	store_fast #3
+	load_fast #2
+	load_fast #3
+	load_fast #1
+	call
+	store me
+	load me
+	store_fast #1
+	lookup grow_up
+	store_fast #2
+	load_fast #1
+	load_fast #2
+	call
+	void
+	ret
+end

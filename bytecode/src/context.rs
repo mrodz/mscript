@@ -206,6 +206,10 @@ impl<'a> Ctx<'a> {
         self.stack.clone()
     }
 
+    pub fn ref_local_operating_stack(&self) -> &[Primitive] {
+        &self.stack
+    }
+
     /// Exit the instruction with an [`InstructionExitState`]. Each state
     /// is cleared before the next instruction is processed.
     ///

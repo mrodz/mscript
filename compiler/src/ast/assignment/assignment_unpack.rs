@@ -6,8 +6,8 @@ use crate::{
 };
 
 use crate::ast::{
-    new_err,
     list::ListBound,
+    new_err,
     r#type::{IntoType, NativeType},
     Assignment, Number, TypeLayout, Value,
 };
