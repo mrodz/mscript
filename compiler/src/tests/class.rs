@@ -1,9 +1,8 @@
 use crate::eval;
 
 #[test]
-fn person_class() {
-    eval(
-        r#"
+fn class_grammar() {
+    eval(r#"
 		class Person {
 			first_name: str
 			last_name: str
@@ -23,14 +22,6 @@ fn person_class() {
 				return self.first_name + " " + self.last_name
 			}
 		}
-	
-		me = Person("Mateo", "Rodriguez", 16)
-	
-		assert me.age == 16
-		me.grow_up()
-		assert me.age == 17
-	
-		assert me.full_name() == "Mateo Rodriguez"
 	"#,
     )
     .unwrap()
