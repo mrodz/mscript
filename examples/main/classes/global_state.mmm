@@ -1,0 +1,49 @@
+function A_0::$constructor
+	arg 0
+	store self
+	void
+	ret
+end
+function A_0
+	make_object
+	store_fast #1
+	make_function ./global_state.mmm#A_0::$constructor
+	store_fast #0
+	load_fast #1
+	load_fast #0
+	call
+	delete_name_scoped #0
+	load_fast #1
+	ret
+end
+function __module__
+	int 0
+	store instances
+	make_function .\global_state.mmm#A_0
+	store_fast A
+	load A
+	store_fast #1
+	load_fast #1
+	call
+	store first
+	load A
+	store_fast #1
+	load_fast #1
+	call
+	store second
+	load A
+	store_fast #1
+	load_fast #1
+	call
+	store third
+	load first
+	printn *
+	void
+	load second
+	printn *
+	void
+	load third
+	printn *
+	void
+	ret
+end

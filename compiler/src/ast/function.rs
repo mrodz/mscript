@@ -321,7 +321,7 @@ impl Parser {
             // so the parameters MUST never be used. Essentially, we are just
             // syntax checks.
             let parameters =
-                Self::function_parameters(parameters, false).map_err(|e| vec![anyhow!(e)])?;
+                Self::function_parameters(parameters, false, false).map_err(|e| vec![anyhow!(e)])?;
 
             return Ok(Function::new(
                 Arc::new(parameters),
@@ -348,7 +348,7 @@ impl Parser {
             .user_data()
             .push_function(ScopeReturnStatus::detect_should_return(return_type));
 
-        let parameters = Arc::new(Self::function_parameters(parameters, true).to_err_vec()?);
+        let parameters = Arc::new(Self::function_parameters(parameters, true, false).to_err_vec()?);
 
         // input.user_data().register_function_parameters_to_scope(Arc::clone(&parameters));
 

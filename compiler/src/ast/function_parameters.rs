@@ -48,7 +48,7 @@ impl Display for FunctionParameters {
 
         let mut iter = types.iter();
         let Some(first) = iter.next() else {
-            return Ok(())
+            return Ok(());
         };
 
         buf.push_str(&first.to_string());
@@ -96,12 +96,15 @@ impl Parser {
     pub fn function_parameters(
         input: Node,
         add_to_scope_dependencies: bool,
+        require_self_param: bool,
     ) -> Result<FunctionParameters> {
         let mut children = input.children();
 
         let mut result: Vec<Ident> = vec![];
 
         let file_name = input.user_data().get_source_file_name();
+
+        let mut satifies_self_param = !require_self_param;
 
         for c in 0.. {
             let Some(ident_node) = children.next() else {
@@ -118,6 +121,10 @@ impl Parser {
                         result.push(ident);
                     }
 
+                    if require_self_param {
+                        satifies_self_param = true;
+                    }
+
                     continue;
                 }
             }
@@ -131,9 +138,7 @@ impl Parser {
                 bail!(new_err(ident_span, &file_name, format!("for type safety, function parameters require type signatures. (try: `{}: type`)", ident.name())))
             };
 
-            let Some(ty) = ty else {
-                err()?
-            };
+            let Some(ty) = ty else { err()? };
 
             if ty.as_rule() != Rule::r#type {
                 err()?
@@ -148,6 +153,10 @@ impl Parser {
             }
 
             result.push(ident);
+        }
+
+        if !satifies_self_param {
+            return Err(new_err(input.as_span(), &input.user_data().get_source_file_name(), "this function must take `self` as the first parameter because it is defined as a class instance fn".to_owned()));
         }
 
         Ok(FunctionParameters::Named(result))

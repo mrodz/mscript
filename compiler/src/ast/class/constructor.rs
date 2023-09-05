@@ -102,7 +102,7 @@ impl Compile for Constructor {
 impl WalkForType for Constructor {
     fn type_from_node(input: &Node) -> Result<Ident> {
         let parameters = input.children().next().unwrap();
-        let parameters = Parser::function_parameters(parameters, false)?;
+        let parameters = Parser::function_parameters(parameters, false, true)?;
 
         let function_type = FunctionType::new(Arc::new(parameters), ScopeReturnStatus::Void);
 
@@ -144,7 +144,7 @@ impl Parser {
         // Using "_" or not saving it as a variable causes the scope to pop instantly.
         let _scope_handle = input.user_data().push_function(ScopeReturnStatus::Void);
 
-        let parameters = Self::function_parameters(parameters, true).to_err_vec()?;
+        let parameters = Self::function_parameters(parameters, true, true).to_err_vec()?;
 
         let body = children.next().unwrap();
         let body = Self::block(body)?;
