@@ -33,7 +33,7 @@
 //!
 //! END LICENSE
 
-use std::{borrow::Cow, rc::Rc, sync::Arc};
+use std::{borrow::Cow, rc::Rc};
 
 use anyhow::{bail, Context, Result};
 use once_cell::sync::Lazy;
@@ -51,9 +51,9 @@ use crate::{
 };
 
 use super::{
-    boolean::boolean_from_str, function::FunctionType, list::Index, map_err, new_err,
-    r#type::IntoType, CompilationState, Compile, CompileTimeEvaluate, CompiledItem, Dependencies,
-    Dependency, FunctionArguments, TemporaryRegister, TypeLayout, Value,
+    boolean::boolean_from_str, dot_lookup::DotChain, function::FunctionType, list::Index, map_err,
+    new_err, r#type::IntoType, CompilationState, Compile, CompileTimeEvaluate, CompiledItem,
+    Dependencies, Dependency, FunctionArguments, TemporaryRegister, TypeLayout, Value,
 };
 
 pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
@@ -73,7 +73,10 @@ pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
         .op(Op::infix(add, Left) | Op::infix(subtract, Left))
         .op(Op::infix(multiply, Left) | Op::infix(divide, Left) | Op::infix(modulo, Left))
         .op(Op::prefix(unary_minus))
-        .op(Op::postfix(list_index) | Op::postfix(callable))
+        .op(Op::postfix(dot_chain)
+            | Op::postfix(list_index)
+            | Op::postfix(callable)
+            | Op::postfix(dot_chain))
 });
 
 #[derive(Debug, Clone, PartialEq)]
@@ -124,7 +127,7 @@ pub(crate) enum CallableContents {
     },
     Standard {
         lhs_raw: Box<Expr>,
-        function: Arc<FunctionType>,
+        function: FunctionType,
         arguments: FunctionArguments,
     },
 }
@@ -141,6 +144,11 @@ pub(crate) enum Expr {
         rhs: Box<Expr>,
     },
     Callable(CallableContents),
+    DotLookup {
+        lhs: Box<Expr>,
+        dot_chain: DotChain,
+        expected_type: TypeLayout,
+    },
     Index {
         lhs_raw: Box<Expr>,
         index: Index,
@@ -217,6 +225,7 @@ impl CompileTimeEvaluate for Expr {
             Self::ReferenceToSelf => Ok(ConstexprEvaluation::Impossible),
             Self::Callable { .. } => Ok(ConstexprEvaluation::Impossible),
             Self::Index { .. } => Ok(ConstexprEvaluation::Impossible),
+            Self::DotLookup { .. } => Ok(ConstexprEvaluation::Impossible),
         }
     }
 }
@@ -252,19 +261,20 @@ impl IntoType for Expr {
 
                 Ok(return_type.clone().into_owned())
             }
-            Expr::ReferenceToSelf => bail!("`self` is a keyword and does not have a type"),
+            Expr::ReferenceToSelf => Ok(TypeLayout::ClassSelf),
             Expr::Index { index, .. } => index.for_type(),
+            Expr::DotLookup { expected_type, .. } => Ok(expected_type.to_owned()),
         }
     }
 }
 
 impl Dependencies for Expr {
     fn dependencies(&self) -> Vec<Dependency> {
-        use Expr::*;
+        use Expr as E;
         match self {
-            Value(val) => val.net_dependencies(),
-            UnaryMinus(expr) | UnaryNot(expr) => expr.net_dependencies(),
-            BinOp { lhs, rhs, .. } => {
+            E::Value(val) => val.net_dependencies(),
+            E::UnaryMinus(expr) | E::UnaryNot(expr) => expr.net_dependencies(),
+            E::BinOp { lhs, rhs, .. } => {
                 let mut lhs_dep = lhs.net_dependencies();
                 let mut rhs_dep = rhs.net_dependencies();
 
@@ -272,20 +282,21 @@ impl Dependencies for Expr {
 
                 lhs_dep
             }
-            Callable(CallableContents::ToSelf { arguments, .. }) => arguments.net_dependencies(),
-            Callable(CallableContents::Standard {
+            E::Callable(CallableContents::ToSelf { arguments, .. }) => arguments.net_dependencies(),
+            E::Callable(CallableContents::Standard {
                 lhs_raw, arguments, ..
             }) => {
                 let mut lhs_deps = lhs_raw.net_dependencies();
                 lhs_deps.append(&mut arguments.net_dependencies());
                 lhs_deps
             }
-            Index { lhs_raw, index } => {
+            E::Index { lhs_raw, index } => {
                 let mut lhs_deps = lhs_raw.net_dependencies();
                 lhs_deps.append(&mut index.net_dependencies());
                 lhs_deps
             }
-            x => unimplemented!("{x:?}"),
+            E::DotLookup { lhs, .. } => lhs.net_dependencies(),
+            E::ReferenceToSelf => vec![],
         }
     }
 }
@@ -385,13 +396,14 @@ fn compile_depth(
 
             lhs_compiled.push(instruction!(store_fast lhs_register));
 
-            let callable = Callable::new(arguments, instruction!(load_fast lhs_register));
+            let callable: Callable<'_> =
+                Callable::new(arguments, instruction!(load_fast lhs_register), None);
 
             lhs_compiled.append(&mut callable.compile(state)?);
 
             Ok(lhs_compiled)
         }
-        Expr::ReferenceToSelf => Ok(vec![]),
+        Expr::ReferenceToSelf => Ok(vec![instruction!(load_fast "self")]),
         Expr::Callable(CallableContents::ToSelf { arguments, .. }) => {
             let callable = Callable::new_recursive_call(arguments);
 
@@ -400,6 +412,11 @@ fn compile_depth(
         Expr::Index { lhs_raw, index } => {
             let mut result = lhs_raw.compile(state)?;
             result.append(&mut index.compile(state)?);
+            Ok(result)
+        }
+        Expr::DotLookup { lhs, dot_chain, .. } => {
+            let mut result = lhs.compile(state)?;
+            result.append(&mut dot_chain.compile(state)?);
             Ok(result)
         }
     }
@@ -477,7 +494,6 @@ fn parse_expr(
                     Rule::boolean => {
                         Expr::Value(Value::Boolean(boolean_from_str(primary.as_str())))
                     }
-
                     rule => unreachable!("Expr::parse expected atom, found {:?}", rule),
                 };
 
@@ -514,7 +530,7 @@ fn parse_expr(
 
             if let Err(e) = bin_op.validate() {
                 return Err(vec![new_err(
-                    l_span.unwrap(),
+                    l_span.unwrap_or_else(|| panic!("{}", e.to_string())),
                     &user_data.get_source_file_name(),
                     e.to_string(),
                 )]);
@@ -549,8 +565,8 @@ fn parse_expr(
 
                 let lhs_ty = lhs.for_type().to_err_vec()?;
 
-                let Some(function_type) = lhs_ty.is_function() else {
-                    return Err(vec![new_err(l_span.unwrap(), &user_data.get_source_file_name(), format!("`{lhs_ty}` is not callable"))]);
+                let Some(function_type) = lhs_ty.get_function() else {
+                    return Err(vec![new_err(l_span.unwrap(), &user_data.get_source_file_name(), "this is not callable".to_owned())]);
                 };
 
                 let function_arguments: Pair<Rule> = op.into_inner().next().unwrap();
@@ -576,6 +592,18 @@ fn parse_expr(
 
                 Ok((Expr::Index { lhs_raw: Box::new(lhs), index }, None))
             },
+            Rule::dot_chain => {
+                let lhs = lhs?.0;
+
+                let lhs_ty = lhs.for_type().to_err_vec()?;
+                let lhs_ty = lhs_ty.assume_type_of_self(&user_data);
+
+                let index: Pair<Rule> = op;
+                let index: Node = Node::new_with_user_data(index, Rc::clone(&user_data));
+                let (dot_chain, final_output_type) = Parser::dot_chain(index, &lhs_ty)?;
+
+                Ok((Expr::DotLookup { lhs: Box::new(lhs), dot_chain, expected_type: final_output_type.to_owned() }, None))
+            }
             _ => unreachable!(),
         })
         .parse(pairs);

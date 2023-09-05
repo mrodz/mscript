@@ -1,36 +1,33 @@
-use std::{borrow::Cow, collections::HashMap, fmt::Display, rc::Rc, sync::Arc};
+use std::{borrow::Cow, fmt::Display, hash::Hash, sync::Arc};
 
 use crate::{
     ast::value::ValToUsize,
-    parser::{util::parse_with_userdata_features, AssocFileData, Node, Parser, Rule},
-    scope::ScopeReturnStatus,
+    parser::{AssocFileData, Node, Parser, Rule},
+    scope::{ScopeReturnStatus, SuccessTypeSearchResult, TypeSearchResult},
+    CompilationError,
 };
 use anyhow::{bail, Result};
-use once_cell::sync::Lazy;
 use pest::Span;
 
 use super::{
+    class::ClassType,
     function::FunctionType,
     list::{ListBound, ListType},
     map_err,
     math_expr::Op,
-    FunctionParameters, Value, BIGINT_TYPE, INT_TYPE,
+    FunctionParameters, Value,
 };
 
-static mut TYPES: Lazy<HashMap<&str, TypeLayout>> = Lazy::new(|| {
-    let mut x = HashMap::new();
-
-    x.insert("bool", TypeLayout::Native(NativeType::Bool));
-    x.insert("str", TypeLayout::Native(NativeType::Str(StrWrapper(None))));
-    x.insert("int", TypeLayout::Native(NativeType::Int));
-    x.insert("bigint", TypeLayout::Native(NativeType::BigInt));
-    x.insert("float", TypeLayout::Native(NativeType::Float));
-    x.insert("byte", TypeLayout::Native(NativeType::Byte));
-
-    x
-});
-
 pub(crate) struct SupportedTypesWrapper(Box<[Cow<'static, TypeLayout>]>);
+
+pub(crate) static BIGINT_TYPE: TypeLayout = TypeLayout::Native(NativeType::BigInt);
+pub(crate) static BOOL_TYPE: TypeLayout = TypeLayout::Native(NativeType::Bool);
+pub(crate) static BYTE_TYPE: TypeLayout = TypeLayout::Native(NativeType::Byte);
+pub(crate) static FLOAT_TYPE: TypeLayout = TypeLayout::Native(NativeType::Float);
+pub(crate) static INT_TYPE: TypeLayout = TypeLayout::Native(NativeType::Int);
+pub(crate) static STR_TYPE: TypeLayout =
+    TypeLayout::Native(NativeType::Str(StrWrapper::unknown_size()));
+pub(crate) static SELF_TYPE: TypeLayout = TypeLayout::ClassSelf;
 
 impl Display for SupportedTypesWrapper {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -68,28 +65,15 @@ impl SupportedTypesWrapper {
     }
 }
 
-#[allow(unused)]
-pub(crate) mod shorthands {
-    use super::*;
-
-    pub(crate) static BOOL_TYPE: Lazy<&TypeLayout> =
-        Lazy::new(|| unsafe { TYPES.get("bool").unwrap() });
-
-    pub(crate) static INT_TYPE: Lazy<&TypeLayout> =
-        Lazy::new(|| unsafe { TYPES.get("int").unwrap() });
-
-    pub(crate) static BIGINT_TYPE: Lazy<&TypeLayout> =
-        Lazy::new(|| unsafe { TYPES.get("bigint").unwrap() });
-
-    pub(crate) static FLOAT_TYPE: Lazy<&TypeLayout> =
-        Lazy::new(|| unsafe { TYPES.get("float").unwrap() });
-
-    pub(crate) static BYTE_TYPE: Lazy<&TypeLayout> =
-        Lazy::new(|| unsafe { TYPES.get("byte").unwrap() });
-}
-
 #[derive(Debug, Clone, Copy, Eq)]
 pub struct StrWrapper(pub(in crate::ast) Option<usize>);
+
+impl StrWrapper {
+    #[inline]
+    pub const fn unknown_size() -> Self {
+        Self(None)
+    }
+}
 
 impl From<StrWrapper> for Option<usize> {
     fn from(value: StrWrapper) -> Self {
@@ -106,7 +90,54 @@ impl PartialEq for StrWrapper {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+impl Hash for StrWrapper {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+    }
+}
+
+#[cfg(test)]
+mod eq_hash_test {
+    use crate::assert_proper_eq_hash;
+
+    use super::*;
+
+    #[test]
+    fn none_none() {
+        let lhs = StrWrapper(None);
+        let rhs = StrWrapper(None);
+
+        assert_proper_eq_hash!(lhs, rhs);
+    }
+
+    #[test]
+    #[should_panic]
+    fn none_some() {
+        let lhs = StrWrapper(None);
+        let rhs = StrWrapper(Some(12));
+
+        assert_proper_eq_hash!(lhs, rhs);
+    }
+
+    #[test]
+    fn matching() {
+        let lhs = StrWrapper(Some(0xDEADBEEF));
+        let rhs = StrWrapper(Some(0xDEADBEEF));
+
+        assert_proper_eq_hash!(lhs, rhs);
+    }
+
+    #[test]
+    #[should_panic]
+    fn mismatch() {
+        let lhs = StrWrapper(Some(0xDEADBEEF));
+        let rhs = StrWrapper(Some(0xFEEDBEEF));
+
+        assert_proper_eq_hash!(lhs, rhs);
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NativeType {
     Bool,
     Str(StrWrapper),
@@ -118,19 +149,28 @@ pub enum NativeType {
 
 impl Display for NativeType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let name = format!("{self:?}").to_ascii_lowercase();
-        write!(f, "{name}")
+        match self {
+            Self::Str(..) => write!(f, "str"),
+            Self::Bool => write!(f, "bool"),
+            Self::Int => write!(f, "int"),
+            Self::BigInt => write!(f, "bigint"),
+            Self::Float => write!(f, "float"),
+            Self::Byte => write!(f, "byte"),
+        }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub(crate) enum TypeLayout {
-    Function(Arc<FunctionType>),
+    Function(FunctionType),
     /// metadata wrapper around a [TypeLayout]
     CallbackVariable(Box<TypeLayout>),
     Native(NativeType),
     List(ListType),
     ValidIndexes(ListBound, ListBound),
+    Class(ClassType),
+    ClassSelf,
+    Void,
 }
 
 impl Display for TypeLayout {
@@ -141,6 +181,9 @@ impl Display for TypeLayout {
             Self::Native(native) => write!(f, "{native}"),
             Self::List(list) => write!(f, "{list}"),
             Self::ValidIndexes(lower, upper) => write!(f, "B({lower}..{upper})"),
+            Self::Class(class_type) => write!(f, "{class_type}"),
+            Self::ClassSelf => write!(f, "self"),
+            Self::Void => write!(f, "void"),
         }
     }
 }
@@ -151,6 +194,12 @@ impl TypeLayout {
         let me = self.get_type_recursively();
 
         matches!(me, TypeLayout::Native(NativeType::Bool))
+    }
+
+    pub fn is_float(&self) -> bool {
+        let me = self.get_type_recursively();
+
+        matches!(me, TypeLayout::Native(NativeType::Float))
     }
 
     pub fn get_error_hint_between_types(&self, incompatible: &Self) -> Option<&'static str> {
@@ -189,14 +238,129 @@ impl TypeLayout {
         }
     }
 
-    pub fn is_function(&self) -> Option<Arc<FunctionType>> {
+    pub fn owned_is_function(self) -> Option<FunctionType> {
+        let me = self.get_owned_type_recursively();
+
+        let TypeLayout::Function(f) = me else {
+            return None;
+        };
+
+        Some(f)
+    }
+
+    pub fn assume_type_of_self(self, user_data: &AssocFileData) -> TypeLayout {
+        if matches!(self, TypeLayout::ClassSelf) {
+            TypeLayout::Class(user_data.get_type_of_executing_class().unwrap().clone())
+        } else {
+            self
+        }
+    }
+
+    pub fn is_function(&self) -> Option<&FunctionType> {
         let me = self.get_type_recursively();
 
         let TypeLayout::Function(f) = me else {
             return None;
         };
 
-        Some(Arc::clone(f))
+        Some(f)
+    }
+
+    pub fn get_function(self) -> Option<FunctionType> {
+        match self.get_owned_type_recursively() {
+            TypeLayout::Function(f) => Some(f),
+            TypeLayout::Class(class_ty) => {
+                let constructor = class_ty.constructor();
+
+                Some(FunctionType::new(
+                    constructor.arced_parameters(),
+                    ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Class(class_ty))),
+                ))
+
+                // let params = constructor.parameters().clone();
+                // let return_type = constructor.return_type();
+
+                // let types = params.to_types();
+
+                // let no_self = types.get(1..).unwrap_or(&[]);
+
+                // let params = FunctionParameters::TypesOnly(no_self.into());
+                // let params = Arc::new(params);
+
+                // let return_type = return_type.clone();
+
+                // todo!();
+                // Some(FunctionType::new(params, return_type))
+            }
+            _ => None,
+        }
+    }
+
+    pub fn get_property_type<'a>(&'a self, property_name: &str) -> Option<&'a TypeLayout> {
+        match self {
+            Self::Class(class_type) => {
+                let ident = class_type.get_property(property_name)?;
+                let property_type: &'a Cow<'static, TypeLayout> = ident.ty().ok()?;
+
+                Some(property_type)
+            }
+            _ => None,
+        }
+    }
+
+    pub fn get_addressable_properties(&self) -> Vec<String> {
+        match self {
+            Self::Class(class_type) => {
+                let fields = class_type.arced_fields();
+                let fields = fields.iter();
+
+                let mut result = vec![];
+
+                // let fields = fields.map(|x| x.).collect();
+
+                for field in fields {
+                    result.push(field.name().clone());
+                }
+
+                result
+
+                // fields
+            }
+            _ => vec![],
+        }
+    }
+
+    pub fn get_property_hint_from_input_no_lookup(&self) -> String {
+        let visible_properties = self.get_addressable_properties();
+
+        let mut property_iter = visible_properties.iter();
+
+        let mut result = String::new();
+
+        if let Some(first) = property_iter.next() {
+            result.push_str(first);
+        }
+
+        const LIMIT: usize = 7;
+
+        let mut remaining = 0;
+
+        for (idx, property) in property_iter.enumerate() {
+            if idx > LIMIT {
+                remaining += 1;
+                continue;
+            }
+            result.push_str(", ");
+            result.push_str(property);
+        }
+
+        let remaining_message = if remaining != 0 {
+            Cow::Owned(format!(" (+{remaining} remaining)"))
+        } else {
+            Cow::Borrowed("")
+        };
+
+        format!(" Available properties: {result}{remaining_message}")
     }
 
     pub fn can_be_used_as_list_index(&self) -> bool {
@@ -268,9 +432,10 @@ impl TypeLayout {
         let me = self.get_type_recursively();
 
         Some(SupportedTypesWrapper(match me {
-            Self::Native(NativeType::Str(_)) => {
-                Box::new([Cow::Borrowed(&INT_TYPE), Cow::Borrowed(&BIGINT_TYPE)])
-            }
+            Self::Native(NativeType::Str(_)) => Box::new([
+                Cow::Owned(TypeLayout::Native(NativeType::Int)),
+                Cow::Owned(TypeLayout::Native(NativeType::BigInt)),
+            ]),
             Self::List(x) => {
                 let (lower, upper) = x.valid_indexes();
 
@@ -408,38 +573,38 @@ pub(crate) trait IntoType {
     }
 }
 
-pub(crate) fn type_from_str(
-    input: &str,
-    user_data: Rc<AssocFileData>,
-) -> Result<Cow<'static, TypeLayout>> {
-    unsafe {
-        if let Some(r#type) = TYPES.get(input) {
-            Ok(Cow::Borrowed(r#type))
-        } else {
-            if let Ok(list_type_open_only) =
-                parse_with_userdata_features(Rule::list_type_open_only, input, user_data.clone())
-            {
-                let single = list_type_open_only.single()?;
-                let ty = Parser::list_type_open_only(single)?;
-                return Ok(Cow::Owned(TypeLayout::List(ty)));
-            } else if let Ok(function_type) =
-                parse_with_userdata_features(Rule::function_type, input, user_data.clone())
-            {
-                let single = function_type.single()?;
-                let ty = Parser::function_type(single)?;
-                return Ok(Cow::Owned(TypeLayout::Function(Arc::new(ty))));
-            } else if let Ok(list_type) =
-                parse_with_userdata_features(Rule::list_type, input, user_data)
-            {
-                let single = list_type.single()?;
-                let ty = Parser::list_type(single)?;
-                return Ok(Cow::Owned(TypeLayout::List(ty)));
-            }
+// pub(crate) fn type_from_str(
+//     input: &str,
+//     user_data: Rc<AssocFileData>,
+// ) -> Result<Cow<'static, TypeLayout>> {
+//     unsafe {
+//         if let Some(r#type) = user_data.get_type(input) {
+//             Ok(Cow::Borrowed(r#type))
+//         } else {
+//             if let Ok(list_type_open_only) =
+//                 parse_with_userdata_features(Rule::list_type_open_only, input, user_data.clone())
+//             {
+//                 let single = list_type_open_only.single()?;
+//                 let ty = Parser::list_type_open_only(single)?;
+//                 return Ok(Cow::Owned(TypeLayout::List(ty)));
+//             } else if let Ok(function_type) =
+//                 parse_with_userdata_features(Rule::function_type, input, user_data.clone())
+//             {
+//                 let single = function_type.single()?;
+//                 let ty = Parser::function_type(single)?;
+//                 return Ok(Cow::Owned(TypeLayout::Function(Arc::new(ty))));
+//             } else if let Ok(list_type) =
+//                 parse_with_userdata_features(Rule::list_type, input, user_data)
+//             {
+//                 let single = list_type.single()?;
+//                 let ty = Parser::list_type(single)?;
+//                 return Ok(Cow::Owned(TypeLayout::List(ty)));
+//             }
 
-            bail!("type '{input}' has not been registered")
-        }
-    }
-}
+//             bail!("type '{input}' has not been registered")
+//         }
+//     }
+// }
 
 impl Parser {
     pub fn function_type(input: Node) -> Result<FunctionType> {
@@ -537,14 +702,40 @@ impl Parser {
     }
 
     pub fn r#type(input: Node) -> Result<Cow<'static, TypeLayout>> {
-        let as_str = input.as_str();
-        let span = input.as_span();
+        let ty = input.children().single().unwrap();
+
+        let span = ty.as_span();
         let file_name = input.user_data().get_file_name();
-        map_err(
-            type_from_str(as_str, input.into_user_data()),
-            span,
-            &file_name,
-            "unknown type".into(),
-        )
+
+        use TypeLayout::*;
+
+        const UNKNOWN_TYPE: &str = "unknown type";
+
+        let x =
+            match ty.as_rule() {
+                Rule::function_type => SuccessTypeSearchResult::Owned(Function(
+                    Self::function_type(ty).details(span, &file_name, UNKNOWN_TYPE)?,
+                )),
+                Rule::list_type_open_only => SuccessTypeSearchResult::Owned(List(
+                    Self::list_type_open_only(ty).details(span, &file_name, UNKNOWN_TYPE)?,
+                )),
+                Rule::list_type => SuccessTypeSearchResult::Owned(List(
+                    Self::list_type(ty).details(span, &file_name, UNKNOWN_TYPE)?,
+                )),
+                Rule::ident => {
+                    let ty = input.user_data().get_type_from_str(ty.as_str());
+
+                    let TypeSearchResult::Ok(ty) = ty else {
+                        bail!("unknown type")
+                    };
+
+                    ty
+                }
+                x => unreachable!("{x:?} as a type hasn't been implemented"),
+            };
+
+        let x = x.into_cow();
+
+        Ok(x)
     }
 }

@@ -13,9 +13,8 @@ use crate::{
 
 use super::{
     new_err,
-    r#type::{IntoType, NativeType},
-    BinaryOperation, CompilationState, Compile, Dependencies, TypeLayout, Value, FLOAT_TYPE,
-    INT_TYPE,
+    r#type::{IntoType, NativeType, INT_TYPE},
+    BinaryOperation, CompilationState, Compile, Dependencies, TypeLayout, Value,
 };
 
 #[derive(Debug)]
@@ -238,7 +237,10 @@ impl Parser {
                             Self::ident(next.children().single().unwrap()).to_err_vec()?;
 
                         ident
-                            .link_force_no_inherit(input.user_data(), Cow::Borrowed(&INT_TYPE))
+                            .link_force_no_inherit(
+                                input.user_data(),
+                                Cow::Owned(TypeLayout::Native(NativeType::Int)),
+                            )
                             .to_err_vec()?;
 
                         input.user_data().add_dependency(&ident);
@@ -252,13 +254,10 @@ impl Parser {
 
         let rhs = step
             .as_ref()
-            .map_or_else(
-                || Ok(Cow::Borrowed(*INT_TYPE)),
-                |(val, _)| val.for_type().map(Cow::Owned),
-            )
+            .map_or_else(|| Ok(INT_TYPE.clone()), |(val, _)| val.for_type())
             .to_err_vec()?;
 
-        let Some(step_output_type) = start_ty.get_output_type(rhs.as_ref(), &BinaryOperation::Add) else {
+        let Some(step_output_type) = start_ty.get_output_type(&rhs, &BinaryOperation::Add) else {
             let span = if let Some((_, span)) = step {
                 span
             } else {
@@ -299,8 +298,8 @@ impl Parser {
             )]);
         }
 
-        let start_is_float = &start_ty == *FLOAT_TYPE;
-        let end_is_float = &end_ty == *FLOAT_TYPE;
+        let start_is_float = start_ty.is_float();
+        let end_is_float = end_ty.is_float();
 
         if (start_is_float ^ end_is_float) && step.is_none() {
             let span = if start_is_float {

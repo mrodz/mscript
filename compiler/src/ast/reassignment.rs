@@ -12,17 +12,18 @@ use crate::{
 };
 
 use super::{
-    list::Index, r#type::IntoType, CompilationState, Compile, Dependencies, Ident, TypeLayout,
-    Value,
+    dot_lookup::DotChain, list::Index, r#type::IntoType, CompilationState, Compile, Dependencies,
+    Ident, TypeLayout, Value,
 };
 
 pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
     use pest::pratt_parser::Op;
-    use Rule::*;
+    use Rule as R;
 
-    PrattParser::new().op(Op::postfix(list_index))
+    PrattParser::new().op(Op::postfix(R::list_index) | Op::postfix(R::dot_chain))
 });
 
+#[allow(unused)]
 #[derive(Debug)]
 pub(crate) enum ReassignmentPath {
     Ident(Ident),
@@ -31,16 +32,27 @@ pub(crate) enum ReassignmentPath {
         lhs: Box<ReassignmentPath>,
         index: Index,
     },
+    DotLookup {
+        lhs: Box<ReassignmentPath>,
+        dot_chain: DotChain,
+        expected_type: TypeLayout,
+    },
 }
 
 impl Compile for ReassignmentPath {
     fn compile(&self, state: &CompilationState) -> Result<Vec<super::CompiledItem>, anyhow::Error> {
         match self {
             ReassignmentPath::Ident(ident) => ident.compile(state),
-            ReassignmentPath::ReferenceToSelf(_) => unimplemented!(),
+            ReassignmentPath::ReferenceToSelf(_) => Ok(vec![instruction!(load_fast "self")]),
             ReassignmentPath::Index { lhs, index } => {
                 let mut result = lhs.compile(state)?;
                 result.append(&mut index.compile(state)?);
+                Ok(result)
+            }
+            ReassignmentPath::DotLookup { lhs, dot_chain, .. } => {
+                let mut result = lhs.compile(state)?;
+
+                result.append(&mut dot_chain.compile(state)?);
                 Ok(result)
             }
         }
@@ -56,6 +68,7 @@ impl IntoType for ReassignmentPath {
             Self::ReferenceToSelf(None) => {
                 bail!("`self` does not have a writable type in this context")
             }
+            Self::DotLookup { .. } => todo!(),
         }
     }
 }
@@ -79,7 +92,7 @@ impl Compile for Reassignment {
 
         result.append(&mut vec![
             instruction!(load_fast val_register),
-            instruction!(vec_mut),
+            instruction!(ptr_mut),
             instruction!(delete_name_scoped val_register),
         ]);
 
@@ -100,7 +113,14 @@ fn parse_path(
             let raw_string = primary.as_str();
 
             if raw_string == "self" {
-                // panic!()
+                if let Some(class_type) = user_data.get_type_of_executing_class() {
+                    // cloning ClassType is cheap
+                    let class_type = class_type.clone();
+                    return Ok(ReassignmentPath::ReferenceToSelf(Some(Cow::Owned(
+                        TypeLayout::Class(class_type),
+                    ))));
+                }
+
                 return Ok(ReassignmentPath::ReferenceToSelf(None));
                 // return Ok(ReassignmentPath::ReferenceToSelf);
             }
@@ -142,6 +162,23 @@ fn parse_path(
                     index,
                 })
             }
+            Rule::dot_chain => {
+                let lhs = lhs?;
+
+                let lhs_ty = lhs.for_type().to_err_vec()?;
+                let lhs_ty = lhs_ty.assume_type_of_self(&user_data);
+
+                let (dot_chain, expected_type) = Parser::dot_chain(
+                    Node::new_with_user_data(op, Rc::clone(&user_data)),
+                    &lhs_ty,
+                )?;
+
+                Ok(ReassignmentPath::DotLookup {
+                    lhs: Box::new(lhs),
+                    dot_chain,
+                    expected_type: expected_type.to_owned(),
+                })
+            }
             other => unimplemented!("{other:?}"),
         })
         .parse(pairs)
@@ -150,6 +187,16 @@ fn parse_path(
 impl ReassignmentPath {
     pub(crate) fn parse(input: Node) -> Result<ReassignmentPath, Vec<anyhow::Error>> {
         parse_path(input.children().into_pairs(), Rc::clone(input.user_data()))
+    }
+
+    pub(crate) fn expected_type(&self) -> &TypeLayout {
+        match self {
+            Self::DotLookup { expected_type, .. } => expected_type,
+            Self::ReferenceToSelf(Some(ty)) => ty.as_ref(),
+            Self::ReferenceToSelf(None) => unreachable!("`self` does not have a type here"),
+            Self::Ident(ident) => ident.ty().unwrap().as_ref(),
+            Self::Index { index, .. } => index.final_output_type(),
+        }
     }
 }
 
@@ -165,8 +212,21 @@ impl Parser {
         let path = children.next().unwrap();
         let value = children.next().unwrap();
 
+        let path_span = value.as_span();
+
         let path = ReassignmentPath::parse(path)?;
         let value = Self::value(value)?;
+        let value_ty = value.for_type().to_err_vec()?;
+
+        let expected_ty = path.expected_type();
+
+        if &value_ty != expected_ty {
+            return Err(vec![new_err(
+                path_span,
+                &input.user_data().get_source_file_name(),
+                format!("type mismatch: cannot assign `{value_ty}` to `{expected_ty}`"),
+            )]);
+        }
 
         Ok(Reassignment { path, value })
     }

@@ -348,6 +348,8 @@ impl Parser {
     pub fn value(input: Node) -> Result<Value, Vec<anyhow::Error>> {
         let mut children = input.children();
 
+        assert_eq!(input.as_rule(), Rule::value);
+
         let value = children.next().unwrap();
         let matched = match value.as_rule() {
             Rule::function => Value::Function(Self::function(value)?),

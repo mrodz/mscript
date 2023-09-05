@@ -185,9 +185,9 @@ impl Parser {
         if do_all_if_branches_return
             && (do_all_else_branches_return || can_determine_is_if_branch_truthy)
         {
-            let mut return_type = input.user_data().get_return_type_mut();
+            input.user_data().mark_should_return_as_completed();
 
-            return_type.mark_should_return_as_completed().to_err_vec()?;
+            // return_type.mark_should_return_as_completed().to_err_vec()?;
         }
 
         Ok(IfStatement {

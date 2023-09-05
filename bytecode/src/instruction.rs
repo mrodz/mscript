@@ -129,9 +129,9 @@ pub mod implementations {
     use super::*;
     use crate::context::SpecialScope;
     use crate::function::{PrimitiveFunction, ReturnValue};
-    use crate::rc_to_ref;
     use crate::stack::VariableFlags;
     use crate::{bool, function, int, object, vector};
+    use crate::{optional, rc_to_ref};
     use std::collections::HashMap;
     use std::rc::Rc;
 
@@ -245,9 +245,9 @@ pub mod implementations {
             Ok(())
         }
 
-        vec_mut(ctx, _args) {
+        ptr_mut(ctx, _args) {
             if ctx.stack_size() < 2 {
-                bail!("mutating a vec requires [ptr, value]");
+                bail!("mutating a ptr requires [ptr, value] (found: {:?})", ctx.get_local_operating_stack());
             }
 
             let new_val = ctx.pop().unwrap();
@@ -599,6 +599,37 @@ pub mod implementations {
             Ok(())
         }
 
+        call_class(ctx, args) {
+            let Some(instance_name) = args.get(0) else {
+                bail!("`call_class` requires the name of the instance on which this method will be called");
+            };
+
+            let last = ctx.pop();
+
+            let Some(Primitive::Function(f)) = last else {
+                bail!("the last item on the local stack {last:?} must be a function.")
+            };
+
+            let Some(variable) = ctx.load_local(instance_name) else {
+                bail!("`{instance_name}` is not in scope")
+            };
+
+            let mut arguments = vec![variable.0.clone()];
+
+            arguments.extend_from_slice(ctx.ref_local_operating_stack());
+
+            ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
+                destination: JumpRequestDestination::Standard(f.location().clone()),
+                callback_state: f.callback_state().clone(),
+                stack: ctx.rced_call_stack(),
+                arguments,
+            }));
+
+            ctx.clear_stack();
+
+            Ok(())
+        }
+
         mutate(ctx, args) {
             let var_name = args.first().context("object mutation requires a name argument")?;
 
@@ -631,7 +662,6 @@ pub mod implementations {
             // This never needs to re-allocate, but does need to do O(n) data movement
             // if the circular buffer doesn’t happen to be at the beginning of the
             // allocation (https://doc.rust-lang.org/std/collections/vec_deque/struct.VecDeque.html)
-            let arguments = ctx.get_local_operating_stack();
 
             let Some(first) = args.first() else {
                 let last = ctx.pop();
@@ -644,13 +674,16 @@ pub mod implementations {
                     destination: JumpRequestDestination::Standard(f.location().clone()),
                     callback_state: f.callback_state().clone(),
                     stack: ctx.rced_call_stack(),
-                    arguments,
+                    arguments: ctx.get_local_operating_stack(),
                 }));
 
                 ctx.clear_stack();
 
                 return Ok(())
             };
+
+            let arguments = ctx.get_local_operating_stack();
+
 
             ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                 destination: JumpRequestDestination::Standard(first.clone()),
@@ -711,13 +744,21 @@ pub mod implementations {
     }
 
     instruction! {
+        reserve_primitive(ctx=ctx) {
+            ctx.push(optional!(empty));
+
+            Ok(())
+        }
+    }
+
+    instruction! {
         store(ctx, args) {
             let Some(name) = args.first() else {
                 bail!("store requires a name")
             };
 
             if ctx.stack_size() != 1 {
-                bail!("store can only store a single item");
+                bail!("store can only store a single item (found: {:?})", ctx.get_local_operating_stack());
             }
 
             let arg = ctx.pop().unwrap().move_out_of_heap_primitive();
@@ -729,11 +770,11 @@ pub mod implementations {
 
         store_fast(ctx, args) {
             let Some(name) = args.first() else {
-                bail!("store requires a name")
+                bail!("store_fast requires a name")
             };
 
             if ctx.stack_size() != 1 {
-                bail!("store can only store a single item");
+                bail!("store_fast can only store a single item");
             }
 
             let arg = ctx.pop().unwrap().move_out_of_heap_primitive();
@@ -749,7 +790,7 @@ pub mod implementations {
             };
 
             if ctx.stack_size() != 1 {
-                bail!("store can only store a single item");
+                bail!("store_object can only store a single item");
             }
 
             let arg = ctx.pop().unwrap().move_out_of_heap_primitive();
@@ -883,6 +924,33 @@ pub mod implementations {
             ctx.push(primitive);
 
             Ok(())
+        }
+
+        lookup(ctx, args) {
+            if ctx.stack_size() != 1 {
+                bail!("`lookup` requires a single item on the stack (found {:?})", ctx.get_local_operating_stack());
+            }
+
+            let Some(name) = args.get(0) else {
+                bail!("`lookup` requires a name argument");
+            };
+
+            let primitive = ctx.pop().unwrap();
+
+            let result: Rc<(Primitive, VariableFlags)> = primitive.lookup(name).with_context(|| format!("{name} does not exist on {primitive:?}"))?;
+
+            let result_ptr = Rc::as_ptr(&result) as *mut (Primitive, VariableFlags);
+
+            let primitive_ptr: *mut Primitive = unsafe {
+                &mut (*result_ptr).0
+            };
+
+            let heap_primitive = Primitive::HeapPrimitive(primitive_ptr);
+
+            ctx.push(heap_primitive);
+
+            Ok(())
+
         }
 
         assert(ctx, args) {

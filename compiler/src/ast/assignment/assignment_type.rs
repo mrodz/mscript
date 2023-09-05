@@ -2,9 +2,7 @@ use std::borrow::Cow;
 
 use anyhow::Result;
 
-use super::r#type::IntoType;
-use super::{new_err, Assignment, Value};
-use crate::ast::{Ident, TypeLayout};
+use crate::ast::{new_err, r#type::IntoType, Assignment, Ident, TypeLayout, Value};
 use crate::parser::{Node, Parser};
 use crate::VecErr;
 

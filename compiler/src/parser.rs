@@ -1,17 +1,19 @@
 use std::borrow::Cow;
-use std::cell::{Ref, RefMut};
+use std::cell::Ref;
 use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use anyhow::{anyhow, bail, Result};
 use pest_consume::Parser as ParserDerive;
 
 use crate::ast::{
-    CompilationState, Compile, CompiledFunctionId, CompiledItem, Declaration, Dependencies,
-    FunctionParameters, Ident, TypeLayout,
+    ClassType, CompilationState, Compile, CompiledFunctionId, CompiledItem, Declaration,
+    Dependencies, FunctionParameters, Ident, TypeLayout,
 };
 use crate::instruction;
-use crate::scope::{Scope, ScopeHandle, ScopeIter, ScopeReturnStatus, ScopeType, Scopes};
+use crate::scope::{
+    Scope, ScopeHandle, ScopeIter, ScopeReturnStatus, ScopeType, Scopes, TypeSearchResult,
+};
 
 #[allow(unused)]
 pub(crate) type Node<'i> = pest_consume::Node<'i, Rule, Rc<AssocFileData>>;
@@ -25,6 +27,7 @@ pub(crate) struct AssocFileData {
     scopes: Scopes,
     file_name: Arc<String>, // last_arg_type: Rc<RefCell<Vec<IdentType>>>
     source_name: Arc<String>,
+    class_id_c: RwLock<usize>,
 }
 
 impl AssocFileData {
@@ -41,6 +44,7 @@ impl AssocFileData {
             scopes: Scopes::new(),
             file_name: Arc::new(destination_name), // last_arg_type: Rc::new(RefCell::new(vec![]))
             source_name: Arc::new(source_name),
+            class_id_c: RwLock::new(0),
         }
     }
 
@@ -70,9 +74,13 @@ impl AssocFileData {
         bail!("no loop found")
     }
 
-    pub fn get_return_type_mut(&self) -> RefMut<ScopeReturnStatus> {
-        RefMut::map(self.scopes.last_mut(), Scope::peek_yields_value_mut)
+    pub fn get_type_from_str(&self, ty: &str) -> TypeSearchResult {
+        self.scopes.get_type_from_str(ty)
     }
+
+    // pub fn get_return_type_mut(&self) -> RefMut<ScopeReturnStatus> {
+    //     RefMut::map(self.scopes.last_mut(), Scope::peek_yields_value_mut)
+    // }
 
     pub fn get_return_type(&self) -> Ref<ScopeReturnStatus> {
         Ref::map(self.scopes.last(), Scope::peek_yields_value)
@@ -96,6 +104,26 @@ impl AssocFileData {
 
     pub fn push_number_loop(&self, yields: ScopeReturnStatus) -> ScopeHandle {
         self.push_scope_typed(ScopeType::NumberLoop, yields)
+    }
+
+    pub fn push_class_unknown_self(&self) -> ScopeHandle {
+        self.push_scope_typed(ScopeType::Class(None), ScopeReturnStatus::No)
+    }
+
+    pub fn set_self_type_of_class(&self, new_class_type: ClassType) {
+        self.scopes.set_self_type_of_class(new_class_type)
+    }
+
+    pub fn get_type_of_executing_class(&self) -> Option<Ref<ClassType>> {
+        self.scopes.get_type_of_executing_class()
+    }
+
+    /// This function should **ONLY** be called when creating the AST Node for a Class Type.
+    pub fn request_class_id(&self) -> usize {
+        let mut class_id = self.class_id_c.write().unwrap();
+        let result = *class_id;
+        *class_id += 1;
+        result
     }
 
     pub fn get_current_executing_function(
@@ -155,6 +183,11 @@ impl AssocFileData {
         None
     }
 
+    pub fn mark_should_return_as_completed(&self) {
+        // let mut last = self.scopes.last_mut();
+        self.scopes.mark_should_return_as_completed();
+    }
+
     /// Returns the depth at which the stack is expected to be once the added frame is cleaned up.
     pub fn push_scope_typed(&self, ty: ScopeType, yields: ScopeReturnStatus) -> ScopeHandle {
         let depth = {
@@ -188,6 +221,16 @@ impl AssocFileData {
         let scope = self.scopes.last();
 
         Ref::filter_map(scope, |scope| scope.contains(dependency)).ok()
+    }
+
+    pub fn is_function_a_class_method(&self) -> bool {
+        let mut iter = self.scopes.iter();
+
+        let this_frame = iter.next().unwrap();
+
+        let parent_scope = iter.next().unwrap();
+
+        this_frame.is_class() || parent_scope.is_class()
     }
 
     pub fn get_dependency_flags_from_name(

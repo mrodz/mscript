@@ -22,7 +22,7 @@ pub static REPR_TO_BIN: Lazy<HashMap<&[u8], u8>> = Lazy::new(|| {
 ///
 /// Saving this as a constant makes it harder for the arrays to fall out of sync
 /// by requiring that they both take the same size.
-pub const INSTRUCTION_COUNT: usize = 56;
+pub const INSTRUCTION_COUNT: usize = 59;
 
 /// This is an array that provides O(1) lookups of names from bytes.
 pub static BIN_TO_REPR: [&[u8]; INSTRUCTION_COUNT] = [
@@ -80,8 +80,11 @@ pub static BIN_TO_REPR: [&[u8]; INSTRUCTION_COUNT] = [
     /* 0x33 [51] */ b"store_fast",
     /* 0x34 [52] */ b"delete_name_scoped",
     /* 0x35 [53] */ b"delete_name_reference_scoped",
-    /* 0x36 [54] */ b"vec_mut",
+    /* 0x36 [54] */ b"ptr_mut",
     /* 0x37 [55] */ b"assert",
+    /* 0x38 [56] */ b"reserve_primitive",
+    /* 0x39 [57] */ b"lookup",
+    /* 0x3A [58] */ b"call_class",
 ];
 
 /// Similar to [`BIN_TO_REPR`][crate::instruction_constants::BIN_TO_REPR],
@@ -141,68 +144,74 @@ pub static FUNCTION_POINTER_LOOKUP: [InstructionSignature; INSTRUCTION_COUNT] = 
     implementations::store_fast,
     implementations::delete_name_scoped,
     implementations::delete_name_reference_scoped,
-    implementations::vec_mut,
+    implementations::ptr_mut,
     implementations::assert,
+    implementations::reserve_primitive,
+    implementations::lookup,
+    implementations::call_class,
 ];
 
 pub mod id {
-    const NOP: u8 = 0;
-    const CONSTEXPR: u8 = 1;
-    const STACK_DUMP: u8 = 2;
-    const POP: u8 = 3;
-    const BIN_OP: u8 = 4;
-    const VEC_OP: u8 = 5;
-    const BOOL: u8 = 6;
-    const STRING: u8 = 7;
-    const BIGINT: u8 = 8;
-    const INT: u8 = 9;
-    const FLOAT: u8 = 10;
+    pub const NOP: u8 = 0;
+    pub const CONSTEXPR: u8 = 1;
+    pub const STACK_DUMP: u8 = 2;
+    pub const POP: u8 = 3;
+    pub const BIN_OP: u8 = 4;
+    pub const VEC_OP: u8 = 5;
+    pub const BOOL: u8 = 6;
+    pub const STRING: u8 = 7;
+    pub const BIGINT: u8 = 8;
+    pub const INT: u8 = 9;
+    pub const FLOAT: u8 = 10;
     #[deprecated]
-    const CHAR: u8 = 11;
-    const BYTE: u8 = 12;
-    const MAKE_FUNCTION: u8 = 13;
-    const MAKE_OBJECT: u8 = 14;
-    const MAKE_VECTOR: u8 = 15;
-    const VOID: u8 = 16;
-    const BREAKPOINT: u8 = 17;
-    const RET: u8 = 18;
-    const PRINT: u8 = 19;
-    const CALL: u8 = 20;
-    const CALL_OBJECT: u8 = 21;
-    const STACK_SIZE: u8 = 22;
-    const STORE: u8 = 23;
-    const STORE_OBJECT: u8 = 24;
-    const LOAD: u8 = 25;
-    const LOAD_FAST: u8 = 26;
-    const TYPECMP: u8 = 27;
-    const IF: u8 = 28;
-    const JMP: u8 = 29;
+    pub const CHAR: u8 = 11;
+    pub const BYTE: u8 = 12;
+    pub const MAKE_FUNCTION: u8 = 13;
+    pub const MAKE_OBJECT: u8 = 14;
+    pub const MAKE_VECTOR: u8 = 15;
+    pub const VOID: u8 = 16;
+    pub const BREAKPOINT: u8 = 17;
+    pub const RET: u8 = 18;
+    pub const PRINT: u8 = 19;
+    pub const CALL: u8 = 20;
+    pub const CALL_OBJECT: u8 = 21;
+    pub const STACK_SIZE: u8 = 22;
+    pub const STORE: u8 = 23;
+    pub const STORE_OBJECT: u8 = 24;
+    pub const LOAD: u8 = 25;
+    pub const LOAD_FAST: u8 = 26;
+    pub const TYPECMP: u8 = 27;
+    pub const IF: u8 = 28;
+    pub const JMP: u8 = 29;
     #[deprecated]
-    const ENDIF: u8 = 30;
-    const STRICT_EQU: u8 = 31;
-    const EQU: u8 = 32;
-    const ARG: u8 = 33;
-    const MUTATE: u8 = 34;
-    const LOAD_CALLBACK: u8 = 35;
-    const LOAD_OBJECT: u8 = 36;
-    const CALL_LIB: u8 = 37;
-    const LEN: u8 = 38;
-    const DONE: u8 = 39;
+    pub const ENDIF: u8 = 30;
+    pub const STRICT_EQU: u8 = 31;
+    pub const EQU: u8 = 32;
+    pub const ARG: u8 = 33;
+    pub const MUTATE: u8 = 34;
+    pub const LOAD_CALLBACK: u8 = 35;
+    pub const LOAD_OBJECT: u8 = 36;
+    pub const CALL_LIB: u8 = 37;
+    pub const LEN: u8 = 38;
+    pub const DONE: u8 = 39;
     #[deprecated]
-    const UPDATE: u8 = 40;
-    const SCOPE: u8 = 41;
-    const ELSE: u8 = 42;
-    const NEG: u8 = 43;
-    const NEQ: u8 = 44;
-    const NOT: u8 = 45;
-    const CALL_SELF: u8 = 46;
-    const STORE_SKIP: u8 = 47;
-    const FAST_REV2: u8 = 48;
-    const WHILE_LOOP: u8 = 49;
-    const JMP_POP: u8 = 50;
-    const STORE_FAST: u8 = 51;
-    const DELETE_NAME_SCOPED: u8 = 52;
-    const DELETE_NAME_REFERENCE_SCOPE: u8 = 53;
-    const VEC_MUT: u8 = 54;
-    const ASSERT: u8 = 55;
+    pub const UPDATE: u8 = 40;
+    pub const SCOPE: u8 = 41;
+    pub const ELSE: u8 = 42;
+    pub const NEG: u8 = 43;
+    pub const NEQ: u8 = 44;
+    pub const NOT: u8 = 45;
+    pub const CALL_SELF: u8 = 46;
+    pub const STORE_SKIP: u8 = 47;
+    pub const FAST_REV2: u8 = 48;
+    pub const WHILE_LOOP: u8 = 49;
+    pub const JMP_POP: u8 = 50;
+    pub const STORE_FAST: u8 = 51;
+    pub const DELETE_NAME_SCOPED: u8 = 52;
+    pub const DELETE_NAME_REFERENCE_SCOPE: u8 = 53;
+    pub const PTR_MUT: u8 = 54;
+    pub const ASSERT: u8 = 55;
+    pub const RESERVE_PRIMITIVE: u8 = 56;
+    pub const LOOKUP: u8 = 57;
+    pub const CALL_CLASS: u8 = 58;
 }

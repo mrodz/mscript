@@ -29,6 +29,8 @@ pub mod compilation_bridge {
     pub use crate::file::{MScriptFile, MScriptFileBuilder};
     pub use crate::instruction::Instruction;
 
+    pub use crate::instruction_constants::id;
+
     /// From a string, get an instruction's corresponding byte.
     ///
     /// ```

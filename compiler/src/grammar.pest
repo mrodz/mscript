@@ -38,7 +38,7 @@ allow_bin_op = _{ primitive | ident | function }
 math_primary = _{ allow_bin_op | "(" ~ math_expr ~ ")" }
 
 math_prefix = _{ unary_minus | not }
-math_postfix = _{ callable | list_index }
+math_postfix = _{ dot_chain | callable | list_index }
 
 math_atom = _{ math_prefix? ~ math_primary ~ math_postfix? }
 math_expr = { math_atom ~ (bin_op ~ math_atom)* }
@@ -67,7 +67,7 @@ escape_sequence = @{ "\\" ~ escape_character }
 string = @{ "\"" ~ (("\\\"") | (!("\"") ~ ANY))* ~ "\"" }
 
 
-ident_chars = _{ (('a'..'z') | ('0'..'9') | "_") }
+ident_chars = _{ (('a'..'z') | ('0'..'9') | ('A'..'Z') | "_") }
 
 ident = @{ !('0'..'9') ~ ident_chars+ }
 type = { function_type | list_type_open_only | list_type | ident }
@@ -104,7 +104,13 @@ assignment_variant = _{ assignment_no_type | assignment_type | assignment_unpack
 assignment = { (assignment_flags ~ assignment_variant) | assignment_variant }
 
 reassignment_primary = _{ ident | "(" ~ reassignment_expr ~ ")" }
-reassignment_postfix = _{ list_index }
+
+dot_name_lookup = { ident }
+dot_function_call = { ident ~ callable }
+dot_chain_option = _{ dot_function_call | dot_name_lookup }
+dot_chain = { ("." ~ dot_chain_option)+ }
+
+reassignment_postfix = _{ list_index | dot_chain }
 reassignment_expr = { reassignment_primary ~ reassignment_postfix }
 reassignment = { reassignment_expr ~ "=" ~ value }
 
@@ -130,7 +136,17 @@ assertion = { "assert" ~  value }
 
 return_statement = { "return " ~ value? }
 
-declaration = { assignment | reassignment | print_statement | assertion | return_statement | continue_statement | break_statement | if_statement | while_loop | number_loop | math_expr }
+class_variable = { assignment_flags? ~ ident ~ (":" ~ type)? }
+class_constructor = { "constructor" ~ "(" ~ function_parameters ~ ")" ~ function_return_type? ~ block }
+class_bound_function = { "fn" ~ ident ~ "(" ~ function_parameters ~ ")" ~ function_return_type? ~ block }
+
+class_feature = _{ class_constructor | class_bound_function | class_variable }
+
+class_body = { "{" ~ class_feature*  ~ "}" }
+
+class = { "class" ~ ident ~ class_body }
+
+declaration = { class | reassignment | assignment | print_statement | assertion | return_statement | continue_statement | break_statement | if_statement | while_loop | number_loop | math_expr }
 
 file = {
     SOI ~

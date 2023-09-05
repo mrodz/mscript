@@ -15,19 +15,75 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context, Result};
-use ast::{CompilationState, Compile};
+use ast::{map_err, new_err, CompilationState, Compile};
 use bytecode::compilation_bridge::{Instruction, MScriptFile, MScriptFileBuilder};
 use bytecode::Program;
 use indicatif::{MultiProgress, ProgressBar, ProgressFinish, ProgressStyle};
 
 use once_cell::sync::Lazy;
 use parser::AssocFileData;
+use pest::Span;
 
 use crate::ast::CompiledItem;
 use crate::parser::{root_node_from_str, Parser};
 
 struct VerboseLogger {
     progress_bars: Option<MultiProgress>,
+}
+
+pub(crate) trait CompilationError {
+    type Output;
+    fn details(self, span: Span, file_name: &str, message: impl Into<String>) -> Self::Output;
+    fn details_lazy_message(
+        self,
+        span: Span,
+        file_name: &str,
+        message: impl Fn() -> String,
+    ) -> Self::Output;
+}
+
+impl<T> CompilationError for Result<T> {
+    type Output = Self;
+    fn details(self, span: Span, file_name: &str, message: impl Into<String>) -> Self::Output {
+        map_err(self, span, file_name, message.into())
+    }
+
+    fn details_lazy_message(
+        self,
+        span: Span,
+        file_name: &str,
+        message: impl Fn() -> String,
+    ) -> Self::Output {
+        if self.is_err() {
+            self.details(span, file_name, message())
+        } else {
+            self
+        }
+    }
+}
+
+impl<T> CompilationError for Option<T> {
+    type Output = Result<T>;
+    fn details(self, span: Span, file_name: &str, message: impl Into<String>) -> Self::Output {
+        if let Some(x) = self {
+            return Ok(x);
+        }
+
+        Err(new_err(span, file_name, message.into()))
+    }
+
+    fn details_lazy_message(
+        self,
+        span: Span,
+        file_name: &str,
+        message: impl Fn() -> String,
+    ) -> Self::Output {
+        if let Some(x) = self {
+            Ok(x)
+        } else {
+            self.details(span, file_name, message())
+        }
+    }
 }
 
 static SPINNER_STYLE: Lazy<ProgressStyle> = Lazy::new(|| {

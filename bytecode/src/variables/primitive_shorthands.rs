@@ -94,7 +94,7 @@ macro_rules! function {
     ($data:expr) => {{
         use $crate::BytecodePrimitive;
 
-        BytecodePrimitive::Function(std::rc::Rc::new($data))
+        BytecodePrimitive::Function($data)
     }};
 }
 
@@ -140,6 +140,21 @@ macro_rules! object {
         use $crate::BytecodePrimitive;
 
         BytecodePrimitive::Object($data)
+    }};
+}
+
+/// Create a bytecode optional primitive
+#[macro_export]
+macro_rules! optional {
+    (empty) => {{
+        use $crate::BytecodePrimitive;
+
+        BytecodePrimitive::Optional(None)
+    }};
+    ($data:expr) => {{
+        use $crate::BytecodePrimitive;
+
+        BytecodePrimitive::Optional(Some(Box::new($data)))
     }};
 }
 

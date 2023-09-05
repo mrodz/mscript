@@ -1,11 +1,10 @@
 mod assertion;
 mod assignment;
-mod assignment_no_type;
-mod assignment_type;
-mod assignment_unpack;
 mod boolean;
 mod callable;
+mod class;
 mod declaration;
+mod dot_lookup;
 mod function;
 mod function_arguments;
 mod function_body;
@@ -29,6 +28,7 @@ mod while_loop;
 pub(crate) use assertion::Assertion;
 pub(crate) use assignment::Assignment;
 pub(crate) use callable::Callable;
+pub(crate) use class::ClassType;
 pub(crate) use declaration::Declaration;
 pub(crate) use function::Function;
 pub(crate) use function_arguments::FunctionArguments;
@@ -48,8 +48,8 @@ pub(crate) use reassignment::Reassignment;
 pub(crate) use value::{CompileTimeEvaluate, ConstexprEvaluation, Value};
 pub(crate) use while_loop::WhileLoop;
 
-#[allow(unused_imports)]
-pub(crate) use r#type::shorthands::{BIGINT_TYPE, BOOL_TYPE, BYTE_TYPE, FLOAT_TYPE, INT_TYPE};
+#[allow(unused)]
+pub(crate) use r#type::{BIGINT_TYPE, BOOL_TYPE, BYTE_TYPE, FLOAT_TYPE, INT_TYPE, STR_TYPE};
 
 use anyhow::{anyhow, bail, Context, Error, Result};
 use bytecode::compilation_bridge::{raw_byte_instruction_to_string_representation, Instruction};

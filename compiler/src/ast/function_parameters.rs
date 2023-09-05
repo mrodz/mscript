@@ -11,11 +11,12 @@ use crate::{
 };
 
 use super::{
-    new_err, r#type::TypeLayout, CompilationState, Compile, CompiledItem, Dependencies, Dependency,
-    Ident,
+    new_err,
+    r#type::{TypeLayout, SELF_TYPE},
+    CompilationState, Compile, CompiledItem, Dependencies, Dependency, Ident,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum FunctionParameters {
     Named(Vec<Ident>),
     TypesOnly(Vec<Cow<'static, TypeLayout>>),
@@ -29,7 +30,7 @@ impl FunctionParameters {
         }
     }
 
-    pub fn to_types(&self) -> Cow<Vec<Cow<TypeLayout>>> {
+    pub fn to_types(&self) -> Cow<'_, Vec<Cow<'static, TypeLayout>>> {
         match self {
             FunctionParameters::Named(names) => {
                 Cow::Owned(names.iter().map(|x| x.ty().unwrap().clone()).collect())
@@ -102,10 +103,24 @@ impl Parser {
 
         let file_name = input.user_data().get_source_file_name();
 
-        loop {
+        for c in 0.. {
             let Some(ident_node) = children.next() else {
                 break;
             };
+
+            if c == 0 {
+                let ident_str = ident_node.as_str();
+                if ident_str == "self" && input.user_data().is_function_a_class_method() {
+                    if add_to_scope_dependencies {
+                        let ident =
+                            Ident::new("self".to_owned(), Some(Cow::Borrowed(&SELF_TYPE)), false);
+                        input.user_data().add_dependency(&ident);
+                        result.push(ident);
+                    }
+
+                    continue;
+                }
+            }
 
             let ident_span = ident_node.as_span();
             let mut ident = Self::ident(ident_node)?;

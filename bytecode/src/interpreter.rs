@@ -114,14 +114,15 @@ impl Program {
 
         let (path, symbol) = destination_label.split_at(last_hash);
 
-        let path = path.to_string();
+        let path = path.to_string().replace('\\', "/");
         let symbol = &symbol[1..];
 
         let path_ref = &path;
 
-        rc_to_ref(&rc_of_self).add_file(Rc::new(path.replace('\\', "/")))?;
+        rc_to_ref(&rc_of_self).add_file(Rc::new(path.clone()))?;
 
-        let file = Self::get_file(rc_of_self.clone(), path_ref)?;
+        let file = Self::get_file(rc_of_self.clone(), path_ref)
+            .with_context(|| format!("failed jumping to {path}"))?;
 
         let Some(function) = rc_to_ref(&file).get_function(&symbol.to_owned()) else {
             bail!("could not find function (missing `{symbol}`, searching in {file:?})")

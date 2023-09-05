@@ -51,6 +51,13 @@ pub static KEYWORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
 });
 
 impl Ident {
+    pub fn new(name: String, ty: Option<Cow<'static, TypeLayout>>, read_only: bool) -> Self {
+        Self {
+            name,
+            ty,
+            read_only,
+        }
+    }
     pub fn mark_const(&mut self) {
         self.read_only = true;
     }
@@ -79,7 +86,15 @@ impl Ident {
         &self.name
     }
 
-    pub fn ty(&self) -> Result<&Cow<TypeLayout>> {
+    pub fn ty_owned(self) -> Result<Cow<'static, TypeLayout>> {
+        if let Some(ty) = self.ty {
+            Ok(ty)
+        } else {
+            bail!("trying to get the type of an identifier that is typeless")
+        }
+    }
+
+    pub fn ty(&self) -> Result<&Cow<'static, TypeLayout>> {
         if let Some(ref ty) = self.ty {
             Ok(ty)
         } else {
@@ -115,6 +130,10 @@ impl Ident {
         self.ty = Some(ident.ty.clone().context("no type")?);
 
         Ok(())
+    }
+
+    pub fn set_type_no_link(&mut self, ty: Cow<'static, TypeLayout>) {
+        self.ty = Some(ty);
     }
 
     pub fn link_from_pointed_type_with_lookup(&mut self, user_data: &AssocFileData) -> Result<()> {
