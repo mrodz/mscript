@@ -25,7 +25,7 @@ pub(crate) struct Parser;
 #[derive(Debug)]
 pub(crate) struct AssocFileData {
     scopes: Scopes,
-    file_name: Arc<String>, // last_arg_type: Rc<RefCell<Vec<IdentType>>>
+    file_name: Arc<String>,
     source_name: Arc<String>,
     class_id_c: RwLock<usize>,
 }
@@ -42,7 +42,7 @@ impl AssocFileData {
 
         Self {
             scopes: Scopes::new(),
-            file_name: Arc::new(destination_name), // last_arg_type: Rc::new(RefCell::new(vec![]))
+            file_name: Arc::new(destination_name),
             source_name: Arc::new(source_name),
             class_id_c: RwLock::new(0),
         }
@@ -77,10 +77,6 @@ impl AssocFileData {
     pub fn get_type_from_str(&self, ty: &str) -> TypeSearchResult {
         self.scopes.get_type_from_str(ty)
     }
-
-    // pub fn get_return_type_mut(&self) -> RefMut<ScopeReturnStatus> {
-    //     RefMut::map(self.scopes.last_mut(), Scope::peek_yields_value_mut)
-    // }
 
     pub fn get_return_type(&self) -> Ref<ScopeReturnStatus> {
         Ref::map(self.scopes.last(), Scope::peek_yields_value)
@@ -118,6 +114,10 @@ impl AssocFileData {
         self.scopes.get_type_of_executing_class()
     }
 
+    pub fn get_type_of_executing_class_in_nth_frame(&self, skip_n_frames: usize) -> Option<Ref<ClassType>> {
+        self.scopes.get_type_of_executing_class_in_nth_frame(skip_n_frames)
+    }
+
     /// This function should **ONLY** be called when creating the AST Node for a Class Type.
     pub fn request_class_id(&self) -> usize {
         let mut class_id = self.class_id_c.write().unwrap();
@@ -149,22 +149,6 @@ impl AssocFileData {
         })
     }
 
-    // pub fn register_function_parameters_to_scope(
-    //     &self,
-    //     function_parameters: Arc<FunctionParameters>,
-    // ) {
-    //     let mut this_scope = self.scopes.last_mut();
-
-    //     let idents = function_parameters.slice();
-
-    //     for ident in idents {
-    //         self.scopes.add_variable(ident);
-    //     }
-
-    //     this_scope.add_parameters(function_parameters);
-
-    // }
-
     pub fn return_statement_expected_yield_type(&self) -> Option<Ref<Cow<'static, TypeLayout>>> {
         for scope in self.scopes.iter() {
             let Ok(result) = Ref::filter_map(scope, |x| x.peek_yields_value().get_type()) else {
@@ -172,19 +156,12 @@ impl AssocFileData {
             };
 
             return Some(result);
-            // let Some(ty) = scope.peek_yields_value().get_type();
-
-            // save this code in case this change breaks it:
-            // let (ScopeReturnStatus::Should(result) | ScopeReturnStatus::Did(result)) = scope.peek_yields_value() else {
-            //     continue;
-            // };
         }
 
         None
     }
 
     pub fn mark_should_return_as_completed(&self) {
-        // let mut last = self.scopes.last_mut();
         self.scopes.mark_should_return_as_completed();
     }
 
@@ -207,6 +184,10 @@ impl AssocFileData {
 
     pub fn add_dependency(&self, dependency: &Ident) {
         self.scopes.add_variable(dependency)
+    }
+
+    pub fn add_type(&self, name: Box<str>, ty: TypeLayout) {
+        self.scopes.add_type(name, ty)
     }
 
     pub fn has_name_been_mapped(&self, dependency: &String) -> bool {

@@ -16,7 +16,7 @@ use super::{class_feature::ClassFeature, Constructor};
 #[derive(Debug)]
 pub(crate) struct ClassBody {
     features: Vec<ClassFeature>,
-    constructor: Option<Constructor>,
+    constructor: Constructor,
 }
 
 impl Compile for ClassBody {
@@ -27,9 +27,7 @@ impl Compile for ClassBody {
             result.append(&mut feature.compile(state)?);
         }
 
-        if let Some(ref constructor) = self.constructor {
-            result.append(&mut constructor.compile(state)?);
-        }
+        result.append(&mut self.constructor.compile(state)?);
 
         result.push(instruction!(ret));
 
@@ -38,7 +36,7 @@ impl Compile for ClassBody {
 }
 
 impl ClassBody {
-    pub fn new(features: Vec<ClassFeature>, constructor: Option<Constructor>) -> Self {
+    pub fn new(features: Vec<ClassFeature>, constructor: Constructor) -> Self {
         Self {
             features,
             constructor,
@@ -64,9 +62,7 @@ impl Dependencies for ClassBody {
         let mut features_sup: Vec<Dependency> =
             self.features.iter().flat_map(|x| x.supplies()).collect();
 
-        if let Some(ref constructor) = self.constructor {
-            features_sup.append(&mut constructor.supplies());
-        }
+        features_sup.append(&mut self.constructor.supplies());
 
         features_sup
     }
@@ -78,9 +74,7 @@ impl Dependencies for ClassBody {
             .flat_map(|x| x.net_dependencies())
             .collect();
 
-        if let Some(ref constructor) = self.constructor {
-            block_dependencies.append(&mut constructor.net_dependencies());
-        }
+        block_dependencies.append(&mut self.constructor.net_dependencies());
 
         block_dependencies
     }
@@ -123,6 +117,15 @@ impl Parser {
                 rule => unreachable!("{rule:?} is not implemented for class"),
             }
         }
+
+        let constructor = constructor.unwrap_or_else(|| {
+            let path_str = input.user_data().get_file_name();
+            let class_type = input.user_data().get_type_of_executing_class_in_nth_frame(1).unwrap();
+            let class_name = class_type.arced_name();
+            let class_id = class_type.id;
+
+            Constructor::default_constructor(path_str, class_name, class_id)
+        });
 
         Ok(ClassBody::new(class_features, constructor))
     }

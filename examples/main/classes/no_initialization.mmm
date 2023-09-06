@@ -1,0 +1,45 @@
+function ComplexNumber_0::$constructor
+	arg 0
+	store self
+	void
+	ret
+end
+function ComplexNumber_0
+	reserve_primitive
+	store_fast real
+	reserve_primitive
+	store_fast imaginary
+	make_object
+	store_fast #1
+	make_function ./no_initialization.mmm#ComplexNumber_0::$constructor
+	store_fast #0
+	load_fast #1
+	load_fast #0
+	call
+	delete_name_scoped #0
+	load_fast #1
+	ret
+end
+function A_1
+	ret
+end
+function __module__
+	make_function .\no_initialization.mmm#ComplexNumber_0
+	store_fast ComplexNumber
+	make_function .\no_initialization.mmm#A_1
+	store_fast A
+	load A
+	store_fast #1
+	load_fast #1
+	call
+	store one
+	load one
+	printn *
+	void
+	load ComplexNumber
+	store_fast #1
+	load_fast #1
+	call
+	store sqrt_neg_1
+	ret
+end

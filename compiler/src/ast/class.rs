@@ -178,6 +178,11 @@ impl Parser {
             Self::class_body(body_node)?
         };
 
+        input.user_data().add_type(
+            ident.name().clone().into_boxed_str(),
+            ident.ty().unwrap().clone().into_owned(),
+        );
+
         input.user_data().add_dependency(&ident);
 
         let result = Class {

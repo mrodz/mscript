@@ -212,7 +212,6 @@ impl Scopes {
         x.last_mut().unwrap().add_dependency(dependency);
     }
 
-    #[allow(unused)]
     pub(crate) fn add_type(&self, name: Box<str>, ty: TypeLayout) {
         let mut x = self.0.borrow_mut();
 
@@ -248,9 +247,9 @@ impl Scopes {
         TypeSearchResult::NotFound
     }
 
-    pub(crate) fn get_type_of_executing_class(&self) -> Option<Ref<ClassType>> {
+    pub(crate) fn get_type_of_executing_class_in_nth_frame(&self, step_n_frames: usize) -> Option<Ref<ClassType>> {
         Ref::filter_map(self.0.borrow(), |scopes| {
-            let second_to_last = &scopes[scopes.len() - 2];
+            let second_to_last = &scopes[scopes.len() - step_n_frames];
 
             let ScopeType::Class(Some(ref class_type)) = second_to_last.ty else {
                 return None;
@@ -259,6 +258,10 @@ impl Scopes {
             Some(class_type)
         })
         .ok()
+    }
+
+    pub(crate) fn get_type_of_executing_class(&self) -> Option<Ref<ClassType>> {
+        self.get_type_of_executing_class_in_nth_frame(2)
     }
 }
 

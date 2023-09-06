@@ -11,7 +11,7 @@ use std::{
     path::{Path, PathBuf},
     rc::Rc,
     sync::Mutex,
-    thread,
+    thread, io::{stdout, Write},
 };
 
 use crate::cli::CompilationTargets;
@@ -142,6 +142,8 @@ fn main() -> Result<()> {
                 };
 
                 println!("Running...\n");
+
+                stdout().flush()?;
 
                 let program = Program::new_from_file(product)?;
                 program.execute()

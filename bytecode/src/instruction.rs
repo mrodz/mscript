@@ -599,37 +599,6 @@ pub mod implementations {
             Ok(())
         }
 
-        call_class(ctx, args) {
-            let Some(instance_name) = args.get(0) else {
-                bail!("`call_class` requires the name of the instance on which this method will be called");
-            };
-
-            let last = ctx.pop();
-
-            let Some(Primitive::Function(f)) = last else {
-                bail!("the last item on the local stack {last:?} must be a function.")
-            };
-
-            let Some(variable) = ctx.load_local(instance_name) else {
-                bail!("`{instance_name}` is not in scope")
-            };
-
-            let mut arguments = vec![variable.0.clone()];
-
-            arguments.extend_from_slice(ctx.ref_local_operating_stack());
-
-            ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
-                destination: JumpRequestDestination::Standard(f.location().clone()),
-                callback_state: f.callback_state().clone(),
-                stack: ctx.rced_call_stack(),
-                arguments,
-            }));
-
-            ctx.clear_stack();
-
-            Ok(())
-        }
-
         mutate(ctx, args) {
             let var_name = args.first().context("object mutation requires a name argument")?;
 
