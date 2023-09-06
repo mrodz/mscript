@@ -177,8 +177,8 @@ impl Display for Object {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "[object {} @ {:#x}] {{ {} }}",
-            self.name, self as *const Self as usize, self.object_variables
+            "[object {} @ {:#x}]",
+            self.name, self as *const Self as usize
         )
     }
 }

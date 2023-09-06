@@ -37,6 +37,10 @@ impl Parser {
         let expected_types: Cow<Vec<Cow<TypeLayout>>> = expected_parameters.to_types();
 
         for (idx, child) in children.enumerate() {
+            if idx == expected_types.len() {
+                break;
+            }
+            
             let child_span = child.as_span();
             let value_for_arg = Self::value(child)?;
 

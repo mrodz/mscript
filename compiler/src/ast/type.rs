@@ -1,7 +1,7 @@
 use std::{borrow::Cow, fmt::Display, hash::Hash, sync::Arc};
 
 use crate::{
-    ast::value::ValToUsize,
+    ast::{value::ValToUsize, new_err},
     parser::{AssocFileData, Node, Parser, Rule},
     scope::{ScopeReturnStatus, SuccessTypeSearchResult, TypeSearchResult},
     CompilationError,
@@ -705,7 +705,7 @@ impl Parser {
         let ty = input.children().single().unwrap();
 
         let span = ty.as_span();
-        let file_name = input.user_data().get_file_name();
+        let file_name = input.user_data().get_source_file_name();
 
         use TypeLayout::*;
 
@@ -726,7 +726,7 @@ impl Parser {
                     let ty = input.user_data().get_type_from_str(ty.as_str());
 
                     let TypeSearchResult::Ok(ty) = ty else {
-                        bail!("unknown type")
+                        return Err(new_err(span, &file_name, UNKNOWN_TYPE.to_owned()));
                     };
 
                     ty

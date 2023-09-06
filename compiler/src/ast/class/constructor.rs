@@ -29,6 +29,16 @@ impl Constructor {
     pub fn symbolic_id(&self) -> String {
         format!("{}_{}::$constructor", self.class_name, self.class_id)
     }
+
+    pub fn default_constructor(path_str: Arc<String>, class_name: Arc<String>, class_id: usize) -> Self {
+        Self {
+            parameters: FunctionParameters::Named(vec![Ident::new("self".to_owned(), Some(Cow::Owned(TypeLayout::ClassSelf)), true)]),
+            body: Block::empty_body(),
+            path_str,
+            class_name,
+            class_id,
+        }
+    }
 }
 
 impl Compile for Constructor {
