@@ -167,7 +167,7 @@ impl MScriptFile {
     fn get_functions(rc_of_self: &Rc<Self>) -> Result<Functions> {
         let path = rc_of_self.path();
         let mut reader = BufReader::new(
-            File::open(path).with_context(|| format!("failed opening file `{path}`"))?,
+            File::open(path).with_context(|| format!("failed opening file `{path}` ({rc_of_self:?})"))?,
         );
         let mut buffer = Vec::new();
 
