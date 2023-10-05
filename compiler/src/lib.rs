@@ -178,6 +178,8 @@ pub fn eval(mscript_code: &str) -> Result<(), Vec<anyhow::Error>> {
         mscript_code,
     )?;
 
+    println!("{compiled_items:?}");
+
     let eval_environment: Rc<MScriptFile> =
         seal_compiled_items(Path::new(output_path), compiled_items).to_err_vec()?;
 

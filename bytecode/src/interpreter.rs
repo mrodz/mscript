@@ -15,6 +15,7 @@ use std::io::{stdout, Write};
 use std::panic;
 use std::rc::{Rc, Weak};
 
+#[derive(Debug)]
 pub struct Program {
     /// Keeps track of from where the program was called.
     entrypoint: Weak<String>,
@@ -118,6 +119,8 @@ impl Program {
         let symbol = &symbol[1..];
 
         let path_ref = &path;
+
+        println!("SELF: {rc_of_self:?}, REQUEST: {request:?}");
 
         rc_to_ref(&rc_of_self).add_file(Rc::new(path.clone()))?;
 
