@@ -589,6 +589,8 @@ pub mod implementations {
             let arguments = ctx.get_local_operating_stack();
             ctx.clear_stack();
 
+            println!("<!> CALL_OBJECT: {path}");
+
             ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                 destination: JumpRequestDestination::Standard(path.clone()),
                 callback_state,
@@ -639,8 +641,12 @@ pub mod implementations {
                     bail!("missing argument, and the last item in the local stack {last:?} is not a function.")
                 };
 
+                let destination = JumpRequestDestination::Standard(f.location().clone());
+
+                println!("<!> CALL (function ptr): {f:?}, destination: {destination:?}");
+
                 ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
-                    destination: JumpRequestDestination::Standard(f.location().clone()),
+                    destination,
                     callback_state: f.callback_state().clone(),
                     stack: ctx.rced_call_stack(),
                     arguments: ctx.get_local_operating_stack(),
@@ -652,6 +658,8 @@ pub mod implementations {
             };
 
             let arguments = ctx.get_local_operating_stack();
+
+            println!("<!> CALL (path): {first:?}");
 
 
             ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
@@ -673,6 +681,8 @@ pub mod implementations {
 
             let stack = ctx.rced_call_stack();
             let name = stack.get_executing_function_label().context("not run in a function")?;
+
+            println!("<!> CALL_SELF: {name:?}");
 
             ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                 destination: JumpRequestDestination::Standard(name.clone()),
@@ -1105,6 +1115,8 @@ pub mod implementations {
             };
 
             let arguments = ctx.get_local_operating_stack();
+
+            println!("<!> CALL_LIB: lib {lib_name:?} func {func_name:?}");
 
             ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                 destination: JumpRequestDestination::Library {
