@@ -284,7 +284,7 @@ impl Function {
     /// # Panics
     /// This function will `panic!` if the instruction byte falls outside of (0..[`INSTRUCTION_COUNT`][crate::instruction_constants::INSTRUCTION_COUNT])
     pub(crate) fn run(
-        &mut self,
+        &self,
         args: Cow<Vec<Primitive>>,
         current_frame: Rc<Stack>,
         callback_state: Option<Rc<VariableMapping>>,
@@ -434,6 +434,21 @@ impl<'a> Functions {
         Self {
             map: HashMap::new(),
         }
+    }
+
+    pub(crate) fn run_function(
+        &self, 
+        name: &String,
+        args: Cow<Vec<Primitive>>,
+        current_frame: Rc<Stack>,
+        callback_state: Option<Rc<VariableMapping>>,
+        jump_callback: &mut impl Fn(&JumpRequest) -> Result<ReturnValue>,
+    ) -> Result<ReturnValue> {
+        let Some(function) = self.map.get(name) else {
+            panic!("not found");
+        };
+
+        function.run(args, current_frame, callback_state, jump_callback)
     }
 
     pub(crate) fn add_function(

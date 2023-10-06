@@ -1,6 +1,5 @@
 use super::Primitive;
 use crate::function::PrimitiveFunction;
-use crate::rc_to_ref;
 use crate::stack::{flag_constants, VariableFlags, VariableMapping};
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
@@ -91,7 +90,7 @@ impl Object {
     }
 
     pub fn get_property(
-        &mut self,
+        &self,
         property_name: &str,
         include_functions: bool,
     ) -> Option<Rc<(Primitive, VariableFlags)>> {
@@ -121,7 +120,7 @@ impl Object {
     }
 
     pub fn has_variable(&self, variable_name: &str) -> Option<Rc<(Primitive, VariableFlags)>> {
-        rc_to_ref(&self.object_variables).get(variable_name)
+        self.object_variables.get(variable_name)
     }
 
     pub fn has_function<'a>(

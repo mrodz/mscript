@@ -88,6 +88,7 @@ macro_rules! raise_error {
 /// there is no concern regarding multiple processes attempting to modify the
 /// call stack, change a file's flags, etc.
 #[inline(always)]
+#[deprecated = "Unstable when used with unpinned data, bad code practice too."]
 pub(crate) fn rc_to_ref<T>(arc: &std::rc::Rc<T>) -> &'static mut T {
     unsafe { &mut (*(std::rc::Rc::as_ptr(arc) as *mut T)) }
 }

@@ -10,6 +10,7 @@ use crate::stack::Stack;
 use crate::BytecodePrimitive;
 use anyhow::{bail, Context, Result};
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::{stdout, Write};
 use std::panic;
@@ -20,7 +21,7 @@ pub struct Program {
     /// Keeps track of from where the program was called.
     entrypoint: Weak<String>,
     /// Keeps a record of the `.mmm` files in use.
-    files_in_use: HashMap<Rc<String>, Rc<MScriptFile>>,
+    files_in_use: RefCell<HashMap<Rc<String>, Rc<MScriptFile>>>,
 }
 
 impl Program {
@@ -29,7 +30,7 @@ impl Program {
 
         Ok(Self {
             entrypoint: Rc::downgrade(&file_path),
-            files_in_use: HashMap::from([(file_path, entrypoint)]),
+            files_in_use: RefCell::new(HashMap::from([(file_path, entrypoint)])),
         })
     }
 
@@ -47,13 +48,13 @@ impl Program {
 
         Ok(Self {
             entrypoint: Rc::downgrade(&entrypoint),
-            files_in_use,
+            files_in_use: RefCell::new(files_in_use),
         })
     }
 
     /// Gives callers the ability to check if a file is in use by the interpreter.
     fn is_file_loaded(&self, path: &String) -> Option<Rc<MScriptFile>> {
-        self.files_in_use.get(path).cloned()
+        self.files_in_use.borrow().get(path).cloned()
     }
 
     /// Add a file to the running program. Its instructions will be loaded into memory.
@@ -64,14 +65,17 @@ impl Program {
     ///
     /// # Errors
     /// If opening a `.mmm` file fails, the error will be passed up.
-    fn add_file(&mut self, path: Rc<String>) -> Result<bool> {
-        if self.files_in_use.contains_key(&path) {
+    fn add_file(&self, path: Rc<String>) -> Result<bool> {
+        if self.files_in_use.borrow().contains_key(&path) {
             return Ok(false);
         }
 
         let new_file = MScriptFile::open(Rc::clone(&path))?;
 
-        self.files_in_use.insert(path, new_file);
+        {
+            let mut borrow = self.files_in_use.borrow_mut();
+            borrow.insert(path, new_file);
+        }
 
         Ok(true)
     }
@@ -122,24 +126,33 @@ impl Program {
 
         println!("SELF: {rc_of_self:?}, REQUEST: {request:?}");
 
-        rc_to_ref(&rc_of_self).add_file(Rc::new(path.clone()))?;
+        rc_of_self.add_file(Rc::new(path.clone()))?;
+        // rc_to_ref(&rc_of_self).add_file(Rc::new(path.clone()))?;
 
         let file = Self::get_file(rc_of_self.clone(), path_ref)
             .with_context(|| format!("failed jumping to {path}"))?;
 
-        let Some(function) = rc_to_ref(&file).get_function(&symbol.to_owned()) else {
-            bail!("could not find function (missing `{symbol}`, searching in {file:?})")
-        };
-
         let callback_state = request.callback_state.as_ref().cloned();
 
-        let return_value = function.run(
+        let return_value = file.run_function(
+            &symbol.to_owned(),
             Cow::Borrowed(&request.arguments),
             Rc::clone(&request.stack),
             callback_state,
             &mut |req| Self::process_jump_request(rc_of_self.clone(), req),
         )?;
+        // let Some(function) = rc_to_ref(&file).get_function(&symbol.to_owned()) else {
+        //     bail!("could not find function (missing `{symbol}`, searching in {file:?})")
+        // };
 
+        // let return_value = function.run(
+        //     Cow::Borrowed(&request.arguments),
+        //     Rc::clone(&request.stack),
+        //     callback_state,
+        //     &mut |req| Self::process_jump_request(rc_of_self.clone(), req),
+        // )?;
+
+        // todo!()
         Ok(return_value)
     }
 
@@ -217,15 +230,19 @@ impl Program {
 
         // let module_function = format!("{}#main", entrypoint.path());
 
-        let Some(function) = rc_to_ref(&entrypoint).get_function(&"__module__".to_owned()) else {
-            bail!("could not find entrypoint (hint: try adding `function __module__`. Searching in {:?})", entrypoint)
-        };
+        // let Some(function) = rc_to_ref(&entrypoint).get_function(&"__module__".to_owned()) else {
+        //     bail!("could not find entrypoint (hint: try adding `function __module__`. Searching in {:?})", entrypoint)
+        // };
 
         log::debug!("Spawning interpreter...");
 
-        let main_ret = function.run(Cow::Owned(vec![]), stack.clone(), None, &mut |req| {
-            Self::process_jump_request(rc_of_self.clone(), req)
-        });
+        let main_ret = entrypoint.run_function(
+            &"__module__".to_owned(),
+            Cow::Owned(vec![]),
+            stack.clone(),
+            None,
+            &mut |req| Self::process_jump_request(rc_of_self.clone(), req),
+        );
 
         if let Err(e) = main_ret {
             stdout().lock().flush()?;

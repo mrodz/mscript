@@ -1,7 +1,7 @@
 //! The interpreter's primitive datatypes.
 //! Every "value" in the interpreter is a primitive.
 
-use crate::{bigint, bool, byte, float, int, rc_to_ref, stack::VariableFlags, string};
+use crate::{bigint, bool, byte, float, int, stack::VariableFlags, string};
 use anyhow::{bail, Result};
 use std::{fmt::Display, rc::Rc};
 
@@ -135,7 +135,7 @@ impl Primitive {
         use Primitive as P;
         match self {
             P::Object(obj) => {
-                let property = rc_to_ref(obj).get_property(property, true)?;
+                let property = obj.get_property(property, true)?;
                 Some(property)
             }
             _ => None,
