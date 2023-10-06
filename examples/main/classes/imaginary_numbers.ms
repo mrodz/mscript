@@ -1,3 +1,4 @@
+
 class ImaginaryNumber {
 	real: float
 	imaginary: float
@@ -7,12 +8,8 @@ class ImaginaryNumber {
 		self.imaginary = imaginary
 	}
 
-	fn to_string(self) -> str {
-		return "" + self.real + " + " + self.imaginary + "i"
-	}
+	fn noargs(self) {}
 }
 
 sqrtNeg1 = ImaginaryNumber(0f, 1f)
-assert sqrtNeg1.to_string() == "0 + 1i"
-
-print sqrtNeg1.to_string()
+sqrtNeg1.noargs()

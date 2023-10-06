@@ -124,8 +124,6 @@ impl Program {
 
         let path_ref = &path;
 
-        println!("SELF: {rc_of_self:?}, REQUEST: {request:?}");
-
         rc_of_self.add_file(Rc::new(path.clone()))?;
         // rc_to_ref(&rc_of_self).add_file(Rc::new(path.clone()))?;
 

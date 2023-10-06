@@ -643,7 +643,7 @@ pub mod implementations {
 
                 let destination = JumpRequestDestination::Standard(f.location().clone());
 
-                println!("<!> CALL (function ptr): {f:?}, destination: {destination:?}");
+                println!("<!> CALL (function ptr): {destination:?}");
 
                 ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                     destination,

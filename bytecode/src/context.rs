@@ -9,6 +9,7 @@ use crate::stack::{Stack, VariableFlags};
 use anyhow::{bail, Result};
 use std::borrow::Cow;
 use std::fmt::{Debug, Display};
+use std::pin::Pin;
 use std::rc::Rc;
 use std::slice::SliceIndex;
 
