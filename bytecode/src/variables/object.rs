@@ -2,6 +2,7 @@ use super::Primitive;
 use crate::function::PrimitiveFunction;
 use crate::stack::{flag_constants, VariableFlags, VariableMapping};
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::rc::Rc;
@@ -93,7 +94,7 @@ impl Object {
         &self,
         property_name: &str,
         include_functions: bool,
-    ) -> Option<Rc<(Primitive, VariableFlags)>> {
+    ) -> Option<Rc<RefCell<(Primitive, VariableFlags)>>> {
         let maybe_property = self.has_variable(property_name);
 
         if maybe_property.is_some() {
@@ -110,16 +111,19 @@ impl Object {
 
         if let Some(path_to_use) = is_function {
             let function = PrimitiveFunction::new(path_to_use.into_owned(), None);
-            Some(Rc::new((
+            
+            let tuple = (
                 Primitive::Function(function),
                 VariableFlags(flag_constants::READ_ONLY),
-            )))
+            );
+            
+            Some(Rc::new(RefCell::new(tuple)))
         } else {
             None
         }
     }
 
-    pub fn has_variable(&self, variable_name: &str) -> Option<Rc<(Primitive, VariableFlags)>> {
+    pub fn has_variable(&self, variable_name: &str) -> Option<Rc<RefCell<(Primitive, VariableFlags)>>> {
         self.object_variables.get(variable_name)
     }
 
@@ -132,7 +136,8 @@ impl Object {
             let joined_name = class_name.to_owned() + "::" + function_name;
             let maybe_function_ptr = self.object_variables.get(&joined_name);
             if let Some(bundle) = maybe_function_ptr {
-                if let Primitive::Function(function_ptr) = &bundle.0 {
+                let bundle = bundle.borrow();
+                if let Primitive::Function(ref function_ptr) = bundle.0 {
                     return Some(Cow::Owned(function_ptr.location().clone()));
                 }
             }

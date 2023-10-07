@@ -8,6 +8,7 @@ use super::variables::{ObjectBuilder, Primitive};
 use anyhow::{bail, Context, Result};
 use once_cell::sync::Lazy;
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::io::{stdin, stdout, Write};
@@ -130,8 +131,7 @@ pub mod implementations {
     use crate::context::SpecialScope;
     use crate::function::{PrimitiveFunction, ReturnValue};
     use crate::stack::VariableFlags;
-    use crate::{bool, function, int, object, vector};
-    use crate::{optional, rc_to_ref};
+    use crate::{bool, function, int, object, vector, optional};
     use std::collections::HashMap;
     use std::rc::Rc;
 
@@ -276,17 +276,19 @@ pub mod implementations {
 
                 let new_val = ctx.pop().unwrap();
 
-                let mut primitive_with_flags: Rc<(Primitive, VariableFlags)> = ctx.load_local(&op_name[1..]).context("vector not found for pushing")?;
+                let primitive_with_flags: Rc<RefCell<(Primitive, VariableFlags)>> = ctx.load_local(&op_name[1..]).context("vector not found for pushing")?;
 
-                let primitive_with_flags: &mut (Primitive, VariableFlags) = Rc::make_mut(&mut primitive_with_flags);
+                let primitive_with_flags = primitive_with_flags.borrow();
+                // let primitive_with_flags: &mut (Primitive, VariableFlags) = Rc::make_mut(&mut primitive_with_flags);
 
-                let Primitive::Vector(ref mut vector) = primitive_with_flags.0 else {
+                let Primitive::Vector(ref vector) = primitive_with_flags.0 else {
                     bail!("not a vector, trying to push")
                 };
 
-                let vector: &mut Vec<Primitive> = rc_to_ref(vector);
 
-                vector.push(new_val);
+                // let vector: &mut Vec<Primitive> = rc_to_ref(vector);
+
+                vector.borrow_mut().push(new_val);
             } else if let [b'[', index @ .., b']'] = bytes {
                 let Some(indexable) = ctx.pop() else {
                     bail!("the stack is empty");
@@ -301,6 +303,7 @@ pub mod implementations {
                         if !byte.is_ascii_digit() {
                             let index_as_str = std::str::from_utf8(index)?;
                             let variable = ctx.load_local(index_as_str).with_context(|| format!("'{index_as_str}' is not a literal number nor a name that has been mapped locally"))?;
+                            let variable = variable.borrow();
                             let primitive_part: &Primitive = &variable.0;
 
                             let as_index: usize = primitive_part.try_into_numeric_index()?;
@@ -316,7 +319,9 @@ pub mod implementations {
 
                 match indexable {
                     Primitive::Vector(vector) => {
-                        let r: *mut Primitive = rc_to_ref(&vector).get_mut(idx).with_context(|| format!("index {idx} out of bounds (len {})", vector.len()))?;
+                        let mut vector = vector.borrow_mut();
+                        let vec_len = vector.len();
+                        let r: *mut Primitive = vector.get_mut(idx).with_context(|| format!("index {idx} out of bounds (len {vec_len})"))?;
                         ctx.push(Primitive::HeapPrimitive(r));
 
                     }
@@ -329,12 +334,16 @@ pub mod implementations {
             } else {
                 match op_name.as_str() {
                     "reverse" => {
-                        let Some(Primitive::Vector(vector)) = ctx.get_last_op_item_mut() else {
+                        let Some(Primitive::Vector(vector)) = ctx.get_last_op_item() else {
                             bail!("Cannot perform a vector operation on a non-vector")
                         };
 
-                        let reference = Rc::get_mut(vector).context("could not get reference to vector")?;
-                        reference.reverse();
+                        let mut vector = vector.borrow_mut();
+
+                        vector.reverse();
+
+                        // let reference = Rc::get_mut(vector).context("could not get reference to vector")?;
+                        // reference.reverse();
                     },
                     "mut" => {
                         let idx = arg_iter.next().context("mutating an array requires an argument")?;
@@ -346,11 +355,15 @@ pub mod implementations {
 
                         let new_item = ctx.pop().context("could not pop first item")?;
 
-                        let Some(Primitive::Vector(vector)) = ctx.get_last_op_item_mut() else {
+                        let Some(Primitive::Vector(vector)) = ctx.get_last_op_item() else {
                             bail!("Cannot perform a vector operation on a non-vector")
                         };
 
-                        Rc::get_mut(vector).context("could not get reference to vector")?[idx] = new_item;
+                        let mut vector = vector.borrow_mut();
+
+                        vector[idx] = new_item;
+                    
+                        // Rc::get_mut(vector).context("could not get reference to vector")?[idx] = new_item;
 
                     }
                     not_found => bail!("operation not found: `{not_found}`")
@@ -372,7 +385,7 @@ pub mod implementations {
             };
 
             let result = match top {
-                Primitive::Vector(v) => int!(v.len().try_into()?),
+                Primitive::Vector(v) => int!(v.borrow().len().try_into()?),
                 Primitive::Str(s) => int!(s.len().try_into()?),
                 _ => bail!("cannot get the raw length of a non-string/vector"),
             };
@@ -491,11 +504,23 @@ pub mod implementations {
                     let location = &function.location();
                     let object_path = format!("{}#{name}$", location.upgrade().unwrap().path());
 
-                    let object_functions = rc_to_ref(&location.upgrade().unwrap()).get_object_functions(&object_path)?;
+                    // todo!("pointer hacking ahead...");
+
+                    let location = location.upgrade().unwrap();
 
                     let mut mapping: HashSet<String> = HashSet::new();
 
-                    for func in object_functions {
+                    let functions_ref = location.get_functions_ref().context("no functions")?;
+
+                    let iter = functions_ref.map.iter().filter_map(move |(key, val)| {
+                        if key.starts_with(&object_path) {
+                            Some(val)
+                        } else {
+                            None
+                        }
+                    });
+
+                    for func in iter {
                         mapping.insert(func.get_qualified_name());
                     }
 
@@ -505,7 +530,7 @@ pub mod implementations {
                 OBJECT_BUILDER.name(Rc::clone(&name)).object_variables(object_variables).build()
             };
 
-            ctx.push(object!(Rc::new(obj)));
+            ctx.push(object!(Rc::new(RefCell::new(obj))));
 
             Ok(())
         }
@@ -584,7 +609,7 @@ pub mod implementations {
                 bail!("last item in the local stack {first:?} is not an object.")
             };
 
-            let callback_state = Some(o.object_variables.clone());
+            let callback_state = Some(o.borrow().object_variables.clone());
 
             let arguments = ctx.get_local_operating_stack();
             ctx.clear_stack();
@@ -610,20 +635,23 @@ pub mod implementations {
 
             let new_item: Primitive = ctx.pop().context("could not pop first item")?;
 
-            let Some(Primitive::Object(o)) = ctx.get_last_op_item_mut() else {
+            let Some(Primitive::Object(o)) = ctx.get_last_op_item() else {
                 bail!("Cannot perform an object mutation on a non-object")
             };
 
             // this bypass of Rc protections is messy and should be refactored.
-            let var = rc_to_ref(o).has_variable(var_name).context("variable does not exist on object")?;
+            let obj_view = o.borrow();
+            let has_variable = obj_view.has_variable(var_name).context("variable does not exist on object")?;
+            let mut var = has_variable.borrow_mut();
 
             if var.0.ty() != new_item.ty() {
                 bail!("mismatched types in assignment ({:?} & {:?})", var.0.ty(), new_item.ty())
             }
 
             // let () = rc_to_ref(&var.0);
-            let x = &mut rc_to_ref(&var).0;
-            *x = new_item;
+            var.0 = new_item;
+            // let x = &mut rc_to_ref(&var).0;
+            // *x = new_item;
             // var.0 = new_item;
 
             Ok(())
@@ -680,12 +708,16 @@ pub mod implementations {
             let callback_state = ctx.get_callback_variables();
 
             let stack = ctx.rced_call_stack();
-            let name = stack.get_executing_function_label().context("not run in a function")?;
+            
+            let name = {
+                let stack_view = stack.borrow();
+                stack_view.get_executing_function_label().context("not run in a function")?.to_owned()
+            };
 
             println!("<!> CALL_SELF: {name:?}");
 
             ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
-                destination: JumpRequestDestination::Standard(name.clone()),
+                destination: JumpRequestDestination::Standard(name),
                 callback_state,
                 stack,
                 arguments
@@ -847,7 +879,7 @@ pub mod implementations {
                 bail!("load before store (`{name}` not in scope)")
             };
 
-            ctx.push(var.0.clone());
+            ctx.push(var.borrow().0.clone());
 
             Ok(())
         }
@@ -858,10 +890,10 @@ pub mod implementations {
             };
 
             let Some(var) = ctx.load_local(name) else {
-                bail!("load before store (`{name}` not in this stack frame)\nframe `{}`'s variables:\n{}", ctx.rced_call_stack().get_frame_label(), ctx.get_frame_variables())
+                bail!("load before store (`{name}` not in this stack frame)\nframe `{}`'s variables:\n{}", ctx.rced_call_stack().borrow().get_frame_label(), ctx.get_frame_variables())
             };
 
-            ctx.push(var.0.clone());
+            ctx.push(var.borrow().0.clone());
 
             Ok(())
         }
@@ -873,7 +905,7 @@ pub mod implementations {
 
             let var = ctx.load_callback_variable(name)?;
 
-            ctx.push(var.0.clone());
+            ctx.push(var.borrow().0.clone());
 
             Ok(())
         }
@@ -897,8 +929,8 @@ pub mod implementations {
 
             let name = args.first().unwrap();
 
-            let deleted: Rc<(Primitive, VariableFlags)> = ctx.delete_variable_local(name)?;
-            let primitive: Primitive = deleted.0.clone();
+            let deleted: Rc<RefCell<(Primitive, VariableFlags)>> = ctx.delete_variable_local(name)?;
+            let primitive: Primitive = deleted.borrow().0.clone();
 
             ctx.push(primitive);
 
@@ -916,7 +948,7 @@ pub mod implementations {
 
             let primitive = ctx.pop().unwrap();
 
-            let result: Rc<(Primitive, VariableFlags)> = primitive.lookup(name).with_context(|| format!("{name} does not exist on {primitive:?}"))?;
+            let result: Rc<RefCell<(Primitive, VariableFlags)>> = primitive.lookup(name).with_context(|| format!("{name} does not exist on {primitive:?}"))?;
 
             let result_ptr = Rc::as_ptr(&result) as *mut (Primitive, VariableFlags);
 
@@ -1272,7 +1304,7 @@ pub struct JumpRequest {
     /// this field will be `Some`.
     pub callback_state: Option<Rc<VariableMapping>>,
     /// This is a shared reference to the interpreter call stack.
-    pub stack: Rc<Stack>,
+    pub stack: Rc<RefCell<Stack>>,
     /// The arguments to the jump request. If this request is a function
     /// call (which should be 99% of cases), it will be the arguments passed
     /// from the caller.

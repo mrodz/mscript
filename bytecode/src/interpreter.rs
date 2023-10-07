@@ -4,7 +4,6 @@
 
 use super::function::ReturnValue;
 use super::instruction::{JumpRequest, JumpRequestDestination};
-use super::rc_to_ref;
 use crate::file::MScriptFile;
 use crate::stack::Stack;
 use crate::BytecodePrimitive;
@@ -13,7 +12,6 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::{stdout, Write};
-use std::panic;
 use std::rc::{Rc, Weak};
 
 #[derive(Debug)]
@@ -170,11 +168,7 @@ impl Program {
                 .get(func_name.as_bytes())
                 .with_context(|| format!("Could not find symbol ({func_name})"))?;
 
-            let ffi_result = panic::catch_unwind(|| lib_fn(args));
-
-            let Ok(ffi_result) = ffi_result else {
-                bail!("Symbol {func_name} in dynamic library {lib_name} panicked at runtime.\nPlease contact the library owners to remove unwraps, panics, and asserts.\nExceptions and other errors should be sent via a `ReturnValue::FFIError`")
-            };
+            let ffi_result = lib_fn(args);
 
             Ok(ffi_result)
         }
@@ -223,7 +217,7 @@ impl Program {
         log::debug!("Loaded instructions from file");
 
         log::debug!("Creating call stack...");
-        let stack = Rc::new(Stack::new());
+        let stack = Rc::new(RefCell::new(Stack::new()));
         log::debug!("Created call stack");
 
         // let module_function = format!("{}#main", entrypoint.path());
@@ -249,10 +243,10 @@ impl Program {
             bail!("Interpreter crashed")
         }
 
-        if stack.size() != 0 {
+        if stack.borrow().size() != 0 {
             stdout().lock().flush()?;
 
-            eprintln!("\n******* MSCRIPT INTERPRETER STACK MISMATCH *******\nFound:\n{stack}\n\n... When the program should have unwinded its stack completely. This is most likely a flaw with the compiler.\n\nPlease report this at https://github.com/mrodz/mscript-lang/issues/new\n");
+            eprintln!("\n******* MSCRIPT INTERPRETER STACK MISMATCH *******\nFound:\n{}\n\n... When the program should have unwinded its stack completely. This is most likely a flaw with the compiler.\n\nPlease report this at https://github.com/mrodz/mscript-lang/issues/new\n", stack.borrow());
             bail!("Program exited in a confused state, execution integrity has been compromised.")
         }
 

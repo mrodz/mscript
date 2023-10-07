@@ -18,9 +18,9 @@ impl std::ops::Add for Primitive {
             (Str(x), y) => string!(x + &y.to_string()),
             (x, Str(y)) => string!(x.to_string() + &y),
             (Vector(x), Vector(y)) => {
-                let mut x = Vec::clone(&x);
+                let mut x = Vec::clone(x.borrow().as_ref());
 
-                x.extend_from_slice(&y);
+                x.extend_from_slice(y.borrow().as_ref());
                 vector!(raw x)
             }
             _ => bail!("valid ops: number + number, str + any, any + str, vec + vec"),

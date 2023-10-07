@@ -3,7 +3,7 @@
 
 use crate::{bigint, bool, byte, float, int, stack::VariableFlags, string};
 use anyhow::{bail, Result};
-use std::{fmt::Display, rc::Rc};
+use std::{fmt::Display, rc::Rc, cell::RefCell};
 
 /// This macro allows easy recursion over variants.
 macro_rules! primitive {
@@ -52,9 +52,9 @@ primitive! {
     Byte(u8),
     // We don't need reference counting because cloning a primitive function is cheap
     Function(crate::function::PrimitiveFunction),
-    Vector(std::rc::Rc<Vec<crate::variables::Primitive>>),
+    Vector(Rc<RefCell<Vec<crate::variables::Primitive>>>),
     HeapPrimitive(*mut crate::variables::Primitive),
-    Object(std::rc::Rc<crate::variables::Object>),
+    Object(Rc<RefCell<crate::variables::Object>>),
     // Supports Lazy Allocation
     Optional(Option<Box<crate::variables::Primitive>>),
 }
@@ -131,11 +131,11 @@ impl Primitive {
         }
     }
 
-    pub fn lookup(&self, property: &str) -> Option<Rc<(Primitive, VariableFlags)>> {
+    pub fn lookup(&self, property: &str) -> Option<Rc<RefCell<(Primitive, VariableFlags)>>> {
         use Primitive as P;
         match self {
             P::Object(obj) => {
-                let property = obj.get_property(property, true)?;
+                let property = obj.borrow().get_property(property, true)?;
                 Some(property)
             }
             _ => None,
@@ -248,7 +248,8 @@ impl Primitive {
             Function(fun) => write!(f, "{fun}"),
             Vector(l) => {
                 write!(f, "[")?;
-                let mut iter = l.iter();
+                let borrow = l.borrow();
+                let mut iter = borrow.iter();
 
                 depth += 1;
 
@@ -269,7 +270,7 @@ impl Primitive {
             HeapPrimitive(hp) => unsafe { write!(f, "*mut {:#X} -> {}", *hp as usize, **hp) },
             #[cfg(not(feature = "debug"))]
             HeapPrimitive(hp) => unsafe { write!(f, "&{}", **hp) },
-            Object(o) => write!(f, "{o}"),
+            Object(o) => write!(f, "{}", o.borrow()),
             Optional(Some(primitive)) => write!(f, "{primitive}"),
             Optional(None) => write!(f, "none"),
         }
