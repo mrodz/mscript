@@ -284,7 +284,7 @@ pub(crate) struct ScopeHandle<'a> {
 }
 
 impl<'a> ScopeHandle<'a> {
-    pub(crate) fn new(depth_at_init: usize, belongs_to: &'a Scopes) -> Self {
+    pub(crate) const fn new(depth_at_init: usize, belongs_to: &'a Scopes) -> Self {
         Self {
             depth_at_init,
             parent: belongs_to,
@@ -394,7 +394,7 @@ impl Display for Scope {
 }
 
 impl Scope {
-    fn new(
+    const fn new(
         variables: HashSet<Ident>,
         types: HashMap<Box<str>, TypeLayout>,
         ty: ScopeType,

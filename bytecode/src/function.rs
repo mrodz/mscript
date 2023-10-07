@@ -39,7 +39,7 @@ pub struct PrimitiveFunction {
 
 impl PrimitiveFunction {
     /// Initialize a [`PrimitiveFunction`] given its fields.
-    pub(crate) fn new(path: String, callback_state: Option<Rc<VariableMapping>>) -> Self {
+    pub(crate) const fn new(path: String, callback_state: Option<Rc<VariableMapping>>) -> Self {
         Self {
             location: path,
             callback_state,
@@ -232,7 +232,7 @@ impl Display for Function {
 
 impl Function {
     /// Initialize a [`Function`] given its fields.
-    pub(crate) fn new(
+    pub(crate) const fn new(
         location: Weak<MScriptFile>,
         name: String,
         instructions: Box<[Instruction]>,
@@ -429,7 +429,7 @@ pub struct Functions {
 
 impl<'a> Functions {
     /// Initialize a [`Functions`] map given its fields.
-    pub(crate) fn new(map: HashMap<Rc<String>, Function>) -> Self {
+    pub(crate) const fn new(map: HashMap<Rc<String>, Function>) -> Self {
         Self { map }
     }
 

@@ -202,7 +202,7 @@ impl Display for FunctionType {
 }
 
 impl Function {
-    pub fn new(
+    pub const fn new(
         parameters: Arc<FunctionParameters>,
         body: Block,
         return_type: ScopeReturnStatus,

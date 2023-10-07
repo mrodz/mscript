@@ -136,13 +136,6 @@ impl MScriptFile {
         Ok(new_uninit)
     }
 
-    // pub fn new(functions: Functions, path: String) -> Rc<Self> {
-    //     Rc::new(Self {
-    //         functions: RefCell::new(Some(functions)),
-    //         path: Rc::new(path.replace('\\', "/")),
-    //     })
-    // }
-
     /// Searches for a function given its name.
     pub fn run_function(
         &self,

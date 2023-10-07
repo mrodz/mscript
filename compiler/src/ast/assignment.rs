@@ -32,30 +32,30 @@ pub(crate) enum Assignment {
 }
 
 impl Assignment {
-    pub fn new(ident: Ident, value: Value) -> Self {
+    pub const fn new(ident: Ident, value: Value) -> Self {
         Self::Single {
             ident,
             value,
-            flags: AssignmentFlag::default(),
+            flags: AssignmentFlag(0),
         }
     }
 
-    pub fn new_multi(idents: Box<[Ident]>, value: Value) -> Self {
+    pub const fn new_multi(idents: Box<[Ident]>, value: Value) -> Self {
         Self::Multiple {
             idents,
             value,
-            flags: AssignmentFlag::default(),
+            flags: AssignmentFlag(0),
         }
     }
 
     #[inline]
-    pub fn flags(&self) -> &AssignmentFlag {
+    pub const fn flags(&self) -> &AssignmentFlag {
         let (Self::Single { flags, .. } | Self::Multiple { flags, .. }) = self;
         flags
     }
 
     #[inline]
-    pub fn value(&self) -> &Value {
+    pub const fn value(&self) -> &Value {
         let (Self::Single { value, .. } | Self::Multiple { value, .. }) = self;
         value
     }

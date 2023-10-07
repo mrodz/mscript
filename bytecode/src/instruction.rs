@@ -1351,7 +1351,7 @@ pub struct Instruction {
 
 impl Instruction {
     /// Simple constructor
-    pub fn new(id: u8, arguments: Box<[String]>) -> Self {
+    pub const fn new(id: u8, arguments: Box<[String]>) -> Self {
         Instruction { id, arguments }
     }
 }

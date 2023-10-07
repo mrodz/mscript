@@ -185,6 +185,13 @@ impl Primitive {
     /// This code will blow up the VM if the HP ptr is not valid. If this happens, though,
     /// it is a bug with the compiler. Users will NEVER encounter a stale mutable pointer on
     /// their own, as it is a private type known only to the compiler used for array tricks.
+    /// 
+    /// # Safety
+    /// This function assumes that if `self` is a [HeapPrimitive]
+    /// that points to memory inside a vector/list, the vector/list
+    /// is "pinned" and has not been modified since this pointer's creation.
+    /// Otherwise, this function will access a dangling reference and construct
+    /// a Primitive from binary garbage.
     pub unsafe fn move_out_of_heap_primitive(self) -> Self {
         if let Self::HeapPrimitive(primitive) = self {
             primitive.to_owned_primitive()

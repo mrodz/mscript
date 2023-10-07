@@ -155,7 +155,7 @@ pub struct Stack(Vec<StackFrame>);
 
 impl Stack {
     /// Create a new, empty call stack.
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self(vec![])
     }
 

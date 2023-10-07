@@ -78,7 +78,7 @@ impl PartialEq for Object {
 }
 
 impl Object {
-    pub fn new(
+    pub const fn new(
         name: Rc<String>,
         // functions: &'static HashSet<String>,
         object_variables: Rc<VariableMapping>,
