@@ -131,6 +131,7 @@ pub mod implementations {
     use crate::context::SpecialScope;
     use crate::function::{PrimitiveFunction, ReturnValue};
     use crate::stack::VariableFlags;
+    use crate::variables::HeapPrimitive;
     use crate::{bool, function, int, object, vector, optional};
     use std::collections::HashMap;
     use std::rc::Rc;
@@ -220,8 +221,8 @@ pub mod implementations {
                 bail!("bin_op requires two items on the local operating stack (found {:?})", ctx.get_local_operating_stack())
             };
 
-            let left = left.move_out_of_heap_primitive();
-            let right = right.move_out_of_heap_primitive();
+            let left = unsafe { left.move_out_of_heap_primitive() };
+            let right = unsafe { right.move_out_of_heap_primitive() };
 
             let result = match (symbols.as_str(), &left, &right) {
                 ("+", ..) => left + right,
@@ -258,9 +259,9 @@ pub mod implementations {
             };
 
             unsafe {
-                *vec_ptr = new_val;
+                vec_ptr.set(new_val);
             }
-
+            
             Ok(())
         }
 
@@ -321,8 +322,12 @@ pub mod implementations {
                     Primitive::Vector(vector) => {
                         let mut vector = vector.borrow_mut();
                         let vec_len = vector.len();
-                        let r: *mut Primitive = vector.get_mut(idx).with_context(|| format!("index {idx} out of bounds (len {vec_len})"))?;
-                        ctx.push(Primitive::HeapPrimitive(r));
+
+                        let ptr = vector.get_mut(idx).with_context(|| format!("index {idx} out of bounds (len {vec_len})"))? as *mut _;
+
+                        let heap_primitive = HeapPrimitive::new_array_view(ptr);
+
+                        ctx.push(Primitive::HeapPrimitive(heap_primitive));
 
                     }
                     Primitive::Str(string) => {
@@ -772,7 +777,9 @@ pub mod implementations {
                 bail!("store can only store a single item (found: {:?})", ctx.get_local_operating_stack());
             }
 
-            let arg = ctx.pop().unwrap().move_out_of_heap_primitive();
+            let arg = ctx.pop().unwrap();
+            
+            let arg = unsafe { arg.move_out_of_heap_primitive() };
 
             ctx.register_variable(name.clone(), arg)?;
 
@@ -788,7 +795,9 @@ pub mod implementations {
                 bail!("store_fast can only store a single item");
             }
 
-            let arg = ctx.pop().unwrap().move_out_of_heap_primitive();
+            let arg = ctx.pop().unwrap();
+            
+            let arg = unsafe { arg.move_out_of_heap_primitive() };
 
             ctx.register_variable_local(name.clone(), arg)?;
 
@@ -804,7 +813,9 @@ pub mod implementations {
                 bail!("store_object can only store a single item");
             }
 
-            let arg = ctx.pop().unwrap().move_out_of_heap_primitive();
+            let arg = ctx.pop().unwrap();
+            
+            let arg = unsafe { arg.move_out_of_heap_primitive() };
 
             ctx.update_callback_variable(name, arg)?;
 
@@ -848,7 +859,9 @@ pub mod implementations {
                 }
             }
 
-            let arg = ctx.pop().unwrap().move_out_of_heap_primitive();
+            let arg = ctx.pop().unwrap();
+            
+            let arg = unsafe { arg.move_out_of_heap_primitive() };
             ctx.register_variable_local(name.clone(), arg)?;
 
             Ok(())
@@ -960,13 +973,9 @@ pub mod implementations {
 
             // let result_ptr = Rc::as_ptr(&result) as *mut RefCell<(Primitive, VariableFlags)>;
 
-            let primitive_ptr: *mut Primitive = unsafe {
-                &mut (*result.as_ptr()).0
-            };
+            let heap_primitive = Primitive::HeapPrimitive(HeapPrimitive::new_lookup_view(result));
 
-            let heap_primitive = Primitive::HeapPrimitive(primitive_ptr);
-
-            println!("`{heap_primitive}`");
+            // println!("LOOKUP `{heap_primitive}` @ {:#x}", primitive_ptr as usize);
 
             ctx.push(heap_primitive);
 
