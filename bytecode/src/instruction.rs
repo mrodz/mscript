@@ -619,8 +619,6 @@ pub mod implementations {
             let arguments = ctx.get_local_operating_stack();
             ctx.clear_stack();
 
-            println!("<!> CALL_OBJECT: {path}");
-
             ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                 destination: JumpRequestDestination::Standard(path.clone()),
                 callback_state,
@@ -676,8 +674,6 @@ pub mod implementations {
 
                 let destination = JumpRequestDestination::Standard(f.location().clone());
 
-                println!("<!> CALL (function ptr): {destination:?}");
-
                 ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                     destination,
                     callback_state: f.callback_state().clone(),
@@ -691,9 +687,6 @@ pub mod implementations {
             };
 
             let arguments = ctx.get_local_operating_stack();
-
-            println!("<!> CALL (path): {first:?}");
-
 
             ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                 destination: JumpRequestDestination::Standard(first.clone()),
@@ -718,8 +711,6 @@ pub mod implementations {
                 let stack_view = stack.borrow();
                 stack_view.get_executing_function_label().context("not run in a function")?.to_owned()
             };
-
-            println!("<!> CALL_SELF: {name:?}");
 
             ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                 destination: JumpRequestDestination::Standard(name),
@@ -906,8 +897,6 @@ pub mod implementations {
                 bail!("load before store (`{name}` not in this stack frame)\nframe `{}`'s variables:\n{}", ctx.rced_call_stack().borrow().get_frame_label(), ctx.get_frame_variables())
             };
 
-            println!("LDA {name}, {var:?}");
-
             ctx.push(var.borrow().0.clone());
 
             Ok(())
@@ -965,17 +954,7 @@ pub mod implementations {
 
             let result: Rc<RefCell<(Primitive, VariableFlags)>> = primitive.lookup(name).with_context(|| format!("{name} does not exist on {primitive:?}"))?;
 
-            println!(".{name} = {result:#?}");
-
-            // let x = Ref::map(result.borrow(), |tuple| {
-            //     &tuple.0
-            // });
-
-            // let result_ptr = Rc::as_ptr(&result) as *mut RefCell<(Primitive, VariableFlags)>;
-
             let heap_primitive = Primitive::HeapPrimitive(HeapPrimitive::new_lookup_view(result));
-
-            // println!("LOOKUP `{heap_primitive}` @ {:#x}", primitive_ptr as usize);
 
             ctx.push(heap_primitive);
 
@@ -1166,8 +1145,6 @@ pub mod implementations {
             };
 
             let arguments = ctx.get_local_operating_stack();
-
-            println!("<!> CALL_LIB: lib {lib_name:?} func {func_name:?}");
 
             ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                 destination: JumpRequestDestination::Library {

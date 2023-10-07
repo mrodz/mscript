@@ -111,11 +111,11 @@ impl AssocFileData {
     }
 
     pub fn get_type_of_executing_class(&self) -> Option<Ref<ClassType>> {
-        self.scopes.get_type_of_executing_class()
+        self.scopes.get_type_of_executing_class(0)
     }
 
     pub fn get_type_of_executing_class_in_nth_frame(&self, skip_n_frames: usize) -> Option<Ref<ClassType>> {
-        self.scopes.get_type_of_executing_class_in_nth_frame(skip_n_frames)
+        self.scopes.get_type_of_executing_class(skip_n_frames)
     }
 
     /// This function should **ONLY** be called when creating the AST Node for a Class Type.

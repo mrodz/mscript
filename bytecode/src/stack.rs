@@ -296,10 +296,7 @@ impl Stack {
 
                 mapping.0 = var;
 
-                // println!("\t\t[STORED] {name} to {}", frame.label);
-
                 return Ok(());
-                // this means it has already been mapped.
             }
 
             if !SpecialScope::is_label_special_scope(&frame.label) {
