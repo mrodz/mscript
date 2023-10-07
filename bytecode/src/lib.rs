@@ -80,14 +80,3 @@ macro_rules! raise_error {
         }
     };
 }
-
-/// Hacky function to get the contents of an Arc as a mutable reference.
-///
-/// Red flags galore! Using this function bypasses the safety of using shared references to
-/// prevent data races. However, since the current design of the interpreter is single threaded,
-/// there is no concern regarding multiple processes attempting to modify the
-/// call stack, change a file's flags, etc.
-#[inline(always)]
-pub(crate) fn rc_to_ref<T>(arc: &std::rc::Rc<T>) -> &'static mut T {
-    unsafe { &mut (*(std::rc::Rc::as_ptr(arc) as *mut T)) }
-}

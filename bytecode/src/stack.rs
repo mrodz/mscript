@@ -1,12 +1,12 @@
 //! Program call stack
 
 use anyhow::{anyhow, bail, Context, Result};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::rc::Rc;
 
 use crate::context::SpecialScope;
-use crate::rc_to_ref;
 
 use super::variables::Primitive;
 
@@ -71,13 +71,14 @@ impl Debug for VariableFlags {
 }
 
 #[derive(Default, Debug, PartialEq, Clone)]
-pub struct VariableMapping(HashMap<String, Rc<(Primitive, VariableFlags)>>);
+pub struct VariableMapping(HashMap<String, Rc<RefCell<(Primitive, VariableFlags)>>>);
 
 impl Display for VariableMapping {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut result = vec![];
 
         for (key, value) in self.0.iter() {
+            let value = value.borrow();
             result.push(format!("{key} = {} (attr: {:?})", value.0, value.1));
         }
 
@@ -100,14 +101,14 @@ impl Display for VariableMapping {
     }
 }
 
-impl From<HashMap<String, Rc<(Primitive, VariableFlags)>>> for VariableMapping {
-    fn from(value: HashMap<String, Rc<(Primitive, VariableFlags)>>) -> Self {
+impl From<HashMap<String, Rc<RefCell<(Primitive, VariableFlags)>>>> for VariableMapping {
+    fn from(value: HashMap<String, Rc<RefCell<(Primitive, VariableFlags)>>>) -> Self {
         Self(value)
     }
 }
 
 impl VariableMapping {
-    pub fn get(&self, key: &str) -> Option<Rc<(Primitive, VariableFlags)>> {
+    pub fn get(&self, key: &str) -> Option<Rc<RefCell<(Primitive, VariableFlags)>>> {
         self.0.get(key).cloned()
     }
 
@@ -120,12 +121,15 @@ impl VariableMapping {
     ///
     /// # Errors
     /// This function can error if the variable has not been mapped, or if the name is read-only.
-    pub fn update(&mut self, name: &str, value: Primitive) -> Result<()> {
+    pub fn update(&self, name: &str, value: Primitive) -> Result<()> {
         // if insert returns None, that means there was no value there,
         // and this `update` is invalid.
-        if let Some(pair) = self.0.get_mut(name) {
+        if let Some(pair) = self.0.get(name) {
+            let mut pair = pair.borrow_mut();
+
             if pair.1.can_update() {
-                rc_to_ref(pair).0 = value;
+                pair.0 = value;
+                // rc_to_ref(pair).0 = value;
             } else {
                 bail!("variable is read-only")
             }
@@ -151,7 +155,7 @@ pub struct Stack(Vec<StackFrame>);
 
 impl Stack {
     /// Create a new, empty call stack.
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self(vec![])
     }
 
@@ -219,14 +223,17 @@ impl Stack {
 
     /// Search the call stack for a frame with a variable with a matching `name`. Will start at the top (most recent)
     /// and will continue until the very first stack frame.
-    pub fn find_name(&self, name: &str) -> Option<Rc<(Primitive, VariableFlags)>> {
+    pub fn find_name(&self, name: &str) -> Option<Rc<RefCell<(Primitive, VariableFlags)>>> {
         for stack_frame in self.0.iter().rev() {
             let tuple = stack_frame.variables.get(name);
-            if let Some(ref packed) = tuple {
-                let flags = &packed.1;
+            if let Some(packed) = tuple {
+                let is_exclusive = {
+                    let borrow = packed.borrow();
+                    borrow.1.is_exclusive_to_frame()
+                };
 
-                if !flags.is_exclusive_to_frame() {
-                    return Some(tuple.unwrap());
+                if !is_exclusive {
+                    return Some(packed);
                 } else {
                     continue;
                 }
@@ -250,13 +257,13 @@ impl Stack {
     ) -> Result<()> {
         let stack_frame = self.0.last_mut().context("nothing in the stack")?;
         let variables = &mut stack_frame.variables.0;
-        variables.insert(name, Rc::new((var, flags)));
+        variables.insert(name, Rc::new(RefCell::new((var, flags))));
 
         Ok(())
     }
 
     /// Delete a variable from the current stack frame.
-    pub fn delete_variable_local(&mut self, name: &str) -> Result<Rc<(Primitive, VariableFlags)>> {
+    pub fn delete_variable_local(&mut self, name: &str) -> Result<Rc<RefCell<(Primitive, VariableFlags)>>> {
         let frame = self.0.last_mut().expect("no stack frame");
 
         frame.variables.0.remove(name).ok_or(anyhow!(
@@ -273,26 +280,23 @@ impl Stack {
     ) -> Result<()> {
         for frame in self.0.iter().rev() {
             if let Some(ref mapping) = frame.variables.get(&name) {
-                let mut_mapping_ref: &mut (Primitive, VariableFlags) = rc_to_ref(mapping);
-                if mut_mapping_ref.1.is_read_only() {
+                let mut mapping = mapping.borrow_mut();
+                // let mut_mapping_ref: &mut (Primitive, VariableFlags) = rc_to_ref(mapping);
+                if mapping.1.is_read_only() {
                     bail!("cannot reassign to read-only variable {name}");
                 }
 
                 let new_flags_bitfield = flags.0;
-                let previos_flags_bitfield = mut_mapping_ref.1 .0;
+                let previos_flags_bitfield = mapping.1.0;
 
                 // if a new flag was introduced that the original did not have
                 if new_flags_bitfield | previos_flags_bitfield != previos_flags_bitfield {
                     bail!("cannot assign bitfield {new_flags_bitfield:8b} to variable {name}, which has bitfield {previos_flags_bitfield:8b}");
                 }
 
-                let primitive_part = &mut mut_mapping_ref.0;
-                *primitive_part = var;
-
-                // println!("\t\t[STORED] {name} to {}", frame.label);
+                mapping.0 = var;
 
                 return Ok(());
-                // this means it has already been mapped.
             }
 
             if !SpecialScope::is_label_special_scope(&frame.label) {

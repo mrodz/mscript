@@ -18,14 +18,14 @@ pub(crate) struct Callable<'a> {
 }
 
 impl<'a> Callable<'a> {
-    pub fn new_recursive_call(arguments: &'a FunctionArguments) -> Self {
+    pub const fn new_recursive_call(arguments: &'a FunctionArguments) -> Self {
         Self {
             destination: CallableDestination::ToSelf,
             function_arguments: arguments,
         }
     }
 
-    pub fn new(
+    pub const fn new(
         arguments: &'a FunctionArguments,
         load_instruction: CompiledItem,
         self_register: Option<String>,

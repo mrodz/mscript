@@ -51,7 +51,7 @@ pub static KEYWORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
 });
 
 impl Ident {
-    pub fn new(name: String, ty: Option<Cow<'static, TypeLayout>>, read_only: bool) -> Self {
+    pub const fn new(name: String, ty: Option<Cow<'static, TypeLayout>>, read_only: bool) -> Self {
         Self {
             name,
             ty,

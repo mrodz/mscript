@@ -4,6 +4,7 @@
 
 use anyhow::{bail, Context, Result};
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::path::Path;
@@ -12,7 +13,6 @@ use std::rc::{Rc, Weak};
 use crate::context::{Ctx, SpecialScope};
 use crate::file::MScriptFile;
 use crate::instruction::{run_instruction, Instruction};
-use crate::rc_to_ref;
 
 use super::instruction::JumpRequest;
 use super::stack::{Stack, VariableMapping};
@@ -39,7 +39,7 @@ pub struct PrimitiveFunction {
 
 impl PrimitiveFunction {
     /// Initialize a [`PrimitiveFunction`] given its fields.
-    pub(crate) fn new(path: String, callback_state: Option<Rc<VariableMapping>>) -> Self {
+    pub(crate) const fn new(path: String, callback_state: Option<Rc<VariableMapping>>) -> Self {
         Self {
             location: path,
             callback_state,
@@ -232,7 +232,7 @@ impl Display for Function {
 
 impl Function {
     /// Initialize a [`Function`] given its fields.
-    pub(crate) fn new(
+    pub(crate) const fn new(
         location: Weak<MScriptFile>,
         name: String,
         instructions: Box<[Instruction]>,
@@ -284,13 +284,15 @@ impl Function {
     /// # Panics
     /// This function will `panic!` if the instruction byte falls outside of (0..[`INSTRUCTION_COUNT`][crate::instruction_constants::INSTRUCTION_COUNT])
     pub(crate) fn run(
-        &mut self,
+        &self,
         args: Cow<Vec<Primitive>>,
-        current_frame: Rc<Stack>,
+        current_frame: Rc<RefCell<Stack>>,
         callback_state: Option<Rc<VariableMapping>>,
         jump_callback: &mut impl Fn(&JumpRequest) -> Result<ReturnValue>,
     ) -> Result<ReturnValue> {
-        rc_to_ref(&current_frame).extend(self.get_qualified_name());
+        {
+            current_frame.borrow_mut().extend(self.get_qualified_name());
+        }
 
         // Each function needs its own context.
         let mut context = Ctx::new(self, current_frame.clone(), args, callback_state);
@@ -343,7 +345,8 @@ impl Function {
             // process the exit state
             match ret {
                 InstructionExitState::ReturnValue(ret) => {
-                    rc_to_ref(&current_frame).pop_until_function();
+                    current_frame.borrow_mut().pop_until_function();
+                    // rc_to_ref(&current_frame).pop_until_function();
                     return Ok(ret.clone());
                 }
                 InstructionExitState::JumpRequest(jump_request) => {
@@ -402,7 +405,7 @@ impl Function {
         // Handle when a function does not explicitly return.
         log::warn!("Warning: function concludes without `ret` instruction");
 
-        rc_to_ref(&current_frame).pop();
+        current_frame.borrow_mut().pop();
 
         Ok(ReturnValue::NoValue)
     }
@@ -421,12 +424,12 @@ impl Function {
 /// A map of a function's name to the function struct.
 #[derive(Debug)]
 pub struct Functions {
-    map: HashMap<Rc<String>, Function>,
+    pub(crate) map: HashMap<Rc<String>, Function>,
 }
 
 impl<'a> Functions {
     /// Initialize a [`Functions`] map given its fields.
-    pub(crate) fn new(map: HashMap<Rc<String>, Function>) -> Self {
+    pub(crate) const fn new(map: HashMap<Rc<String>, Function>) -> Self {
         Self { map }
     }
 
@@ -434,6 +437,21 @@ impl<'a> Functions {
         Self {
             map: HashMap::new(),
         }
+    }
+
+    pub(crate) fn run_function(
+        &self,
+        name: &String,
+        args: Cow<Vec<Primitive>>,
+        current_frame: Rc<RefCell<Stack>>,
+        callback_state: Option<Rc<VariableMapping>>,
+        jump_callback: &mut impl Fn(&JumpRequest) -> Result<ReturnValue>,
+    ) -> Result<ReturnValue> {
+        let Some(function) = &self.map.get(name) else {
+            panic!("not found");
+        };
+
+        function.run(args, current_frame, callback_state, jump_callback)
     }
 
     pub(crate) fn add_function(
@@ -449,19 +467,19 @@ impl<'a> Functions {
         self.map.insert(Rc::new(name), function)
     }
 
-    /// Get all functions whose name starts with `name`
-    pub(crate) fn get_object_functions(
-        &'a self,
-        name: &'a String,
-    ) -> impl Iterator<Item = &Function> + 'a {
-        self.map.iter().filter_map(move |(key, val)| {
-            if key.starts_with(name) {
-                Some(val)
-            } else {
-                None
-            }
-        })
-    }
+    // /// Get all functions whose name starts with `name`
+    // pub(crate) fn get_object_functions<'b: 'a>(
+    //     &'a self,
+    //     name: &'b String,
+    // ) -> impl Iterator<Item = &Function> + 'a {
+    //     self.map.iter().filter_map(move |(key, val)| {
+    //         if key.starts_with(name) {
+    //             Some(val)
+    //         } else {
+    //             None
+    //         }
+    //     })
+    // }
 
     /// Get a reference to a function with name `signature`, if it exists.
     pub(crate) fn get(&self, signature: &String) -> Result<&Function> {

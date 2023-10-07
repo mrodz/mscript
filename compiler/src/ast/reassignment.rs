@@ -220,11 +220,11 @@ impl Parser {
 
         let expected_ty = path.expected_type();
 
-        if &value_ty != expected_ty {
+        if value_ty.get_type_recursively() != expected_ty.get_type_recursively() {
             return Err(vec![new_err(
                 path_span,
                 &input.user_data().get_source_file_name(),
-                format!("type mismatch: cannot assign `{value_ty}` to `{expected_ty}`"),
+                format!("type mismatch: cannot assign `{value_ty:?}` to `{expected_ty:?}`"),
             )]);
         }
 

@@ -1,9 +1,9 @@
 //! The interpreter's primitive datatypes.
 //! Every "value" in the interpreter is a primitive.
 
-use crate::{bigint, bool, byte, float, int, rc_to_ref, stack::VariableFlags, string};
+use crate::{bigint, bool, byte, float, int, stack::VariableFlags, string};
 use anyhow::{bail, Result};
-use std::{fmt::Display, rc::Rc};
+use std::{fmt::{Display, Debug}, rc::Rc, cell::{RefCell, Ref}, ops::Deref};
 
 /// This macro allows easy recursion over variants.
 macro_rules! primitive {
@@ -43,6 +43,69 @@ macro_rules! primitive {
     };
 }
 
+#[derive(Debug, Clone)]
+pub enum HeapPrimitive {
+    ArrayPtr(*mut Primitive),
+    Lookup(Rc<RefCell<(Primitive, VariableFlags)>>)
+}
+
+impl HeapPrimitive {
+    pub const fn new_array_view(pinned_ptr: *mut Primitive) -> Self {
+        Self::ArrayPtr(pinned_ptr)
+    }
+
+    pub const fn new_lookup_view(shared_ptr: Rc<RefCell<(Primitive, VariableFlags)>>) -> Self {
+        Self::Lookup(shared_ptr)
+    }
+
+    pub(crate) unsafe fn to_owned_primitive(&self) -> Primitive {
+        match self {
+            Self::ArrayPtr(mut_ptr) => (**mut_ptr).clone(),
+            Self::Lookup(cell) => {
+                let view = cell.borrow();
+                view.0.to_owned()
+            }
+        }
+    }
+
+    pub(crate) unsafe fn set(&self, new_val: Primitive) {
+        match self {
+            Self::Lookup(cell) => {
+                let mut view = cell.borrow_mut();
+                view.0 = new_val;
+            }
+            Self::ArrayPtr(mut_ptr) => {
+                **mut_ptr = new_val;
+            }
+        }
+    }
+
+    pub(crate) unsafe fn borrow(&self) -> Box<dyn Deref<Target = Primitive> + '_> {
+        match self {
+            Self::Lookup(shared_ptr) => {
+                Box::new(Ref::map(shared_ptr.borrow(), |view| {
+                    &view.0
+                }))
+            }
+            Self::ArrayPtr(raw_mut_ptr) => {
+                let as_ref = raw_mut_ptr.as_ref().expect("could not get compliant reference from [mut array ptr]");
+
+                Box::new(as_ref)
+            }
+        }
+    }
+}
+
+impl PartialEq for HeapPrimitive {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::ArrayPtr(lhs), Self::ArrayPtr(rhs)) => lhs == rhs,
+            (Self::Lookup(lhs), Self::Lookup(rhs)) => lhs == rhs,
+            _ => unimplemented!("not comparable")
+        }
+    }
+}
+
 primitive! {
     Bool(bool),
     Str(String),
@@ -52,9 +115,9 @@ primitive! {
     Byte(u8),
     // We don't need reference counting because cloning a primitive function is cheap
     Function(crate::function::PrimitiveFunction),
-    Vector(std::rc::Rc<Vec<crate::variables::Primitive>>),
-    HeapPrimitive(*mut crate::variables::Primitive),
-    Object(std::rc::Rc<crate::variables::Object>),
+    Vector(Rc<RefCell<Vec<crate::variables::Primitive>>>),
+    HeapPrimitive(HeapPrimitive),
+    Object(Rc<RefCell<crate::variables::Object>>),
     // Supports Lazy Allocation
     Optional(Option<Box<crate::variables::Primitive>>),
 }
@@ -122,20 +185,26 @@ impl Primitive {
     /// This code will blow up the VM if the HP ptr is not valid. If this happens, though,
     /// it is a bug with the compiler. Users will NEVER encounter a stale mutable pointer on
     /// their own, as it is a private type known only to the compiler used for array tricks.
-    pub fn move_out_of_heap_primitive(self) -> Self {
+    /// 
+    /// # Safety
+    /// This function assumes that if `self` is a [HeapPrimitive]
+    /// that points to memory inside a vector/list, the vector/list
+    /// is "pinned" and has not been modified since this pointer's creation.
+    /// Otherwise, this function will access a dangling reference and construct
+    /// a Primitive from binary garbage.
+    pub unsafe fn move_out_of_heap_primitive(self) -> Self {
         if let Self::HeapPrimitive(primitive) = self {
-            log::trace!("Heap clone @ {:#X}", primitive as usize);
-            unsafe { (*primitive).clone() }
+            primitive.to_owned_primitive()
         } else {
             self
         }
     }
 
-    pub fn lookup(&self, property: &str) -> Option<Rc<(Primitive, VariableFlags)>> {
+    pub fn lookup(&self, property: &str) -> Option<Rc<RefCell<(Primitive, VariableFlags)>>> {
         use Primitive as P;
         match self {
             P::Object(obj) => {
-                let property = rc_to_ref(obj).get_property(property, true)?;
+                let property = obj.borrow().get_property(property, true)?;
                 Some(property)
             }
             _ => None,
@@ -248,7 +317,8 @@ impl Primitive {
             Function(fun) => write!(f, "{fun}"),
             Vector(l) => {
                 write!(f, "[")?;
-                let mut iter = l.iter();
+                let borrow = l.borrow();
+                let mut iter = borrow.iter();
 
                 depth += 1;
 
@@ -265,11 +335,11 @@ impl Primitive {
             }
             // For all intents and purposes, this code is safe. We assume that if this code blows up,
             // something went SERIOUSLY wrong with the MScript compiler.
-            #[cfg(feature = "debug")]
-            HeapPrimitive(hp) => unsafe { write!(f, "*mut {:#X} -> {}", *hp as usize, **hp) },
-            #[cfg(not(feature = "debug"))]
-            HeapPrimitive(hp) => unsafe { write!(f, "&{}", **hp) },
-            Object(o) => write!(f, "{o}"),
+            HeapPrimitive(hp) => {
+                let view = unsafe { hp.borrow() };
+                let view = &**view;
+                write!(f, "&{view}") },
+            Object(o) => write!(f, "{}", o.borrow()),
             Optional(Some(primitive)) => write!(f, "{primitive}"),
             Optional(None) => write!(f, "none"),
         }

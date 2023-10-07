@@ -2,12 +2,12 @@
 //! In other words, all side effects should carried out through this interface.
 
 use super::function::{Function, InstructionExitState};
-use super::rc_to_ref;
 use super::stack::VariableMapping;
 use super::variables::Primitive;
 use crate::stack::{Stack, VariableFlags};
 use anyhow::{bail, Result};
 use std::borrow::Cow;
+use std::cell::{RefCell, Ref};
 use std::fmt::{Debug, Display};
 use std::rc::Rc;
 use std::slice::SliceIndex;
@@ -63,7 +63,7 @@ pub struct Ctx<'a> {
     /// A reference to the function that this [`Ctx`] belongs to.
     function: &'a Function,
     /// A shared reference to the interpreter's function stack trace.
-    call_stack: Rc<Stack>,
+    call_stack: Rc<RefCell<Stack>>,
     /// This field is checked after executing each instruction. While private, it can
     /// be modified via the [`Ctx::signal`] and [`Ctx::clear_signal`] methods.
     exit_state: InstructionExitState,
@@ -88,7 +88,7 @@ impl<'a> Ctx<'a> {
     /// * `callback_state` - Any special variables captured by the function
     pub fn new(
         function: &'a Function,
-        call_stack: Rc<Stack>,
+        call_stack: Rc<RefCell<Stack>>,
         args: Cow<'a, Vec<Primitive>>,
         callback_state: Option<Rc<VariableMapping>>,
     ) -> Self {
@@ -117,11 +117,7 @@ impl<'a> Ctx<'a> {
             bail!("this function is not a callback")
         };
 
-        let mapping = Rc::as_ptr(mapping) as *mut VariableMapping;
-
-        unsafe {
-            (*mapping).update(name, value)?;
-        }
+        mapping.update(name, value)?;
 
         Ok(())
     }
@@ -135,7 +131,7 @@ impl<'a> Ctx<'a> {
     ///
     /// * `name` - the name of the callback variable
     /// * `value` - the [`Primitive`] value that will be stored in the same slot.
-    pub fn load_callback_variable(&self, name: &str) -> Result<Rc<(Primitive, VariableFlags)>> {
+    pub fn load_callback_variable(&self, name: &str) -> Result<Rc<RefCell<(Primitive, VariableFlags)>>> {
         let Some(ref mapping) = self.callback_state else {
             bail!("this function is not a callback")
         };
@@ -153,7 +149,7 @@ impl<'a> Ctx<'a> {
     }
 
     /// Returns the [Call Stack](`Stack`) associated with this [`Ctx`] as an `Rc`.
-    pub fn rced_call_stack(&self) -> Rc<Stack> {
+    pub fn rced_call_stack(&self) -> Rc<RefCell<Stack>> {
         Rc::clone(&self.call_stack)
     }
 
@@ -198,7 +194,7 @@ impl<'a> Ctx<'a> {
 
     /// Get the `Display` format of the call stack. Principally used for Debug/Display purposes.
     pub fn get_call_stack_string(&self) -> String {
-        self.call_stack.to_string()
+        self.call_stack.borrow().to_string()
     }
 
     /// Creates a **COPY** of the local operating stack.
@@ -235,17 +231,17 @@ impl<'a> Ctx<'a> {
 
     /// Add a new stack frame with a given label.
     pub(crate) fn add_frame(&self, label: String) {
-        rc_to_ref(&self.call_stack).extend(label)
+        self.call_stack.borrow_mut().extend(label)
     }
 
     /// Pop a frame from the stack.
     pub(crate) fn pop_frame(&self) {
-        rc_to_ref(&self.call_stack).pop()
+        self.call_stack.borrow_mut().pop()
     }
 
     /// Get the depth of the call stack.
     pub(crate) fn frames_count(&self) -> usize {
-        unsafe { (*Rc::as_ptr(&self.call_stack)).size() }
+        self.call_stack.borrow().size()
     }
 
     /// Delete all items in the local operating stack.
@@ -276,23 +272,20 @@ impl<'a> Ctx<'a> {
 
     /// Store a variable to this function. Will get dropped when the function goes out of scope.
     pub(crate) fn register_variable(&self, name: String, var: Primitive) -> Result<()> {
-        let call_stack = rc_to_ref(&self.call_stack);
-
-        call_stack.register_variable(name, var)
+        // let call_stack = rc_to_ref(&self.call_stack);
+        self.call_stack.borrow_mut().register_variable(name, var)
     }
 
     /// Store a variable to the top of the call stack *only*. Will get dropped when the stack frame goes out of scope.
     pub(crate) fn register_variable_local(&self, name: String, var: Primitive) -> Result<()> {
-        let call_stack = rc_to_ref(&self.call_stack);
-
-        call_stack.register_variable_local(name, var, VariableFlags::none())
+        self.call_stack.borrow_mut().register_variable_local(name, var, VariableFlags::none())
     }
 
     pub(crate) fn delete_variable_local(
         &self,
         name: &str,
-    ) -> Result<Rc<(Primitive, VariableFlags)>> {
-        rc_to_ref(&self.call_stack).delete_variable_local(name)
+    ) -> Result<Rc<RefCell<(Primitive, VariableFlags)>>> {
+        self.call_stack.borrow_mut().delete_variable_local(name)
     }
 
     // /// Mutate a variable in this function.
@@ -303,21 +296,21 @@ impl<'a> Ctx<'a> {
     /// Get the [`Primitive`] value and its associated [`VariableFlags`] from a name.
     ///
     /// Will start the search in the current function and bubble all the way up to the highest stack frame.
-    pub(crate) fn load_variable(&self, name: &str) -> Option<Rc<(Primitive, VariableFlags)>> {
-        self.call_stack.find_name(name)
+    pub(crate) fn load_variable(&self, name: &str) -> Option<Rc<RefCell<(Primitive, VariableFlags)>>> {
+        self.call_stack.borrow().find_name(name)
     }
 
     /// Get a reference to all of the variables mapped to this function.
-    pub(crate) fn get_frame_variables(&self) -> &VariableMapping {
-        self.call_stack.get_frame_variables()
+    pub(crate) fn get_frame_variables(&self) -> Ref<VariableMapping> {
+        Ref::map(self.call_stack.borrow(), Stack::get_frame_variables)
     }
 
     /// Get the [`Primitive`] value and its associated [`VariableFlags`] from a name.
     ///
     /// Will search _exclusively_ in the current stack frame, which makes this function more performant
     /// when searching for variables that should exist in the same stack frame.
-    pub(crate) fn load_local(&self, name: &str) -> Option<Rc<(Primitive, VariableFlags)>> {
-        self.call_stack.get_frame_variables().get(name)
+    pub(crate) fn load_local(&self, name: &str) -> Option<Rc<RefCell<(Primitive, VariableFlags)>>> {
+        self.call_stack.borrow().get_frame_variables().get(name)
     }
 
     /// Return the callback variables associated to this function, if they exist.

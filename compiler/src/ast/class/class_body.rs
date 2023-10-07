@@ -36,7 +36,7 @@ impl Compile for ClassBody {
 }
 
 impl ClassBody {
-    pub fn new(features: Vec<ClassFeature>, constructor: Constructor) -> Self {
+    pub const fn new(features: Vec<ClassFeature>, constructor: Constructor) -> Self {
         Self {
             features,
             constructor,

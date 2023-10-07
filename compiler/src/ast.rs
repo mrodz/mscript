@@ -428,7 +428,7 @@ impl<'a> Dependency<'a> {
     pub fn name(&self) -> &String {
         self.ident.as_ref().name()
     }
-    pub fn new(ident: Cow<'a, Ident>) -> Self {
+    pub const fn new(ident: Cow<'a, Ident>) -> Self {
         Self {
             ident,
             cycles_needed: 0,

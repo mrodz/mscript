@@ -1,17 +1,21 @@
 //! Interface for file operations.
 
+use std::borrow::Cow;
+use std::cell::{RefCell, Ref};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::rc::Rc;
 
+use crate::function::ReturnValue;
 use anyhow::{bail, Context, Result};
 
 use crate::function::Function;
-use crate::instruction::{split_string, Instruction};
+use crate::instruction::{split_string, Instruction, JumpRequest};
+use crate::stack::{Stack, VariableMapping};
+use crate::BytecodePrimitive;
 
 use super::function::Functions;
-use super::rc_to_ref;
 
 /// Wrapper around a bytecode file.
 #[derive(Debug)]
@@ -20,7 +24,7 @@ pub struct MScriptFile {
     path: Rc<String>,
     /// The functions in the file. Even though it is an `Option`, by the time an [`MScriptFile`]
     /// is initialized, this field will be propagated.
-    functions: Option<Functions>,
+    functions: RefCell<Option<Functions>>,
 }
 
 #[derive(Debug)]
@@ -33,17 +37,27 @@ impl MScriptFileBuilder {
         Self {
             building: Rc::new(MScriptFile {
                 path: Rc::new(path_to_file.replace('\\', "/")),
-                functions: Some(Functions::new_empty()),
+                functions: RefCell::new(Some(Functions::new_empty())),
             }),
         }
     }
 
-    pub fn add_function(&mut self, name: String, bytecode: Box<[Instruction]>) -> Option<Function> {
-        let Some(ref mut functions) = rc_to_ref(&self.building).functions else {
-            unreachable!()
-        };
+    pub fn add_function(&mut self, name: String, bytecode: Box<[Instruction]>) {
+        // let Some(ref mut functions) = rc_to_ref(&self.building).functions else {
+        //     unreachable!()
+        // };
 
-        functions.add_function(Rc::downgrade(&self.building), name, bytecode)
+        let functions = &self.building.functions;
+
+        let mut functions = functions.borrow_mut();
+
+        if let Some(functions) = functions.as_mut() {
+            functions.add_function(Rc::downgrade(&self.building), name, bytecode);
+        } else {
+            unreachable!()
+        }
+
+        // functions.add_function(Rc::downgrade(&self.building), name, bytecode)
     }
 
     pub fn build(self) -> Rc<MScriptFile> {
@@ -109,30 +123,47 @@ impl MScriptFile {
     pub fn open(path: Rc<String>) -> Result<Rc<Self>> {
         let new_uninit = Rc::new(Self {
             path,
-            functions: None,
+            functions: RefCell::new(None),
         });
 
         let functions = Self::get_functions(&new_uninit)?;
 
-        rc_to_ref(&new_uninit).functions = Some(functions);
+        {
+            let mut borrow = new_uninit.functions.borrow_mut();
+            *borrow = Some(functions);
+        }
 
         Ok(new_uninit)
     }
 
-    pub fn new(functions: Functions, path: String) -> Rc<Self> {
-        Rc::new(Self {
-            functions: Some(functions),
-            path: Rc::new(path.replace('\\', "/")),
-        })
-    }
-
     /// Searches for a function given its name.
-    pub fn get_function(&mut self, name: &String) -> Option<&mut Function> {
+    pub fn run_function(
+        &self,
+        name: &String,
+        args: Cow<Vec<BytecodePrimitive>>,
+        current_frame: Rc<RefCell<Stack>>,
+        callback_state: Option<Rc<VariableMapping>>,
+        jump_callback: &mut impl Fn(&JumpRequest) -> Result<ReturnValue>,
+    ) -> Result<ReturnValue> {
         // let name = format!("{}#{name}", self.path);
 
-        let function = self.functions.as_mut().unwrap().get_mut(name);
+        let functions = self.functions.borrow();
 
-        function.ok()
+        if functions.is_none() {
+            bail!("not found");
+        }
+
+        let Some(functions) = functions.as_ref() else {
+            unreachable!()
+        };
+
+        functions.run_function(name, args, current_frame, callback_state, jump_callback)
+
+        // let functions = self.functions.borrow_mut();
+
+        // let functions = functions.as_mut()?.get_mut(name).ok()?.run(args, current_frame, callback_state, jump_callback);
+
+        // function.ok()
     }
 
     /// Get the path of the file.
@@ -145,17 +176,49 @@ impl MScriptFile {
         self.path.clone()
     }
 
-    /// Get the functions associated with an object mapped as `name`.
-    pub fn get_object_functions<'a>(
-        &'a mut self,
-        name: &'a String,
-    ) -> Result<impl Iterator<Item = &Function>> {
-        let Some(ref mut functions) = self.functions else {
-            bail!("no functions")
-        };
+    pub(crate) fn get_functions_ref(&self) -> Option<Ref<Functions>> {
+        let functions = self.functions.borrow();
 
-        Ok(functions.get_object_functions(name))
+        Ref::filter_map(functions, |functions| {
+            functions.as_ref()
+        }).ok()
     }
+
+    /// Get the functions associated with an object mapped as `name`.
+    // pub fn get_object_functions<'a>(
+    //     &'a self,
+    //     name: &String,
+    // ) -> Result<impl Iterator<Item = Ref<'a, Function>>> {
+    //     Ref::filter_map(self.functions.borrow(), |functions| {
+    //         let functions = functions.as_ref()?;
+    //         Some(&functions.map.iter().filter_map(move |(key, val)| {
+    //             if key.starts_with(name) {
+    //                 Some(val)
+    //             } else {
+    //                 None
+    //             }
+    //         }))
+    //     })
+    //     // self.functions.borrow().iter().map(f)
+    //     // let functions = self.functions.get_mut().as_mut().context("no functions")?;
+
+    //     // let functions_view = self.functions.borrow();
+
+    //     // let functions = functions_view.as_ref().context("no functions")?;
+
+    //     // Ref::filter_map(self.functions.borrow(), |functions| {
+    //     //     let functions = functions.as_ref()?;
+
+    //     //     Some(functions.get_object_functions(name)?)
+    //     // })
+    //     // Ok(functions.get_object_functions(name))
+    //     // let functions = self.functions.borrow().as_ref().context("no functions")?;
+    //     // let Some(ref mut functions) = self.functions else {
+    //     //     bail!("no functions")
+    //     // };
+
+    //     // Ok(functions.get_object_functions(name))
+    // }
 
     /// Get all the functions associated with this file.
     ///
@@ -167,7 +230,8 @@ impl MScriptFile {
     fn get_functions(rc_of_self: &Rc<Self>) -> Result<Functions> {
         let path = rc_of_self.path();
         let mut reader = BufReader::new(
-            File::open(path).with_context(|| format!("failed opening file `{path}`"))?,
+            File::open(path)
+                .with_context(|| format!("failed opening file `{path}` ({rc_of_self:?})"))?,
         );
         let mut buffer = Vec::new();
 

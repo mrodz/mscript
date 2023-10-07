@@ -247,21 +247,20 @@ impl Scopes {
         TypeSearchResult::NotFound
     }
 
-    pub(crate) fn get_type_of_executing_class_in_nth_frame(&self, step_n_frames: usize) -> Option<Ref<ClassType>> {
+    pub(crate) fn get_type_of_executing_class(&self, step_n_frames: usize) -> Option<Ref<ClassType>> {
         Ref::filter_map(self.0.borrow(), |scopes| {
-            let second_to_last = &scopes[scopes.len() - step_n_frames];
+            let iter = scopes.iter().rev().skip(step_n_frames);
 
-            let ScopeType::Class(Some(ref class_type)) = second_to_last.ty else {
-                return None;
-            };
+            for scope in iter {
+                if let ScopeType::Class(Some(ref class_type)) = scope.ty {
+                    return Some(class_type);
+                };
+            }
 
-            Some(class_type)
+            None
+            // let second_to_last = &scopes[scopes.len() - step_n_frames];
         })
         .ok()
-    }
-
-    pub(crate) fn get_type_of_executing_class(&self) -> Option<Ref<ClassType>> {
-        self.get_type_of_executing_class_in_nth_frame(2)
     }
 }
 
@@ -284,7 +283,7 @@ pub(crate) struct ScopeHandle<'a> {
 }
 
 impl<'a> ScopeHandle<'a> {
-    pub(crate) fn new(depth_at_init: usize, belongs_to: &'a Scopes) -> Self {
+    pub(crate) const fn new(depth_at_init: usize, belongs_to: &'a Scopes) -> Self {
         Self {
             depth_at_init,
             parent: belongs_to,
@@ -394,7 +393,7 @@ impl Display for Scope {
 }
 
 impl Scope {
-    fn new(
+    const fn new(
         variables: HashSet<Ident>,
         types: HashMap<Box<str>, TypeLayout>,
         ty: ScopeType,
