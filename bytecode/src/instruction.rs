@@ -666,7 +666,7 @@ pub mod implementations {
                 let last = ctx.pop();
 
                 let Some(Primitive::Function(f)) = last else {
-                    bail!("missing argument, and the last item in the local stack {last:?} is not a function.")
+                    bail!("missing argument, and the last item in the local stack ({last:?}, S:{:#?}) is not a function.", ctx.get_local_operating_stack())
                 };
 
                 let destination = JumpRequestDestination::Standard(f.location().clone());
@@ -893,6 +893,8 @@ pub mod implementations {
                 bail!("load before store (`{name}` not in this stack frame)\nframe `{}`'s variables:\n{}", ctx.rced_call_stack().borrow().get_frame_label(), ctx.get_frame_variables())
             };
 
+            println!("LDA {name}, {var:?}");
+
             ctx.push(var.borrow().0.clone());
 
             Ok(())
@@ -950,13 +952,21 @@ pub mod implementations {
 
             let result: Rc<RefCell<(Primitive, VariableFlags)>> = primitive.lookup(name).with_context(|| format!("{name} does not exist on {primitive:?}"))?;
 
-            let result_ptr = Rc::as_ptr(&result) as *mut (Primitive, VariableFlags);
+            println!(".{name} = {result:#?}");
+
+            // let x = Ref::map(result.borrow(), |tuple| {
+            //     &tuple.0
+            // });
+
+            // let result_ptr = Rc::as_ptr(&result) as *mut RefCell<(Primitive, VariableFlags)>;
 
             let primitive_ptr: *mut Primitive = unsafe {
-                &mut (*result_ptr).0
+                &mut (*result.as_ptr()).0
             };
 
             let heap_primitive = Primitive::HeapPrimitive(primitive_ptr);
+
+            println!("`{heap_primitive}`");
 
             ctx.push(heap_primitive);
 

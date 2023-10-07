@@ -447,7 +447,7 @@ impl<'a> Functions {
         callback_state: Option<Rc<VariableMapping>>,
         jump_callback: &mut impl Fn(&JumpRequest) -> Result<ReturnValue>,
     ) -> Result<ReturnValue> {
-        let Some(function) = dbg!(&self.map).get(name) else {
+        let Some(function) = &self.map.get(dbg!(name)) else {
             panic!("not found");
         };
 

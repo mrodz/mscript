@@ -1,15 +1,18 @@
-
 class ImaginaryNumber {
-	real: float
-	imaginary: float
+			real: float
+			imaginary: float
 
-	constructor(self, real: float, imaginary: float) {
-		self.real = real
-		self.imaginary = imaginary
-	}
+			constructor(self, real: float, imaginary: float) {
+				self.real = real
+				self.imaginary = imaginary
+			}
 
-	fn noargs(self) {}
-}
+			fn to_string(self) -> str {
+				return "" + self.real + " + " + self.imaginary + "i"
+			}
 
-sqrtNeg1 = ImaginaryNumber(0f, 1f)
-sqrtNeg1.noargs()
+			fn noargs(self) {}
+		}
+
+		sqrtNeg1 = ImaginaryNumber(0f, 1f)
+print sqrtNeg1.noargs

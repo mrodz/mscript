@@ -111,12 +111,12 @@ macro_rules! vector {
     () => {{
         use $crate::BytecodePrimitive;
 
-        BytecodePrimitive::Vector(std::rc::Rc::new(vec![]))
+        BytecodePrimitive::Vector(std::rc::Rc::new(std::cell::RefCell::new(vec![])))
     }};
     ($elem:expr; $n:expr) => {{
         use $crate::BytecodePrimitive;
 
-        BytecodePrimitive::Vector(std::rc::Rc::new(vec![$elem; $n]))
+        BytecodePrimitive::Vector(std::rc::Rc::new(std::cell::RefCell::new(vec![$elem; $n])))
     }};
     ($($x:expr),+ $(,)?) => {{
         use $crate::BytecodePrimitive;
