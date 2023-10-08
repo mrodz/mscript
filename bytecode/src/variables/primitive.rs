@@ -218,6 +218,10 @@ impl Primitive {
         matches!(self.ty(), Bool | Int | Float | Byte | BigInt)
     }
 
+    pub fn is_function(&self) -> bool {
+        matches!(self.ty(), Type::Function)
+    }
+
     pub fn try_into_numeric_index(&self) -> Result<usize> {
         Ok(match self {
             Primitive::Byte(byte) => *byte as usize,

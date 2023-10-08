@@ -120,7 +120,7 @@ impl Parser {
 
         let constructor = constructor.unwrap_or_else(|| {
             let path_str = input.user_data().get_file_name();
-            let class_type = input.user_data().get_type_of_executing_class_in_nth_frame(1).unwrap();
+            let class_type = input.user_data().get_type_of_executing_class_in_nth_frame(0).unwrap();
             let class_name = class_type.arced_name();
             let class_id = class_type.id;
 

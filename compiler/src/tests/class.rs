@@ -90,7 +90,7 @@ fn instance_counter() {
 #[test]
 fn factorial_pair() {
     eval(
-		r#"
+        r#"
 		class FactorialPair {
 			number: int
 			factorial: bigint
@@ -122,6 +122,44 @@ fn factorial_pair() {
 		assert fact1.to_string() == "Factorial of 1 is 1"
 		assert fact6.to_string() == "Factorial of 6 is 720"
 		assert fact32.to_string() == "Factorial of 32 is 263130836933693530167218012160000000"
+	"#,
+    )
+    .unwrap();
+}
+
+#[test]
+fn capture_outside_env() {
+    eval(
+        r#"
+		MESSAGE = "Hello, "
+		GREETER_INSTANCES = 0
+
+		class Greeter {
+			name: str
+
+			constructor(self, name: str) {
+				self.name = name
+				modify GREETER_INSTANCES = GREETER_INSTANCES + 1
+			}
+
+			fn greet(self) -> str {
+				return MESSAGE + self.name
+			}
+
+			fn number_of_greeters(self) -> int {
+				return GREETER_INSTANCES
+			}
+		}
+
+		hi_mateo = Greeter("Mateo")
+		hi_scout = Greeter("Scout")
+
+		assert hi_mateo.greet() == "Hello, Mateo"
+		assert hi_scout.greet() == "Hello, Scout"
+
+		assert hi_mateo.number_of_greeters() == hi_scout.number_of_greeters()
+		assert hi_mateo.number_of_greeters() == GREETER_INSTANCES
+		assert GREETER_INSTANCES == 2
 	"#,
     )
     .unwrap();

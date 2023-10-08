@@ -489,7 +489,11 @@ pub mod implementations {
                 None
             };
 
-            ctx.push(function!(PrimitiveFunction::new(location.into(), callback_state)));
+            let function_ptr = PrimitiveFunction::new(location.into(), callback_state);
+
+            // dbg!(&function_ptr);
+
+            ctx.push(function!(function_ptr));
 
             Ok(())
         }
@@ -674,9 +678,13 @@ pub mod implementations {
 
                 let destination = JumpRequestDestination::Standard(f.location().clone());
 
+                let callback_state = f.callback_state().clone();
+
+                // dbg!(&callback_state);
+
                 ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                     destination,
-                    callback_state: f.callback_state().clone(),
+                    callback_state,
                     stack: ctx.rced_call_stack(),
                     arguments: ctx.get_local_operating_stack(),
                 }));
@@ -953,6 +961,8 @@ pub mod implementations {
             let primitive = ctx.pop().unwrap();
 
             let result: Rc<RefCell<(Primitive, VariableFlags)>> = primitive.lookup(name).with_context(|| format!("{name} does not exist on {primitive:?}"))?;
+
+            // println!("LOOKING UP ON: {primitive:?}\nLOOKUP RETURNED: {result:?}");
 
             let heap_primitive = Primitive::HeapPrimitive(HeapPrimitive::new_lookup_view(result));
 

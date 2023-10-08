@@ -153,10 +153,32 @@ struct StackFrame {
 #[derive(Debug, Default)]
 pub struct Stack(Vec<StackFrame>);
 
+struct StackIter<'a> {
+    frames: &'a [StackFrame],
+}
+
+impl <'a>Iterator for StackIter<'a> {
+    type Item = &'a StackFrame;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let next = self.frames.last();
+        if let Some(frames) = self.frames.get(..self.frames.len() - 2) {
+            self.frames = frames;
+        } else {
+            self.frames = &[];
+        }
+        next
+    }
+}
+
 impl Stack {
     /// Create a new, empty call stack.
     pub const fn new() -> Self {
         Self(vec![])
+    }
+
+    fn iter(&self) -> StackIter {
+        StackIter { frames: self.0.as_ref() }
     }
 
     /// Get the label of the current frame.

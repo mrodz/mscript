@@ -253,30 +253,30 @@ impl Value {
     pub fn associate_with_ident(&self, ident: &mut Ident, user_data: &AssocFileData) -> Result<()> {
         match self {
             Value::Function(ref f) => {
-                let ty = f.for_type()?;
+                let ty = f.for_type()?.get_owned_type_recursively();
                 ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
             }
             Value::Ident(..) => {
                 ident.link_from_pointed_type_with_lookup(user_data)?;
             }
             Value::Number(ref number) => {
-                let ty = number.for_type()?;
+                let ty = number.for_type()?.get_owned_type_recursively();
                 ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
             }
             Value::String(ref string) => {
-                let ty = string.for_type()?;
+                let ty = string.for_type()?.get_owned_type_recursively();
                 ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
             }
             Value::MathExpr(ref math_expr) => {
-                let ty = math_expr.for_type()?;
+                let ty = math_expr.for_type()?.get_owned_type_recursively();
                 ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
             }
             Value::Boolean(ref boolean) => {
-                let ty = boolean.for_type()?;
+                let ty = boolean.for_type()?.get_owned_type_recursively();
                 ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
             }
             Value::List(ref list) => {
-                let ty = list.for_type_force_mixed()?;
+                let ty = list.for_type_force_mixed()?.get_owned_type_recursively();
                 ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
             }
         }

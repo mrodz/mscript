@@ -141,19 +141,17 @@ impl Ident {
             bail!("already has type {ty:?}")
         }
 
-        let (ident, is_callback) = user_data
+        let (ident, _) = user_data
             .get_dependency_flags_from_name(&self.name)
             .with_context(|| format!("'{}' has not been mapped", self.name))?;
 
-        let new_ty = ident.ty.clone().map(|x| {
-            if is_callback {
-                Cow::Owned(TypeLayout::CallbackVariable(x.into_owned().into()))
-            } else {
-                x
-            }
-        });
+        let new_ty = ident.ty().expect("no type").get_type_recursively();
+        let new_ty = Cow::Owned(new_ty.clone());
 
-        self.ty = new_ty;
+
+        self.ty = Some(new_ty);
+
+        dbg!(self);
 
         Ok(())
     }
