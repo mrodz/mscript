@@ -118,6 +118,10 @@ impl AssocFileData {
         self.scopes.get_type_of_executing_class(skip_n_frames)
     }
 
+    // pub fn get_name_of_executing_class_in_nth_frame(&self, skip_n_frames: usize) -> Result<&str> {
+    //     self.scopes.get_name_of_executing_class(step_n_frames)
+    // }
+
     /// This function should **ONLY** be called when creating the AST Node for a Class Type.
     pub fn request_class_id(&self) -> usize {
         let mut class_id = self.class_id_c.write().unwrap();

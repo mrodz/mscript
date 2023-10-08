@@ -97,6 +97,9 @@ impl Assignment {
 impl Dependencies for Assignment {
     fn supplies(&self) -> Vec<Dependency> {
         if let Self::Single { ident, .. } = self {
+            if ident.name() == "x" {
+                dbg!(ident);
+            }
             if !self.flags().contains(AssignmentFlag::modify()) {
                 return vec![Dependency::new(Cow::Borrowed(ident))];
             }
@@ -136,7 +139,7 @@ impl Dependencies for Assignment {
             }
         }
 
-        result
+        dbg!(result)
     }
 }
 
@@ -166,6 +169,7 @@ impl Compile for Assignment {
 
         match self {
             Self::Single { ident, .. } => {
+                // dbg!(ident);
                 let name = ident.name();
                 let store_instruction = if self.flags().contains(AssignmentFlag::modify()) {
                     instruction!(store_object name)

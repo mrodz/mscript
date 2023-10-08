@@ -135,13 +135,34 @@ impl<'a> Ctx<'a> {
         let Some(ref mapping) = self.callback_state else {
             bail!("this function is not a callback")
         };
-
+        
         let Some(pair) = mapping.get(name) else {
             bail!("this callback does not have `{name}`")
         };
 
         Ok(pair)
     }
+    // pub fn load_callback_variable(&self, name: &str) -> Result<Rc<RefCell<(Primitive, VariableFlags)>>> {
+    //     if let Some(ref mapping) = self.callback_state {
+    //         if let Some(pair) = mapping.get(name) {
+    //             return Ok(pair);
+    //         };
+    //     }
+        
+    //     let call_stack = self.call_stack.borrow();
+
+    //     for stack in call_stack.iter() {
+    //         if stack.
+    //     }
+        
+    //     // let Some(ref mapping) = dbg!(self).callback_state else {
+    //     //     bail!("this function is not a callback")
+    //     // };
+
+        
+
+    //     Ok(pair)
+    // }
 
     /// Returns the [`Function`] associated with this [`Ctx`]. In a sense, the bytecode function "owns" this context, hence the name.
     pub fn owner(&self) -> &Function {

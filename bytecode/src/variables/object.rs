@@ -1,7 +1,5 @@
 use super::Primitive;
-use crate::function::PrimitiveFunction;
-use crate::stack::{flag_constants, VariableFlags, VariableMapping};
-use std::borrow::Cow;
+use crate::stack::{VariableFlags, VariableMapping};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
@@ -107,44 +105,42 @@ impl Object {
             None
         };
 
-        let is_function = self.has_function(property_name, include_class_name);
-
-        if let Some(path_to_use) = is_function {
-            let function = PrimitiveFunction::new(path_to_use.into_owned(), None);
-            
-            let tuple = (
-                Primitive::Function(function),
-                VariableFlags(flag_constants::READ_ONLY),
-            );
-            
-            Some(Rc::new(RefCell::new(tuple)))
-        } else {
-            None
-        }
+        self.has_function(property_name, include_class_name)
     }
 
     pub fn has_variable(&self, variable_name: &str) -> Option<Rc<RefCell<(Primitive, VariableFlags)>>> {
         self.object_variables.get(variable_name)
     }
 
-    pub fn has_function<'a>(
+    pub fn has_function(
         &self,
-        function_name: &'a str,
+        function_name: &str,
         include_class_name: Option<&str>,
-    ) -> Option<Cow<'a, str>> {
+    ) -> Option<Rc<RefCell<(Primitive, VariableFlags)>>> {
         if let Some(class_name) = include_class_name {
             let joined_name = class_name.to_owned() + "::" + function_name;
             let maybe_function_ptr = self.object_variables.get(&joined_name);
             if let Some(bundle) = maybe_function_ptr {
-                let bundle = bundle.borrow();
-                if let Primitive::Function(ref function_ptr) = bundle.0 {
-                    return Some(Cow::Owned(function_ptr.location().clone()));
+                let bundle_view = bundle.borrow().0.is_function();
+
+
+                if bundle_view {
+                    return Some(bundle)
                 }
+                
             }
         }
 
-        if self.object_variables.contains(function_name) {
-            Some(Cow::Borrowed(function_name))
+        let direct_lookup = self.object_variables.get(function_name);
+
+        let Some(field) = direct_lookup else {
+            return None;
+        };
+
+        let bundle = field.borrow().0.is_function();
+
+        if bundle {
+            Some(field)
         } else {
             None
         }
