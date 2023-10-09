@@ -94,7 +94,7 @@ impl WalkForType for MemberFunction {
         let mut ident = Parser::ident(ident_node)?;
 
         let parameters_node = children.next().unwrap();
-        let parameters = Parser::function_parameters(parameters_node, false, true)?;
+        let parameters = Parser::function_parameters(parameters_node, false, true, true)?;
 
         let maybe_return_type_node = children.next().unwrap();
 
@@ -155,7 +155,7 @@ impl Parser {
         // Using "_" or not saving it as a variable causes the scope to pop instantly.
         let _scope_handle = input.user_data().push_function(return_type.clone());
 
-        let parameters = Self::function_parameters(parameters, true, true).to_err_vec()?;
+        let parameters = Self::function_parameters(parameters, true, true, true).to_err_vec()?;
         let body = Self::block(body)?;
         let function_type = FunctionType::new(Arc::new(parameters.clone()), return_type);
 

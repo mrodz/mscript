@@ -132,7 +132,7 @@ impl Parser {
 
                 assert_eq!(arguments.as_rule(), Rule::function_arguments);
 
-                let arguments = Self::function_arguments(arguments, function_type.parameters())?;
+                let arguments = Self::function_arguments(arguments, function_type.parameters(), Some(lhs_ty))?;
 
                 let lookup_type = DotLookupOption::FunctionCall {
                     function_name: ident_str,

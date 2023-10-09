@@ -28,6 +28,7 @@ impl Parser {
     pub fn function_arguments(
         input: Node,
         expected_parameters: &FunctionParameters,
+        allow_self_type: Option<&TypeLayout>,
     ) -> Result<FunctionArguments, Vec<anyhow::Error>> {
         let children = input.children();
 
@@ -36,12 +37,14 @@ impl Parser {
 
         let expected_types: Cow<Vec<Cow<TypeLayout>>> = expected_parameters.to_types();
 
+        let mut child_span = input.as_span();
+
         for (idx, child) in children.enumerate() {
             if idx == expected_types.len() {
                 break;
             }
             
-            let child_span = child.as_span();
+            child_span = child.as_span();
             let value_for_arg = Self::value(child)?;
 
             let arg_ty = value_for_arg.for_type().to_err_vec()?;
@@ -50,7 +53,9 @@ impl Parser {
 
             let user_gave = arg_ty.get_type_recursively();
 
-            if !user_gave.eq(expected_ty_at_idx) {
+            let class_self_case = allow_self_type.map(|ty| expected_ty_at_idx.is_class_self() && ty.eq(user_gave)).unwrap_or(false);  
+
+            if !user_gave.eq(expected_ty_at_idx) && !class_self_case {
                 let argument_number = idx + 1;
                 let error_message = format!("type mismatch when calling function (argument #{argument_number} was expected to be `{expected_ty_at_idx}` based on type signature, instead found `{user_gave}`)");
                 errors.push(new_err(
@@ -63,6 +68,28 @@ impl Parser {
             }
 
             result.push(value_for_arg)
+        }
+
+        let result_len = result.len();
+        let expected_parameters_len = expected_parameters.len();
+
+        if result_len != expected_parameters_len {
+
+            let result_plural = if result_len == 1 {
+                ""
+            } else {
+                "s"
+            };
+
+            let expected_plural = if expected_parameters_len == 1 {
+                ""
+            } else {
+                "s"
+            };
+
+            let msg = format!("supplied {result_len} argument{result_plural}, but this function's signature specifies {expected_parameters_len} parameter{expected_plural} (Expected: `fn ({expected_parameters}) ...`)");
+
+            errors.push(new_err(child_span, &input.user_data().get_source_file_name(), msg))
         }
 
         if !errors.is_empty() {

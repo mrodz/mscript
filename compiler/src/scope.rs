@@ -10,7 +10,7 @@ use anyhow::{bail, Result};
 
 use crate::ast::{
     ClassType, FunctionParameters, Ident, TypeLayout, BIGINT_TYPE, BOOL_TYPE, BYTE_TYPE,
-    FLOAT_TYPE, INT_TYPE, STR_TYPE,
+    FLOAT_TYPE, INT_TYPE, STR_TYPE, SELF_TYPE,
 };
 
 #[derive(Debug, Clone, PartialEq, Hash)]
@@ -227,6 +227,7 @@ impl Scopes {
             "bool" => return TypeSearchResult::Ok(Primitive(&BOOL_TYPE)),
             "bigint" => return TypeSearchResult::Ok(Primitive(&BIGINT_TYPE)),
             "byte" => return TypeSearchResult::Ok(Primitive(&BYTE_TYPE)),
+            "Self" => return TypeSearchResult::Ok(Primitive(&SELF_TYPE)),
             _ => (),
         }
 
@@ -459,7 +460,7 @@ impl Scope {
     }
 
     /// able to be improved
-    pub fn contains(&self, dependency: &String) -> Option<&Ident> {
+    pub fn contains(&self, dependency: &str) -> Option<&Ident> {
         // Ident hashes names exclusively, so we can pass `ty = None`
         self.variables.iter().find(|&x| x.name() == dependency)
     }

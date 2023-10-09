@@ -286,6 +286,10 @@ impl<'a> Ctx<'a> {
         self.stack.push(var);
     }
 
+    pub(crate) fn push_front(&mut self, var: Primitive) {
+        self.stack.insert(0, var);
+    }
+
     /// Pop an item from the local operating stack.
     pub(crate) fn pop(&mut self) -> Option<Primitive> {
         self.stack.pop()

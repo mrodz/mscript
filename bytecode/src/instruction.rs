@@ -972,6 +972,20 @@ pub mod implementations {
 
         }
 
+        ld_self(ctx, args) {
+            let Some(name) = args.get(0) else {
+                bail!("`ld_self` requires a name argument");
+            };
+
+            let Some(var) = ctx.load_local(name) else {
+                bail!("load before store (`{name}` not in this stack frame)\nframe `{}`'s variables:\n{}", ctx.rced_call_stack().borrow().get_frame_label(), ctx.get_frame_variables())
+            };
+
+            ctx.push_front(var.borrow().0.clone());
+
+            Ok(())
+        }
+
         assert(ctx, args) {
             if ctx.stack_size() != 1 {
                 bail!("assert can only operate on a single item");

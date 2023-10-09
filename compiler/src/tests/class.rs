@@ -164,3 +164,25 @@ fn capture_outside_env() {
     )
     .unwrap();
 }
+
+#[test]
+fn self_type() {
+	eval(r#"
+		class Dog {
+			name: str
+		
+			constructor(self, name: str) {
+				self.name = name
+			}
+	
+			fn play(self, other: Self) -> str {
+				return self.name + " is playing with " + other.name
+			}
+		}
+	
+		x = Dog("Scout")
+		y = Dog("Muna")
+	
+		assert x.play(y) == "Scout is playing with Muna"
+	"#).unwrap();
+}

@@ -132,25 +132,40 @@ impl AssocFileData {
 
     pub fn get_current_executing_function(
         &self,
-    ) -> Option<(Ref<Scope>, Ref<Arc<FunctionParameters>>)> {
-        let mut iter = self.scopes.iter();
+    ) -> Result<(Ref<Scope>, Ref<Arc<FunctionParameters>>)> {
+        let iter = self.scopes.iter();
 
-        iter.find(|x| x.is_function()).map(|scope| {
-            Ref::map_split(scope, |scope| {
-                let ty = scope.ty_ref();
+        for scope in iter {
+            if scope.is_function() {
+                let (scope, parameters) = Ref::map_split(scope, |scope| {
+                    let ScopeType::Function(parameters) = scope.ty_ref() else {
+                        unreachable!();
+                    };
 
-                let ScopeType::Function(parameters) = ty else {
-                    unreachable!()
+                    (scope, parameters)
+                });
+
+                let Ok(parameters) = Ref::filter_map(parameters, |parameters| {
+                    let Some(parameters) = parameters.as_ref() else {
+                        if let Some(dependency) = scope.contains("self") {
+                            if dependency.ty().expect("unmapped type").as_ref() == &TypeLayout::ClassSelf {
+                                return None;
+                            }
+                        }
+                        
+                        unreachable!("function parameters should have been initialized");
+                    };
+
+                    Some(parameters)
+                }) else {
+                    bail!("in a class, `self` cannot be used to recursively call a member function because `self` is a reference to the class and not the function.")
                 };
 
-                (
-                    scope,
-                    parameters
-                        .as_ref()
-                        .expect("function parameters should have been initialized"),
-                )
-            })
-        })
+                return Ok((scope, parameters))
+            }
+        }
+
+        bail!("no function scope encountered yet")
     }
 
     pub fn return_statement_expected_yield_type(&self) -> Option<Ref<Cow<'static, TypeLayout>>> {
@@ -194,15 +209,15 @@ impl AssocFileData {
         self.scopes.add_type(name, ty)
     }
 
-    pub fn has_name_been_mapped(&self, dependency: &String) -> bool {
+    pub fn has_name_been_mapped(&self, dependency: &str) -> bool {
         self.get_dependency_flags_from_name(dependency).is_some()
     }
 
-    pub fn has_name_been_mapped_local(&self, dependency: &String) -> bool {
+    pub fn has_name_been_mapped_local(&self, dependency: &str) -> bool {
         self.get_ident_from_name_local(dependency).is_some()
     }
 
-    pub fn get_ident_from_name_local(&self, dependency: &String) -> Option<Ref<Ident>> {
+    pub fn get_ident_from_name_local(&self, dependency: &str) -> Option<Ref<Ident>> {
         let scope = self.scopes.last();
 
         Ref::filter_map(scope, |scope| scope.contains(dependency)).ok()
@@ -220,7 +235,7 @@ impl AssocFileData {
 
     pub fn get_dependency_flags_from_name(
         &self,
-        dependency: &String,
+        dependency: &str,
     ) -> Option<(Ref<Ident>, bool)> {
         let scopes = self.scopes.iter();
         self.get_dependency_flags_from_name_and_scopes_plus_skip(dependency, scopes, 0)
@@ -228,7 +243,7 @@ impl AssocFileData {
 
     pub fn get_dependency_flags_from_name_skip_n(
         &self,
-        dependency: &String,
+        dependency: &str,
         skip: usize,
     ) -> Option<(Ref<Ident>, bool)> {
         let scopes = self.scopes.iter();
@@ -237,7 +252,7 @@ impl AssocFileData {
 
     fn get_dependency_flags_from_name_and_scopes_plus_skip<'a>(
         &'a self,
-        dependency: &String,
+        dependency: &str,
         scopes: ScopeIter<'a>,
         skip: usize,
     ) -> Option<(Ref<Ident>, bool)> {

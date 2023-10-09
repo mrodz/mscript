@@ -47,7 +47,7 @@ use crate::{
     ast::{number, Callable, ConstexprEvaluation},
     instruction,
     parser::{AssocFileData, Node, Parser, Rule},
-    VecErr,
+    CompilationError, VecErr,
 };
 
 use super::{
@@ -458,7 +458,7 @@ fn parse_expr(
                         let file_name = user_data.get_file_name();
 
                         let (ident, is_callback) = user_data
-                            .get_dependency_flags_from_name(&raw_string.to_string())
+                            .get_dependency_flags_from_name(raw_string)
                             .with_context(|| {
                                 new_err(
                                     primary.as_span(),
@@ -555,9 +555,12 @@ fn parse_expr(
                     let function_arguments: Pair<Rule> = op.into_inner().next().unwrap();
                     let function_arguments: Node = Node::new_with_user_data(function_arguments, Rc::clone(&user_data));
 
-                    let (_, parameters) = user_data.get_current_executing_function().unwrap();
+                    let (_, parameters) = user_data
+                        .get_current_executing_function()
+                        .details(l_span.unwrap(), &user_data.get_source_file_name(), "`self` is not callable here".to_owned())
+                        .to_err_vec()?;
 
-                    let arguments: FunctionArguments = Parser::function_arguments(function_arguments, &parameters)?;
+                    let arguments: FunctionArguments = Parser::function_arguments(function_arguments, &parameters, None)?;
 
 
                     return Ok((Expr::Callable(CallableContents::ToSelf { return_type, arguments }), None))
@@ -571,7 +574,7 @@ fn parse_expr(
 
                 let function_arguments: Pair<Rule> = op.into_inner().next().unwrap();
                 let function_arguments: Node = Node::new_with_user_data(function_arguments, Rc::clone(&user_data));
-                let function_arguments: FunctionArguments = Parser::function_arguments(function_arguments, function_type.parameters())?;
+                let function_arguments: FunctionArguments = Parser::function_arguments(function_arguments, function_type.parameters(), None)?;
 
                 Ok((Expr::Callable(CallableContents::Standard { lhs_raw: Box::new(lhs), function: function_type, arguments: function_arguments }), None))
             },
