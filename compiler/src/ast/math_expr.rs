@@ -53,7 +53,7 @@ use crate::{
 use super::{
     boolean::boolean_from_str, dot_lookup::DotChain, function::FunctionType, list::Index, map_err,
     new_err, r#type::IntoType, CompilationState, Compile, CompileTimeEvaluate, CompiledItem,
-    Dependencies, Dependency, FunctionArguments, TemporaryRegister, TypeLayout, Value,
+    Dependencies, Dependency, FunctionArguments, TemporaryRegister, TypeLayout, Value, ClassType,
 };
 
 pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
@@ -136,6 +136,7 @@ pub(crate) enum CallableContents {
 pub(crate) enum Expr {
     Value(Value),
     ReferenceToSelf,
+    ReferenceToConstructor(ClassType),
     UnaryMinus(Box<Expr>),
     UnaryNot(Box<Expr>),
     BinOp {
@@ -207,7 +208,9 @@ impl CompileTimeEvaluate for Expr {
                 let lhs = lhs.try_constexpr_eval()?;
                 let rhs = rhs.try_constexpr_eval()?;
 
-                let (Some(Value::Number(lhs)), Some(Value::Number(rhs))) = (lhs.as_ref(), rhs.as_ref()) else {
+                let (Some(Value::Number(lhs)), Some(Value::Number(rhs))) =
+                    (lhs.as_ref(), rhs.as_ref())
+                else {
                     return Ok(ConstexprEvaluation::Impossible);
                 };
 
@@ -223,6 +226,7 @@ impl CompileTimeEvaluate for Expr {
                 Ok(ConstexprEvaluation::Owned(Value::Number(bin_op_applied?)))
             }
             Self::ReferenceToSelf => Ok(ConstexprEvaluation::Impossible),
+            Self::ReferenceToConstructor(..) => Ok(ConstexprEvaluation::Impossible),
             Self::Callable { .. } => Ok(ConstexprEvaluation::Impossible),
             Self::Index { .. } => Ok(ConstexprEvaluation::Impossible),
             Self::DotLookup { .. } => Ok(ConstexprEvaluation::Impossible),
@@ -262,6 +266,9 @@ impl IntoType for Expr {
                 Ok(return_type.clone().into_owned())
             }
             Expr::ReferenceToSelf => Ok(TypeLayout::ClassSelf),
+            Expr::ReferenceToConstructor(class_type) => {
+                Ok(TypeLayout::Function(class_type.constructor()))
+            }
             Expr::Index { index, .. } => index.for_type(),
             Expr::DotLookup { expected_type, .. } => Ok(expected_type.to_owned()),
         }
@@ -297,6 +304,7 @@ impl Dependencies for Expr {
             }
             E::DotLookup { lhs, .. } => lhs.net_dependencies(),
             E::ReferenceToSelf => vec![],
+            E::ReferenceToConstructor(..) => vec![],
         }
     }
 }
@@ -409,6 +417,9 @@ fn compile_depth(
 
             callable.compile(state)
         }
+        Expr::ReferenceToConstructor(class_type) => {
+            Ok(vec![])
+        }
         Expr::Index { lhs_raw, index } => {
             let mut result = lhs_raw.compile(state)?;
             result.append(&mut index.compile(state)?);
@@ -455,6 +466,17 @@ fn parse_expr(
                             return Ok((Expr::ReferenceToSelf, Some(primary_span)))
                         }
 
+                        if raw_string == "Self" {
+                            let class = user_data
+                                .get_type_of_executing_class()
+                                .details(primary_span, &user_data.get_source_file_name(), "`Self` refers to the constructor of a class, but it is only valid inside the body of said class.")
+                                .to_err_vec()?;
+
+                            let class_ty = class.clone();
+
+                            return Ok((Expr::ReferenceToConstructor(class_ty), Some(primary_span)))
+                        }
+
                         let file_name = user_data.get_file_name();
 
                         let (ident, is_callback) = user_data
@@ -477,20 +499,6 @@ fn parse_expr(
                         Expr::Value(Value::Ident(cloned))
                     }
                     Rule::math_expr => parse_expr(primary.into_inner(), user_data.clone())?,
-                    // Rule::callable => {
-                    //     let x = util::parse_with_userdata_features(
-                    //         Rule::callable,
-                    //         primary.as_str(),
-                    //         user_data.clone(),
-                    //     )
-                    //     .map_err(|e| vec![anyhow!(e)])?;
-
-                    //     let single = x.single().map_err(|e| vec![anyhow!(e)])?;
-
-                    //     let callable = Parser::callable(single)?;
-
-                    //     Expr::Value(Value::Callable(callable))
-                    // }
                     Rule::boolean => {
                         Expr::Value(Value::Boolean(boolean_from_str(primary.as_str())))
                     }
@@ -549,21 +557,41 @@ fn parse_expr(
             Rule::callable => {
                 let (lhs, l_span) = lhs?;
 
-                if let Expr::ReferenceToSelf = lhs {
-                    let return_type = user_data.return_statement_expected_yield_type().map(|x| x.clone());
+                let lhs = Box::new(lhs);
 
-                    let function_arguments: Pair<Rule> = op.into_inner().next().unwrap();
-                    let function_arguments: Node = Node::new_with_user_data(function_arguments, Rc::clone(&user_data));
+                match lhs.as_ref() {
+                    Expr::ReferenceToSelf => {
+                        let return_type = user_data.return_statement_expected_yield_type().map(|x| x.clone());
 
-                    let (_, parameters) = user_data
-                        .get_current_executing_function()
-                        .details(l_span.unwrap(), &user_data.get_source_file_name(), "`self` is not callable here".to_owned())
-                        .to_err_vec()?;
+                        let function_arguments: Pair<Rule> = op.into_inner().next().unwrap();
+                        let function_arguments: Node = Node::new_with_user_data(function_arguments, Rc::clone(&user_data));
 
-                    let arguments: FunctionArguments = Parser::function_arguments(function_arguments, &parameters, None)?;
+                        let (_, parameters) = user_data
+                            .get_current_executing_function()
+                            .details(l_span.unwrap(), &user_data.get_source_file_name(), "`self` is not callable here".to_owned())
+                            .to_err_vec()?;
+
+                        let arguments: FunctionArguments = Parser::function_arguments(function_arguments, &parameters, None)?;
 
 
-                    return Ok((Expr::Callable(CallableContents::ToSelf { return_type, arguments }), None))
+                        return Ok((Expr::Callable(CallableContents::ToSelf { return_type, arguments }), None))
+                    }
+                    Expr::ReferenceToConstructor(ref function_type) => {
+                        let function_arguments: Pair<Rule> = op.into_inner().next().unwrap();
+                        let function_arguments: Node = Node::new_with_user_data(function_arguments, Rc::clone(&user_data));
+
+                        let function_type = function_type.constructor();
+
+                        let parameters = function_type.parameters();
+
+                        let arguments: FunctionArguments = Parser::function_arguments(function_arguments, &parameters, None)?;
+
+                        // let function_type = function_type.clone();
+
+                        return Ok((Expr::Callable(CallableContents::Standard { lhs_raw: lhs, function: function_type, arguments }), None))
+                    
+                    }
+                    _ => ()
                 }
 
                 let lhs_ty = lhs.for_type().to_err_vec()?;
@@ -576,7 +604,7 @@ fn parse_expr(
                 let function_arguments: Node = Node::new_with_user_data(function_arguments, Rc::clone(&user_data));
                 let function_arguments: FunctionArguments = Parser::function_arguments(function_arguments, function_type.parameters(), None)?;
 
-                Ok((Expr::Callable(CallableContents::Standard { lhs_raw: Box::new(lhs), function: function_type, arguments: function_arguments }), None))
+                Ok((Expr::Callable(CallableContents::Standard { lhs_raw: lhs, function: function_type, arguments: function_arguments }), None))
             },
             Rule::list_index => {
                 let lhs = lhs?.0;

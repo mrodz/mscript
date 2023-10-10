@@ -42,8 +42,8 @@ impl Compile for Class {
         let body_compiled = self.body.compile(state)?;
 
         let TypeLayout::Class(ty) = self.ident.ty()?.as_ref() else {
-			unreachable!()
-		};
+            unreachable!()
+        };
 
         let id = CompiledFunctionId::Custom(format!("{}_{}", ty.name(), ty.id));
 
@@ -68,10 +68,23 @@ impl Compile for Class {
 pub(crate) struct ClassType {
     name: Arc<String>,
     fields: Arc<[Ident]>,
+    path_str: Arc<String>,
     id: usize,
 }
 
 impl ClassType {
+    pub(crate) fn abs_id(&self) -> String {
+        format!("{}_{}", self.name, self.id)
+    }
+
+    pub(crate) fn abs_class_path(&self) -> String {
+        format!("{}#", self.path_str)
+    }
+
+    pub(crate) fn initialization_callable_path(&self) -> String {
+        format!("{}#{}_{}", self.path_str, self.name, self.id)
+    }
+
     pub fn constructor(&self) -> FunctionType {
         for field in self.fields() {
             if field.name() == "$constructor" {
@@ -160,6 +173,7 @@ impl Parser {
 
             let class_type = ClassType {
                 fields,
+                path_str: input.user_data().get_file_name(),
                 name: Arc::new(ident.name().to_owned()),
                 id: input.user_data().request_class_id(),
             };
