@@ -5,7 +5,7 @@ use super::function::{Function, InstructionExitState};
 use super::stack::VariableMapping;
 use super::variables::Primitive;
 use crate::stack::{Stack, VariableFlags};
-use anyhow::{bail, Result};
+use anyhow::{bail, Result, Context};
 use std::borrow::Cow;
 use std::cell::{RefCell, Ref};
 use std::fmt::{Debug, Display};
@@ -66,15 +66,13 @@ pub struct Ctx<'a> {
     call_stack: Rc<RefCell<Stack>>,
     /// This field is checked after executing each instruction. While private, it can
     /// be modified via the [`Ctx::signal`] and [`Ctx::clear_signal`] methods.
-    exit_state: InstructionExitState,
+    exit_state: Box<InstructionExitState>,
     /// The arguments to the function.
     args: Cow<'a, Vec<Primitive>>,
     /// A separate variable mapping for closures and objects. If `None`, this function is neither.
     /// Otherwise, contains a reference shared amongst all instances of the callback to point to
     /// shared/global data.
     callback_state: Option<Rc<VariableMapping>>,
-
-    special_scopes: Option<&'a mut Vec<SpecialScope>>,
 }
 
 impl<'a> Ctx<'a> {
@@ -96,10 +94,10 @@ impl<'a> Ctx<'a> {
             stack: Vec::new(),
             function,
             call_stack,
-            exit_state: InstructionExitState::NoExit,
+            exit_state: Box::new(InstructionExitState::NoExit),
             args,
             callback_state,
-            special_scopes: None,
+            // special_scopes: None,
         }
     }
 
@@ -142,27 +140,6 @@ impl<'a> Ctx<'a> {
 
         Ok(pair)
     }
-    // pub fn load_callback_variable(&self, name: &str) -> Result<Rc<RefCell<(Primitive, VariableFlags)>>> {
-    //     if let Some(ref mapping) = self.callback_state {
-    //         if let Some(pair) = mapping.get(name) {
-    //             return Ok(pair);
-    //         };
-    //     }
-        
-    //     let call_stack = self.call_stack.borrow();
-
-    //     for stack in call_stack.iter() {
-    //         if stack.
-    //     }
-        
-    //     // let Some(ref mapping) = dbg!(self).callback_state else {
-    //     //     bail!("this function is not a callback")
-    //     // };
-
-        
-
-    //     Ok(pair)
-    // }
 
     /// Returns the [`Function`] associated with this [`Ctx`]. In a sense, the bytecode function "owns" this context, hence the name.
     pub fn owner(&self) -> &Function {
@@ -237,7 +214,7 @@ impl<'a> Ctx<'a> {
     /// ctx.signal(InstructionExitState::Goto(5))
     /// ```
     pub(crate) fn signal(&mut self, exit_state: InstructionExitState) {
-        self.exit_state = exit_state;
+        *self.exit_state = exit_state;
     }
 
     /// Get the [`InstructionExitState`] stored in the [`Ctx`]
@@ -247,7 +224,7 @@ impl<'a> Ctx<'a> {
 
     /// Reset [`Ctx::exit_state`]
     pub(crate) fn clear_signal(&mut self) {
-        self.exit_state = InstructionExitState::NoExit;
+        *self.exit_state = InstructionExitState::NoExit;
     }
 
     /// Add a new stack frame with a given label.
@@ -295,8 +272,13 @@ impl<'a> Ctx<'a> {
         self.stack.pop()
     }
 
+    pub(crate) fn register_export(&self, name: String, var: Rc<RefCell<(Primitive, VariableFlags)>>) -> Result<()> {
+        let file = self.function.location().upgrade().context("could not upgrade reference to file")?;
+        file.add_export(name, var)
+    }
+
     /// Store a variable to this function. Will get dropped when the function goes out of scope.
-    pub(crate) fn register_variable(&self, name: String, var: Primitive) -> Result<()> {
+    pub(crate) fn register_variable(&self, name: Cow<'static, str>, var: Primitive) -> Result<()> {
         // let call_stack = rc_to_ref(&self.call_stack);
         self.call_stack.borrow_mut().register_variable(name, var)
     }

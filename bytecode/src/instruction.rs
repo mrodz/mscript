@@ -503,7 +503,7 @@ pub mod implementations {
                 bail!("`make_object` does not require arguments")
             }
 
-            let object_variables = Rc::new(ctx.get_frame_variables().clone());
+            let object_variables = Rc::new(VariableMapping::clone(&ctx.get_frame_variables()));
 
             let function = ctx.owner();
             let name = Rc::new(function.name().clone());
@@ -769,18 +769,58 @@ pub mod implementations {
     instruction! {
         store(ctx, args) {
             let Some(name) = args.first() else {
-                bail!("store requires a name")
+                bail!("`store` requires a name")
             };
 
             if ctx.stack_size() != 1 {
-                bail!("store can only store a single item (found: {:?})", ctx.get_local_operating_stack());
+                bail!("`store` can only store a single item (found: {:?})", ctx.get_local_operating_stack());
             }
 
             let arg = ctx.pop().unwrap();
             
             let arg = unsafe { arg.move_out_of_heap_primitive() };
 
-            ctx.register_variable(name.clone(), arg)?;
+            ctx.register_variable(Cow::Owned(name.to_owned()), arg)?;
+
+            Ok(())
+        }
+
+        export_name(ctx, args) {
+            let Some(name) = args.first() else {
+                bail!("`export_name` requires a name")
+            };
+
+            if ctx.stack_size() != 1 {
+                bail!("`export_name` can only store a single item (found: {:?})", ctx.get_local_operating_stack());
+            }
+
+            let arg = ctx.pop().unwrap();
+            
+            let arg = unsafe { arg.move_out_of_heap_primitive() };
+
+            let pair = Rc::new(RefCell::new((arg, VariableFlags::new_public())));
+
+            ctx.register_export(name.to_owned(), pair)?;
+
+            Ok(())
+        }
+
+        export_special(ctx, args) {
+            let Some(name) = args.first() else {
+                bail!("`export_name` requires a name")
+            };
+
+            if ctx.stack_size() != 1 {
+                bail!("`export_name` can only store a single item (found: {:?})", ctx.get_local_operating_stack());
+            }
+
+            let arg = ctx.pop().unwrap();
+            
+            let arg = unsafe { arg.move_out_of_heap_primitive() };
+
+            let pair = Rc::new(RefCell::new((arg, VariableFlags::new_public())));
+
+            ctx.register_export(name.to_owned(), pair)?;
 
             Ok(())
         }

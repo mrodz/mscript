@@ -417,7 +417,7 @@ fn compile_depth(
 
             callable.compile(state)
         }
-        Expr::ReferenceToConstructor(class_type) => {
+        Expr::ReferenceToConstructor(..) => {
             Ok(vec![])
         }
         Expr::Index { lhs_raw, index } => {

@@ -14,6 +14,7 @@ mod variables;
 
 // Alternate naming to make writing FFI functions simpler.
 pub use function::ReturnValue as FFIReturnValue;
+pub(crate) use variables::Primitive;
 pub use variables::Primitive as BytecodePrimitive;
 
 // Expose the Program interface.

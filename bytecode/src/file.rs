@@ -12,8 +12,8 @@ use anyhow::{bail, Context, Result};
 
 use crate::function::Function;
 use crate::instruction::{split_string, Instruction, JumpRequest};
-use crate::stack::{Stack, VariableMapping};
-use crate::BytecodePrimitive;
+use crate::stack::{Stack, VariableMapping, VariableFlags};
+use crate::Primitive;
 
 use super::function::Functions;
 
@@ -25,6 +25,7 @@ pub struct MScriptFile {
     /// The functions in the file. Even though it is an `Option`, by the time an [`MScriptFile`]
     /// is initialized, this field will be propagated.
     functions: RefCell<Option<Functions>>,
+    exports: RefCell<VariableMapping>,
 }
 
 #[derive(Debug)]
@@ -38,15 +39,12 @@ impl MScriptFileBuilder {
             building: Rc::new(MScriptFile {
                 path: Rc::new(path_to_file.replace('\\', "/")),
                 functions: RefCell::new(Some(Functions::new_empty())),
+                exports: RefCell::new(VariableMapping::default()),
             }),
         }
     }
 
     pub fn add_function(&mut self, name: String, bytecode: Box<[Instruction]>) {
-        // let Some(ref mut functions) = rc_to_ref(&self.building).functions else {
-        //     unreachable!()
-        // };
-
         let functions = &self.building.functions;
 
         let mut functions = functions.borrow_mut();
@@ -56,8 +54,6 @@ impl MScriptFileBuilder {
         } else {
             unreachable!()
         }
-
-        // functions.add_function(Rc::downgrade(&self.building), name, bytecode)
     }
 
     pub fn build(self) -> Rc<MScriptFile> {
@@ -124,6 +120,7 @@ impl MScriptFile {
         let new_uninit = Rc::new(Self {
             path,
             functions: RefCell::new(None),
+            exports: RefCell::new(VariableMapping::default()),
         });
 
         let functions = Self::get_functions(&new_uninit)?;
@@ -140,7 +137,7 @@ impl MScriptFile {
     pub fn run_function(
         &self,
         name: &String,
-        args: Cow<Vec<BytecodePrimitive>>,
+        args: Cow<Vec<Primitive>>,
         current_frame: Rc<RefCell<Stack>>,
         callback_state: Option<Rc<VariableMapping>>,
         jump_callback: &mut impl Fn(&JumpRequest) -> Result<ReturnValue>,
@@ -184,41 +181,15 @@ impl MScriptFile {
         }).ok()
     }
 
-    /// Get the functions associated with an object mapped as `name`.
-    // pub fn get_object_functions<'a>(
-    //     &'a self,
-    //     name: &String,
-    // ) -> Result<impl Iterator<Item = Ref<'a, Function>>> {
-    //     Ref::filter_map(self.functions.borrow(), |functions| {
-    //         let functions = functions.as_ref()?;
-    //         Some(&functions.map.iter().filter_map(move |(key, val)| {
-    //             if key.starts_with(name) {
-    //                 Some(val)
-    //             } else {
-    //                 None
-    //             }
-    //         }))
-    //     })
-    //     // self.functions.borrow().iter().map(f)
-    //     // let functions = self.functions.get_mut().as_mut().context("no functions")?;
+    
+    pub fn add_export(&self, name: String, var: Rc<RefCell<(Primitive, VariableFlags)>>) -> Result<()> {
+        let mut view = self.exports.borrow_mut();
 
-    //     // let functions_view = self.functions.borrow();
+        log::trace!("Exporting {name:?} = {var:?}");
 
-    //     // let functions = functions_view.as_ref().context("no functions")?;
+        view.update_once(name, var).context("Double export: name is already exported")
+    }
 
-    //     // Ref::filter_map(self.functions.borrow(), |functions| {
-    //     //     let functions = functions.as_ref()?;
-
-    //     //     Some(functions.get_object_functions(name)?)
-    //     // })
-    //     // Ok(functions.get_object_functions(name))
-    //     // let functions = self.functions.borrow().as_ref().context("no functions")?;
-    //     // let Some(ref mut functions) = self.functions else {
-    //     //     bail!("no functions")
-    //     // };
-
-    //     // Ok(functions.get_object_functions(name))
-    // }
 
     /// Get all the functions associated with this file.
     ///
