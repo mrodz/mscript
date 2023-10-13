@@ -290,7 +290,7 @@ impl IntoType for Value {
         match self {
             Self::Function(function) => function.for_type(),
             Self::Ident(ident) => Ok(ident.ty()?.clone().into_owned()),
-            Self::MathExpr(math_expr) => math_expr.for_type(),
+            Self::MathExpr(math_expr) => dbg!(math_expr.for_type()),
             Self::Number(number) => number.for_type(),
             Self::String(string) => string.for_type(),
             Self::Boolean(boolean) => boolean.for_type(),

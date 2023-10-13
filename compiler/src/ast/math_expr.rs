@@ -236,6 +236,7 @@ impl CompileTimeEvaluate for Expr {
 
 impl IntoType for Expr {
     fn for_type(&self) -> Result<super::TypeLayout> {
+        dbg!(self);
         match self {
             Expr::Value(val) => val.for_type(),
             Expr::BinOp { lhs, op, rhs } => {
@@ -251,11 +252,14 @@ impl IntoType for Expr {
                 })
             }
             Expr::UnaryMinus(val) | Expr::UnaryNot(val) => val.for_type(),
-            Expr::Callable(CallableContents::Standard { function, .. }) => {
+            Expr::Callable(CallableContents::Standard { function, lhs_raw, .. }) => {
+                dbg!(lhs_raw);
                 let return_type = function
                     .return_type()
                     .get_type()
                     .context("function returns void")?;
+                
+                dbg!(return_type);
                 Ok(return_type.clone().into_owned())
             }
             Expr::Callable(CallableContents::ToSelf { return_type, .. }) => {
@@ -417,8 +421,9 @@ fn compile_depth(
 
             callable.compile(state)
         }
-        Expr::ReferenceToConstructor(..) => {
-            Ok(vec![])
+        Expr::ReferenceToConstructor(class_type) => {
+            let id = class_type.abs_id();
+            Ok(vec![instruction!(load_self_export id)])
         }
         Expr::Index { lhs_raw, index } => {
             let mut result = lhs_raw.compile(state)?;
@@ -633,7 +638,13 @@ fn parse_expr(
                 let index: Node = Node::new_with_user_data(index, Rc::clone(&user_data));
                 let (dot_chain, final_output_type) = Parser::dot_chain(index, &lhs_ty)?;
 
-                Ok((Expr::DotLookup { lhs: Box::new(lhs), dot_chain, expected_type: final_output_type.to_owned() }, None))
+                let expected_type = if final_output_type.is_class_self() {
+                    lhs_ty
+                } else {
+                    final_output_type.to_owned()
+                };
+
+                Ok((Expr::DotLookup { lhs: Box::new(lhs), dot_chain, expected_type }, None))
             }
             _ => unreachable!(),
         })

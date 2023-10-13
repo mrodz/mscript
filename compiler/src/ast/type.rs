@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt::Display, hash::Hash, sync::Arc};
+use std::{borrow::Cow, fmt::Display, hash::Hash, sync::Arc, cell::Ref};
 
 use crate::{
     ast::{value::ValToUsize, new_err},
@@ -206,8 +206,7 @@ impl TypeLayout {
         let me = self.get_type_recursively();
 
         matches!(me, TypeLayout::ClassSelf)
-        
-    } 
+    }
 
     pub fn get_error_hint_between_types(&self, incompatible: &Self) -> Option<&'static str> {
         use NativeType::*;
@@ -380,6 +379,20 @@ impl TypeLayout {
             TypeLayout::Native(NativeType::Int | NativeType::BigInt)
         )
     }
+
+    pub fn eq_complex(&self, rhs: &Self, executing_class: Option<Ref<ClassType>>) -> bool {
+        if self == rhs {
+            return true;
+        }
+
+        match (self, rhs, executing_class) {
+            (Self::ClassSelf, TypeLayout::Class(other), Some(executing_class)) | (TypeLayout::Class(other), Self::ClassSelf, Some(executing_class)) => {
+                executing_class.eq(&other)
+            },
+            _ => false,
+        }
+
+    } 
 
     pub fn get_output_type_from_index(&self, index: &Value) -> Result<Cow<TypeLayout>> {
         let me = self.get_type_recursively();

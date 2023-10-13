@@ -283,6 +283,10 @@ impl<'a> Ctx<'a> {
         self.call_stack.borrow_mut().register_variable(name, var)
     }
 
+    pub(crate) fn ref_variable(&self, name: Cow<'static, str>, var: Rc<RefCell<(Primitive, VariableFlags)>>) {
+        self.call_stack.borrow_mut().ref_variable(name, var)
+    }
+
     /// Store a variable to the top of the call stack *only*. Will get dropped when the stack frame goes out of scope.
     pub(crate) fn register_variable_local(&self, name: String, var: Primitive) -> Result<()> {
         self.call_stack.borrow_mut().register_variable_local(name, var, VariableFlags::none())
@@ -305,6 +309,12 @@ impl<'a> Ctx<'a> {
     /// Will start the search in the current function and bubble all the way up to the highest stack frame.
     pub(crate) fn load_variable(&self, name: &str) -> Option<Rc<RefCell<(Primitive, VariableFlags)>>> {
         self.call_stack.borrow().find_name(name)
+    }
+
+    pub(crate) fn load_self_export(&self, name: &str) -> Option<Rc<RefCell<(Primitive, VariableFlags)>>> {
+        let file = self.function.location().upgrade().expect("could not upgrade reference to file");
+
+        file.get_export(name)
     }
 
     /// Get a reference to all of the variables mapped to this function.

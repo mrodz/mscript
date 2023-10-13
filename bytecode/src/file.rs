@@ -190,6 +190,12 @@ impl MScriptFile {
         view.update_once(name, var).context("Double export: name is already exported")
     }
 
+    pub fn get_export(&self, name: &str) -> Option<Rc<RefCell<(Primitive, VariableFlags)>>> {
+        let exports = self.exports.borrow();
+        dbg!(&exports);
+        exports.get(name)
+    }
+
 
     /// Get all the functions associated with this file.
     ///

@@ -23,7 +23,7 @@ use crate::{
 
 use super::{
     function::FunctionType, r#type::IntoType, Compile, CompiledFunctionId, CompiledItem,
-    Dependencies, Dependency, FunctionParameters, Ident,
+    Dependencies, Dependency, FunctionParameters, Ident, new_err,
 };
 
 pub(in crate::ast::class) trait WalkForType {
@@ -57,9 +57,11 @@ impl Compile for Class {
 
         let name = self.ident.name();
 
+        let function_name = format!("{}#{id}", self.path_str);
+
         Ok(vec![
-            instruction!(make_function(format!("{}#{id}", self.path_str))),
-            instruction!(store_fast name),
+            instruction!(make_function function_name),
+            instruction!(export_special name id),
         ])
     }
 }
@@ -161,8 +163,15 @@ impl Parser {
         let mut children = input.children();
 
         let ident_node = children.next().unwrap();
+        let ident_span = ident_node.as_span();
 
         let mut ident = Self::ident(ident_node).to_err_vec()?;
+
+        let has_been_declared = input.user_data().get_ident_from_name_local(ident.name());
+
+        if let Some(has_been_declared) = has_been_declared {
+            return Err(vec![new_err(ident_span, &input.user_data().get_source_file_name(), format!("This name is already in scope (Hint: `{}: {} = ...` was declared somewhere above)", ident.name(), has_been_declared.ty().unwrap()))]);
+        }
 
         let body_node = children.next().unwrap();
 
@@ -192,12 +201,14 @@ impl Parser {
             Self::class_body(body_node)?
         };
 
+        ident.mark_const();
+
         input.user_data().add_type(
             ident.name().clone().into_boxed_str(),
             ident.ty().unwrap().clone().into_owned(),
         );
 
-        input.user_data().add_dependency(&ident);
+        input.user_data().add_dependency(dbg!(&ident));
 
         let result = Class {
             ident,

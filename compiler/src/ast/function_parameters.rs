@@ -156,7 +156,8 @@ impl Parser {
             ident.link_force_no_inherit(input.user_data(), ty)?;
 
             if add_to_scope_dependencies {
-                input.user_data().add_dependency(&ident);
+
+                // input.user_data().add_dependency(ident);
             }
 
             result.push(ident);

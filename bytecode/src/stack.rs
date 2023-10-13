@@ -289,6 +289,12 @@ impl Stack {
         self.register_variable_flags(name, var, VariableFlags::none())
     }
 
+    pub fn ref_variable(&mut self, name: Cow<'static, str>, var: Rc<RefCell<(Primitive, VariableFlags)>>) {
+        let stack_frame = self.0.last_mut().expect("nothing in the stack");
+        let variables = &mut stack_frame.variables.0;
+        variables.insert(name.into_owned(), var);
+    }
+
     /// Add a `name -> variable` mapping to the current stack frame, with flags.
     pub fn register_variable_local(
         &mut self,

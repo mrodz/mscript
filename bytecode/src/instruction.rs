@@ -131,6 +131,7 @@ pub mod implementations {
     use crate::context::SpecialScope;
     use crate::function::{PrimitiveFunction, ReturnValue};
     use crate::stack::VariableFlags;
+    use crate::stack::flag_constants::READ_ONLY;
     use crate::variables::HeapPrimitive;
     use crate::{bool, function, int, object, vector, optional};
     use std::collections::HashMap;
@@ -805,22 +806,42 @@ pub mod implementations {
             Ok(())
         }
 
-        export_special(ctx, args) {
-            let Some(name) = args.first() else {
-                bail!("`export_name` requires a name")
+        load_self_export(ctx, args) {
+            let Some(src) = args.first() else {
+                bail!("`load_self_export` requires a source name")
             };
 
+            let primitive = ctx
+                .load_self_export(src)
+                .with_context(|| format!("`{src}` has not been exported from the executing module."))?;
+
+            let primitive = primitive.borrow().0.clone();
+            
+            ctx.push(primitive);
+            // ctx.ref_variable(Cow::Owned(s.to_owned()), primitive);
+
+            Ok(())
+        }
+
+        export_special(ctx, args) {
+            let Some(name) = args.first() else {
+                bail!("`export_special` requires a name")
+            };
+
+            let export_name = args.get(1).unwrap_or(name);
+
             if ctx.stack_size() != 1 {
-                bail!("`export_name` can only store a single item (found: {:?})", ctx.get_local_operating_stack());
+                bail!("`export_special` can only store a single item (found: {:?})", ctx.get_local_operating_stack());
             }
 
             let arg = ctx.pop().unwrap();
             
             let arg = unsafe { arg.move_out_of_heap_primitive() };
 
-            let pair = Rc::new(RefCell::new((arg, VariableFlags::new_public())));
+            let pair = Rc::new(RefCell::new((arg, VariableFlags(READ_ONLY))));
 
-            ctx.register_export(name.to_owned(), pair)?;
+            ctx.register_export(export_name.to_owned(), Rc::clone(&pair))?;
+            ctx.ref_variable(Cow::Owned(name.to_owned()), pair);
 
             Ok(())
         }
