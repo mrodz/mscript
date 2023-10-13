@@ -236,7 +236,6 @@ impl CompileTimeEvaluate for Expr {
 
 impl IntoType for Expr {
     fn for_type(&self) -> Result<super::TypeLayout> {
-        dbg!(self);
         match self {
             Expr::Value(val) => val.for_type(),
             Expr::BinOp { lhs, op, rhs } => {
@@ -252,14 +251,12 @@ impl IntoType for Expr {
                 })
             }
             Expr::UnaryMinus(val) | Expr::UnaryNot(val) => val.for_type(),
-            Expr::Callable(CallableContents::Standard { function, lhs_raw, .. }) => {
-                dbg!(lhs_raw);
+            Expr::Callable(CallableContents::Standard { function, .. }) => {
                 let return_type = function
                     .return_type()
                     .get_type()
                     .context("function returns void")?;
                 
-                dbg!(return_type);
                 Ok(return_type.clone().into_owned())
             }
             Expr::Callable(CallableContents::ToSelf { return_type, .. }) => {
@@ -643,6 +640,8 @@ fn parse_expr(
                 } else {
                     final_output_type.to_owned()
                 };
+
+                dbg!(&expected_type);
 
                 Ok((Expr::DotLookup { lhs: Box::new(lhs), dot_chain, expected_type }, None))
             }

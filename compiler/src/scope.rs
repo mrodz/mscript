@@ -1,6 +1,6 @@
 use std::{
     borrow::{Borrow, Cow},
-    cell::{Ref, RefCell},
+    cell::{Ref, RefCell, RefMut},
     collections::{HashMap, HashSet},
     fmt::Display,
     sync::Arc,
@@ -155,6 +155,10 @@ impl<'a> std::ops::Deref for SuccessTypeSearchResult<'a> {
 }
 
 impl Scopes {
+    fn borrow_mut(&self) -> RefMut<Vec<Scope>>{
+        self.0.borrow_mut()
+    }
+
     pub(crate) fn new() -> Self {
         log::trace!("INIT Virtual Stack at MODULE");
         Self(RefCell::new(vec![Scope::new_file()]))
@@ -204,7 +208,7 @@ impl Scopes {
 
     fn pop(&self) -> Option<Scope> {
         log::trace!("Virtual Stack POP");
-        self.0.borrow_mut().pop()
+        {self.0.borrow_mut()}.pop()
     }
 
     pub(crate) fn add_variable(&self, dependency: &Ident) {
@@ -246,6 +250,19 @@ impl Scopes {
         }
 
         TypeSearchResult::NotFound
+    }
+
+    pub(crate) fn get_owned_type_of_executing_class(&self, step_n_frames: usize) -> Option<ClassType> {
+        let scopes = self.0.borrow();
+        let iter = scopes.iter().rev().skip(step_n_frames);
+
+        for scope in iter {
+            if let ScopeType::Class(Some(ref class_type)) = scope.ty {
+                return Some(class_type.to_owned());
+            };
+        }
+
+        None
     }
 
     pub(crate) fn get_type_of_executing_class(&self, step_n_frames: usize) -> Option<Ref<ClassType>> {

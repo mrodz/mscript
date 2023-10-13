@@ -35,6 +35,10 @@ impl FunctionType {
         &self.return_type
     }
 
+    pub(crate) fn set_return_type(&mut self, new_status: ScopeReturnStatus) {
+        *self.return_type = new_status;
+    }
+
     pub fn parameters(&self) -> &FunctionParameters {
         &self.parameters
     }

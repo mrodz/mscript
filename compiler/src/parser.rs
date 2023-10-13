@@ -110,6 +110,10 @@ impl AssocFileData {
         self.scopes.set_self_type_of_class(new_class_type)
     }
 
+    pub fn get_owned_type_of_executing_class(&self) -> Option<ClassType> {
+        self.scopes.get_owned_type_of_executing_class(0)
+    }
+
     pub fn get_type_of_executing_class(&self) -> Option<Ref<ClassType>> {
         self.scopes.get_type_of_executing_class(0)
     }

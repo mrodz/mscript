@@ -192,7 +192,6 @@ impl MScriptFile {
 
     pub fn get_export(&self, name: &str) -> Option<Rc<RefCell<(Primitive, VariableFlags)>>> {
         let exports = self.exports.borrow();
-        dbg!(&exports);
         exports.get(name)
     }
 

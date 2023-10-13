@@ -79,25 +79,22 @@ impl ClassType {
         format!("{}_{}", self.name, self.id)
     }
 
-    pub(crate) fn abs_class_path(&self) -> String {
-        format!("{}#", self.path_str)
-    }
-
-    pub(crate) fn initialization_callable_path(&self) -> String {
-        format!("{}#{}_{}", self.path_str, self.name, self.id)
-    }
-
     pub fn constructor(&self) -> FunctionType {
+        let return_type = ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Class(self.clone())));
+        
         for field in self.fields() {
             if field.name() == "$constructor" {
                 let x = field.clone().ty_owned().unwrap();
-                return x.into_owned().owned_is_function().unwrap();
+                if let Some(mut constructor) = x.into_owned().owned_is_function() {
+                    constructor.set_return_type(return_type);
+                    return constructor;
+                }
+                unreachable!()
             }
         }
 
         // use default constructor if a class doesn't have one.
 
-        let return_type = ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Class(self.clone())));
         let empty_parameters = Arc::new(FunctionParameters::TypesOnly(vec![]));
 
         FunctionType::new(empty_parameters, return_type)
@@ -166,6 +163,7 @@ impl Parser {
         let ident_span = ident_node.as_span();
 
         let mut ident = Self::ident(ident_node).to_err_vec()?;
+        ident.mark_const();
 
         let has_been_declared = input.user_data().get_ident_from_name_local(ident.name());
 
@@ -201,14 +199,12 @@ impl Parser {
             Self::class_body(body_node)?
         };
 
-        ident.mark_const();
-
         input.user_data().add_type(
             ident.name().clone().into_boxed_str(),
             ident.ty().unwrap().clone().into_owned(),
         );
 
-        input.user_data().add_dependency(dbg!(&ident));
+        input.user_data().add_dependency(&ident);
 
         let result = Class {
             ident,

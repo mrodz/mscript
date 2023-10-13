@@ -159,7 +159,7 @@ impl Parser {
         let body = children.next().unwrap();
         let body = Self::block(body)?;
 
-        let class_type = input.user_data().get_type_of_executing_class().unwrap();
+        let class_type = input.user_data().get_owned_type_of_executing_class().unwrap();
 
         let path_str = input.user_data().get_file_name();
 

@@ -139,12 +139,17 @@ impl Parser {
                     arguments,
                 };
 
+                let output_type = function_type.return_type().get_type().unwrap_or(&Cow::Owned(TypeLayout::Void));
+
+                let output_type = if output_type.is_class_self() {
+                    lhs_ty
+                } else {
+                    &output_type
+                };
+
                 Ok(DotLookup {
                     lookup_type,
-                    output_type: function_type
-                        .return_type()
-                        .get_type()
-                        .unwrap_or(&Cow::Owned(TypeLayout::Void)),
+                    output_type,
                 })
             }
             Rule::dot_name_lookup => Ok(DotLookup {
