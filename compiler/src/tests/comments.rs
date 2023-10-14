@@ -2,7 +2,8 @@ use crate::eval;
 
 #[test]
 fn grammar() {
-	eval(r####"
+    eval(
+        r####"
 		class AWSDynamoRecord {
 			constructor(self, key: str, value: str) {
 				# ...
@@ -29,33 +30,41 @@ fn grammar() {
 		const CONFIG = AWSConfig(### YOUR API KEY HERE ###)
 		
 		send_record_to_aws(CONFIG, AWSDynamoRecord("Mateo", "Rust,Python,Java,C,C++"))
-	"####).unwrap();
+	"####,
+    )
+    .unwrap();
 }
 
 #[test]
 fn no_die() {
-	eval(r#"
+    eval(
+        r#"
 		###
 		print "Hello!"
 		assert false
 		###
 	
 		print "World!"
-	"#).unwrap();
+	"#,
+    )
+    .unwrap();
 }
 
 #[test]
 fn block_comment_mid_assignment() {
-	eval(r#"
+    eval(
+        r#"
 		meaning_of_life = ### "To be happy and live righteously" ### 42
 	
 		assert meaning_of_life == 42
-	"#).unwrap();
+	"#,
+    )
+    .unwrap();
 }
 
 #[test]
 fn block_comment_mid_string() {
-	eval(r####"
+    eval(r####"
 		const LOREM_IPSUM = "###Lorem Ipsum### is a filler text that is used to fill the space between the elements of a web page or a document."
 		
 		assert LOREM_IPSUM[0] == "#"
@@ -66,7 +75,8 @@ fn block_comment_mid_string() {
 
 #[test]
 fn save_the_world() {
-	eval(r#"
+    eval(
+        r#"
 
 		class DeathStar {
 			fn build_lazar(self) -> Self {
@@ -91,5 +101,7 @@ fn save_the_world() {
 
 		# Phew! Close call. Good Job Luke ;)
 		death_star.build_lazar().generate_power().charge_lazar() #.destroy_alderaan()
-	"#).unwrap();
+	"#,
+    )
+    .unwrap();
 }

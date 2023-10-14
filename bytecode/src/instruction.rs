@@ -130,10 +130,10 @@ pub mod implementations {
     use super::*;
     use crate::context::SpecialScope;
     use crate::function::{PrimitiveFunction, ReturnValue};
-    use crate::stack::VariableFlags;
     use crate::stack::flag_constants::READ_ONLY;
+    use crate::stack::VariableFlags;
     use crate::variables::HeapPrimitive;
-    use crate::{bool, function, int, object, vector, optional};
+    use crate::{bool, function, int, object, optional, vector};
     use std::collections::HashMap;
     use std::rc::Rc;
 
@@ -262,7 +262,7 @@ pub mod implementations {
             unsafe {
                 vec_ptr.set(new_val);
             }
-            
+
             Ok(())
         }
 
@@ -368,7 +368,7 @@ pub mod implementations {
                         let mut vector = vector.borrow_mut();
 
                         vector[idx] = new_item;
-                    
+
                         // Rc::get_mut(vector).context("could not get reference to vector")?[idx] = new_item;
 
                     }
@@ -711,7 +711,7 @@ pub mod implementations {
             let callback_state = ctx.get_callback_variables();
 
             let stack = ctx.rced_call_stack();
-            
+
             let name = {
                 let stack_view = stack.borrow();
                 stack_view.get_executing_function_label().context("not run in a function")?.to_owned()
@@ -774,7 +774,7 @@ pub mod implementations {
             }
 
             let arg = ctx.pop().unwrap();
-            
+
             let arg = unsafe { arg.move_out_of_heap_primitive() };
 
             ctx.register_variable(Cow::Owned(name.to_owned()), arg)?;
@@ -792,7 +792,7 @@ pub mod implementations {
             }
 
             let arg = ctx.pop().unwrap();
-            
+
             let arg = unsafe { arg.move_out_of_heap_primitive() };
 
             let pair = Rc::new(RefCell::new((arg, VariableFlags::new_public())));
@@ -812,7 +812,7 @@ pub mod implementations {
                 .with_context(|| format!("`{src}` has not been exported from the executing module."))?;
 
             let primitive = primitive.borrow().0.clone();
-            
+
             ctx.push(primitive);
             // ctx.ref_variable(Cow::Owned(s.to_owned()), primitive);
 
@@ -831,7 +831,7 @@ pub mod implementations {
             }
 
             let arg = ctx.pop().unwrap();
-            
+
             let arg = unsafe { arg.move_out_of_heap_primitive() };
 
             let pair = Rc::new(RefCell::new((arg, VariableFlags(READ_ONLY))));
@@ -852,7 +852,7 @@ pub mod implementations {
             }
 
             let arg = ctx.pop().unwrap();
-            
+
             let arg = unsafe { arg.move_out_of_heap_primitive() };
 
             ctx.register_variable_local(name.clone(), arg)?;
@@ -870,7 +870,7 @@ pub mod implementations {
             }
 
             let arg = ctx.pop().unwrap();
-            
+
             let arg = unsafe { arg.move_out_of_heap_primitive() };
 
             ctx.update_callback_variable(name, arg)?;
@@ -916,7 +916,7 @@ pub mod implementations {
             }
 
             let arg = ctx.pop().unwrap();
-            
+
             let arg = unsafe { arg.move_out_of_heap_primitive() };
             ctx.register_variable_local(name.clone(), arg)?;
 

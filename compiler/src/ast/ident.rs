@@ -45,8 +45,24 @@ impl PartialEq for Ident {
 
 pub static KEYWORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
     HashSet::from_iter([
-        "fn", "obj", "print", "return", "if", "else", "true", "false", "modify", "const", "self",
-        "while", "continue", "break", "from", "constructor", "class", "Self"
+        "fn",
+        "obj",
+        "print",
+        "return",
+        "if",
+        "else",
+        "true",
+        "false",
+        "modify",
+        "const",
+        "self",
+        "while",
+        "continue",
+        "break",
+        "from",
+        "constructor",
+        "class",
+        "Self",
     ])
 });
 
@@ -147,7 +163,6 @@ impl Ident {
 
         let new_ty = ident.ty().expect("no type").get_type_recursively();
         let new_ty = Cow::Owned(new_ty.clone());
-
 
         self.ty = Some(new_ty);
 

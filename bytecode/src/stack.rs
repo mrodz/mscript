@@ -127,7 +127,11 @@ impl VariableMapping {
         self.0.contains_key(key)
     }
 
-    pub fn update_once(&mut self, name: String, value: Rc<RefCell<(Primitive, VariableFlags)>>) -> Result<()> {
+    pub fn update_once(
+        &mut self,
+        name: String,
+        value: Rc<RefCell<(Primitive, VariableFlags)>>,
+    ) -> Result<()> {
         if let Some(export) = self.0.insert(name, value) {
             bail!("value already present: {export:?}");
         }
@@ -176,7 +180,7 @@ struct StackIter<'a> {
     frames: &'a [StackFrame],
 }
 
-impl <'a>Iterator for StackIter<'a> {
+impl<'a> Iterator for StackIter<'a> {
     type Item = &'a StackFrame;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -197,7 +201,9 @@ impl Stack {
     }
 
     fn iter(&self) -> StackIter {
-        StackIter { frames: self.0.as_ref() }
+        StackIter {
+            frames: self.0.as_ref(),
+        }
     }
 
     /// Get the label of the current frame.
@@ -289,7 +295,11 @@ impl Stack {
         self.register_variable_flags(name, var, VariableFlags::none())
     }
 
-    pub fn ref_variable(&mut self, name: Cow<'static, str>, var: Rc<RefCell<(Primitive, VariableFlags)>>) {
+    pub fn ref_variable(
+        &mut self,
+        name: Cow<'static, str>,
+        var: Rc<RefCell<(Primitive, VariableFlags)>>,
+    ) {
         let stack_frame = self.0.last_mut().expect("nothing in the stack");
         let variables = &mut stack_frame.variables.0;
         variables.insert(name.into_owned(), var);
@@ -310,7 +320,10 @@ impl Stack {
     }
 
     /// Delete a variable from the current stack frame.
-    pub fn delete_variable_local(&mut self, name: &str) -> Result<Rc<RefCell<(Primitive, VariableFlags)>>> {
+    pub fn delete_variable_local(
+        &mut self,
+        name: &str,
+    ) -> Result<Rc<RefCell<(Primitive, VariableFlags)>>> {
         let frame = self.0.last_mut().expect("no stack frame");
 
         frame.variables.0.remove(name).ok_or(anyhow!(
@@ -334,7 +347,7 @@ impl Stack {
                 }
 
                 let new_flags_bitfield = flags.0;
-                let previos_flags_bitfield = mapping.1.0;
+                let previos_flags_bitfield = mapping.1 .0;
 
                 // if a new flag was introduced that the original did not have
                 if new_flags_bitfield | previos_flags_bitfield != previos_flags_bitfield {

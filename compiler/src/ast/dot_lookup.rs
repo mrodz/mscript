@@ -132,14 +132,18 @@ impl Parser {
 
                 assert_eq!(arguments.as_rule(), Rule::function_arguments);
 
-                let arguments = Self::function_arguments(arguments, function_type.parameters(), Some(lhs_ty))?;
+                let arguments =
+                    Self::function_arguments(arguments, function_type.parameters(), Some(lhs_ty))?;
 
                 let lookup_type = DotLookupOption::FunctionCall {
                     function_name: ident_str,
                     arguments,
                 };
 
-                let output_type = function_type.return_type().get_type().unwrap_or(&Cow::Owned(TypeLayout::Void));
+                let output_type = function_type
+                    .return_type()
+                    .get_type()
+                    .unwrap_or(&Cow::Owned(TypeLayout::Void));
 
                 let output_type = if output_type.is_class_self() {
                     lhs_ty

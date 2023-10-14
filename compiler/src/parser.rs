@@ -118,7 +118,10 @@ impl AssocFileData {
         self.scopes.get_type_of_executing_class(0)
     }
 
-    pub fn get_type_of_executing_class_in_nth_frame(&self, skip_n_frames: usize) -> Option<Ref<ClassType>> {
+    pub fn get_type_of_executing_class_in_nth_frame(
+        &self,
+        skip_n_frames: usize,
+    ) -> Option<Ref<ClassType>> {
         self.scopes.get_type_of_executing_class(skip_n_frames)
     }
 
@@ -156,7 +159,6 @@ impl AssocFileData {
                                 return None;
                             }
                         }
-                        
                         unreachable!("function parameters should have been initialized");
                     };
 
@@ -165,7 +167,7 @@ impl AssocFileData {
                     bail!("in a class, `self` cannot be used to recursively call a member function because `self` is a reference to the class and not the function.")
                 };
 
-                return Ok((scope, parameters))
+                return Ok((scope, parameters));
             }
         }
 
@@ -237,10 +239,7 @@ impl AssocFileData {
         this_frame.is_class() || parent_scope.is_class()
     }
 
-    pub fn get_dependency_flags_from_name(
-        &self,
-        dependency: &str,
-    ) -> Option<(Ref<Ident>, bool)> {
+    pub fn get_dependency_flags_from_name(&self, dependency: &str) -> Option<(Ref<Ident>, bool)> {
         let scopes = self.scopes.iter();
         self.get_dependency_flags_from_name_and_scopes_plus_skip(dependency, scopes, 0)
     }
@@ -363,8 +362,7 @@ pub(crate) fn root_node_from_str(
 ) -> Result<Node, Vec<anyhow::Error>> {
     let x = util::parse_with_userdata_features(Rule::file, input_str, user_data);
 
-    x
-        .map_err(|e| vec![anyhow!(e)])?
+    x.map_err(|e| vec![anyhow!(e)])?
         .single()
         .map_err(|e| vec![anyhow!(e)])
 }

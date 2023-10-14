@@ -30,9 +30,17 @@ impl Constructor {
         format!("{}_{}::$constructor", self.class_name, self.class_id)
     }
 
-    pub fn default_constructor(path_str: Arc<String>, class_name: Arc<String>, class_id: usize) -> Self {
+    pub fn default_constructor(
+        path_str: Arc<String>,
+        class_name: Arc<String>,
+        class_id: usize,
+    ) -> Self {
         Self {
-            parameters: FunctionParameters::Named(vec![Ident::new("self".to_owned(), Some(Cow::Owned(TypeLayout::ClassSelf)), true)]),
+            parameters: FunctionParameters::Named(vec![Ident::new(
+                "self".to_owned(),
+                Some(Cow::Owned(TypeLayout::ClassSelf)),
+                true,
+            )]),
             body: Block::empty_body(),
             path_str,
             class_name,
@@ -159,7 +167,10 @@ impl Parser {
         let body = children.next().unwrap();
         let body = Self::block(body)?;
 
-        let class_type = input.user_data().get_owned_type_of_executing_class().unwrap();
+        let class_type = input
+            .user_data()
+            .get_owned_type_of_executing_class()
+            .unwrap();
 
         let path_str = input.user_data().get_file_name();
 

@@ -8,10 +8,11 @@ use colored::*;
 use compiler::compile as compile_file;
 use log::{Level, LevelFilter, Metadata, Record};
 use std::{
+    io::{stdout, Write},
     path::{Path, PathBuf},
     rc::Rc,
     sync::Mutex,
-    thread, io::{stdout, Write},
+    thread,
 };
 
 use crate::cli::CompilationTargets;

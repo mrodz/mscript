@@ -1,12 +1,12 @@
-use std::{borrow::Cow, fmt::Display, hash::Hash, sync::Arc, ops::Deref};
 use crate::{
-    ast::{value::ValToUsize, new_err},
+    ast::{new_err, value::ValToUsize},
     parser::{AssocFileData, Node, Parser, Rule},
     scope::{ScopeReturnStatus, SuccessTypeSearchResult, TypeSearchResult},
     CompilationError,
 };
 use anyhow::{bail, Result};
 use pest::Span;
+use std::{borrow::Cow, fmt::Display, hash::Hash, ops::Deref, sync::Arc};
 
 use super::{
     class::ClassType,
@@ -379,19 +379,23 @@ impl TypeLayout {
         )
     }
 
-    pub fn eq_complex(&self, rhs: &Self, executing_class: Option<impl Deref<Target = ClassType>>) -> bool {
+    pub fn eq_complex(
+        &self,
+        rhs: &Self,
+        executing_class: Option<impl Deref<Target = ClassType>>,
+    ) -> bool {
         if self == rhs {
             return true;
         }
 
         match (self, rhs, executing_class) {
-            (Self::ClassSelf, TypeLayout::Class(other), Some(executing_class)) | (TypeLayout::Class(other), Self::ClassSelf, Some(executing_class)) => {
+            (Self::ClassSelf, TypeLayout::Class(other), Some(executing_class))
+            | (TypeLayout::Class(other), Self::ClassSelf, Some(executing_class)) => {
                 executing_class.deref().eq(other)
-            },
+            }
             _ => false,
         }
-
-    } 
+    }
 
     pub fn get_output_type_from_index(&self, index: &Value) -> Result<Cow<TypeLayout>> {
         let me = self.get_type_recursively();

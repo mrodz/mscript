@@ -352,7 +352,8 @@ impl Parser {
             .user_data()
             .push_function(ScopeReturnStatus::detect_should_return(return_type));
 
-        let parameters = Arc::new(Self::function_parameters(parameters, true, false, false).to_err_vec()?);
+        let parameters =
+            Arc::new(Self::function_parameters(parameters, true, false, false).to_err_vec()?);
 
         // input.user_data().register_function_parameters_to_scope(Arc::clone(&parameters));
 

@@ -10,7 +10,7 @@ use anyhow::{bail, Result};
 
 use crate::ast::{
     ClassType, FunctionParameters, Ident, TypeLayout, BIGINT_TYPE, BOOL_TYPE, BYTE_TYPE,
-    FLOAT_TYPE, INT_TYPE, STR_TYPE, SELF_TYPE,
+    FLOAT_TYPE, INT_TYPE, SELF_TYPE, STR_TYPE,
 };
 
 #[derive(Debug, Clone, PartialEq, Hash)]
@@ -204,7 +204,7 @@ impl Scopes {
 
     fn pop(&self) -> Option<Scope> {
         log::trace!("Virtual Stack POP");
-        {self.0.borrow_mut()}.pop()
+        { self.0.borrow_mut() }.pop()
     }
 
     pub(crate) fn add_variable(&self, dependency: &Ident) {
@@ -248,7 +248,10 @@ impl Scopes {
         TypeSearchResult::NotFound
     }
 
-    pub(crate) fn get_owned_type_of_executing_class(&self, step_n_frames: usize) -> Option<ClassType> {
+    pub(crate) fn get_owned_type_of_executing_class(
+        &self,
+        step_n_frames: usize,
+    ) -> Option<ClassType> {
         let scopes = self.0.borrow();
         let iter = scopes.iter().rev().skip(step_n_frames);
 
@@ -261,7 +264,10 @@ impl Scopes {
         None
     }
 
-    pub(crate) fn get_type_of_executing_class(&self, step_n_frames: usize) -> Option<Ref<ClassType>> {
+    pub(crate) fn get_type_of_executing_class(
+        &self,
+        step_n_frames: usize,
+    ) -> Option<Ref<ClassType>> {
         Ref::filter_map(self.0.borrow(), |scopes| {
             let iter = scopes.iter().rev().skip(step_n_frames);
 

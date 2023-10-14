@@ -3,7 +3,12 @@
 
 use crate::{bigint, bool, byte, float, int, stack::VariableFlags, string};
 use anyhow::{bail, Result};
-use std::{fmt::{Display, Debug}, rc::Rc, cell::{RefCell, Ref}, ops::Deref};
+use std::{
+    cell::{Ref, RefCell},
+    fmt::{Debug, Display},
+    ops::Deref,
+    rc::Rc,
+};
 
 /// This macro allows easy recursion over variants.
 macro_rules! primitive {
@@ -46,7 +51,7 @@ macro_rules! primitive {
 #[derive(Debug, Clone)]
 pub enum HeapPrimitive {
     ArrayPtr(*mut Primitive),
-    Lookup(Rc<RefCell<(Primitive, VariableFlags)>>)
+    Lookup(Rc<RefCell<(Primitive, VariableFlags)>>),
 }
 
 impl HeapPrimitive {
@@ -82,13 +87,11 @@ impl HeapPrimitive {
 
     pub(crate) unsafe fn borrow(&self) -> Box<dyn Deref<Target = Primitive> + '_> {
         match self {
-            Self::Lookup(shared_ptr) => {
-                Box::new(Ref::map(shared_ptr.borrow(), |view| {
-                    &view.0
-                }))
-            }
+            Self::Lookup(shared_ptr) => Box::new(Ref::map(shared_ptr.borrow(), |view| &view.0)),
             Self::ArrayPtr(raw_mut_ptr) => {
-                let as_ref = raw_mut_ptr.as_ref().expect("could not get compliant reference from [mut array ptr]");
+                let as_ref = raw_mut_ptr
+                    .as_ref()
+                    .expect("could not get compliant reference from [mut array ptr]");
 
                 Box::new(as_ref)
             }
@@ -101,7 +104,7 @@ impl PartialEq for HeapPrimitive {
         match (self, other) {
             (Self::ArrayPtr(lhs), Self::ArrayPtr(rhs)) => lhs == rhs,
             (Self::Lookup(lhs), Self::Lookup(rhs)) => lhs == rhs,
-            _ => unimplemented!("not comparable")
+            _ => unimplemented!("not comparable"),
         }
     }
 }
@@ -185,7 +188,7 @@ impl Primitive {
     /// This code will blow up the VM if the HP ptr is not valid. If this happens, though,
     /// it is a bug with the compiler. Users will NEVER encounter a stale mutable pointer on
     /// their own, as it is a private type known only to the compiler used for array tricks.
-    /// 
+    ///
     /// # Safety
     /// This function assumes that if `self` is a [HeapPrimitive]
     /// that points to memory inside a vector/list, the vector/list
@@ -342,7 +345,8 @@ impl Primitive {
             HeapPrimitive(hp) => {
                 let view = unsafe { hp.borrow() };
                 let view = &**view;
-                write!(f, "&{view}") },
+                write!(f, "&{view}")
+            }
             Object(o) => write!(f, "{}", o.borrow()),
             Optional(Some(primitive)) => write!(f, "{primitive}"),
             Optional(None) => write!(f, "none"),

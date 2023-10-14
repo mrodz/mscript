@@ -172,7 +172,9 @@ mod test {
         let vector = BytecodePrimitive::Vector(std::rc::Rc::new(std::cell::RefCell::new(vec![
             BytecodePrimitive::Int(5),
             BytecodePrimitive::Str("Hello".into()),
-            BytecodePrimitive::Vector(std::rc::Rc::new(std::cell::RefCell::new(vec![BytecodePrimitive::Float(3.14159)]))),
+            BytecodePrimitive::Vector(std::rc::Rc::new(std::cell::RefCell::new(vec![
+                BytecodePrimitive::Float(3.14159),
+            ]))),
         ])));
 
         assert_eq!(

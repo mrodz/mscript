@@ -52,8 +52,9 @@ use crate::{
 
 use super::{
     boolean::boolean_from_str, dot_lookup::DotChain, function::FunctionType, list::Index, map_err,
-    new_err, r#type::IntoType, CompilationState, Compile, CompileTimeEvaluate, CompiledItem,
-    Dependencies, Dependency, FunctionArguments, TemporaryRegister, TypeLayout, Value, ClassType,
+    new_err, r#type::IntoType, ClassType, CompilationState, Compile, CompileTimeEvaluate,
+    CompiledItem, Dependencies, Dependency, FunctionArguments, TemporaryRegister, TypeLayout,
+    Value,
 };
 
 pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
@@ -256,7 +257,7 @@ impl IntoType for Expr {
                     .return_type()
                     .get_type()
                     .context("function returns void")?;
-                
+
                 Ok(return_type.clone().into_owned())
             }
             Expr::Callable(CallableContents::ToSelf { return_type, .. }) => {
@@ -591,7 +592,6 @@ fn parse_expr(
                         // let function_type = function_type.clone();
 
                         return Ok((Expr::Callable(CallableContents::Standard { lhs_raw: lhs, function: function_type, arguments }), None))
-                    
                     }
                     _ => ()
                 }
@@ -649,12 +649,3 @@ fn parse_expr(
 
     maybe_expr.map(|(expr, ..)| expr)
 }
-
-// impl Parser {
-//     pub fn math_expr(input: Node) -> Result<Expr, Vec<anyhow::Error>> {
-//         let children_as_pairs = input.children().into_pairs();
-//         let parsed = parse_expr(children_as_pairs, input.user_data().clone());
-
-//         parsed
-//     }
-// }
