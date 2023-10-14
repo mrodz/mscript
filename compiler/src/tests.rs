@@ -1,6 +1,7 @@
 mod assertions;
 mod class;
 mod functions;
+mod comments;
 mod math;
 mod modify_edge_cases;
 mod number_loop;

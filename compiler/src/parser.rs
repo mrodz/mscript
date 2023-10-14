@@ -363,12 +363,10 @@ pub(crate) fn root_node_from_str(
 ) -> Result<Node, Vec<anyhow::Error>> {
     let x = util::parse_with_userdata_features(Rule::file, input_str, user_data);
 
-    let x = x
+    x
         .map_err(|e| vec![anyhow!(e)])?
         .single()
-        .map_err(|e| vec![anyhow!(e)])?;
-
-    Ok(x)
+        .map_err(|e| vec![anyhow!(e)])
 }
 
 #[derive(Debug, Default)]
