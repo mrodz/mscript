@@ -164,3 +164,113 @@ fn capture_outside_env() {
     )
     .unwrap();
 }
+
+#[test]
+fn self_type() {
+	eval(r#"
+		class Dog {
+			name: str
+		
+			constructor(self, name: str) {
+				self.name = name
+			}
+	
+			fn play(self, other: Self) -> str {
+				return self.name + " is playing with " + other.name
+			}
+		}
+	
+		x = Dog("Scout")
+		y = Dog("Muna")
+	
+		assert x.play(y) == "Scout is playing with Muna"
+	"#).unwrap();
+}
+
+#[test]
+fn self_type_1() {
+	eval(r#"
+		class A {
+			value: int
+			constructor(self) {
+				self.value = 5
+			}
+			fn make_new_a(self) -> Self {
+				new: Self = Self()
+				new.value = 10
+				return new
+			}
+			fn to_string(self) -> str {
+				return "A("+self.value+")"
+			}
+		}
+	
+		a = A()
+		b = a.make_new_a()
+	
+		assert a.to_string() == "A(5)"
+		assert b.to_string() == "A(10)"
+	"#).unwrap();
+}
+
+#[test]
+fn self_type_2() {
+	eval(r#"
+		class Dog {
+			name: str
+		
+			constructor(self, name: str) {
+				self.name = name
+			}
+	
+			fn play(self, other: Self) -> str {
+				return self.name + " is playing with " + other.name
+			}
+	
+			fn birds_and_bees(self, other: Self) -> Self {
+				baby_name = self.name + " & " + other.name + "'s Baby"
+				return Self(baby_name)
+			}
+		}
+	
+		x = Dog("Scout")
+		y = Dog("Muna")
+		
+		assert x.play(y) == "Scout is playing with Muna"
+	
+		pup = x.birds_and_bees(y)
+	
+		assert pup.name == "Scout & Muna's Baby"
+	"#).unwrap();
+}
+
+#[test]
+fn chain() {
+	eval(r#"
+		class D {
+			fn get_value(self) -> int {
+				return 42
+			}
+		}
+	
+		class C {
+			fn d(self) -> D {
+				return D()
+			}
+		}
+	
+		class B {
+			fn c(self) -> C {
+				return C()
+			}
+		}
+	
+		class A {
+			fn b(self) -> B {
+				return B()
+			}
+		}
+	
+		assert (A()).b().c().d().get_value() == 42
+	"#).unwrap();
+}

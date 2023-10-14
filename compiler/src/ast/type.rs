@@ -1,5 +1,4 @@
-use std::{borrow::Cow, fmt::Display, hash::Hash, sync::Arc};
-
+use std::{borrow::Cow, fmt::Display, hash::Hash, sync::Arc, ops::Deref};
 use crate::{
     ast::{value::ValToUsize, new_err},
     parser::{AssocFileData, Node, Parser, Rule},
@@ -181,8 +180,8 @@ impl Display for TypeLayout {
             Self::Native(native) => write!(f, "{native}"),
             Self::List(list) => write!(f, "{list}"),
             Self::ValidIndexes(lower, upper) => write!(f, "B({lower}..{upper})"),
-            Self::Class(class_type) => write!(f, "{class_type}"),
-            Self::ClassSelf => write!(f, "self"),
+            Self::Class(class_type) => write!(f, "{}", class_type.name()),
+            Self::ClassSelf => write!(f, "Self"),
             Self::Void => write!(f, "void"),
         }
     }
@@ -200,6 +199,12 @@ impl TypeLayout {
         let me = self.get_type_recursively();
 
         matches!(me, TypeLayout::Native(NativeType::Float))
+    }
+
+    pub fn is_class_self(&self) -> bool {
+        let me = self.get_type_recursively();
+
+        matches!(me, TypeLayout::ClassSelf)
     }
 
     pub fn get_error_hint_between_types(&self, incompatible: &Self) -> Option<&'static str> {
@@ -319,7 +324,7 @@ impl TypeLayout {
                 // let fields = fields.map(|x| x.).collect();
 
                 for field in fields {
-                    result.push(field.name().clone());
+                    result.push(field.to_string());
                 }
 
                 result
@@ -354,13 +359,17 @@ impl TypeLayout {
             result.push_str(property);
         }
 
+        if result.is_empty() {
+            result.push_str("<none>")
+        }
+
         let remaining_message = if remaining != 0 {
             Cow::Owned(format!(" (+{remaining} remaining)"))
         } else {
             Cow::Borrowed("")
         };
 
-        format!(" Available properties: {result}{remaining_message}")
+        format!(" Available properties are: [{result}{remaining_message}]")
     }
 
     pub fn can_be_used_as_list_index(&self) -> bool {
@@ -369,6 +378,20 @@ impl TypeLayout {
             TypeLayout::Native(NativeType::Int | NativeType::BigInt)
         )
     }
+
+    pub fn eq_complex(&self, rhs: &Self, executing_class: Option<impl Deref<Target = ClassType>>) -> bool {
+        if self == rhs {
+            return true;
+        }
+
+        match (self, rhs, executing_class) {
+            (Self::ClassSelf, TypeLayout::Class(other), Some(executing_class)) | (TypeLayout::Class(other), Self::ClassSelf, Some(executing_class)) => {
+                executing_class.deref().eq(other)
+            },
+            _ => false,
+        }
+
+    } 
 
     pub fn get_output_type_from_index(&self, index: &Value) -> Result<Cow<TypeLayout>> {
         let me = self.get_type_recursively();

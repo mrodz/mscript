@@ -97,6 +97,7 @@ impl Parser {
         input: Node,
         add_to_scope_dependencies: bool,
         require_self_param: bool,
+        allow_self_type: bool,
     ) -> Result<FunctionParameters> {
         let mut children = input.children();
 
@@ -144,12 +145,19 @@ impl Parser {
                 err()?
             }
 
+            let ty_span = ty.as_span();
+
             let ty: Cow<'static, TypeLayout> = Self::r#type(ty)?;
+
+            if !allow_self_type && ty.is_class_self() {
+                return Err(new_err(ty_span, &input.user_data().get_source_file_name(), "`Self` is only a valid type for associated functions, and not normal functions. (Hint: if trying to accept a callback function, use a function type like `fn(int) -> bool`)".to_owned()));
+            }
 
             ident.link_force_no_inherit(input.user_data(), ty)?;
 
             if add_to_scope_dependencies {
-                input.user_data().add_dependency(&ident);
+
+                // input.user_data().add_dependency(ident);
             }
 
             result.push(ident);

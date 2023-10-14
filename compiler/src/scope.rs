@@ -10,7 +10,7 @@ use anyhow::{bail, Result};
 
 use crate::ast::{
     ClassType, FunctionParameters, Ident, TypeLayout, BIGINT_TYPE, BOOL_TYPE, BYTE_TYPE,
-    FLOAT_TYPE, INT_TYPE, STR_TYPE,
+    FLOAT_TYPE, INT_TYPE, STR_TYPE, SELF_TYPE,
 };
 
 #[derive(Debug, Clone, PartialEq, Hash)]
@@ -204,7 +204,7 @@ impl Scopes {
 
     fn pop(&self) -> Option<Scope> {
         log::trace!("Virtual Stack POP");
-        self.0.borrow_mut().pop()
+        {self.0.borrow_mut()}.pop()
     }
 
     pub(crate) fn add_variable(&self, dependency: &Ident) {
@@ -227,6 +227,7 @@ impl Scopes {
             "bool" => return TypeSearchResult::Ok(Primitive(&BOOL_TYPE)),
             "bigint" => return TypeSearchResult::Ok(Primitive(&BIGINT_TYPE)),
             "byte" => return TypeSearchResult::Ok(Primitive(&BYTE_TYPE)),
+            "Self" => return TypeSearchResult::Ok(Primitive(&SELF_TYPE)),
             _ => (),
         }
 
@@ -245,6 +246,19 @@ impl Scopes {
         }
 
         TypeSearchResult::NotFound
+    }
+
+    pub(crate) fn get_owned_type_of_executing_class(&self, step_n_frames: usize) -> Option<ClassType> {
+        let scopes = self.0.borrow();
+        let iter = scopes.iter().rev().skip(step_n_frames);
+
+        for scope in iter {
+            if let ScopeType::Class(Some(ref class_type)) = scope.ty {
+                return Some(class_type.to_owned());
+            };
+        }
+
+        None
     }
 
     pub(crate) fn get_type_of_executing_class(&self, step_n_frames: usize) -> Option<Ref<ClassType>> {
@@ -459,7 +473,7 @@ impl Scope {
     }
 
     /// able to be improved
-    pub fn contains(&self, dependency: &String) -> Option<&Ident> {
+    pub fn contains(&self, dependency: &str) -> Option<&Ident> {
         // Ident hashes names exclusively, so we can pass `ty = None`
         self.variables.iter().find(|&x| x.name() == dependency)
     }

@@ -1,6 +1,7 @@
 //! Program call stack
 
 use anyhow::{anyhow, bail, Context, Result};
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
@@ -22,6 +23,11 @@ pub(crate) mod flag_constants {
 pub struct VariableFlags(pub(crate) u8);
 
 impl VariableFlags {
+    #[inline(always)]
+    pub const fn new_public() -> Self {
+        Self(flag_constants::PUBLIC)
+    }
+
     #[inline(always)]
     pub fn none() -> Self {
         VariableFlags(0)
@@ -70,7 +76,7 @@ impl Debug for VariableFlags {
     }
 }
 
-#[derive(Default, Debug, PartialEq, Clone)]
+#[derive(Default, Debug, PartialEq)]
 pub struct VariableMapping(HashMap<String, Rc<RefCell<(Primitive, VariableFlags)>>>);
 
 impl Display for VariableMapping {
@@ -112,8 +118,21 @@ impl VariableMapping {
         self.0.get(key).cloned()
     }
 
+    /// Explicit clone, because this is probably not intented behavior.
+    pub fn clone(instance: &Self) -> Self {
+        Self(instance.0.clone())
+    }
+
     pub fn contains(&self, key: &str) -> bool {
         self.0.contains_key(key)
+    }
+
+    pub fn update_once(&mut self, name: String, value: Rc<RefCell<(Primitive, VariableFlags)>>) -> Result<()> {
+        if let Some(export) = self.0.insert(name, value) {
+            bail!("value already present: {export:?}");
+        }
+
+        Ok(())
     }
 
     /// Update the value of a variable that has already been registered.
@@ -266,8 +285,14 @@ impl Stack {
     }
 
     /// Add a `name -> variable` mapping to the current stack frame, possibly searching, with default flags.
-    pub fn register_variable(&mut self, name: String, var: Primitive) -> Result<()> {
+    pub fn register_variable(&mut self, name: Cow<'static, str>, var: Primitive) -> Result<()> {
         self.register_variable_flags(name, var, VariableFlags::none())
+    }
+
+    pub fn ref_variable(&mut self, name: Cow<'static, str>, var: Rc<RefCell<(Primitive, VariableFlags)>>) {
+        let stack_frame = self.0.last_mut().expect("nothing in the stack");
+        let variables = &mut stack_frame.variables.0;
+        variables.insert(name.into_owned(), var);
     }
 
     /// Add a `name -> variable` mapping to the current stack frame, with flags.
@@ -296,7 +321,7 @@ impl Stack {
     /// Add a `name -> variable` mapping to the current stack frame, with special flags.
     pub fn register_variable_flags(
         &mut self,
-        name: String,
+        name: Cow<'static, str>,
         var: Primitive,
         flags: VariableFlags,
     ) -> Result<()> {
@@ -326,7 +351,7 @@ impl Stack {
             }
         }
 
-        self.register_variable_local(name, var, flags)?;
+        self.register_variable_local(name.into_owned(), var, flags)?;
 
         Ok(())
     }

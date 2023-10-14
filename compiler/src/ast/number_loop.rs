@@ -243,7 +243,7 @@ impl Parser {
                             )
                             .to_err_vec()?;
 
-                        input.user_data().add_dependency(&ident);
+                        // input.user_data().add_dependency(ident.clone());
                         Some(ident)
                     }
                 }

@@ -131,6 +131,7 @@ pub mod implementations {
     use crate::context::SpecialScope;
     use crate::function::{PrimitiveFunction, ReturnValue};
     use crate::stack::VariableFlags;
+    use crate::stack::flag_constants::READ_ONLY;
     use crate::variables::HeapPrimitive;
     use crate::{bool, function, int, object, vector, optional};
     use std::collections::HashMap;
@@ -491,8 +492,6 @@ pub mod implementations {
 
             let function_ptr = PrimitiveFunction::new(location.into(), callback_state);
 
-            // dbg!(&function_ptr);
-
             ctx.push(function!(function_ptr));
 
             Ok(())
@@ -503,7 +502,7 @@ pub mod implementations {
                 bail!("`make_object` does not require arguments")
             }
 
-            let object_variables = Rc::new(ctx.get_frame_variables().clone());
+            let object_variables = Rc::new(VariableMapping::clone(&ctx.get_frame_variables()));
 
             let function = ctx.owner();
             let name = Rc::new(function.name().clone());
@@ -680,8 +679,6 @@ pub mod implementations {
 
                 let callback_state = f.callback_state().clone();
 
-                // dbg!(&callback_state);
-
                 ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                     destination,
                     callback_state,
@@ -769,18 +766,78 @@ pub mod implementations {
     instruction! {
         store(ctx, args) {
             let Some(name) = args.first() else {
-                bail!("store requires a name")
+                bail!("`store` requires a name")
             };
 
             if ctx.stack_size() != 1 {
-                bail!("store can only store a single item (found: {:?})", ctx.get_local_operating_stack());
+                bail!("`store` can only store a single item (found: {:?})", ctx.get_local_operating_stack());
             }
 
             let arg = ctx.pop().unwrap();
             
             let arg = unsafe { arg.move_out_of_heap_primitive() };
 
-            ctx.register_variable(name.clone(), arg)?;
+            ctx.register_variable(Cow::Owned(name.to_owned()), arg)?;
+
+            Ok(())
+        }
+
+        export_name(ctx, args) {
+            let Some(name) = args.first() else {
+                bail!("`export_name` requires a name")
+            };
+
+            if ctx.stack_size() != 1 {
+                bail!("`export_name` can only store a single item (found: {:?})", ctx.get_local_operating_stack());
+            }
+
+            let arg = ctx.pop().unwrap();
+            
+            let arg = unsafe { arg.move_out_of_heap_primitive() };
+
+            let pair = Rc::new(RefCell::new((arg, VariableFlags::new_public())));
+
+            ctx.register_export(name.to_owned(), pair)?;
+
+            Ok(())
+        }
+
+        load_self_export(ctx, args) {
+            let Some(src) = args.first() else {
+                bail!("`load_self_export` requires a source name")
+            };
+
+            let primitive = ctx
+                .load_self_export(src)
+                .with_context(|| format!("`{src}` has not been exported from the executing module."))?;
+
+            let primitive = primitive.borrow().0.clone();
+            
+            ctx.push(primitive);
+            // ctx.ref_variable(Cow::Owned(s.to_owned()), primitive);
+
+            Ok(())
+        }
+
+        export_special(ctx, args) {
+            let Some(name) = args.first() else {
+                bail!("`export_special` requires a name")
+            };
+
+            let export_name = args.get(1).unwrap_or(name);
+
+            if ctx.stack_size() != 1 {
+                bail!("`export_special` can only store a single item (found: {:?})", ctx.get_local_operating_stack());
+            }
+
+            let arg = ctx.pop().unwrap();
+            
+            let arg = unsafe { arg.move_out_of_heap_primitive() };
+
+            let pair = Rc::new(RefCell::new((arg, VariableFlags(READ_ONLY))));
+
+            ctx.register_export(export_name.to_owned(), Rc::clone(&pair))?;
+            ctx.ref_variable(Cow::Owned(name.to_owned()), pair);
 
             Ok(())
         }
@@ -970,6 +1027,20 @@ pub mod implementations {
 
             Ok(())
 
+        }
+
+        ld_self(ctx, args) {
+            let Some(name) = args.get(0) else {
+                bail!("`ld_self` requires a name argument");
+            };
+
+            let Some(var) = ctx.load_local(name) else {
+                bail!("load before store (`{name}` not in this stack frame)\nframe `{}`'s variables:\n{}", ctx.rced_call_stack().borrow().get_frame_label(), ctx.get_frame_variables())
+            };
+
+            ctx.push_front(var.borrow().0.clone());
+
+            Ok(())
         }
 
         assert(ctx, args) {

@@ -8,7 +8,7 @@ use crate::{
     ast::new_err,
     instruction,
     parser::{AssocFileData, Node, Parser, Rule},
-    VecErr,
+    VecErr, CompilationError,
 };
 
 use super::{
@@ -116,19 +116,19 @@ fn parse_path(
                 if let Some(class_type) = user_data.get_type_of_executing_class() {
                     // cloning ClassType is cheap
                     let class_type = class_type.clone();
-                    return Ok(ReassignmentPath::ReferenceToSelf(Some(Cow::Owned(
+                    return Ok((ReassignmentPath::ReferenceToSelf(Some(Cow::Owned(
                         TypeLayout::Class(class_type),
-                    ))));
+                    ))), primary.as_span()));
                 }
 
-                return Ok(ReassignmentPath::ReferenceToSelf(None));
+                return Ok((ReassignmentPath::ReferenceToSelf(None), primary.as_span()));
                 // return Ok(ReassignmentPath::ReferenceToSelf);
             }
 
             let file_name = user_data.get_file_name();
 
             let (ident, is_callback) = user_data
-                .get_dependency_flags_from_name(&raw_string.to_string())
+                .get_dependency_flags_from_name(raw_string)
                 .with_context(|| {
                     new_err(
                         primary.as_span(),
@@ -145,27 +145,27 @@ fn parse_path(
             };
             // let ident = Parser::ident(Node::new_with_user_data(primary, Rc::clone(&user_data))).to_err_vec()?;
 
-            Ok(ReassignmentPath::Ident(cloned))
+            Ok((ReassignmentPath::Ident(cloned), primary.as_span()))
         })
         .map_postfix(|lhs, op| match op.as_rule() {
             Rule::list_index => {
-                let lhs = lhs?;
+                let (lhs, lhs_span) = lhs?;
 
-                let lhs_ty = lhs.for_type().to_err_vec()?;
+                let lhs_ty = lhs.for_type().details(lhs_span, &user_data.get_source_file_name(), "Invalid index").to_err_vec()?;
 
                 let index = Parser::list_index(
                     Node::new_with_user_data(op, Rc::clone(&user_data)),
                     lhs_ty,
                 )?;
-                Ok(ReassignmentPath::Index {
+                Ok((ReassignmentPath::Index {
                     lhs: Box::new(lhs),
                     index,
-                })
+                }, lhs_span))
             }
             Rule::dot_chain => {
-                let lhs = lhs?;
+                let (lhs, lhs_span) = lhs?;
 
-                let lhs_ty = lhs.for_type().to_err_vec()?;
+                let lhs_ty = lhs.for_type().details(lhs_span, &user_data.get_source_file_name(), "Invalid lookup").to_err_vec()?;
                 let lhs_ty = lhs_ty.assume_type_of_self(&user_data);
 
                 let (dot_chain, expected_type) = Parser::dot_chain(
@@ -173,15 +173,15 @@ fn parse_path(
                     &lhs_ty,
                 )?;
 
-                Ok(ReassignmentPath::DotLookup {
+                Ok((ReassignmentPath::DotLookup {
                     lhs: Box::new(lhs),
                     dot_chain,
                     expected_type: expected_type.to_owned(),
-                })
+                }, lhs_span))
             }
             other => unimplemented!("{other:?}"),
         })
-        .parse(pairs)
+        .parse(pairs).map(|x| x.0)
 }
 
 impl ReassignmentPath {

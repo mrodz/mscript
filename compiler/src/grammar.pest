@@ -13,7 +13,11 @@ keywords = _{
     "const" |
     "self" | 
     "while" |
-    "assert"
+    "assert" |
+    "class" |
+    "constructor" |
+    "Self"
+
 }
 
 integer = @{ '0'..'9' ~ ('0'..'9' | ("_" ~ ('0'..'9')))* }

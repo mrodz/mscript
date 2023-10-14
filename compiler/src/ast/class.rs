@@ -23,7 +23,7 @@ use crate::{
 
 use super::{
     function::FunctionType, r#type::IntoType, Compile, CompiledFunctionId, CompiledItem,
-    Dependencies, Dependency, FunctionParameters, Ident,
+    Dependencies, Dependency, FunctionParameters, Ident, new_err,
 };
 
 pub(in crate::ast::class) trait WalkForType {
@@ -42,8 +42,8 @@ impl Compile for Class {
         let body_compiled = self.body.compile(state)?;
 
         let TypeLayout::Class(ty) = self.ident.ty()?.as_ref() else {
-			unreachable!()
-		};
+            unreachable!()
+        };
 
         let id = CompiledFunctionId::Custom(format!("{}_{}", ty.name(), ty.id));
 
@@ -57,9 +57,11 @@ impl Compile for Class {
 
         let name = self.ident.name();
 
+        let function_name = format!("{}#{id}", self.path_str);
+
         Ok(vec![
-            instruction!(make_function(format!("{}#{id}", self.path_str))),
-            instruction!(store_fast name),
+            instruction!(make_function function_name),
+            instruction!(export_special name id),
         ])
     }
 }
@@ -68,21 +70,31 @@ impl Compile for Class {
 pub(crate) struct ClassType {
     name: Arc<String>,
     fields: Arc<[Ident]>,
+    path_str: Arc<String>,
     id: usize,
 }
 
 impl ClassType {
+    pub(crate) fn abs_id(&self) -> String {
+        format!("{}_{}", self.name, self.id)
+    }
+
     pub fn constructor(&self) -> FunctionType {
+        let return_type = ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Class(self.clone())));
+        
         for field in self.fields() {
             if field.name() == "$constructor" {
                 let x = field.clone().ty_owned().unwrap();
-                return x.into_owned().owned_is_function().unwrap();
+                if let Some(mut constructor) = x.into_owned().owned_is_function() {
+                    constructor.set_return_type(return_type);
+                    return constructor;
+                }
+                unreachable!()
             }
         }
 
         // use default constructor if a class doesn't have one.
 
-        let return_type = ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Class(self.clone())));
         let empty_parameters = Arc::new(FunctionParameters::TypesOnly(vec![]));
 
         FunctionType::new(empty_parameters, return_type)
@@ -148,8 +160,16 @@ impl Parser {
         let mut children = input.children();
 
         let ident_node = children.next().unwrap();
+        let ident_span = ident_node.as_span();
 
         let mut ident = Self::ident(ident_node).to_err_vec()?;
+        ident.mark_const();
+
+        let has_been_declared = input.user_data().get_ident_from_name_local(ident.name());
+
+        if let Some(has_been_declared) = has_been_declared {
+            return Err(vec![new_err(ident_span, &input.user_data().get_source_file_name(), format!("This name is already in scope (Hint: `{}: {} = ...` was declared somewhere above)", ident.name(), has_been_declared.ty().unwrap()))]);
+        }
 
         let body_node = children.next().unwrap();
 
@@ -160,6 +180,7 @@ impl Parser {
 
             let class_type = ClassType {
                 fields,
+                path_str: input.user_data().get_file_name(),
                 name: Arc::new(ident.name().to_owned()),
                 id: input.user_data().request_class_id(),
             };

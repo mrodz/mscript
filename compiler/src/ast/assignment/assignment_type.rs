@@ -2,6 +2,7 @@ use std::borrow::Cow;
 
 use anyhow::Result;
 
+use crate::ast::ClassType;
 use crate::ast::{new_err, r#type::IntoType, Assignment, Ident, TypeLayout, Value};
 use crate::parser::{Node, Parser};
 use crate::VecErr;
@@ -11,6 +12,7 @@ impl Parser {
         input: Node,
         is_const: bool,
         is_modify: bool,
+        self_type: Option<ClassType>
     ) -> Result<(Assignment, bool), Vec<anyhow::Error>> {
         let mut children = input.children();
 
@@ -32,7 +34,7 @@ impl Parser {
         let value: Value = Self::value(value)?;
 
         if let Ok(ref assignment_ty) = value.for_type() {
-            if ty.as_ref().get_type_recursively() != assignment_ty.get_type_recursively() {
+            if !ty.as_ref().get_type_recursively().eq_complex(assignment_ty.get_type_recursively(), self_type.as_ref()) {
                 let hint = ty.get_error_hint_between_types(assignment_ty).map_or_else(
                     || Cow::Borrowed(""),
                     |str| Cow::Owned(format!("\n\t- hint: {str}")),

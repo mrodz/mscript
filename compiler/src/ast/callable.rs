@@ -86,7 +86,7 @@ impl Compile for Callable<'_> {
         };
 
         if let Some(name) = self_register {
-            args_init.insert(0, instruction!(load_fast name));
+            args_init.push(instruction!(ld_self name));
         }
 
         // let func_name = ident.name();

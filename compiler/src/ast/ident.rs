@@ -46,7 +46,7 @@ impl PartialEq for Ident {
 pub static KEYWORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
     HashSet::from_iter([
         "fn", "obj", "print", "return", "if", "else", "true", "false", "modify", "const", "self",
-        "while", "continue", "break", "from", "constructor", "class"
+        "while", "continue", "break", "from", "constructor", "class", "Self"
     ])
 });
 
@@ -150,8 +150,6 @@ impl Ident {
 
 
         self.ty = Some(new_ty);
-
-        dbg!(self);
 
         Ok(())
     }
