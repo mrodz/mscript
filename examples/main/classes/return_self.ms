@@ -16,7 +16,7 @@ class Dog {
     }
 
     fn birds_and_bees(self, other: Self) -> Self {
-        return Self("child")
+        return Self(self.name + " & " + other.name + "'s kid")
 	}
 }
 
@@ -29,3 +29,5 @@ print x.strit()
 print y.strit()
 
 print x.strit()
+
+print x.birds_and_bees(y).strit()

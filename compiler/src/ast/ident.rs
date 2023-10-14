@@ -151,8 +151,6 @@ impl Ident {
 
         self.ty = Some(new_ty);
 
-        dbg!(self);
-
         Ok(())
     }
 

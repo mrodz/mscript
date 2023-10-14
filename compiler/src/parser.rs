@@ -330,7 +330,11 @@ pub(crate) mod util {
                         neq => "!=",
                         and => "&&",
                         or => "||",
-                        xor => "^"
+                        xor => "^",
+                        assignment_flag => "assignment flag",
+                        dot_chain => "dot chain",
+                        class_constructor => "constructor",
+                        class_bound_function => "member function",
                     }),
             )
         })

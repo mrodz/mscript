@@ -586,7 +586,7 @@ fn parse_expr(
 
                         let parameters = function_type.parameters();
 
-                        let arguments: FunctionArguments = Parser::function_arguments(function_arguments, &parameters, None)?;
+                        let arguments: FunctionArguments = Parser::function_arguments(function_arguments, parameters, None)?;
 
                         // let function_type = function_type.clone();
 
@@ -640,8 +640,6 @@ fn parse_expr(
                 } else {
                     final_output_type.to_owned()
                 };
-
-                dbg!(&expected_type);
 
                 Ok((Expr::DotLookup { lhs: Box::new(lhs), dot_chain, expected_type }, None))
             }

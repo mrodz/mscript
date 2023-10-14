@@ -144,7 +144,7 @@ impl Parser {
                 let output_type = if output_type.is_class_self() {
                     lhs_ty
                 } else {
-                    &output_type
+                    output_type
                 };
 
                 Ok(DotLookup {

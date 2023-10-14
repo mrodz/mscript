@@ -1,5 +1,4 @@
-use std::{borrow::Cow, fmt::Display, hash::Hash, sync::Arc, cell::Ref};
-
+use std::{borrow::Cow, fmt::Display, hash::Hash, sync::Arc, ops::Deref};
 use crate::{
     ast::{value::ValToUsize, new_err},
     parser::{AssocFileData, Node, Parser, Rule},
@@ -380,14 +379,14 @@ impl TypeLayout {
         )
     }
 
-    pub fn eq_complex(&self, rhs: &Self, executing_class: Option<Ref<ClassType>>) -> bool {
+    pub fn eq_complex(&self, rhs: &Self, executing_class: Option<impl Deref<Target = ClassType>>) -> bool {
         if self == rhs {
             return true;
         }
 
         match (self, rhs, executing_class) {
             (Self::ClassSelf, TypeLayout::Class(other), Some(executing_class)) | (TypeLayout::Class(other), Self::ClassSelf, Some(executing_class)) => {
-                executing_class.eq(&other)
+                executing_class.deref().eq(other)
             },
             _ => false,
         }

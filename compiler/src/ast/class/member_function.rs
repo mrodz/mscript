@@ -75,8 +75,6 @@ impl Compile for MemberFunction {
 
         let arguments = arguments.into_boxed_slice();
 
-        // dbg!(&arguments);
-
         let make_function_instruction = CompiledItem::Instruction {
             id: MAKE_FUNCTION,
             arguments,

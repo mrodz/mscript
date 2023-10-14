@@ -1,6 +1,6 @@
 use std::{
     borrow::{Borrow, Cow},
-    cell::{Ref, RefCell, RefMut},
+    cell::{Ref, RefCell},
     collections::{HashMap, HashSet},
     fmt::Display,
     sync::Arc,
@@ -155,10 +155,6 @@ impl<'a> std::ops::Deref for SuccessTypeSearchResult<'a> {
 }
 
 impl Scopes {
-    fn borrow_mut(&self) -> RefMut<Vec<Scope>>{
-        self.0.borrow_mut()
-    }
-
     pub(crate) fn new() -> Self {
         log::trace!("INIT Virtual Stack at MODULE");
         Self(RefCell::new(vec![Scope::new_file()]))

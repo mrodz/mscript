@@ -9,6 +9,11 @@ class A {
 		return Self(self.state + add)
 	}
 
+	fn clone_plus(self, add: Self) -> Self {
+		print self.state
+		return Self(1)
+	}
+
 	fn to_string(self) -> str {
 		return "A("+self.state+")"
 	}

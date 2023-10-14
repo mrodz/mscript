@@ -492,8 +492,6 @@ pub mod implementations {
 
             let function_ptr = PrimitiveFunction::new(location.into(), callback_state);
 
-            // dbg!(&function_ptr);
-
             ctx.push(function!(function_ptr));
 
             Ok(())
@@ -680,8 +678,6 @@ pub mod implementations {
                 let destination = JumpRequestDestination::Standard(f.location().clone());
 
                 let callback_state = f.callback_state().clone();
-
-                // dbg!(&callback_state);
 
                 ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                     destination,

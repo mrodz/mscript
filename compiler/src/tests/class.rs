@@ -243,3 +243,34 @@ fn self_type_2() {
 		assert pup.name == "Scout & Muna's Baby"
 	"#).unwrap();
 }
+
+#[test]
+fn chain() {
+	eval(r#"
+		class D {
+			fn get_value(self) -> int {
+				return 42
+			}
+		}
+	
+		class C {
+			fn d(self) -> D {
+				return D()
+			}
+		}
+	
+		class B {
+			fn c(self) -> C {
+				return C()
+			}
+		}
+	
+		class A {
+			fn b(self) -> B {
+				return B()
+			}
+		}
+	
+		assert (A()).b().c().d().get_value() == 42
+	"#).unwrap();
+}
