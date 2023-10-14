@@ -22,8 +22,8 @@ use crate::{
 };
 
 use super::{
-    function::FunctionType, r#type::IntoType, Compile, CompiledFunctionId, CompiledItem,
-    Dependencies, Dependency, FunctionParameters, Ident, new_err,
+    function::FunctionType, new_err, r#type::IntoType, Compile, CompiledFunctionId, CompiledItem,
+    Dependencies, Dependency, FunctionParameters, Ident,
 };
 
 pub(in crate::ast::class) trait WalkForType {
@@ -81,7 +81,7 @@ impl ClassType {
 
     pub fn constructor(&self) -> FunctionType {
         let return_type = ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Class(self.clone())));
-        
+
         for field in self.fields() {
             if field.name() == "$constructor" {
                 let x = field.clone().ty_owned().unwrap();

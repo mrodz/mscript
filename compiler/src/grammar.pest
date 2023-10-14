@@ -1,5 +1,12 @@
 WHITESPACE = _{ " " | "\r\n" | "\n" | "\t" }
 
+line_comment = _{ "#" ~ (!NEWLINE ~ ANY)* }
+
+
+block_comment = _{ "###" ~ (!"###" ~ ANY)* ~ "###" }
+
+COMMENT = _{ block_comment | line_comment }
+
 keywords = _{
     "fn" | 
     "obj" |
@@ -154,6 +161,6 @@ declaration = { class | reassignment | assignment | print_statement | assertion 
 
 file = {
     SOI ~
-    (declaration ~ NEWLINE*)* ~
+    (declaration | NEWLINE)* ~
     EOI
 }

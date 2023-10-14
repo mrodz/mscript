@@ -1,7 +1,7 @@
 //! Interface for file operations.
 
 use std::borrow::Cow;
-use std::cell::{RefCell, Ref};
+use std::cell::{Ref, RefCell};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
@@ -12,7 +12,7 @@ use anyhow::{bail, Context, Result};
 
 use crate::function::Function;
 use crate::instruction::{split_string, Instruction, JumpRequest};
-use crate::stack::{Stack, VariableMapping, VariableFlags};
+use crate::stack::{Stack, VariableFlags, VariableMapping};
 use crate::Primitive;
 
 use super::function::Functions;
@@ -176,25 +176,26 @@ impl MScriptFile {
     pub(crate) fn get_functions_ref(&self) -> Option<Ref<Functions>> {
         let functions = self.functions.borrow();
 
-        Ref::filter_map(functions, |functions| {
-            functions.as_ref()
-        }).ok()
+        Ref::filter_map(functions, |functions| functions.as_ref()).ok()
     }
 
-    
-    pub fn add_export(&self, name: String, var: Rc<RefCell<(Primitive, VariableFlags)>>) -> Result<()> {
+    pub fn add_export(
+        &self,
+        name: String,
+        var: Rc<RefCell<(Primitive, VariableFlags)>>,
+    ) -> Result<()> {
         let mut view = self.exports.borrow_mut();
 
         log::trace!("Exporting {name:?} = {var:?}");
 
-        view.update_once(name, var).context("Double export: name is already exported")
+        view.update_once(name, var)
+            .context("Double export: name is already exported")
     }
 
     pub fn get_export(&self, name: &str) -> Option<Rc<RefCell<(Primitive, VariableFlags)>>> {
         let exports = self.exports.borrow();
         exports.get(name)
     }
-
 
     /// Get all the functions associated with this file.
     ///

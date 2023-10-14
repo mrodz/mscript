@@ -326,12 +326,14 @@ impl Parser {
 
         let user_data = input.user_data();
 
-        // We can't borrow a `Ref` here, because `rvalue` portion might borrow the call stack mutably. 
+        // We can't borrow a `Ref` here, because `rvalue` portion might borrow the call stack mutably.
         let self_type = user_data.get_owned_type_of_executing_class();
 
         let (mut x, did_exist_before) = match assignment.as_rule() {
             Rule::assignment_no_type => Self::assignment_no_type(assignment, is_const, is_modify)?,
-            Rule::assignment_type => Self::assignment_type(assignment, is_const, is_modify, self_type)?,
+            Rule::assignment_type => {
+                Self::assignment_type(assignment, is_const, is_modify, self_type)?
+            }
             Rule::assignment_unpack => Self::assignment_unpack(assignment, is_const, is_modify)?,
             rule => unreachable!("{rule:?}"),
         };

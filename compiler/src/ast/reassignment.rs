@@ -8,7 +8,7 @@ use crate::{
     ast::new_err,
     instruction,
     parser::{AssocFileData, Node, Parser, Rule},
-    VecErr, CompilationError,
+    CompilationError, VecErr,
 };
 
 use super::{
@@ -116,9 +116,12 @@ fn parse_path(
                 if let Some(class_type) = user_data.get_type_of_executing_class() {
                     // cloning ClassType is cheap
                     let class_type = class_type.clone();
-                    return Ok((ReassignmentPath::ReferenceToSelf(Some(Cow::Owned(
-                        TypeLayout::Class(class_type),
-                    ))), primary.as_span()));
+                    return Ok((
+                        ReassignmentPath::ReferenceToSelf(Some(Cow::Owned(TypeLayout::Class(
+                            class_type,
+                        )))),
+                        primary.as_span(),
+                    ));
                 }
 
                 return Ok((ReassignmentPath::ReferenceToSelf(None), primary.as_span()));
@@ -151,21 +154,34 @@ fn parse_path(
             Rule::list_index => {
                 let (lhs, lhs_span) = lhs?;
 
-                let lhs_ty = lhs.for_type().details(lhs_span, &user_data.get_source_file_name(), "Invalid index").to_err_vec()?;
+                let lhs_ty = lhs
+                    .for_type()
+                    .details(lhs_span, &user_data.get_source_file_name(), "Invalid index")
+                    .to_err_vec()?;
 
                 let index = Parser::list_index(
                     Node::new_with_user_data(op, Rc::clone(&user_data)),
                     lhs_ty,
                 )?;
-                Ok((ReassignmentPath::Index {
-                    lhs: Box::new(lhs),
-                    index,
-                }, lhs_span))
+                Ok((
+                    ReassignmentPath::Index {
+                        lhs: Box::new(lhs),
+                        index,
+                    },
+                    lhs_span,
+                ))
             }
             Rule::dot_chain => {
                 let (lhs, lhs_span) = lhs?;
 
-                let lhs_ty = lhs.for_type().details(lhs_span, &user_data.get_source_file_name(), "Invalid lookup").to_err_vec()?;
+                let lhs_ty = lhs
+                    .for_type()
+                    .details(
+                        lhs_span,
+                        &user_data.get_source_file_name(),
+                        "Invalid lookup",
+                    )
+                    .to_err_vec()?;
                 let lhs_ty = lhs_ty.assume_type_of_self(&user_data);
 
                 let (dot_chain, expected_type) = Parser::dot_chain(
@@ -173,15 +189,19 @@ fn parse_path(
                     &lhs_ty,
                 )?;
 
-                Ok((ReassignmentPath::DotLookup {
-                    lhs: Box::new(lhs),
-                    dot_chain,
-                    expected_type: expected_type.to_owned(),
-                }, lhs_span))
+                Ok((
+                    ReassignmentPath::DotLookup {
+                        lhs: Box::new(lhs),
+                        dot_chain,
+                        expected_type: expected_type.to_owned(),
+                    },
+                    lhs_span,
+                ))
             }
             other => unimplemented!("{other:?}"),
         })
-        .parse(pairs).map(|x| x.0)
+        .parse(pairs)
+        .map(|x| x.0)
 }
 
 impl ReassignmentPath {

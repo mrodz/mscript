@@ -43,7 +43,7 @@ impl Parser {
             if idx == expected_types.len() {
                 break;
             }
-            
+
             child_span = child.as_span();
             let value_for_arg = Self::value(child)?;
 
@@ -53,7 +53,9 @@ impl Parser {
 
             let user_gave = arg_ty.get_type_recursively();
 
-            let class_self_case = allow_self_type.map(|ty| expected_ty_at_idx.is_class_self() && ty.eq(user_gave)).unwrap_or(false);  
+            let class_self_case = allow_self_type
+                .map(|ty| expected_ty_at_idx.is_class_self() && ty.eq(user_gave))
+                .unwrap_or(false);
 
             if !user_gave.eq(expected_ty_at_idx) && !class_self_case {
                 let argument_number = idx + 1;
@@ -74,12 +76,7 @@ impl Parser {
         let expected_parameters_len = expected_parameters.len();
 
         if result_len != expected_parameters_len {
-
-            let result_plural = if result_len == 1 {
-                ""
-            } else {
-                "s"
-            };
+            let result_plural = if result_len == 1 { "" } else { "s" };
 
             let expected_plural = if expected_parameters_len == 1 {
                 ""
@@ -89,7 +86,11 @@ impl Parser {
 
             let msg = format!("supplied {result_len} argument{result_plural}, but this function's signature specifies {expected_parameters_len} parameter{expected_plural} (Expected: `fn ({expected_parameters}) ...`)");
 
-            errors.push(new_err(child_span, &input.user_data().get_source_file_name(), msg))
+            errors.push(new_err(
+                child_span,
+                &input.user_data().get_source_file_name(),
+                msg,
+            ))
         }
 
         if !errors.is_empty() {

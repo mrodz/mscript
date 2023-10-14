@@ -159,7 +159,10 @@ impl Parser {
 
         ident.set_type_no_link(Cow::Owned(TypeLayout::Function(function_type)));
 
-        let class_type = input.user_data().get_owned_type_of_executing_class().unwrap();
+        let class_type = input
+            .user_data()
+            .get_owned_type_of_executing_class()
+            .unwrap();
 
         Ok(MemberFunction {
             ident,

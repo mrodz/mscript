@@ -5,9 +5,9 @@ use super::function::{Function, InstructionExitState};
 use super::stack::VariableMapping;
 use super::variables::Primitive;
 use crate::stack::{Stack, VariableFlags};
-use anyhow::{bail, Result, Context};
+use anyhow::{bail, Context, Result};
 use std::borrow::Cow;
-use std::cell::{RefCell, Ref};
+use std::cell::{Ref, RefCell};
 use std::fmt::{Debug, Display};
 use std::rc::Rc;
 use std::slice::SliceIndex;
@@ -129,11 +129,14 @@ impl<'a> Ctx<'a> {
     ///
     /// * `name` - the name of the callback variable
     /// * `value` - the [`Primitive`] value that will be stored in the same slot.
-    pub fn load_callback_variable(&self, name: &str) -> Result<Rc<RefCell<(Primitive, VariableFlags)>>> {
+    pub fn load_callback_variable(
+        &self,
+        name: &str,
+    ) -> Result<Rc<RefCell<(Primitive, VariableFlags)>>> {
         let Some(ref mapping) = self.callback_state else {
             bail!("this function is not a callback")
         };
-        
+
         let Some(pair) = mapping.get(name) else {
             bail!("this callback does not have `{name}`")
         };
@@ -272,8 +275,16 @@ impl<'a> Ctx<'a> {
         self.stack.pop()
     }
 
-    pub(crate) fn register_export(&self, name: String, var: Rc<RefCell<(Primitive, VariableFlags)>>) -> Result<()> {
-        let file = self.function.location().upgrade().context("could not upgrade reference to file")?;
+    pub(crate) fn register_export(
+        &self,
+        name: String,
+        var: Rc<RefCell<(Primitive, VariableFlags)>>,
+    ) -> Result<()> {
+        let file = self
+            .function
+            .location()
+            .upgrade()
+            .context("could not upgrade reference to file")?;
         file.add_export(name, var)
     }
 
@@ -283,13 +294,19 @@ impl<'a> Ctx<'a> {
         self.call_stack.borrow_mut().register_variable(name, var)
     }
 
-    pub(crate) fn ref_variable(&self, name: Cow<'static, str>, var: Rc<RefCell<(Primitive, VariableFlags)>>) {
+    pub(crate) fn ref_variable(
+        &self,
+        name: Cow<'static, str>,
+        var: Rc<RefCell<(Primitive, VariableFlags)>>,
+    ) {
         self.call_stack.borrow_mut().ref_variable(name, var)
     }
 
     /// Store a variable to the top of the call stack *only*. Will get dropped when the stack frame goes out of scope.
     pub(crate) fn register_variable_local(&self, name: String, var: Primitive) -> Result<()> {
-        self.call_stack.borrow_mut().register_variable_local(name, var, VariableFlags::none())
+        self.call_stack
+            .borrow_mut()
+            .register_variable_local(name, var, VariableFlags::none())
     }
 
     pub(crate) fn delete_variable_local(
@@ -307,12 +324,22 @@ impl<'a> Ctx<'a> {
     /// Get the [`Primitive`] value and its associated [`VariableFlags`] from a name.
     ///
     /// Will start the search in the current function and bubble all the way up to the highest stack frame.
-    pub(crate) fn load_variable(&self, name: &str) -> Option<Rc<RefCell<(Primitive, VariableFlags)>>> {
+    pub(crate) fn load_variable(
+        &self,
+        name: &str,
+    ) -> Option<Rc<RefCell<(Primitive, VariableFlags)>>> {
         self.call_stack.borrow().find_name(name)
     }
 
-    pub(crate) fn load_self_export(&self, name: &str) -> Option<Rc<RefCell<(Primitive, VariableFlags)>>> {
-        let file = self.function.location().upgrade().expect("could not upgrade reference to file");
+    pub(crate) fn load_self_export(
+        &self,
+        name: &str,
+    ) -> Option<Rc<RefCell<(Primitive, VariableFlags)>>> {
+        let file = self
+            .function
+            .location()
+            .upgrade()
+            .expect("could not upgrade reference to file");
 
         file.get_export(name)
     }

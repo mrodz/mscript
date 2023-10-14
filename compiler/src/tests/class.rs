@@ -167,7 +167,8 @@ fn capture_outside_env() {
 
 #[test]
 fn self_type() {
-	eval(r#"
+    eval(
+        r#"
 		class Dog {
 			name: str
 		
@@ -184,12 +185,15 @@ fn self_type() {
 		y = Dog("Muna")
 	
 		assert x.play(y) == "Scout is playing with Muna"
-	"#).unwrap();
+	"#,
+    )
+    .unwrap();
 }
 
 #[test]
 fn self_type_1() {
-	eval(r#"
+    eval(
+        r#"
 		class A {
 			value: int
 			constructor(self) {
@@ -210,12 +214,15 @@ fn self_type_1() {
 	
 		assert a.to_string() == "A(5)"
 		assert b.to_string() == "A(10)"
-	"#).unwrap();
+	"#,
+    )
+    .unwrap();
 }
 
 #[test]
 fn self_type_2() {
-	eval(r#"
+    eval(
+        r#"
 		class Dog {
 			name: str
 		
@@ -241,12 +248,15 @@ fn self_type_2() {
 		pup = x.birds_and_bees(y)
 	
 		assert pup.name == "Scout & Muna's Baby"
-	"#).unwrap();
+	"#,
+    )
+    .unwrap();
 }
 
 #[test]
 fn chain() {
-	eval(r#"
+    eval(
+        r#"
 		class D {
 			fn get_value(self) -> int {
 				return 42
@@ -272,5 +282,7 @@ fn chain() {
 		}
 	
 		assert (A()).b().c().d().get_value() == 42
-	"#).unwrap();
+	"#,
+    )
+    .unwrap();
 }

@@ -108,7 +108,10 @@ impl Object {
         self.has_function(property_name, include_class_name)
     }
 
-    pub fn has_variable(&self, variable_name: &str) -> Option<Rc<RefCell<(Primitive, VariableFlags)>>> {
+    pub fn has_variable(
+        &self,
+        variable_name: &str,
+    ) -> Option<Rc<RefCell<(Primitive, VariableFlags)>>> {
         self.object_variables.get(variable_name)
     }
 
@@ -123,11 +126,9 @@ impl Object {
             if let Some(bundle) = maybe_function_ptr {
                 let bundle_view = bundle.borrow().0.is_function();
 
-
                 if bundle_view {
-                    return Some(bundle)
+                    return Some(bundle);
                 }
-                
             }
         }
 

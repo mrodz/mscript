@@ -1,5 +1,6 @@
 mod assertions;
 mod class;
+mod comments;
 mod functions;
 mod math;
 mod modify_edge_cases;
