@@ -1,7 +1,7 @@
 use crate::eval;
 
 #[test]
-pub fn binary_operations() {
+fn binary_operations() {
     eval(
         r#"
 		a = 5
@@ -51,5 +51,27 @@ pub fn binary_operations() {
 		assert 0b101 == 0x5 && 0x5 == B5 && B5 == 5f && 5F == 5 && B0x5 == 0b101
 	"#,
     )
-    .unwrap()
+    .unwrap();
+}
+
+#[test]
+fn lazy_eval() {
+	eval(r#"
+		truthy = fn() -> bool {
+			return true
+		}
+
+		die = fn() -> bool {
+			assert false
+			return false
+		}
+
+		assert true || die()
+		assert truthy() || die()
+
+		traitor = false
+
+		traitor && die()
+	"#)
+	.unwrap();
 }
