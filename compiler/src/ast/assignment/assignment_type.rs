@@ -37,7 +37,7 @@ impl Parser {
             if !ty
                 .as_ref()
                 .get_type_recursively()
-                .eq_complex(assignment_ty.get_type_recursively(), self_type.as_ref())
+                .eq_complex(assignment_ty.get_type_recursively(), self_type.as_ref(), false)
             {
                 let hint = ty.get_error_hint_between_types(assignment_ty).map_or_else(
                     || Cow::Borrowed(""),

@@ -93,7 +93,7 @@ impl Parser {
 
         let class_type = input.user_data().get_type_of_executing_class();
 
-        if !expected_return_type.eq_complex(&Cow::Borrowed(supplied_type), class_type) {
+        if !expected_return_type.eq_complex(&Cow::Borrowed(supplied_type), class_type, true) {
             return Err(vec![new_err(
                 input.as_span(),
                 &input.user_data().get_source_file_name(),

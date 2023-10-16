@@ -164,6 +164,7 @@ pub(crate) enum TypeLayout {
     Function(FunctionType),
     /// metadata wrapper around a [TypeLayout]
     CallbackVariable(Box<TypeLayout>),
+    Optional(Option<Box<Cow<'static, TypeLayout>>>),
     Native(NativeType),
     List(ListType),
     ValidIndexes(ListBound, ListBound),
@@ -182,6 +183,8 @@ impl Display for TypeLayout {
             Self::ValidIndexes(lower, upper) => write!(f, "B({lower}..{upper})"),
             Self::Class(class_type) => write!(f, "{}", class_type.name()),
             Self::ClassSelf => write!(f, "Self"),
+            Self::Optional(Some(ty)) => write!(f, "{ty}?"),
+            Self::Optional(None) => write!(f, "!"),
             Self::Void => write!(f, "void"),
         }
     }
@@ -214,6 +217,7 @@ impl TypeLayout {
             (Native(BigInt), Native(Int)) => "try adding 'B' before a number to convert it to a bigint, eg. `99` -> `B99` or `0x6` -> `B0x6`",
             (Native(Int), Native(Float)) => "cast this floating point value to an integer",
             (Native(Float), Native(Int | BigInt | Byte)) => "cast this integer type to a floating point",
+            (x, Optional(Some(y))) if x == y.as_ref().as_ref() => "unwrap this optional to use its value",
             (Native(Str(..)), _) => "call `.to_str()` on this item to convert it into a str",
             (Function(..), Function(..)) => "check the function type that you provided",
             _ => return None,
@@ -383,6 +387,7 @@ impl TypeLayout {
         &self,
         rhs: &Self,
         executing_class: Option<impl Deref<Target = ClassType>>,
+        lhs_allow_optional_unwrap: bool,
     ) -> bool {
         if self == rhs {
             return true;
@@ -392,6 +397,15 @@ impl TypeLayout {
             (Self::ClassSelf, TypeLayout::Class(other), Some(executing_class))
             | (TypeLayout::Class(other), Self::ClassSelf, Some(executing_class)) => {
                 executing_class.deref().eq(other)
+            }
+            (Self::Optional(None), Self::Optional(Some(_)), _) | (Self::Optional(Some(_)), Self::Optional(None), _) => {
+                true
+            }
+            (Self::Optional(Some(x)), y, _) => {
+                x.as_ref().as_ref() == y
+            }
+            (y, Self::Optional(Some(x)), _) if lhs_allow_optional_unwrap => {
+                x.as_ref().as_ref() == y
             }
             _ => false,
         }
@@ -729,7 +743,13 @@ impl Parser {
     }
 
     pub fn r#type(input: Node) -> Result<Cow<'static, TypeLayout>> {
-        let ty = input.children().single().unwrap();
+        let mut children = input.children();
+
+        let ty = children.next().unwrap();
+
+        // let ty = input.children().single().unwrap();
+
+        let optional_modifier = children.next();
 
         let span = ty.as_span();
         let file_name = input.user_data().get_source_file_name();
@@ -763,6 +783,10 @@ impl Parser {
 
         let x = x.into_cow();
 
-        Ok(x)
+        if optional_modifier.is_some() {
+            Ok(Cow::Owned(TypeLayout::Optional(Some(Box::new(x)))))
+        } else {
+            Ok(x)
+        }
     }
 }

@@ -349,7 +349,7 @@ impl Primitive {
             }
             Object(o) => write!(f, "{}", o.borrow()),
             Optional(Some(primitive)) => write!(f, "{primitive}"),
-            Optional(None) => write!(f, "none"),
+            Optional(None) => write!(f, "nil"),
         }
     }
 }
