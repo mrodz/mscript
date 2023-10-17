@@ -383,6 +383,8 @@ impl TypeLayout {
         )
     }
 
+    /// - `Self` is the expected type
+    /// - `rhs` is the supplied type
     pub fn eq_complex(
         &self,
         rhs: &Self,
@@ -613,39 +615,6 @@ pub(crate) trait IntoType {
         self.for_type()
     }
 }
-
-// pub(crate) fn type_from_str(
-//     input: &str,
-//     user_data: Rc<AssocFileData>,
-// ) -> Result<Cow<'static, TypeLayout>> {
-//     unsafe {
-//         if let Some(r#type) = user_data.get_type(input) {
-//             Ok(Cow::Borrowed(r#type))
-//         } else {
-//             if let Ok(list_type_open_only) =
-//                 parse_with_userdata_features(Rule::list_type_open_only, input, user_data.clone())
-//             {
-//                 let single = list_type_open_only.single()?;
-//                 let ty = Parser::list_type_open_only(single)?;
-//                 return Ok(Cow::Owned(TypeLayout::List(ty)));
-//             } else if let Ok(function_type) =
-//                 parse_with_userdata_features(Rule::function_type, input, user_data.clone())
-//             {
-//                 let single = function_type.single()?;
-//                 let ty = Parser::function_type(single)?;
-//                 return Ok(Cow::Owned(TypeLayout::Function(Arc::new(ty))));
-//             } else if let Ok(list_type) =
-//                 parse_with_userdata_features(Rule::list_type, input, user_data)
-//             {
-//                 let single = list_type.single()?;
-//                 let ty = Parser::list_type(single)?;
-//                 return Ok(Cow::Owned(TypeLayout::List(ty)));
-//             }
-
-//             bail!("type '{input}' has not been registered")
-//         }
-//     }
-// }
 
 impl Parser {
     pub fn function_type(input: Node) -> Result<FunctionType> {
