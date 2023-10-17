@@ -62,6 +62,7 @@ pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
     use Rule::*;
 
     PrattParser::new()
+        .op(Op::infix(unwrap, Left))
         .op(Op::infix(or, Left) | Op::infix(xor, Left))
         .op(Op::infix(and, Left))
         .op(Op::infix(lt, Left)
@@ -96,6 +97,7 @@ pub enum Op {
     And,
     Or,
     Xor,
+    Unwrap,
 }
 
 impl Op {
@@ -116,6 +118,7 @@ impl Op {
             And => "&&",
             Or => "||",
             Xor => "^",
+            Unwrap => "?=",
         }
     }
 }
@@ -538,6 +541,7 @@ fn parse_expr(
                 Rule::and => Op::And,
                 Rule::or => Op::Or,
                 Rule::xor => Op::Xor,
+                Rule::unwrap => Op::Unwrap,
                 rule => unreachable!("Expr::parse expected infix operation, found {:?}", rule),
             };
 

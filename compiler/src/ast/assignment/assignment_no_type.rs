@@ -41,7 +41,7 @@ impl Parser {
             input.as_span(),
             &input.user_data().get_source_file_name(),
             "could not get the type".into(),
-            || vec!["could not infer the type of the value\ntry explicitly defining a type: `name: type = ...`"],
+            || vec!["Could not infer the type of the value; try explicitly defining a type"],
         )
         .to_err_vec()?;
 

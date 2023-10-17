@@ -104,7 +104,10 @@ list_type = { "[" ~ type? ~ ("," ~ (type ~ !("...")))* ~ ("," ~ open_ended_type)
 list_type_open_only = { "[" ~ open_ended_type ~ "]" }
 list_index = { ("[" ~ value ~ "]")+ }
 
-value = { function | math_expr | ident | list }
+unwrap = _{ "?=" }
+unwrap_expr = { ident ~ unwrap ~ value }
+
+value = { function | unwrap_expr | math_expr | ident | list }
 
 assignment_flag = { "modify" | "const" }
 // bad_assignment_flag = { &ident }

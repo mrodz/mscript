@@ -198,6 +198,16 @@ impl TypeLayout {
         matches!(me, TypeLayout::Native(NativeType::Bool))
     }
 
+    pub fn is_optional(&self) -> (bool, Option<&Cow<'static, TypeLayout>>) {
+        let me = self.get_type_recursively();
+
+        if let TypeLayout::Optional(x @ Some(..)) = me {
+            return (true, x.as_ref().map(|x| x.as_ref()))
+        }
+
+        (false, None)
+    }
+
     pub fn is_float(&self) -> bool {
         let me = self.get_type_recursively();
 

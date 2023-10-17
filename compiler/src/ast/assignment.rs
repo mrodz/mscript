@@ -157,6 +157,7 @@ impl Compile for Assignment {
                 Value::MathExpr(math_expr) => math_expr.compile(state)?,
                 Value::Boolean(boolean) => boolean.compile(state)?,
                 Value::List(list) => list.compile(state)?,
+                Value::UnwrapExpr(unwrap_expr) => unwrap_expr.compile(state)?,
             }
         };
 
