@@ -1,5 +1,13 @@
-a: str? = nil
+a: int? = nil
 
-b = a ?= a
+if bbb ?= a {
+    print bbb
+} else {
+    print "a is nil"
+}
 
-print b
+
+x = 5
+y ?= 10
+
+print x + y

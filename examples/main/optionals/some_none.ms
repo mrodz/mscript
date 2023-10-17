@@ -12,3 +12,5 @@ print give_name(30)
 print give_name(42)
 print give_name(1)
 print x
+
+print nil == 5

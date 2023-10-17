@@ -528,6 +528,10 @@ impl TypeLayout {
     pub fn get_output_type(&self, other: &Self, op: &Op) -> Option<TypeLayout> {
         use TypeLayout::*;
 
+        if let (_, Optional(None), Eq | Neq) | (Optional(None), _, Eq | Neq) = (self, other, op) {
+            return Some(BOOL_TYPE.to_owned());
+        }
+
         let Native(me) = self.get_type_recursively() else {
             return None;
         };

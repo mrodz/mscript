@@ -162,7 +162,7 @@ class_body = { "{" ~ class_feature*  ~ "}" }
 
 class = { "class" ~ ident ~ class_body }
 
-declaration = { class | reassignment | assignment | print_statement | assertion | return_statement | continue_statement | break_statement | if_statement | while_loop | number_loop | math_expr }
+declaration = { class | reassignment | assignment | unwrap_expr | print_statement | assertion | return_statement | continue_statement | break_statement | if_statement | while_loop | number_loop | math_expr }
 
 file = {
     SOI ~

@@ -166,12 +166,18 @@ impl Primitive {
             };
         }
 
+        use Primitive as P;
+
+        if let (P::Optional(maybe), yes) | (yes, P::Optional(maybe)) = (self, rhs) {
+            return Ok(maybe.as_ref().is_some_and(|some| some.as_ref() == yes));
+        }
+
         impl_eq!(Int with Float(r=f64), BigInt(r=i128), Byte(r=i32));
         impl_eq!(Float with Int(r=f64), BigInt(r=f64), Byte(r=f64));
         impl_eq!(BigInt with Float(r=f64), Int(r=i128), Byte(r=i128));
         impl_eq!(Byte with Float(r=f64), BigInt(r=i128), Int(r=i32));
 
-        impl_eq!(each Str, Bool with itself);
+        impl_eq!(each Optional, Str, Bool with itself);
     }
 
     /// Returns whether this primitive is numeric.

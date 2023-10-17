@@ -764,6 +764,37 @@ pub mod implementations {
     }
 
     instruction! {
+        unwrap_into(ctx, args) {
+            let Some(name) = args.first() else {
+                bail!("`unwrap_into` requires a name");
+            };
+
+            let Some(primitive) = ctx.pop() else {
+                bail!("`unwrap_into` requires a primitive at the top of the local operating stack");
+            };
+
+            let status = match primitive {
+                Primitive::Optional(Some(unwrapped)) => {
+                    let var = unwrapped.as_ref().to_owned();
+                    ctx.register_variable_local(name.to_owned(), var)?;
+                    true
+                }
+                Primitive::Optional(None) => {
+                    false
+                },
+                other_primitive => {
+                    ctx.register_variable_local(name.to_owned(), other_primitive)?;
+                    true
+                }
+            };
+
+            ctx.push(bool!(status));
+
+            Ok(())
+        }
+    }
+
+    instruction! {
         store(ctx, args) {
             let Some(name) = args.first() else {
                 bail!("`store` requires a name")

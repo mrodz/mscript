@@ -229,7 +229,7 @@ impl Value {
                 ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
             }
             Value::UnwrapExpr(..) => {
-                ident.link_force_no_inherit(user_data, Cow::Borrowed(&BOOL_TYPE));
+                ident.link_force_no_inherit(user_data, Cow::Borrowed(&BOOL_TYPE))?;
             }
         }
 
