@@ -56,7 +56,8 @@ fn binary_operations() {
 
 #[test]
 fn lazy_eval() {
-	eval(r#"
+    eval(
+        r#"
 		truthy = fn() -> bool {
 			return true
 		}
@@ -72,6 +73,7 @@ fn lazy_eval() {
 		traitor = false
 
 		traitor && die()
-	"#)
-	.unwrap();
+	"#,
+    )
+    .unwrap();
 }

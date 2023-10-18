@@ -5,6 +5,7 @@ mod functions;
 mod math;
 mod modify_edge_cases;
 mod number_loop;
+mod optionals;
 
 #[macro_export]
 macro_rules! assert_proper_eq_hash {

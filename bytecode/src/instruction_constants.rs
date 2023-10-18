@@ -22,7 +22,7 @@ pub static REPR_TO_BIN: Lazy<HashMap<&[u8], u8>> = Lazy::new(|| {
 ///
 /// Saving this as a constant makes it harder for the arrays to fall out of sync
 /// by requiring that they both take the same size.
-pub const INSTRUCTION_COUNT: usize = 62;
+pub const INSTRUCTION_COUNT: usize = 65;
 
 /// This is an array that provides O(1) lookups of names from bytes.
 pub static BIN_TO_REPR: [&[u8]; INSTRUCTION_COUNT] = [
@@ -88,6 +88,9 @@ pub static BIN_TO_REPR: [&[u8]; INSTRUCTION_COUNT] = [
     /* 0x3B [59] */ b"export_name",
     /* 0x3C [60] */ b"export_special",
     /* 0x3D [61] */ b"load_self_export",
+    /* 0x3E [62] */ b"unwrap_into",
+    /* 0x3F [63] */ b"unwrap",
+    /* 0x40 [64] */ b"jmp_not_nil",
 ];
 
 /// Similar to [`BIN_TO_REPR`][crate::instruction_constants::BIN_TO_REPR],
@@ -155,6 +158,9 @@ pub static FUNCTION_POINTER_LOOKUP: [InstructionSignature; INSTRUCTION_COUNT] = 
     implementations::export_name,
     implementations::export_special,
     implementations::load_self_export,
+    implementations::unwrap_into,
+    implementations::unwrap,
+    implementations::jmp_not_nil,
 ];
 
 pub mod id {
@@ -223,4 +229,7 @@ pub mod id {
     pub const EXPORT_NAME: u8 = 59;
     pub const EXPORT_SELF: u8 = 60;
     pub const LOAD_SELF_EXPORT: u8 = 61;
+    pub const UNWRAP_INTO: u8 = 62;
+    pub const UNWRAP: u8 = 63;
+    pub const JMP_NOT_NIL: u8 = 64;
 }

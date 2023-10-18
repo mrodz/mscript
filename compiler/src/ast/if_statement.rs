@@ -133,6 +133,16 @@ impl Parser {
         let body = children.next().expect("no body");
         let else_statement = children.next();
 
+        let child_returns_type = input
+            .user_data()
+            .return_statement_expected_yield_type()
+            .map_or_else(
+                || ScopeReturnStatus::No,
+                |ty| ScopeReturnStatus::ParentShould(ty.clone()),
+            );
+
+        let if_scope: ScopeHandle = input.user_data().push_if_typed(child_returns_type);
+
         let condition_as_value = Self::value(condition)?;
 
         let condition_type = condition_as_value.for_type().to_err_vec()?;
@@ -147,16 +157,6 @@ impl Parser {
         }
 
         let can_determine_is_if_branch_truthy = false; // TODO
-
-        let child_returns_type = input
-            .user_data()
-            .return_statement_expected_yield_type()
-            .map_or_else(
-                || ScopeReturnStatus::No,
-                |ty| ScopeReturnStatus::ParentShould(ty.clone()),
-            );
-
-        let if_scope: ScopeHandle = input.user_data().push_if_typed(child_returns_type);
 
         let body_as_block = Self::block(body);
 

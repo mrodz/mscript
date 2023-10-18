@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 
 use crate::{
     parser::{AssocFileData, Node, Parser, Rule},
@@ -8,8 +8,8 @@ use crate::{
 };
 
 use super::{
-    math_expr::Expr, new_err, r#type::IntoType, string::AstString, CompilationState, Compile,
-    CompiledItem, Dependencies, Dependency, Function, Ident, List, Number, TypeLayout,
+    r#type::IntoType, string::AstString, CompilationState, Compile, CompiledItem, Dependencies,
+    Dependency, Expr, Function, Ident, List, Number, TypeLayout, Unwrap, UnwrapExpr, BOOL_TYPE,
 };
 
 #[derive(Debug)]
@@ -19,10 +19,13 @@ pub(crate) enum Value {
     Number(Number),
     String(AstString),
     MathExpr(Box<Expr>),
+    UnwrapExpr(UnwrapExpr),
+    Unwrap(Unwrap),
     Boolean(bool),
     List(List),
 }
 
+#[derive(Debug)]
 pub(crate) enum ValToUsize {
     Ok(usize),
     NotConstexpr,
@@ -186,64 +189,7 @@ impl Indexable for ValueChainType {
     }
 }
 
-#[cfg(not)]
-impl Compile for ValueChainType {
-    fn compile(
-        &self,
-        function_buffer: &mut Vec<CompiledItem>,
-    ) -> Result<Vec<CompiledItem>, anyhow::Error> {
-        match self {
-            Self::Index(index) => index.compile(function_buffer),
-            Self::Dot(_) => unimplemented!(),
-        }
-    }
-}
-
-// #[derive(Debug)]
-// pub(crate) struct ValueChain(pub(crate) Value, pub(crate) Option<Box<ValueChainType>>);
-
-// impl Dependencies for ValueChain {
-//     fn dependencies(&self) -> Vec<Dependency> {
-//         let mut value_dependencies = self.0.net_dependencies();
-//         if let Some(ref next) = self.1 {
-//             value_dependencies.append(&mut next.net_dependencies());
-//         }
-//         value_dependencies
-//     }
-// }
-
-// impl IntoType for ValueChain {
-//     fn for_type(&self) -> Result<TypeLayout> {
-//         if let Some(ref other) = self.1 {
-//             other.output_from_value(&self.0).map(|x| x.into_owned())
-//         } else {
-//             self.0.for_type()
-//         }
-//     }
-// }
-
 impl Value {
-    // #[allow(unused)]
-    // pub fn is_value_callable(&self) -> bool {
-    //     match &self.0 {
-    //         Value::Callable(..) => true,
-    //         Value::MathExpr(maybe_value)
-    //             if matches!(maybe_value.deref(), Expr::Value(Value::Callable(..))) =>
-    //         {
-    //             true
-    //         }
-    //         _ => false,
-    //     }
-    // }
-
-    // pub fn add_index(&mut self, index: Index) {
-    //     if let Some(_) = self.1 {
-    //         unreachable!("index already there!")
-    //     } else {
-    //         self.1 = Some(Box::new(ValueChainType::Index(index)))
-    //     }
-    // }
-
     pub fn is_callable(&self) -> Result<bool> {
         let ty = self.for_type()?;
 
@@ -269,6 +215,14 @@ impl Value {
             }
             Value::MathExpr(ref math_expr) => {
                 let ty = math_expr.for_type()?.get_owned_type_recursively();
+
+                if let TypeLayout::Optional(None) = ty {
+                    bail!(
+                        "Hint: specify this optional's type like `{}: TYPE? = nil`",
+                        ident.name()
+                    )
+                }
+
                 ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
             }
             Value::Boolean(ref boolean) => {
@@ -277,6 +231,13 @@ impl Value {
             }
             Value::List(ref list) => {
                 let ty = list.for_type_force_mixed()?.get_owned_type_recursively();
+                ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
+            }
+            Value::UnwrapExpr(..) => {
+                ident.link_force_no_inherit(user_data, Cow::Borrowed(&BOOL_TYPE))?;
+            }
+            Value::Unwrap(unwrap) => {
+                let ty = unwrap.for_type()?.get_owned_type_recursively();
                 ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
             }
         }
@@ -295,6 +256,8 @@ impl IntoType for Value {
             Self::String(string) => string.for_type(),
             Self::Boolean(boolean) => boolean.for_type(),
             Self::List(list) => list.for_type(),
+            Self::Unwrap(unwrap_expr) => unwrap_expr.for_type(),
+            Self::UnwrapExpr(..) => Ok(BOOL_TYPE.to_owned()),
         }
     }
 }
@@ -310,6 +273,8 @@ impl Dependencies for Value {
             // Self::Callable(callable) => callable.net_dependencies(),
             Self::Boolean(boolean) => boolean.net_dependencies(),
             Self::List(list) => list.net_dependencies(),
+            Self::UnwrapExpr(unwrap_expr) => unwrap_expr.net_dependencies(),
+            Self::Unwrap(unwrap) => unwrap.net_dependencies(),
         }
     }
 }
@@ -324,6 +289,8 @@ impl Compile for Value {
             Self::MathExpr(math_expr) => math_expr.compile(state),
             Self::Boolean(boolean) => boolean.compile(state),
             Self::List(list) => list.compile(state),
+            Self::UnwrapExpr(unwrap_expr) => unwrap_expr.compile(state),
+            Self::Unwrap(unwrap) => unwrap.compile(state),
         }
     }
 }
@@ -360,13 +327,9 @@ impl Parser {
             // Rule::callable => Value::Callable(Self::callable(value)?),
             Rule::list => Value::List(Self::list(value)?),
             Rule::WHITESPACE => unreachable!("{:?}", value.as_span()),
-            x => {
-                return Err(vec![new_err(
-                    input.as_span(),
-                    &input.user_data().get_source_file_name(),
-                    format!("not sure how to handle `{x:?}` :("),
-                )])?
-            }
+            Rule::unwrap_expr => Value::UnwrapExpr(Self::unwrap_expr(value)?),
+            Rule::value_unwrap => Value::Unwrap(Self::unwrap(value)?),
+            x => unreachable!("not sure how to handle `{x:?}`"),
         };
 
         Ok(matched)

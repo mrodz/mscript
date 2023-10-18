@@ -33,6 +33,7 @@ impl Parser {
         let children = input.children();
 
         let mut result = vec![];
+        let mut result_len: usize = 0;
         let mut errors = vec![];
 
         let expected_types: Cow<Vec<Cow<TypeLayout>>> = expected_parameters.to_types();
@@ -53,11 +54,17 @@ impl Parser {
 
             let user_gave = arg_ty.get_type_recursively();
 
-            let class_self_case = allow_self_type
-                .map(|ty| expected_ty_at_idx.is_class_self() && ty.eq(user_gave))
-                .unwrap_or(false);
+            let maybe_class_type = allow_self_type.map(|x| {
+                let TypeLayout::Class(class_type) = x else {
+                    unreachable!();
+                };
 
-            if !user_gave.eq(expected_ty_at_idx) && !class_self_case {
+                class_type
+            });
+
+            result_len += 1;
+
+            if !expected_ty_at_idx.eq_complex(user_gave, maybe_class_type, false) {
                 let argument_number = idx + 1;
                 let error_message = format!("type mismatch when calling function (argument #{argument_number} was expected to be `{expected_ty_at_idx}` based on type signature, instead found `{user_gave}`)");
                 errors.push(new_err(
@@ -72,7 +79,7 @@ impl Parser {
             result.push(value_for_arg)
         }
 
-        let result_len = result.len();
+        // let result_len = result.len();
         let expected_parameters_len = expected_parameters.len();
 
         if result_len != expected_parameters_len {

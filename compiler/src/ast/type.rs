@@ -4,7 +4,7 @@ use crate::{
     scope::{ScopeReturnStatus, SuccessTypeSearchResult, TypeSearchResult},
     CompilationError,
 };
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use pest::Span;
 use std::{borrow::Cow, fmt::Display, hash::Hash, ops::Deref, sync::Arc};
 
@@ -164,6 +164,7 @@ pub(crate) enum TypeLayout {
     Function(FunctionType),
     /// metadata wrapper around a [TypeLayout]
     CallbackVariable(Box<TypeLayout>),
+    Optional(Option<Box<Cow<'static, TypeLayout>>>),
     Native(NativeType),
     List(ListType),
     ValidIndexes(ListBound, ListBound),
@@ -182,6 +183,8 @@ impl Display for TypeLayout {
             Self::ValidIndexes(lower, upper) => write!(f, "B({lower}..{upper})"),
             Self::Class(class_type) => write!(f, "{}", class_type.name()),
             Self::ClassSelf => write!(f, "Self"),
+            Self::Optional(Some(ty)) => write!(f, "{ty}?"),
+            Self::Optional(None) => write!(f, "!"),
             Self::Void => write!(f, "void"),
         }
     }
@@ -193,6 +196,16 @@ impl TypeLayout {
         let me = self.get_type_recursively();
 
         matches!(me, TypeLayout::Native(NativeType::Bool))
+    }
+
+    pub fn is_optional(&self) -> (bool, Option<&Cow<'static, TypeLayout>>) {
+        let me = self.get_type_recursively();
+
+        if let TypeLayout::Optional(x @ Some(..)) = me {
+            return (true, x.as_ref().map(|x| x.as_ref()));
+        }
+
+        (false, None)
     }
 
     pub fn is_float(&self) -> bool {
@@ -214,6 +227,7 @@ impl TypeLayout {
             (Native(BigInt), Native(Int)) => "try adding 'B' before a number to convert it to a bigint, eg. `99` -> `B99` or `0x6` -> `B0x6`",
             (Native(Int), Native(Float)) => "cast this floating point value to an integer",
             (Native(Float), Native(Int | BigInt | Byte)) => "cast this integer type to a floating point",
+            (x, Optional(Some(y))) if x == y.as_ref().as_ref() => "unwrap this optional to use its value",
             (Native(Str(..)), _) => "call `.to_str()` on this item to convert it into a str",
             (Function(..), Function(..)) => "check the function type that you provided",
             _ => return None,
@@ -379,10 +393,13 @@ impl TypeLayout {
         )
     }
 
+    /// - `Self` is the expected type
+    /// - `rhs` is the supplied type
     pub fn eq_complex(
         &self,
         rhs: &Self,
         executing_class: Option<impl Deref<Target = ClassType>>,
+        lhs_allow_optional_unwrap: bool,
     ) -> bool {
         if self == rhs {
             return true;
@@ -393,6 +410,12 @@ impl TypeLayout {
             | (TypeLayout::Class(other), Self::ClassSelf, Some(executing_class)) => {
                 executing_class.deref().eq(other)
             }
+            (Self::Optional(None), Self::Optional(Some(_)), _)
+            | (Self::Optional(Some(_)), Self::Optional(None), _) => true,
+            (Self::Optional(Some(x)), y, _) => x.as_ref().as_ref() == y,
+            (y, Self::Optional(Some(x)), _) if lhs_allow_optional_unwrap => {
+                x.as_ref().as_ref() == y
+            }
             _ => false,
         }
     }
@@ -400,18 +423,18 @@ impl TypeLayout {
     pub fn get_output_type_from_index(&self, index: &Value) -> Result<Cow<TypeLayout>> {
         let me = self.get_type_recursively();
 
-        let index_ty = index.for_type()?;
+        let index_ty = index.for_type().context("could not get type of index")?;
 
         if !index_ty.can_be_used_as_list_index() {
             bail!("`{index_ty}` cannot be used as an index here");
         }
 
-        let index_as_usize = index.get_usize()?;
+        let index_as_usize = index.get_usize().context("could not get index as usize")?;
 
-        if let Self::Native(NativeType::Str(StrWrapper(Some(str_len)))) = me {
-            match index_as_usize {
-                ValToUsize::Ok(index) => {
-                    if index >= *str_len {
+        if let Self::Native(NativeType::Str(StrWrapper(maybe_length))) = me {
+            match (&index_as_usize, maybe_length) {
+                (ValToUsize::Ok(index), Some(str_len)) => {
+                    if index >= str_len {
                         bail!("index {index} too big for str of len {str_len}")
                     }
 
@@ -419,8 +442,10 @@ impl TypeLayout {
 
                     return Ok(Cow::Owned(native_type));
                 }
-                ValToUsize::NotConstexpr => (),
-                ValToUsize::NaN => bail!("str cannot be indexed by a non-int"),
+                (ValToUsize::Ok(..), None) | (ValToUsize::NotConstexpr, _) => {
+                    return Ok(Cow::Borrowed(&STR_TYPE));
+                }
+                (ValToUsize::NaN, _) => bail!("str cannot be indexed by a non-int"),
             }
         }
 
@@ -502,6 +527,22 @@ impl TypeLayout {
     pub fn get_output_type(&self, other: &Self, op: &Op) -> Option<TypeLayout> {
         use TypeLayout::*;
 
+        if self == other && matches!(op, Eq | Neq) {
+            return Some(BOOL_TYPE.to_owned());
+        }
+
+        if let (_, Optional(None), Eq | Neq) | (Optional(None), _, Eq | Neq) = (self, other, op) {
+            return Some(BOOL_TYPE.to_owned());
+        }
+
+        if let (yes, Optional(Some(maybe)), Eq | Neq) | (Optional(Some(maybe)), yes, Eq | Neq) =
+            (self, other, op)
+        {
+            if yes == maybe.as_ref().as_ref() {
+                return Some(BOOL_TYPE.to_owned());
+            }
+        }
+
         let Native(me) = self.get_type_recursively() else {
             return None;
         };
@@ -514,6 +555,7 @@ impl TypeLayout {
         use Op::*;
 
         let matched = match (me, other, op) {
+            (Str(..), Str(..), Eq | Neq) => Bool,
             (lhs, rhs, Gt | Lt | Gte | Lte | Eq | Neq) => {
                 if lhs == rhs {
                     Bool
@@ -599,39 +641,6 @@ pub(crate) trait IntoType {
         self.for_type()
     }
 }
-
-// pub(crate) fn type_from_str(
-//     input: &str,
-//     user_data: Rc<AssocFileData>,
-// ) -> Result<Cow<'static, TypeLayout>> {
-//     unsafe {
-//         if let Some(r#type) = user_data.get_type(input) {
-//             Ok(Cow::Borrowed(r#type))
-//         } else {
-//             if let Ok(list_type_open_only) =
-//                 parse_with_userdata_features(Rule::list_type_open_only, input, user_data.clone())
-//             {
-//                 let single = list_type_open_only.single()?;
-//                 let ty = Parser::list_type_open_only(single)?;
-//                 return Ok(Cow::Owned(TypeLayout::List(ty)));
-//             } else if let Ok(function_type) =
-//                 parse_with_userdata_features(Rule::function_type, input, user_data.clone())
-//             {
-//                 let single = function_type.single()?;
-//                 let ty = Parser::function_type(single)?;
-//                 return Ok(Cow::Owned(TypeLayout::Function(Arc::new(ty))));
-//             } else if let Ok(list_type) =
-//                 parse_with_userdata_features(Rule::list_type, input, user_data)
-//             {
-//                 let single = list_type.single()?;
-//                 let ty = Parser::list_type(single)?;
-//                 return Ok(Cow::Owned(TypeLayout::List(ty)));
-//             }
-
-//             bail!("type '{input}' has not been registered")
-//         }
-//     }
-// }
 
 impl Parser {
     pub fn function_type(input: Node) -> Result<FunctionType> {
@@ -729,7 +738,13 @@ impl Parser {
     }
 
     pub fn r#type(input: Node) -> Result<Cow<'static, TypeLayout>> {
-        let ty = input.children().single().unwrap();
+        let mut children = input.children();
+
+        let ty = children.next().unwrap();
+
+        // let ty = input.children().single().unwrap();
+
+        let optional_modifier = children.next();
 
         let span = ty.as_span();
         let file_name = input.user_data().get_source_file_name();
@@ -763,6 +778,10 @@ impl Parser {
 
         let x = x.into_cow();
 
-        Ok(x)
+        if optional_modifier.is_some() {
+            Ok(Cow::Owned(TypeLayout::Optional(Some(Box::new(x)))))
+        } else {
+            Ok(x)
+        }
     }
 }

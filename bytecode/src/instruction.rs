@@ -764,6 +764,83 @@ pub mod implementations {
     }
 
     instruction! {
+        unwrap_into(ctx, args) {
+            let Some(name) = args.first() else {
+                bail!("`unwrap_into` requires a name");
+            };
+
+            let Some(primitive) = ctx.pop() else {
+                bail!("`unwrap_into` requires a primitive at the top of the local operating stack");
+            };
+
+            let status = match primitive {
+                Primitive::Optional(Some(unwrapped)) => {
+                    let var = unwrapped.as_ref().to_owned();
+
+                    let var = unsafe { var.move_out_of_heap_primitive() };
+
+                    ctx.register_variable_local(name.to_owned(), var)?;
+                    true
+                }
+                primitive @ Primitive::Optional(None) => {
+                    let primitive = unsafe { primitive.move_out_of_heap_primitive() };
+
+                    ctx.register_variable_local(name.to_owned(), primitive)?;
+                    false
+                },
+                other_primitive => {
+                    let other_primitive = unsafe { other_primitive.move_out_of_heap_primitive() };
+
+                    ctx.register_variable_local(name.to_owned(), other_primitive)?;
+                    true
+                }
+            };
+
+            ctx.push(bool!(status));
+
+            Ok(())
+        }
+
+        unwrap(ctx, args) {
+            let Some(primitive) = ctx.get_last_op_item_mut() else {
+                bail!("`unwrap` requires a primitive at the top of the local operating stack");
+            };
+
+            if let Primitive::Optional(optional) = primitive {
+                if let Some(new_primitive) = optional {
+                    *primitive = *new_primitive.clone();
+                } else {
+                    let span = args.get(0).map(String::as_str);
+                    bail!("LOGIC ERROR IN CODE >> {} >> unwrap of `nil`", span.unwrap_or("<no details>"));
+                }
+            }
+
+            Ok(())
+        }
+
+        jmp_not_nil(ctx, args) {
+            let Some(primitive) = ctx.get_last_op_item_mut() else {
+                bail!("`jmp_not_nil` requires a primitive at the top of the local operating stack");
+            };
+
+            let Some(lines_to_jump) = args.get(0) else {
+                bail!("`jmp_not_nil` requires lines_to_jump");
+            };
+
+            let lines_to_jump = lines_to_jump.parse::<isize>().context("jmp_not_nil needs lines_to_jump: isize")?;
+
+            if let Primitive::Optional(None) = primitive {
+                ctx.pop();
+                return Ok(())
+            }
+
+            ctx.signal(InstructionExitState::Goto(lines_to_jump));
+
+            Ok(())
+        }
+    }
+
+    instruction! {
         store(ctx, args) {
             let Some(name) = args.first() else {
                 bail!("`store` requires a name")
@@ -1017,7 +1094,7 @@ pub mod implementations {
 
             let primitive = ctx.pop().unwrap();
 
-            let result: Rc<RefCell<(Primitive, VariableFlags)>> = primitive.lookup(name).with_context(|| format!("{name} does not exist on {primitive:?}"))?;
+            let result: Rc<RefCell<(Primitive, VariableFlags)>> = primitive.lookup(name).with_context(|| format!("`{name}` does not exist on `{primitive:?}`"))?;
 
             // println!("LOOKING UP ON: {primitive:?}\nLOOKUP RETURNED: {result:?}");
 

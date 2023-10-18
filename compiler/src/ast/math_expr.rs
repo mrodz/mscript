@@ -62,6 +62,7 @@ pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
     use Rule::*;
 
     PrattParser::new()
+        .op(Op::infix(unwrap, Left))
         .op(Op::infix(or, Left) | Op::infix(xor, Left))
         .op(Op::infix(and, Left))
         .op(Op::infix(lt, Left)
@@ -96,6 +97,7 @@ pub enum Op {
     And,
     Or,
     Xor,
+    Unwrap,
 }
 
 impl Op {
@@ -116,6 +118,7 @@ impl Op {
             And => "&&",
             Or => "||",
             Xor => "^",
+            Unwrap => "?=",
         }
     }
 }
@@ -135,6 +138,7 @@ pub(crate) enum CallableContents {
 
 #[derive(Debug)]
 pub(crate) enum Expr {
+    Nil,
     Value(Value),
     ReferenceToSelf,
     ReferenceToConstructor(ClassType),
@@ -228,6 +232,7 @@ impl CompileTimeEvaluate for Expr {
             }
             Self::ReferenceToSelf => Ok(ConstexprEvaluation::Impossible),
             Self::ReferenceToConstructor(..) => Ok(ConstexprEvaluation::Impossible),
+            Self::Nil => Ok(ConstexprEvaluation::Impossible),
             Self::Callable { .. } => Ok(ConstexprEvaluation::Impossible),
             Self::Index { .. } => Ok(ConstexprEvaluation::Impossible),
             Self::DotLookup { .. } => Ok(ConstexprEvaluation::Impossible),
@@ -273,6 +278,7 @@ impl IntoType for Expr {
             }
             Expr::Index { index, .. } => index.for_type(),
             Expr::DotLookup { expected_type, .. } => Ok(expected_type.to_owned()),
+            Expr::Nil => Ok(TypeLayout::Optional(None)),
         }
     }
 }
@@ -307,6 +313,7 @@ impl Dependencies for Expr {
             E::DotLookup { lhs, .. } => lhs.net_dependencies(),
             E::ReferenceToSelf => vec![],
             E::ReferenceToConstructor(..) => vec![],
+            E::Nil => vec![],
         }
     }
 }
@@ -433,6 +440,7 @@ fn compile_depth(
             result.append(&mut dot_chain.compile(state)?);
             Ok(result)
         }
+        Expr::Nil => Ok(vec![instruction!(reserve_primitive)]),
     }
 }
 
@@ -458,6 +466,7 @@ fn parse_expr(
 
                         Expr::Value(Value::Number(number))
                     }
+                    Rule::nil => Expr::Nil,
                     Rule::string => {
                         let ast_string = Parser::string(Node::new_with_user_data(primary, user_data.clone())).to_err_vec()?;
                         Expr::Value(Value::String(ast_string))
@@ -530,6 +539,7 @@ fn parse_expr(
                 Rule::and => Op::And,
                 Rule::or => Op::Or,
                 Rule::xor => Op::Xor,
+                Rule::unwrap => Op::Unwrap,
                 rule => unreachable!("Expr::parse expected infix operation, found {:?}", rule),
             };
 
