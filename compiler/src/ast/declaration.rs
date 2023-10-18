@@ -11,7 +11,7 @@ use crate::{
 use super::{
     class::Class, Assertion, Assignment, Break, CompilationState, Compile, CompiledItem, Continue,
     Dependencies, Dependency, Expr, IfStatement, NumberLoop, PrintStatement, Reassignment,
-    ReturnStatement, UnwrapExpr, WhileLoop,
+    ReturnStatement, Unwrap, UnwrapExpr, WhileLoop,
 };
 
 #[derive(Debug)]
@@ -29,6 +29,7 @@ pub(crate) enum Declaration {
     Assertion(Assertion),
     Class(Class),
     UnwrapExpr(UnwrapExpr),
+    ValueUnwrap(Unwrap),
 }
 
 impl Dependencies for Declaration {
@@ -44,7 +45,9 @@ impl Dependencies for Declaration {
             Self::Assertion(assertion) => assertion.supplies(),
             Self::Class(class) => class.supplies(),
             Self::UnwrapExpr(unwrap_expr) => unwrap_expr.supplies(),
-            Self::Reassignment(_) | Self::Continue(_) | Self::Break(_) => vec![],
+            Self::ValueUnwrap(value_unwrap) => value_unwrap.supplies(),
+            Self::Reassignment(reassignment) => reassignment.supplies(),
+            Self::Continue(_) | Self::Break(_) => vec![],
         }
     }
 
@@ -61,6 +64,7 @@ impl Dependencies for Declaration {
             Self::Assertion(assertion) => assertion.net_dependencies(),
             Self::Class(class) => class.net_dependencies(),
             Self::UnwrapExpr(unwrap_expr) => unwrap_expr.net_dependencies(),
+            Self::ValueUnwrap(value_unwrap) => value_unwrap.net_dependencies(),
             Self::Continue(_) | Self::Break(_) => vec![],
         }
     }
@@ -89,6 +93,11 @@ impl Compile for Declaration {
                 let mut unwrap_expr_compiled = x.compile(state)?;
                 unwrap_expr_compiled.push(instruction!(void));
                 Ok(unwrap_expr_compiled)
+            }
+            Self::ValueUnwrap(x) => {
+                let mut unwrap_compiled = x.compile(state)?;
+                unwrap_compiled.push(instruction!(void));
+                Ok(unwrap_compiled)
             }
         }
     }
@@ -120,6 +129,7 @@ impl Parser {
             Rule::assertion => Declaration::Assertion(Self::assertion(declaration)?),
             Rule::class => Declaration::Class(Self::class(declaration)?),
             Rule::unwrap_expr => Declaration::UnwrapExpr(Self::unwrap_expr(declaration)?),
+            Rule::value_unwrap => Declaration::ValueUnwrap(Self::unwrap(declaration)?),
             x => unreachable!("{x:?} is not supported"),
         };
 

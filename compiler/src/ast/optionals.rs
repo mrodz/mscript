@@ -7,7 +7,7 @@ use crate::{
     VecErr,
 };
 
-use super::{Compile, Dependencies, Ident, Value};
+use super::{Compile, Dependencies, Ident, TypeLayout, Value};
 
 #[derive(Debug)]
 pub(crate) struct UnwrapExpr {
@@ -17,25 +17,49 @@ pub(crate) struct UnwrapExpr {
 
 #[derive(Debug)]
 pub(crate) enum Unwrap {
-    Fallible(Box<Value>, String),
+    Fallible {
+        value: Box<Value>,
+        span: String,
+    },
+    Infallible {
+        value: Box<Value>,
+        fallback: Box<Value>,
+    },
 }
 
 impl Unwrap {
     pub fn value(&self) -> &Value {
         match self {
-            Self::Fallible(value, ..) => value.as_ref(),
+            Self::Fallible { value, .. } => value.as_ref(),
+            Self::Infallible { value, .. } => value.as_ref(),
         }
     }
 }
 
 impl Compile for Unwrap {
-    fn compile(&self, state: &super::CompilationState) -> anyhow::Result<Vec<super::CompiledItem>, anyhow::Error> {
+    fn compile(
+        &self,
+        state: &super::CompilationState,
+    ) -> anyhow::Result<Vec<super::CompiledItem>, anyhow::Error> {
         match self {
-            Self::Fallible(value, span) => {
+            Self::Fallible { value, span } => {
                 let mut value_compiled = value.compile(state)?;
 
                 value_compiled.push(instruction!(unwrap span));
-                
+
+                Ok(value_compiled)
+            }
+            Self::Infallible { value, fallback } => {
+                let mut value_compiled = value.compile(state)?;
+
+                let mut fallback_compiled = fallback.compile(state)?;
+
+                let instructions_to_skip = fallback_compiled.len() + 1;
+
+                value_compiled.push(instruction!(jmp_not_nil instructions_to_skip));
+
+                value_compiled.append(&mut fallback_compiled);
+
                 Ok(value_compiled)
             }
         }
@@ -44,7 +68,17 @@ impl Compile for Unwrap {
 
 impl IntoType for Unwrap {
     fn for_type(&self) -> anyhow::Result<super::TypeLayout> {
-        self.value().for_type()
+        let ty = self.value().for_type()?;
+
+        if let (true, unwrapped_ty) = ty.is_optional() {
+            if let Some(type_exists) = unwrapped_ty {
+                return Ok(type_exists.clone().into_owned());
+            } else {
+                return Ok(TypeLayout::Optional(None));
+            }
+        }
+
+        Ok(ty)
     }
 }
 
@@ -85,17 +119,28 @@ impl Compile for UnwrapExpr {
 
 impl Parser {
     pub fn unwrap(input: Node) -> Result<Unwrap, Vec<anyhow::Error>> {
-        let value_node = input.children().single().expect("`get` found multiple `value` nodes");
+        let mut children = input.children();
 
+        let value_node = children.next().unwrap();
         let value_span = value_node.as_span();
-
         let (line, col) = value_span.start_pos().line_col();
-
         let value = Self::value(value_node)?;
 
-        let span = format!("{}:{line}:{col}", &input.user_data().get_source_file_name(), );
+        if let Some(fallback) = children.next() {
+            let fallback = Self::value(fallback)?;
 
-        Ok(Unwrap::Fallible(Box::new(value), span))
+            return Ok(Unwrap::Infallible {
+                value: Box::new(value),
+                fallback: Box::new(fallback),
+            });
+        }
+
+        let span = format!("{}:{line}:{col}", &input.user_data().get_source_file_name(),);
+
+        Ok(Unwrap::Fallible {
+            value: Box::new(value),
+            span,
+        })
     }
 
     pub fn unwrap_expr(input: Node) -> Result<UnwrapExpr, Vec<anyhow::Error>> {
@@ -118,7 +163,7 @@ impl Parser {
 
         match optional_check {
             (true, Some(known_type)) => ident
-                .link_force_no_inherit(&user_data, known_type.clone())
+                .link_force_no_inherit(user_data, known_type.clone())
                 .to_err_vec()?,
             (true, _) => {
                 return Err(vec![new_err(
@@ -128,7 +173,7 @@ impl Parser {
                 )])
             }
             _ => ident
-                .link_force_no_inherit(&user_data, Cow::Owned(value_ty))
+                .link_force_no_inherit(user_data, Cow::Owned(value_ty))
                 .to_err_vec()?,
         }
 

@@ -1,5 +1,5 @@
 empty: int? = nil
 
-a = get empty
+a = get empty or 5
 
 print a

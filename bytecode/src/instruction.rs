@@ -817,6 +817,27 @@ pub mod implementations {
 
             Ok(())
         }
+
+        jmp_not_nil(ctx, args) {
+            let Some(primitive) = ctx.get_last_op_item_mut() else {
+                bail!("`jmp_not_nil` requires a primitive at the top of the local operating stack");
+            };
+
+            let Some(lines_to_jump) = args.get(0) else {
+                bail!("`jmp_not_nil` requires lines_to_jump");
+            };
+
+            let lines_to_jump = lines_to_jump.parse::<isize>().context("jmp_not_nil needs lines_to_jump: isize")?;
+
+            if let Primitive::Optional(None) = primitive {
+                ctx.pop();
+                return Ok(())
+            }
+
+            ctx.signal(InstructionExitState::Goto(lines_to_jump));
+
+            Ok(())
+        }
     }
 
     instruction! {

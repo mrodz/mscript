@@ -87,7 +87,7 @@ list_index = { ("[" ~ value ~ "]")+ }
 unwrap = _{ "?=" }
 unwrap_expr = { ident ~ unwrap ~ value }
 
-value_unwrap = ${ "get" ~ WHITESPACE ~ value }
+value_unwrap = ${ "get" ~ WHITESPACE ~ value ~ (WHITESPACE ~ "or" ~ WHITESPACE ~ value)? }
 
 value = { function | unwrap_expr | value_unwrap | math_expr | ident | list }
 
@@ -144,7 +144,7 @@ class_body = { "{" ~ class_feature*  ~ "}" }
 
 class = { "class" ~ ident ~ class_body }
 
-declaration = { class | reassignment | assignment | unwrap_expr | print_statement | assertion | return_statement | continue_statement | break_statement | if_statement | while_loop | number_loop | math_expr }
+declaration = { class | reassignment | assignment | unwrap_expr | value_unwrap | print_statement | assertion | return_statement | continue_statement | break_statement | if_statement | while_loop | number_loop | math_expr }
 
 file = {
     SOI ~

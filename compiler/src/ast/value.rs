@@ -8,9 +8,8 @@ use crate::{
 };
 
 use super::{
-    r#type::IntoType, string::AstString, CompilationState, Compile, CompiledItem,
-    Dependencies, Dependency, Expr, Function, Ident, List, Number, TypeLayout, Unwrap, UnwrapExpr,
-    BOOL_TYPE,
+    r#type::IntoType, string::AstString, CompilationState, Compile, CompiledItem, Dependencies,
+    Dependency, Expr, Function, Ident, List, Number, TypeLayout, Unwrap, UnwrapExpr, BOOL_TYPE,
 };
 
 #[derive(Debug)]

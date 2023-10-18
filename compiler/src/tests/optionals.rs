@@ -70,7 +70,6 @@ fn assignment_as_expr() {
     .unwrap();
 }
 
-
 #[test]
 fn iterative_approach() {
     eval(
@@ -114,7 +113,6 @@ fn non_null_eval() {
     .unwrap();
 }
 
-
 #[test]
 #[should_panic = "use of undeclared variable"]
 fn proper_scoping_if() {
@@ -145,6 +143,115 @@ fn proper_scoping_while() {
 
             assert xyz == "Hello!"
         "#,
+    )
+    .unwrap();
+}
+
+#[test]
+fn get_keyword() {
+    eval(
+        r#"
+
+        coolest_person: str? = nil
+
+        const LIKES_GREEN = true
+        const CAN_CODE = true
+        const CAN_COOK = true
+
+        if LIKES_GREEN && CAN_CODE && CAN_COOK {
+            coolest_person = "Mom"
+        }
+
+        name: str = get coolest_person
+    
+        assert name == "Mom"
+        assert coolest_person == name
+    "#,
+    )
+    .unwrap();
+}
+
+#[test]
+fn get_or_simple() {
+    eval(
+        r#"
+        x = get nil or 5
+        assert x == 5
+    "#,
+    )
+    .unwrap();
+}
+
+#[test]
+fn get_or_complex() {
+    eval(
+        r#"
+        give_booze = fn(age: int) -> str? {
+            if age < 21 {
+                return nil
+            }
+
+            return "Moonshine"
+        }
+
+        first_label = get give_booze(16) or "Oops! You're underage"
+        assert first_label == "Oops! You're underage"
+
+        first_label = get give_booze(55) or "shhh this will never emerge"
+        assert first_label == "Moonshine"
+        
+    "#,
+    )
+    .unwrap();
+}
+
+#[test]
+#[should_panic = "[Interpreter crashed]"]
+fn abort_store() {
+    eval(
+        r#"
+        y = get nil
+    "#,
+    )
+    .unwrap();
+}
+
+#[test]
+#[should_panic = "[Interpreter crashed]"]
+fn abort_declaration() {
+    eval(
+        r#"
+        get nil
+    "#,
+    )
+    .unwrap();
+}
+
+#[test]
+fn lazy_eval() {
+    eval(
+        r#"
+        die = fn() {
+            assert false
+        }
+
+        get "liberty" or die()
+    "#,
+    )
+    .unwrap();
+}
+
+#[test]
+#[should_panic]
+fn abort_in_or() {
+    eval(
+        r#"
+        die = fn() {
+            assert false
+        }
+
+        get nil or die()
+    "#,
     )
     .unwrap();
 }

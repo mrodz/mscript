@@ -527,6 +527,10 @@ impl TypeLayout {
     pub fn get_output_type(&self, other: &Self, op: &Op) -> Option<TypeLayout> {
         use TypeLayout::*;
 
+        if self == other && matches!(op, Eq | Neq) {
+            return Some(BOOL_TYPE.to_owned());
+        }
+
         if let (_, Optional(None), Eq | Neq) | (Optional(None), _, Eq | Neq) = (self, other, op) {
             return Some(BOOL_TYPE.to_owned());
         }
