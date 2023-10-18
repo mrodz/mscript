@@ -278,7 +278,7 @@ impl IntoType for Expr {
             }
             Expr::Index { index, .. } => index.for_type(),
             Expr::DotLookup { expected_type, .. } => Ok(expected_type.to_owned()),
-            Expr::Nil => Ok(TypeLayout::Optional(None))
+            Expr::Nil => Ok(TypeLayout::Optional(None)),
         }
     }
 }
@@ -440,9 +440,7 @@ fn compile_depth(
             result.append(&mut dot_chain.compile(state)?);
             Ok(result)
         }
-        Expr::Nil => {
-            Ok(vec![instruction!(reserve_primitive)])
-        }
+        Expr::Nil => Ok(vec![instruction!(reserve_primitive)]),
     }
 }
 

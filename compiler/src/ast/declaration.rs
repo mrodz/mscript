@@ -11,7 +11,7 @@ use crate::{
 use super::{
     class::Class, Assertion, Assignment, Break, CompilationState, Compile, CompiledItem, Continue,
     Dependencies, Dependency, Expr, IfStatement, NumberLoop, PrintStatement, Reassignment,
-    ReturnStatement, WhileLoop, UnwrapExpr,
+    ReturnStatement, UnwrapExpr, WhileLoop,
 };
 
 #[derive(Debug)]
@@ -89,7 +89,7 @@ impl Compile for Declaration {
                 let mut unwrap_expr_compiled = x.compile(state)?;
                 unwrap_expr_compiled.push(instruction!(void));
                 Ok(unwrap_expr_compiled)
-            },
+            }
         }
     }
 }

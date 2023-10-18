@@ -90,6 +90,16 @@ impl Parser {
         let condition_span = condition.as_span();
         let block = children.next().unwrap();
 
+        let child_returns_type = input
+            .user_data()
+            .return_statement_expected_yield_type()
+            .map_or_else(
+                || ScopeReturnStatus::No,
+                |ty| ScopeReturnStatus::ParentShould(ty.clone()),
+            );
+
+        let while_loop_scope = input.user_data().push_while_loop(child_returns_type);
+
         let condition = Self::value(condition)?;
 
         let condition_ty = condition.for_type().to_err_vec()?;
@@ -101,16 +111,6 @@ impl Parser {
                 format!("while loop condition must be boolean, found {condition_ty}"),
             )]);
         }
-
-        let child_returns_type = input
-            .user_data()
-            .return_statement_expected_yield_type()
-            .map_or_else(
-                || ScopeReturnStatus::No,
-                |ty| ScopeReturnStatus::ParentShould(ty.clone()),
-            );
-
-        let while_loop_scope = input.user_data().push_while_loop(child_returns_type);
 
         let body = Self::block(block)?;
 

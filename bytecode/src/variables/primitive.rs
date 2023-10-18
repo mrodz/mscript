@@ -169,7 +169,9 @@ impl Primitive {
         use Primitive as P;
 
         if let (P::Optional(maybe), yes) | (yes, P::Optional(maybe)) = (self, rhs) {
-            return Ok(maybe.as_ref().is_some_and(|some| some.as_ref() == yes));
+            if let Some(maybe_unwrapped) = maybe {
+                return Ok(maybe_unwrapped.as_ref() == yes);
+            };
         }
 
         impl_eq!(Int with Float(r=f64), BigInt(r=i128), Byte(r=i32));

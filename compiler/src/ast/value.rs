@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 
 use crate::{
     parser::{AssocFileData, Node, Parser, Rule},
@@ -8,8 +8,9 @@ use crate::{
 };
 
 use super::{
-    Expr, new_err, r#type::IntoType, string::AstString, CompilationState, Compile,
-    CompiledItem, Dependencies, Dependency, Function, Ident, List, Number, TypeLayout, UnwrapExpr, BOOL_TYPE,
+    new_err, r#type::IntoType, string::AstString, CompilationState, Compile, CompiledItem,
+    Dependencies, Dependency, Expr, Function, Ident, List, Number, TypeLayout, UnwrapExpr,
+    BOOL_TYPE,
 };
 
 #[derive(Debug)]
@@ -24,6 +25,7 @@ pub(crate) enum Value {
     List(List),
 }
 
+#[derive(Debug)]
 pub(crate) enum ValToUsize {
     Ok(usize),
     NotConstexpr,
@@ -215,7 +217,10 @@ impl Value {
                 let ty = math_expr.for_type()?.get_owned_type_recursively();
 
                 if let TypeLayout::Optional(None) = ty {
-                    bail!("Hint: specify this optional's type like `{}: TYPE? = nil`", ident.name())
+                    bail!(
+                        "Hint: specify this optional's type like `{}: TYPE? = nil`",
+                        ident.name()
+                    )
                 }
 
                 ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;

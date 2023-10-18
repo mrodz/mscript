@@ -779,7 +779,8 @@ pub mod implementations {
                     ctx.register_variable_local(name.to_owned(), var)?;
                     true
                 }
-                Primitive::Optional(None) => {
+                primitive @ Primitive::Optional(None) => {
+                    ctx.register_variable_local(name.to_owned(), primitive)?;
                     false
                 },
                 other_primitive => {
@@ -1048,7 +1049,7 @@ pub mod implementations {
 
             let primitive = ctx.pop().unwrap();
 
-            let result: Rc<RefCell<(Primitive, VariableFlags)>> = primitive.lookup(name).with_context(|| format!("{name} does not exist on {primitive:?}"))?;
+            let result: Rc<RefCell<(Primitive, VariableFlags)>> = primitive.lookup(name).with_context(|| format!("`{name}` does not exist on `{primitive:?}`"))?;
 
             // println!("LOOKING UP ON: {primitive:?}\nLOOKUP RETURNED: {result:?}");
 

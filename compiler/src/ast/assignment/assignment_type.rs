@@ -34,11 +34,11 @@ impl Parser {
         let value: Value = Self::value(value)?;
 
         if let Ok(ref assignment_ty) = value.for_type() {
-            if !ty
-                .as_ref()
-                .get_type_recursively()
-                .eq_complex(assignment_ty.get_type_recursively(), self_type.as_ref(), false)
-            {
+            if !ty.as_ref().get_type_recursively().eq_complex(
+                assignment_ty.get_type_recursively(),
+                self_type.as_ref(),
+                false,
+            ) {
                 let hint = ty.get_error_hint_between_types(assignment_ty).map_or_else(
                     || Cow::Borrowed(""),
                     |str| Cow::Owned(format!("\n\t- hint: {str}")),

@@ -4,7 +4,7 @@ use crate::{
     scope::{ScopeReturnStatus, SuccessTypeSearchResult, TypeSearchResult},
     CompilationError,
 };
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use pest::Span;
 use std::{borrow::Cow, fmt::Display, hash::Hash, ops::Deref, sync::Arc};
 
@@ -202,7 +202,7 @@ impl TypeLayout {
         let me = self.get_type_recursively();
 
         if let TypeLayout::Optional(x @ Some(..)) = me {
-            return (true, x.as_ref().map(|x| x.as_ref()))
+            return (true, x.as_ref().map(|x| x.as_ref()));
         }
 
         (false, None)
@@ -410,12 +410,9 @@ impl TypeLayout {
             | (TypeLayout::Class(other), Self::ClassSelf, Some(executing_class)) => {
                 executing_class.deref().eq(other)
             }
-            (Self::Optional(None), Self::Optional(Some(_)), _) | (Self::Optional(Some(_)), Self::Optional(None), _) => {
-                true
-            }
-            (Self::Optional(Some(x)), y, _) => {
-                x.as_ref().as_ref() == y
-            }
+            (Self::Optional(None), Self::Optional(Some(_)), _)
+            | (Self::Optional(Some(_)), Self::Optional(None), _) => true,
+            (Self::Optional(Some(x)), y, _) => x.as_ref().as_ref() == y,
             (y, Self::Optional(Some(x)), _) if lhs_allow_optional_unwrap => {
                 x.as_ref().as_ref() == y
             }
@@ -426,18 +423,18 @@ impl TypeLayout {
     pub fn get_output_type_from_index(&self, index: &Value) -> Result<Cow<TypeLayout>> {
         let me = self.get_type_recursively();
 
-        let index_ty = index.for_type()?;
+        let index_ty = index.for_type().context("could not get type of index")?;
 
         if !index_ty.can_be_used_as_list_index() {
             bail!("`{index_ty}` cannot be used as an index here");
         }
 
-        let index_as_usize = index.get_usize()?;
+        let index_as_usize = index.get_usize().context("could not get index as usize")?;
 
-        if let Self::Native(NativeType::Str(StrWrapper(Some(str_len)))) = me {
-            match index_as_usize {
-                ValToUsize::Ok(index) => {
-                    if index >= *str_len {
+        if let Self::Native(NativeType::Str(StrWrapper(maybe_length))) = me {
+            match (&index_as_usize, maybe_length) {
+                (ValToUsize::Ok(index), Some(str_len)) => {
+                    if index >= str_len {
                         bail!("index {index} too big for str of len {str_len}")
                     }
 
@@ -445,8 +442,10 @@ impl TypeLayout {
 
                     return Ok(Cow::Owned(native_type));
                 }
-                ValToUsize::NotConstexpr => (),
-                ValToUsize::NaN => bail!("str cannot be indexed by a non-int"),
+                (ValToUsize::Ok(..), None) | (ValToUsize::NotConstexpr, _) => {
+                    return Ok(Cow::Borrowed(&STR_TYPE));
+                }
+                (ValToUsize::NaN, _) => bail!("str cannot be indexed by a non-int"),
             }
         }
 
@@ -532,6 +531,14 @@ impl TypeLayout {
             return Some(BOOL_TYPE.to_owned());
         }
 
+        if let (yes, Optional(Some(maybe)), Eq | Neq) | (Optional(Some(maybe)), yes, Eq | Neq) =
+            (self, other, op)
+        {
+            if yes == maybe.as_ref().as_ref() {
+                return Some(BOOL_TYPE.to_owned());
+            }
+        }
+
         let Native(me) = self.get_type_recursively() else {
             return None;
         };
@@ -544,6 +551,7 @@ impl TypeLayout {
         use Op::*;
 
         let matched = match (me, other, op) {
+            (Str(..), Str(..), Eq | Neq) => Bool,
             (lhs, rhs, Gt | Lt | Gte | Lte | Eq | Neq) => {
                 if lhs == rhs {
                     Bool

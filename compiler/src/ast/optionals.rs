@@ -24,7 +24,7 @@ impl Compile for UnwrapExpr {
     ) -> anyhow::Result<Vec<super::CompiledItem>, anyhow::Error> {
         let mut value_compiled = self.value.compile(state)?;
 
-		let name = self.ident.name();
+        let name = self.ident.name();
 
         value_compiled.push(instruction!(unwrap_into name));
 
@@ -40,9 +40,6 @@ impl Parser {
         let value = children.next().unwrap();
 
         let value_span = value.as_span();
-
-        dbg!(ident.as_rule());
-        dbg!(value.as_rule());
 
         let mut ident = Self::ident(ident).to_err_vec()?;
 

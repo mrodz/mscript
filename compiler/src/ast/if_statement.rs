@@ -140,7 +140,7 @@ impl Parser {
                 || ScopeReturnStatus::No,
                 |ty| ScopeReturnStatus::ParentShould(ty.clone()),
             );
-            
+
         let if_scope: ScopeHandle = input.user_data().push_if_typed(child_returns_type);
 
         let condition_as_value = Self::value(condition)?;
