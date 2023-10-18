@@ -42,7 +42,7 @@ pub(crate) use loop_control_flow::{Break, Continue};
 pub(crate) use math_expr::{Expr, Op as BinaryOperation};
 pub(crate) use number::Number;
 pub(crate) use number_loop::NumberLoop;
-pub(crate) use optionals::UnwrapExpr;
+pub(crate) use optionals::{Unwrap, UnwrapExpr};
 pub(crate) use print_statement::PrintStatement;
 pub(crate) use r#return::ReturnStatement;
 pub(crate) use r#type::TypeLayout;

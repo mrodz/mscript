@@ -776,20 +776,44 @@ pub mod implementations {
             let status = match primitive {
                 Primitive::Optional(Some(unwrapped)) => {
                     let var = unwrapped.as_ref().to_owned();
+
+                    let var = unsafe { var.move_out_of_heap_primitive() };
+
                     ctx.register_variable_local(name.to_owned(), var)?;
                     true
                 }
                 primitive @ Primitive::Optional(None) => {
+                    let primitive = unsafe { primitive.move_out_of_heap_primitive() };
+
                     ctx.register_variable_local(name.to_owned(), primitive)?;
                     false
                 },
                 other_primitive => {
+                    let other_primitive = unsafe { other_primitive.move_out_of_heap_primitive() };
+
                     ctx.register_variable_local(name.to_owned(), other_primitive)?;
                     true
                 }
             };
 
             ctx.push(bool!(status));
+
+            Ok(())
+        }
+
+        unwrap(ctx, args) {
+            let Some(primitive) = ctx.get_last_op_item_mut() else {
+                bail!("`unwrap` requires a primitive at the top of the local operating stack");
+            };
+
+            if let Primitive::Optional(optional) = primitive {
+                if let Some(new_primitive) = optional {
+                    *primitive = *new_primitive.clone();
+                } else {
+                    let span = args.get(0).map(String::as_str);
+                    bail!("LOGIC ERROR IN CODE >> {} >> unwrap of `nil`", span.unwrap_or("<no details>"));
+                }
+            }
 
             Ok(())
         }

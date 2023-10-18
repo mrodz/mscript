@@ -7,26 +7,6 @@ block_comment = _{ "###" ~ (!"###" ~ ANY)* ~ "###" }
 
 COMMENT = _{ block_comment | line_comment }
 
-keywords = _{
-    "fn" | 
-    "obj" |
-    "print" |
-    "return" |
-    "if" |
-    "else" |
-    "true" |
-    "false" |
-    "modify" |
-    "const" |
-    "self" | 
-    "while" |
-    "assert" |
-    "class" |
-    "constructor" |
-    "Self"
-
-}
-
 integer = @{ '0'..'9' ~ ('0'..'9' | ("_" ~ ('0'..'9')))* }
 
 hex_digit = _{ '0'..'9' | 'a'..'f' | 'A'..'F' }
@@ -37,7 +17,7 @@ float = @{ (integer ~ "." ~ integer) | (integer ~ ("f" | "F")) }
 bigint = @{ "B" ~ (hex_int | integer) }
 
 number = { bigint | hex_int | byte | float | integer }
-boolean = { "true" | "false" }
+boolean = @{ "true" | "false" }
 
 unary_minus = { "-" }
 not = { "!" }
@@ -80,7 +60,7 @@ string = @{ "\"" ~ (("\\\"") | (!("\"") ~ ANY))* ~ "\"" }
 
 ident_chars = _{ (('a'..'z') | ('0'..'9') | ('A'..'Z') | "_") }
 
-nil = { "nil" }
+nil = @{ "nil" }
 ident = @{ !('0'..'9') ~ ident_chars+ }
 optional_modifier = { "?" }
 type = { (function_type | list_type_open_only | list_type | ident) ~ optional_modifier? }
@@ -107,7 +87,9 @@ list_index = { ("[" ~ value ~ "]")+ }
 unwrap = _{ "?=" }
 unwrap_expr = { ident ~ unwrap ~ value }
 
-value = { function | unwrap_expr | math_expr | ident | list }
+value_unwrap = ${ "get" ~ WHITESPACE ~ value }
+
+value = { function | unwrap_expr | value_unwrap | math_expr | ident | list }
 
 assignment_flag = { "modify" | "const" }
 // bad_assignment_flag = { &ident }

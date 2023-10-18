@@ -149,21 +149,8 @@ impl Compile for Assignment {
         let mut value_init = if let ConstexprEvaluation::Owned(value) = maybe_constexpr_eval {
             value.compile(state)?
         } else {
-            match &self.value() {
-                Value::Ident(ident) => ident.compile(state)?,
-                Value::Function(function) => function.in_place_compile_for_value(state)?,
-                Value::Number(number) => number.compile(state)?,
-                Value::String(string) => string.compile(state)?,
-                Value::MathExpr(math_expr) => math_expr.compile(state)?,
-                Value::Boolean(boolean) => boolean.compile(state)?,
-                Value::List(list) => list.compile(state)?,
-                Value::UnwrapExpr(unwrap_expr) => unwrap_expr.compile(state)?,
-            }
+            self.value().compile(state)?
         };
-
-        // if let Some(ref next) = &self.value {
-        //     value_init.append(&mut next.compile(function_buffer)?);
-        // }
 
         match self {
             Self::Single { ident, .. } => {

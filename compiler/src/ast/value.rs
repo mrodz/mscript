@@ -8,8 +8,8 @@ use crate::{
 };
 
 use super::{
-    new_err, r#type::IntoType, string::AstString, CompilationState, Compile, CompiledItem,
-    Dependencies, Dependency, Expr, Function, Ident, List, Number, TypeLayout, UnwrapExpr,
+    r#type::IntoType, string::AstString, CompilationState, Compile, CompiledItem,
+    Dependencies, Dependency, Expr, Function, Ident, List, Number, TypeLayout, Unwrap, UnwrapExpr,
     BOOL_TYPE,
 };
 
@@ -21,6 +21,7 @@ pub(crate) enum Value {
     String(AstString),
     MathExpr(Box<Expr>),
     UnwrapExpr(UnwrapExpr),
+    Unwrap(Unwrap),
     Boolean(bool),
     List(List),
 }
@@ -236,6 +237,10 @@ impl Value {
             Value::UnwrapExpr(..) => {
                 ident.link_force_no_inherit(user_data, Cow::Borrowed(&BOOL_TYPE))?;
             }
+            Value::Unwrap(unwrap) => {
+                let ty = unwrap.for_type()?.get_owned_type_recursively();
+                ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
+            }
         }
 
         Ok(())
@@ -252,6 +257,7 @@ impl IntoType for Value {
             Self::String(string) => string.for_type(),
             Self::Boolean(boolean) => boolean.for_type(),
             Self::List(list) => list.for_type(),
+            Self::Unwrap(unwrap_expr) => unwrap_expr.for_type(),
             Self::UnwrapExpr(..) => Ok(BOOL_TYPE.to_owned()),
         }
     }
@@ -269,6 +275,7 @@ impl Dependencies for Value {
             Self::Boolean(boolean) => boolean.net_dependencies(),
             Self::List(list) => list.net_dependencies(),
             Self::UnwrapExpr(unwrap_expr) => unwrap_expr.net_dependencies(),
+            Self::Unwrap(unwrap) => unwrap.net_dependencies(),
         }
     }
 }
@@ -284,6 +291,7 @@ impl Compile for Value {
             Self::Boolean(boolean) => boolean.compile(state),
             Self::List(list) => list.compile(state),
             Self::UnwrapExpr(unwrap_expr) => unwrap_expr.compile(state),
+            Self::Unwrap(unwrap) => unwrap.compile(state),
         }
     }
 }
@@ -321,13 +329,8 @@ impl Parser {
             Rule::list => Value::List(Self::list(value)?),
             Rule::WHITESPACE => unreachable!("{:?}", value.as_span()),
             Rule::unwrap_expr => Value::UnwrapExpr(Self::unwrap_expr(value)?),
-            x => {
-                return Err(vec![new_err(
-                    input.as_span(),
-                    &input.user_data().get_source_file_name(),
-                    format!("not sure how to handle `{x:?}` :("),
-                )])?
-            }
+            Rule::value_unwrap => Value::Unwrap(Self::unwrap(value)?),
+            x => unreachable!("not sure how to handle `{x:?}`"),
         };
 
         Ok(matched)
