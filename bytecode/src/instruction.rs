@@ -1284,12 +1284,15 @@ pub mod implementations {
         }
 
         done(ctx, _args) {
+            log::trace!("DONE & POP");
             ctx.signal(InstructionExitState::PopScope);
 
             Ok(())
         }
 
         else_stmt(ctx, _args) {
+            log::trace!("PUSH ELSE");
+
             ctx.signal(InstructionExitState::PushScope(SpecialScope::Else));
 
             Ok(())

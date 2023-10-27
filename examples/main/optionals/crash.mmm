@@ -48,18 +48,13 @@ end
 function __module__
 	make_function ./crash.mmm#__fn0
 	store fizz_buzz
-
 	int 1
 	store_fast i
-
 	int 10
 	store_fast L#1
-
 	load_fast i
 	load_fast L#1
-
 	bin_op <
-	
 	while_loop 25
 	load fizz_buzz
 	store_fast #1
@@ -69,12 +64,12 @@ function __module__
 	load_fast #1
 	call
 	unwrap_into label
-	if 7
+	if 6
 	load label
 	printn *
 	void
 	done
-	jmp 5
+	jmp 4
 	else
 	load i
 	printn *
