@@ -50,7 +50,7 @@ impl Compile for IfStatement {
         //  - body_init...
         //  - done
 
-        let if_size = body_init.len() + if self.else_statement.is_some() { 3 } else { 1 };
+        let if_size = body_init.len() + if self.else_statement.is_some() { 2 } else { 1 };
 
         result.push(instruction!(if if_size));
 
@@ -64,7 +64,7 @@ impl Compile for IfStatement {
         if let Some(ref else_statement) = self.else_statement {
             let mut compiled = else_statement.compile(state)?;
 
-            let len = compiled.len();
+            let len = compiled.len() + 1;
             body_init.push(instruction!(jmp len));
             body_init.append(&mut compiled);
 

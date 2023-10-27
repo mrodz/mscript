@@ -181,7 +181,7 @@ pub mod implementations {
                 println!("\nFunction: {}", ctx.owner());
                 println!("\nOperating Stack: {:?}", ctx.get_local_operating_stack());
                 println!("\nStack Trace:\n{stack}");
-                println!("\nThis Frame's Variables:\n\t{}\n", ctx.get_frame_variables());
+                println!("\nThis Frame's Variables:\n\t{}\n", ctx.get_frame_variables()?);
             }
             println!("======= End Context Dump =======");
 
@@ -502,7 +502,11 @@ pub mod implementations {
                 bail!("`make_object` does not require arguments")
             }
 
-            let object_variables = Rc::new(VariableMapping::clone(&ctx.get_frame_variables()));
+
+            let object_variables = {
+                let frame_variables = ctx.get_frame_variables()?;
+                Rc::new(VariableMapping::clone(&frame_variables))
+            };
 
             let function = ctx.owner();
             let name = Rc::new(function.name().clone());
@@ -1035,9 +1039,7 @@ pub mod implementations {
                 bail!("load requires a name")
             };
 
-            let Some(var) = ctx.load_local(name) else {
-                bail!("load before store (`{name}` not in this stack frame)\nframe `{}`'s variables:\n{}", ctx.rced_call_stack().borrow().get_frame_label(), ctx.get_frame_variables())
-            };
+            let var = ctx.load_local(name).with_context(|| format!("load before store (`{name}` not in this stack frame)\nframe `{:?}`'s variables:\n{:?}", ctx.rced_call_stack().borrow().get_frame_label(), ctx.get_frame_variables()))?;
 
             ctx.push(var.borrow().0.clone());
 
@@ -1111,9 +1113,7 @@ pub mod implementations {
                 bail!("`ld_self` requires a name argument");
             };
 
-            let Some(var) = ctx.load_local(name) else {
-                bail!("load before store (`{name}` not in this stack frame)\nframe `{}`'s variables:\n{}", ctx.rced_call_stack().borrow().get_frame_label(), ctx.get_frame_variables())
-            };
+            let var = ctx.load_local(name).with_context(|| format!("load before store (`{name}` not in this stack frame)\nframe `{:?}`'s variables:\n{:?}", ctx.rced_call_stack().borrow().get_frame_label(), ctx.get_frame_variables()))?;
 
             ctx.push_front(var.borrow().0.clone());
 
@@ -1284,12 +1284,15 @@ pub mod implementations {
         }
 
         done(ctx, _args) {
+            log::trace!("DONE & POP");
             ctx.signal(InstructionExitState::PopScope);
 
             Ok(())
         }
 
         else_stmt(ctx, _args) {
+            log::trace!("PUSH ELSE");
+
             ctx.signal(InstructionExitState::PushScope(SpecialScope::Else));
 
             Ok(())

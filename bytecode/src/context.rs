@@ -345,16 +345,30 @@ impl<'a> Ctx<'a> {
     }
 
     /// Get a reference to all of the variables mapped to this function.
-    pub(crate) fn get_frame_variables(&self) -> Ref<VariableMapping> {
-        Ref::map(self.call_stack.borrow(), Stack::get_frame_variables)
+    pub(crate) fn get_frame_variables(&self) -> Result<Ref<VariableMapping>> {
+        let Ok(frame_variables) =
+            Ref::filter_map(self.call_stack.borrow(), |x| x.get_frame_variables().ok())
+        else {
+            bail!(
+                "could not get frame variables (stack = {:?})",
+                self.call_stack
+            )
+        };
+
+        Ok(frame_variables)
     }
 
     /// Get the [`Primitive`] value and its associated [`VariableFlags`] from a name.
     ///
     /// Will search _exclusively_ in the current stack frame, which makes this function more performant
     /// when searching for variables that should exist in the same stack frame.
-    pub(crate) fn load_local(&self, name: &str) -> Option<Rc<RefCell<(Primitive, VariableFlags)>>> {
-        self.call_stack.borrow().get_frame_variables().get(name)
+    pub(crate) fn load_local(&self, name: &str) -> Result<Rc<RefCell<(Primitive, VariableFlags)>>> {
+        self.call_stack
+            .borrow()
+            .get_frame_variables()
+            .context("cannot load variables")?
+            .get(name)
+            .context("name not found")
     }
 
     /// Return the callback variables associated to this function, if they exist.

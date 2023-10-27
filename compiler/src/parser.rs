@@ -155,7 +155,9 @@ impl AssocFileData {
                 let Ok(parameters) = Ref::filter_map(parameters, |parameters| {
                     let Some(parameters) = parameters.as_ref() else {
                         if let Some(dependency) = scope.contains("self") {
-                            if dependency.ty().expect("unmapped type").as_ref() == &TypeLayout::ClassSelf {
+                            if dependency.ty().expect("unmapped type").as_ref()
+                                == &TypeLayout::ClassSelf
+                            {
                                 return None;
                             }
                         }

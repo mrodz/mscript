@@ -1,0 +1,85 @@
+function __fn0
+	arg 0
+	store input
+	reserve_primitive
+	store result
+	load input
+	store_fast #1
+	int 3
+	load_fast #1
+	fast_rev2
+	bin_op %
+	store_fast #0
+	int 0
+	load_fast #0
+	fast_rev2
+	equ
+	if 4
+	string Fizz
+	store result
+	done
+	load input
+	store_fast #1
+	int 5
+	load_fast #1
+	fast_rev2
+	bin_op %
+	store_fast #0
+	int 0
+	load_fast #0
+	fast_rev2
+	equ
+	if 13
+	load result
+	jmp_not_nil 2
+	string 
+	store preappend
+	load preappend
+	store_fast #0
+	string Buzz
+	load_fast #0
+	fast_rev2
+	bin_op +
+	store result
+	done
+	load result
+	ret
+end
+function __module__
+	make_function ./crash.mmm#__fn0
+	store fizz_buzz
+	int 1
+	store_fast i
+	int 10
+	store_fast L#1
+	load_fast i
+	load_fast L#1
+	bin_op <
+	while_loop 25
+	load fizz_buzz
+	store_fast #1
+	load i
+	store_fast #2
+	load_fast #2
+	load_fast #1
+	call
+	unwrap_into label
+	if 6
+	load label
+	printn *
+	void
+	done
+	jmp 4
+	else
+	load i
+	printn *
+	void
+	done
+	load i
+	int 1
+	bin_op +
+	store i
+	jmp_pop -27
+	delete_name_scoped i L#1
+	ret
+end

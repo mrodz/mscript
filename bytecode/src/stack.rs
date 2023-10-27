@@ -207,8 +207,8 @@ impl Stack {
     }
 
     /// Get the label of the current frame.
-    pub fn get_frame_label(&self) -> &String {
-        &self.0.last().expect("nothing in the stack").label
+    pub fn get_frame_label(&self) -> Result<&String> {
+        Ok(&self.0.last().context("nothing in the stack")?.label)
     }
 
     pub fn get_executing_function_label(&self) -> Option<&String> {
@@ -222,8 +222,8 @@ impl Stack {
     }
 
     /// Get the variables of the current frame.
-    pub fn get_frame_variables(&self) -> &VariableMapping {
-        &self.0.last().expect("nothing in the stack").variables
+    pub fn get_frame_variables(&self) -> Result<&VariableMapping> {
+        Ok(&self.0.last().context("nothing in the stack")?.variables)
     }
 
     /// Extend the call stack by adding a new frame.
@@ -373,7 +373,7 @@ impl Stack {
 impl Display for Stack {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Some(first) = self.0.last() else {
-            return write!(f, "<Empty Stack>")
+            return write!(f, "<Empty Stack>");
         };
 
         write!(f, "\t>> {}", first.label)?; // print the cause first

@@ -67,8 +67,12 @@ impl Parser {
         let ty = value.for_type().to_err_vec()?;
 
         let Some(value_ty) = ty.supports_index() else {
-			return Err(vec![new_err(value_span, file_name, format!("cannot unpack a value of `{ty}`, which does not support indexing"))])
-		};
+            return Err(vec![new_err(
+                value_span,
+                file_name,
+                format!("cannot unpack a value of `{ty}`, which does not support indexing"),
+            )]);
+        };
 
         if value_ty.contains_raw_type(&TypeLayout::Native(NativeType::Int)) {
             return Err(vec![new_err(
@@ -94,9 +98,10 @@ impl Parser {
 
         for (idx, (ident, ident_span)) in idents.iter_mut().zip(spans).enumerate() {
             let index_as_number: Number = Number::Integer(idx.to_string());
-            let Ok(type_at_idx) = ty.get_output_type_from_index(&Value::Number(index_as_number)) else {
-				return Err(vec![new_err(ident_span, file_name, format!("unpacking index [{idx}] is deemed not safe by the compiler because it cannot guarantee it is a valid index"))]);
-			};
+            let Ok(type_at_idx) = ty.get_output_type_from_index(&Value::Number(index_as_number))
+            else {
+                return Err(vec![new_err(ident_span, file_name, format!("unpacking index [{idx}] is deemed not safe by the compiler because it cannot guarantee it is a valid index"))]);
+            };
 
             if let Some(list_type) = type_at_idx.is_list() {
                 if list_type.must_be_const() && !is_const {

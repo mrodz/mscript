@@ -32,8 +32,8 @@ impl Display for SupportedTypesWrapper {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut iter = self.0.iter();
         let Some(first) = iter.next() else {
-                            return Ok(())
-                        };
+            return Ok(());
+        };
         write!(f, "{first}")?;
 
         for ty in iter {
@@ -548,7 +548,7 @@ impl TypeLayout {
         };
 
         let Native(other) = other.get_type_recursively() else {
-            return None
+            return None;
         };
 
         use NativeType::*;
@@ -647,9 +647,7 @@ impl Parser {
         let mut children = input.children();
 
         let mut child_and_rule = || {
-            let Some(child) = children.next() else {
-                return None
-            };
+            let child = children.next()?;
 
             let rule = child.as_rule();
 

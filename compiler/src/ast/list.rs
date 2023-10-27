@@ -117,7 +117,9 @@ impl ListBound {
                     bail!("Cannot guarantee that this operation will not fail, as it is a non-constexpr index.\nTo allow fallable lookups, explicitly give a spread type to the list:\n```\n\tvar: [int...] = [1, 2, 3]\n```")
                 };
 
-                let ValToUsize::Ok(value) = value.get_usize().context("cannot index with this type")? else {
+                let ValToUsize::Ok(value) =
+                    value.get_usize().context("cannot index with this type")?
+                else {
                     bail!("error converting to numeric index")
                 };
 
@@ -555,7 +557,11 @@ impl Parser {
             let value_ty = value.for_type().to_err_vec()?;
 
             let Some(expected_type_for_value) = last_ty.supports_index() else {
-                return Err(vec![new_err(value_span, file_name, format!("`{last_ty}` does not support indexing, yet here `{value_ty}` is used"))]);
+                return Err(vec![new_err(
+                    value_span,
+                    file_name,
+                    format!("`{last_ty}` does not support indexing, yet here `{value_ty}` is used"),
+                )]);
             };
 
             if !expected_type_for_value

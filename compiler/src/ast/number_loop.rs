@@ -278,8 +278,12 @@ impl Parser {
             return Err(vec![new_err(
                 val_start_span,
                 &input.user_data().get_source_file_name(),
-                format!("applying a step of `{rhs}` to `{start_ty}` produces `{}`", after_step_output.map_or_else(|| Cow::Borrowed("never"), |ty| Cow::Owned(ty.to_string()))),
-            )])
+                format!(
+                    "applying a step of `{rhs}` to `{start_ty}` produces `{}`",
+                    after_step_output
+                        .map_or_else(|| Cow::Borrowed("never"), |ty| Cow::Owned(ty.to_string()))
+                ),
+            )]);
         };
 
         if !start_ty.is_numeric(true) {

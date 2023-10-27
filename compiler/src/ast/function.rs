@@ -324,8 +324,8 @@ impl Parser {
             // We are reading parameters without pushing the function frame,
             // so the parameters MUST never be used. Essentially, we are just
             // syntax checks.
-            let parameters =
-                Self::function_parameters(parameters, false, false, false).map_err(|e| vec![anyhow!(e)])?;
+            let parameters = Self::function_parameters(parameters, false, false, false)
+                .map_err(|e| vec![anyhow!(e)])?;
 
             return Ok(Function::new(
                 Arc::new(parameters),

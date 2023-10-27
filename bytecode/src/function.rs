@@ -325,6 +325,8 @@ impl Function {
             // `context` must have its exit state cleared before continuing the loop.
             let ret: &InstructionExitState = context.poll();
 
+            let old_ptr_location = instruction_ptr;
+
             let mut goto_fn = |offset: isize| -> Result<()> {
                 let new_val = instruction_ptr
                     .checked_add_signed(offset)
@@ -379,10 +381,12 @@ impl Function {
                     context.clear_signal();
                     continue;
                 }
-                InstructionExitState::GotoPopScope(offset, frames_to_pop) => {
+                ref x @ InstructionExitState::GotoPopScope(offset, frames_to_pop) => {
                     goto_fn(*offset)?;
 
                     for _ in 0..*frames_to_pop {
+                        log::trace!("{x:?} at i#{old_ptr_location} of {}, new location is {instruction_ptr}", self.get_qualified_name());
+
                         context.pop_frame();
                     }
 
@@ -390,7 +394,8 @@ impl Function {
                     continue;
                 }
                 InstructionExitState::PopScope => {
-                    if special_scopes.pop().is_some() {
+                    if let Some(x) = special_scopes.pop() {
+                        log::trace!("PopScope `{x:?}` at {instruction_ptr}");
                         context.pop_frame();
                     }
                 }
