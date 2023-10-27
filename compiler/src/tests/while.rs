@@ -2,7 +2,8 @@ use crate::eval;
 
 #[test]
 fn while_loop() {
-    eval(r#"
+    eval(
+        r#"
         i = 0
 
         random_call = fn() -> bool {
@@ -16,12 +17,15 @@ fn while_loop() {
         }
     
         assert i == 9
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 }
 
 #[test]
 fn continue_skip() {
-    eval(r#"
+    eval(
+        r#"
         i = 0
         while i < 5 {
             i = i + 1
@@ -29,12 +33,15 @@ fn continue_skip() {
         }
 
         assert i == 5
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 }
 
 #[test]
 fn break_skip() {
-    eval(r#"
+    eval(
+        r#"
         i = 0
         while i < 5 {
             i = i + 1
@@ -42,6 +49,7 @@ fn break_skip() {
         }
 
         assert i == 1
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 }
-

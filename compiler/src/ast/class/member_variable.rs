@@ -89,9 +89,9 @@ impl Parser {
         };
 
         let Some(ty_node) = children.next() else {
-			let var_name = ident.name();
-			return Err(vec![new_err(input.as_span(), &input.user_data().get_file_name(), format!("member variables of a class require an explicit type (hint: change `{var_name}` to `{var_name}: type`", ))]);
-		};
+            let var_name = ident.name();
+            return Err(vec![new_err(input.as_span(), &input.user_data().get_file_name(), format!("member variables of a class require an explicit type (hint: change `{var_name}` to `{var_name}: type`", ))]);
+        };
 
         let ty = Self::r#type(ty_node).to_err_vec()?;
 

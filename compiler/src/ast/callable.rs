@@ -78,7 +78,11 @@ impl Compile for Callable<'_> {
             state.free_many_temporary_registers(register_count);
         }
 
-        let CallableDestination::Standard { load_instruction, self_register } = &self.destination else {
+        let CallableDestination::Standard {
+            load_instruction,
+            self_register,
+        } = &self.destination
+        else {
             // let CallableDestination::ToSelf { return_type }
             args_init.push(instruction!(call_self));
 

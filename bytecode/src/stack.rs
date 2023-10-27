@@ -373,7 +373,7 @@ impl Stack {
 impl Display for Stack {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Some(first) = self.0.last() else {
-            return write!(f, "<Empty Stack>")
+            return write!(f, "<Empty Stack>");
         };
 
         write!(f, "\t>> {}", first.label)?; // print the cause first

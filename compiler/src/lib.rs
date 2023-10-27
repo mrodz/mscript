@@ -196,7 +196,12 @@ pub(crate) fn seal_compiled_items(
     let mut file_builder = MScriptFileBuilder::new(output_path_owned);
 
     for compiled_item in compiled_items.into_iter() {
-        let CompiledItem::Function { id, content: Some(content), .. } = compiled_item else {
+        let CompiledItem::Function {
+            id,
+            content: Some(content),
+            ..
+        } = compiled_item
+        else {
             bail!("Encountered a non-function when packaging compiled items: {compiled_item:?}");
         };
 

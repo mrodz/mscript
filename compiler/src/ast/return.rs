@@ -17,8 +17,8 @@ pub(crate) struct ReturnStatement(Option<Value>);
 impl Compile for ReturnStatement {
     fn compile(&self, state: &CompilationState) -> Result<Vec<super::CompiledItem>> {
         let Some(ref return_value) = self.0 else {
-			return Ok(vec![instruction!(ret)])
-		};
+            return Ok(vec![instruction!(ret)]);
+        };
 
         let mut value_init = return_value.compile(state)?;
         value_init.push(instruction!(ret));
@@ -59,19 +59,19 @@ impl Parser {
             let expected_return_type = input.user_data().get_return_type();
 
             if let Some(expected_return_type) = expected_return_type.get_type() {
-				// #0
-				return Err(vec![new_err(
-					input.as_span(),
-					&input.user_data().get_source_file_name(),
-					format!(
+                // #0
+                return Err(vec![new_err(
+                    input.as_span(),
+                    &input.user_data().get_source_file_name(),
+                    format!(
 						"this function was expected to return {expected_return_type}, but no value was supplied"
-					)
-				)])
-			} else {
-				// #4
-				return Ok(ReturnStatement(None))
-			}
-		};
+					),
+                )]);
+            } else {
+                // #4
+                return Ok(ReturnStatement(None));
+            }
+        };
 
         let value = Self::value(value_node)?;
 
@@ -81,15 +81,15 @@ impl Parser {
         let expected_return_type = input.user_data().get_return_type();
 
         let Some(expected_return_type) = expected_return_type.get_type() else {
-			// #3
-			return Err(vec![new_err(
-				input.as_span(),
-				&input.user_data().get_source_file_name(),
-				format!(
+            // #3
+            return Err(vec![new_err(
+                input.as_span(),
+                &input.user_data().get_source_file_name(),
+                format!(
 					"this function did not expect to return a value, but {supplied_type} was supplied"
-				)
-			)])
-		};
+				),
+            )]);
+        };
 
         let class_type = input.user_data().get_type_of_executing_class();
 

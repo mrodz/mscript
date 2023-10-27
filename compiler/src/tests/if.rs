@@ -2,7 +2,8 @@ use crate::eval;
 
 #[test]
 fn if_statement() {
-    eval(r#"
+    eval(
+        r#"
         a = 10
 
         if true {
@@ -16,12 +17,15 @@ fn if_statement() {
         }
 
         assert a == 10
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 }
 
 #[test]
 fn if_statement_in_function() {
-    eval(r#"
+    eval(
+        r#"
         b = 50
         const C = 33
         do_something = fn() {
@@ -43,12 +47,15 @@ fn if_statement_in_function() {
 
         do_something()
 
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 }
 
 #[test]
 fn nesting() {
-    eval(r#"
+    eval(
+        r#"
         if true {
             if false {
                 assert false
@@ -66,12 +73,15 @@ fn nesting() {
         } else {
             assert false
         }
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 }
 
 #[test]
 fn if_else_inside_numeric_loop() {
-    eval(r#"
+    eval(
+        r#"
         fizz_buzz = fn(input: int) -> str? {
             result: str? = nil
     
@@ -98,12 +108,15 @@ fn if_else_inside_numeric_loop() {
         }
 
         assert result_buffer == "12Fizz4BuzzFizz78FizzBuzz11Fizz1314FizzBuzz"
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 }
 
 #[test]
 fn if_else_inside_while_loop() {
-    eval(r#"
+    eval(
+        r#"
         fizz_buzz = fn(input: int) -> str? {
             result: str? = nil
     
@@ -134,5 +147,7 @@ fn if_else_inside_while_loop() {
         }
 
         assert result_buffer == "12Fizz4BuzzFizz78FizzBuzz11Fizz1314FizzBuzz"
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 }

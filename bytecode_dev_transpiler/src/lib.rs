@@ -163,7 +163,8 @@ pub fn transpile_file(path: &str, new_path: &str) -> Result<()> {
                     bail!("{name:?} is deprecated and not supported by this interpreter")
                 }
 
-                let Some(instruction_in_byte_fmt) = string_instruction_representation_to_byte(name) else {
+                let Some(instruction_in_byte_fmt) = string_instruction_representation_to_byte(name)
+                else {
                     bail!("{name} is not a valid instruction")
                 };
 
@@ -180,7 +181,9 @@ pub fn transpile_file(path: &str, new_path: &str) -> Result<()> {
                     bail!("{trimmed_end:?} is deprecated and not supported by this interpreter")
                 }
 
-                let Some(instruction_in_byte_fmt) = string_instruction_representation_to_byte(instruction) else {
+                let Some(instruction_in_byte_fmt) =
+                    string_instruction_representation_to_byte(instruction)
+                else {
                     bail!("{instruction} is not a valid instruction")
                 };
 
