@@ -33,7 +33,7 @@
 //!
 //! END LICENSE
 
-use std::{borrow::Cow, rc::Rc};
+use std::{borrow::Cow, rc::Rc, fmt::Display};
 
 use anyhow::{bail, Context, Result};
 use once_cell::sync::Lazy;
@@ -61,24 +61,31 @@ pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
     use pest::pratt_parser::{Assoc::*, Op};
     use Rule::*;
 
+    macro_rules! infix {
+        ($rule:ident) => {
+            Op::infix($rule, Left)
+        };
+    }
+
     PrattParser::new()
-        .op(Op::infix(unwrap, Left))
-        .op(Op::infix(or, Left) | Op::infix(xor, Left))
-        .op(Op::infix(and, Left))
-        .op(Op::infix(lt, Left)
-            | Op::infix(lte, Left)
-            | Op::infix(gt, Left)
-            | Op::infix(gte, Left)
-            | Op::infix(eq, Left)
-            | Op::infix(neq, Left))
+        .op(infix!(unwrap))
+        .op(infix!(or) | infix!(xor))
+        .op(infix!(and))
+        .op(infix!(lt)
+            | infix!(lte)
+            | infix!(gt)
+            | infix!(gte)
+            | infix!(eq)
+            | infix!(neq))
         .op(Op::prefix(not))
-        .op(Op::infix(add, Left) | Op::infix(subtract, Left))
-        .op(Op::infix(multiply, Left) | Op::infix(divide, Left) | Op::infix(modulo, Left))
+        .op(infix!(add) | infix!(subtract))
+        .op(infix!(multiply) | infix!(divide) | infix!(modulo))
         .op(Op::prefix(unary_minus))
         .op(Op::postfix(dot_chain)
             | Op::postfix(list_index)
             | Op::postfix(callable)
             | Op::postfix(dot_chain))
+        .op(infix!(add_assign) | infix!(sub_assign) | infix!(mul_assign) | infix!(div_assign) | infix!(mod_assign))
 });
 
 #[derive(Debug, Clone, PartialEq)]
@@ -98,28 +105,48 @@ pub enum Op {
     Or,
     Xor,
     Unwrap,
+    AddAssign,
+    SubAssign,
+    MulAssign,
+    DivAssign,
+    ModAssign,
+}
+
+impl Display for Op {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.symbol())
+    }
 }
 
 impl Op {
-    pub fn symbol(&self) -> &'static str {
-        use Op::*;
+    pub const fn symbol(&self) -> &'static str {
         match self {
-            Add => "+",
-            Subtract => "-",
-            Multiply => "*",
-            Divide => "/",
-            Modulo => "%",
-            Lt => "<",
-            Lte => "<=",
-            Gt => ">",
-            Gte => ">=",
-            Eq => "==",
-            Neq => "!=",
-            And => "&&",
-            Or => "||",
-            Xor => "^",
-            Unwrap => "?=",
+            Op::Add => "+",
+            Op::Subtract => "-",
+            Op::Multiply => "*",
+            Op::Divide => "/",
+            Op::Modulo => "%",
+            Op::Lt => "<",
+            Op::Lte => "<=",
+            Op::Gt => ">",
+            Op::Gte => ">=",
+            Op::Eq => "==",
+            Op::Neq => "!=",
+            Op::And => "&&",
+            Op::Or => "||",
+            Op::Xor => "^",
+            Op::Unwrap => "?=",
+            Op::AddAssign => "+=",
+            Op::SubAssign => "-=",
+            Op::MulAssign => "*=",
+            Op::DivAssign => "/=",
+            Op::ModAssign => "%=",
         }
+    }
+
+    pub const fn is_op_assign(&self) -> bool {
+        use Op::*;
+        matches!(self, AddAssign | SubAssign | MulAssign | DivAssign | ModAssign)
     }
 }
 
@@ -245,6 +272,16 @@ impl IntoType for Expr {
         match self {
             Expr::Value(val) => val.for_type(),
             Expr::BinOp { lhs, op, rhs } => {
+                if op.is_op_assign() {
+                    let Expr::Value(Value::Ident(ident)) = lhs.as_ref() else {
+                        unreachable!()
+                    };
+
+                    if ident.is_const() {
+                        bail!("cannot reassign using {op} to {}, which is const", ident.name())
+                    }
+                }
+
                 let lhs = lhs.for_type()?;
                 let rhs = rhs.for_type()?;
 
@@ -360,40 +397,49 @@ fn compile_depth(
 
             Ok(eval)
         }
-        Expr::BinOp { lhs, op, rhs } => {
-            let mut lhs = compile_depth(lhs, state, state.poll_temporary_register())?;
+        Expr::BinOp { lhs: lhs_raw, op, rhs } => {
+            let mut lhs = compile_depth(lhs_raw, state, state.poll_temporary_register())?;
             let mut rhs = compile_depth(rhs, state, state.poll_temporary_register())?;
 
-            lhs.reserve(rhs.len() + 4);
+            match op {
+                Op::And => {
+                    let rhs_len = rhs.len() + 3;
+                    lhs.push(instruction!(store_skip depth "0" rhs_len));
+                    lhs.append(&mut rhs);
+                    lhs.push(instruction!(load_fast depth));
+                    lhs.push(instruction!(bin_op "&&"));
+    
+                    return Ok(lhs);
+                }
+                Op::Or => {
+                    let rhs_len = rhs.len() + 3;
+                    lhs.push(instruction!(store_skip depth "1" rhs_len));
+                    lhs.append(&mut rhs);
+                    lhs.push(instruction!(load_fast depth));
+                    lhs.push(instruction!(bin_op "||"));
+    
+                    return Ok(lhs);
+                }
+                Op::AddAssign | Op::SubAssign | Op::MulAssign | Op::DivAssign | Op::ModAssign => {
+                    let Expr::Value(Value::Ident(ident)) = lhs_raw.as_ref() else {
+                        unreachable!()
+                    };
 
-            // let temp_name = depth.repr();
+                    // lhs.push(instruction!(store_fast depth));
+                    rhs.push(instruction!(bin_op_assign (ident.name()) (op.symbol())));
 
-            // store the initialization to the "second part"
-            if op == &Op::And {
-                let rhs_len = rhs.len() + 3;
-                lhs.push(instruction!(store_skip depth "0" rhs_len));
-                lhs.append(&mut rhs);
-                lhs.push(instruction!(load_fast depth));
-                lhs.push(instruction!(bin_op "&&"));
+                    return Ok(rhs)
+                }
+                _ => {
+                    // store the initialization to the "second part", prep for bin_op
 
-                return Ok(lhs);
+                    lhs.push(instruction!(store_fast depth));
+                    lhs.append(&mut rhs);
+                    lhs.push(instruction!(load_fast depth));
+                    lhs.push(instruction!(fast_rev2));        
+                }
             }
-
-            if op == &Op::Or {
-                let rhs_len = rhs.len() + 3;
-                lhs.push(instruction!(store_skip depth "1" rhs_len));
-                lhs.append(&mut rhs);
-                lhs.push(instruction!(load_fast depth));
-                lhs.push(instruction!(bin_op "||"));
-
-                return Ok(lhs);
-            }
-
-            lhs.push(instruction!(store_fast depth));
-            lhs.append(&mut rhs);
-            lhs.push(instruction!(load_fast depth));
-            lhs.push(instruction!(fast_rev2));
-
+            
             match op {
                 Op::Eq => lhs.push(instruction!(equ)),
                 Op::Neq => lhs.push(instruction!(neq)),
@@ -454,6 +500,7 @@ fn parse_expr(
     pairs: Pairs<Rule>,
     user_data: Rc<AssocFileData>,
 ) -> Result<Expr, Vec<anyhow::Error>> {
+    log::debug!("parse_expr");
     let maybe_expr = PRATT_PARSER
         .map_primary(
             |primary| -> Result<(Expr, Option<Span>), Vec<anyhow::Error>> {
@@ -540,6 +587,11 @@ fn parse_expr(
                 Rule::or => Op::Or,
                 Rule::xor => Op::Xor,
                 Rule::unwrap => Op::Unwrap,
+                Rule::add_assign => Op::AddAssign,
+                Rule::sub_assign => Op::SubAssign,
+                Rule::mul_assign => Op::MulAssign,
+                Rule::div_assign => Op::DivAssign,
+                Rule::mod_assign => Op::ModAssign,
                 rule => unreachable!("Expr::parse expected infix operation, found {:?}", rule),
             };
 

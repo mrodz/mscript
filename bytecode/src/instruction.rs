@@ -135,6 +135,7 @@ pub mod implementations {
     use crate::variables::HeapPrimitive;
     use crate::{bool, function, int, object, optional, vector};
     use std::collections::HashMap;
+    use std::ops::Deref;
     use std::rc::Rc;
 
     instruction! {
@@ -243,6 +244,50 @@ pub mod implementations {
             }.context("invalid binary operation")?;
 
             ctx.clear_and_set_stack(result);
+
+            Ok(())
+        }
+
+        bin_op_assign(ctx, args) {
+
+            let name = args.first().context("you must supply a name")?;
+            let op = args.get(1).context("Expected an operation [+=,-=,*=,/=,%=]")?;
+
+            let bundle = ctx.load_variable(name).with_context(|| format!("{name} has not been mapped"))?;
+            let value: &mut Primitive = ctx.get_last_op_item_mut().context("there must be a value at the top of the stack for a `bin_op_assign`")?;
+
+            let result = {
+                let view = bundle.borrow();
+                let view = view.deref();
+
+                match op.as_str() {
+                    "+=" => {
+                        let no_mut: &Primitive = value;
+                        (no_mut + &view.0)?
+                    }
+                    "-=" => {
+                        let no_mut: &Primitive = value;
+                        (no_mut - &view.0)?
+                    }
+                    "*=" => {
+                        let no_mut: &Primitive = value;
+                        (no_mut * &view.0)?
+                    }
+                    "/=" => {
+                        let no_mut: &Primitive = value;
+                        (no_mut / &view.0)?
+                    }
+                    "%=" => {
+                        let no_mut: &Primitive = value;
+                        (no_mut % &view.0)?
+                    }
+                    _ => bail!("unknown assignment operation: {op}")
+                }
+            };
+
+            let mut view = bundle.borrow_mut();
+            view.0 = result.clone(); 
+            *value = result;
 
             Ok(())
         }

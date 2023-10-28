@@ -6,6 +6,15 @@ impl std::ops::Mul for Primitive {
     type Output = Result<Primitive>;
 
     fn mul(self, rhs: Self) -> Self::Output {
+        &self * &rhs
+    }
+}
+
+
+impl std::ops::Mul for &Primitive {
+    type Output = Result<Primitive>;
+
+    fn mul(self, rhs: Self) -> Self::Output {
         let (t1, t2) = (&self, &rhs);
         let math = apply_math_bin_op_if_applicable!(t1 * t2);
 
@@ -28,14 +37,13 @@ impl std::ops::Mul for Primitive {
         }
 
         Ok(match (self, rhs) {
-            (Str(x), Int(y)) => string!(x.repeat(y.try_into()?)),
-            (Str(x), BigInt(y)) => string!(x.repeat(y.try_into()?)),
-            (Int(y), Str(x)) => string!(x.repeat(y.try_into()?)),
-            (BigInt(y), Str(x)) => string!(x.repeat(y.try_into()?)),
-
-            (Vector(ref x), Int(y)) => vector!(raw repeat_vec(x.borrow().as_ref(), y.try_into()?)?),
+            (Str(x), Int(y)) => string!(x.repeat((*y).try_into()?)),
+            (Str(x), BigInt(y)) => string!(x.repeat((*y).try_into()?)),
+            (Int(y), Str(x)) => string!(x.repeat((*y).try_into()?)),
+            (BigInt(y), Str(x)) => string!(x.repeat((*y).try_into()?)),
+            (Vector(ref x), Int(y)) => vector!(raw repeat_vec(x.borrow().as_ref(), (*y).try_into()?)?),
             (Vector(ref x), BigInt(y)) => {
-                vector!(raw repeat_vec(x.borrow().as_ref(), y.try_into()?)?)
+                vector!(raw repeat_vec(x.borrow().as_ref(), (*y).try_into()?)?)
             }
             _ => bail!("valid ops: number * number, str * number, vec * number"),
         })

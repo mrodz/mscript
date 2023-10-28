@@ -77,3 +77,30 @@ fn lazy_eval() {
     )
     .unwrap();
 }
+
+#[test]
+fn bin_op_assignment() {
+	eval(r#"
+		a = 7
+
+		print_number = fn(input: int) {
+		
+			assert input == 10
+	
+		} # END print_number
+	
+		print_number(a += 3)
+	
+		assert a == 10
+	"#).unwrap();
+}
+
+#[test]
+#[should_panic = "cannot reassign using += to a, which is const"]
+fn const_bin_op_mod() {
+	eval(r#"
+		const a = 7
+		a += 1
+		assert a == 8
+	"#).unwrap();
+}
