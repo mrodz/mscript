@@ -74,6 +74,10 @@ impl AssocFileData {
         bail!("no loop found")
     }
 
+    pub fn is_at_module_level(&self) -> bool {
+        self.scopes.depth() == 1
+    }
+
     pub fn get_type_from_str(&self, ty: &str) -> TypeSearchResult {
         self.scopes.get_type_from_str(ty)
     }

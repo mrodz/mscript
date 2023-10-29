@@ -14,7 +14,6 @@ use super::variables::Primitive;
 /// Bit fields for variable flags.
 pub(crate) mod flag_constants {
     pub const READ_ONLY: u8 = 0b00000001;
-    pub const PUBLIC: u8 = 0b00000010;
     pub const LOCAL_FRAME_ONLY: u8 = 0b00000100;
     pub const LOOP_VARIABLE: u8 = 0b00001000;
 }
@@ -23,37 +22,23 @@ pub(crate) mod flag_constants {
 pub struct VariableFlags(pub(crate) u8);
 
 impl VariableFlags {
-    #[inline(always)]
-    pub const fn new_public() -> Self {
-        Self(flag_constants::PUBLIC)
-    }
-
-    #[inline(always)]
-    pub fn none() -> Self {
+    pub const fn none() -> Self {
         VariableFlags(0)
     }
 
-    #[inline(always)]
-    pub fn is_read_only(&self) -> bool {
+    pub const fn is_read_only(&self) -> bool {
         self.0 & flag_constants::READ_ONLY == flag_constants::READ_ONLY
     }
 
-    #[inline(always)]
-    pub fn can_update(&self) -> bool {
+    pub const fn can_update(&self) -> bool {
         !self.is_read_only()
     }
 
-    #[inline(always)]
-    pub fn is_public(&self) -> bool {
-        self.0 & flag_constants::PUBLIC == flag_constants::PUBLIC
-    }
-
-    #[inline(always)]
-    pub fn is_exclusive_to_frame(&self) -> bool {
+    pub const fn is_exclusive_to_frame(&self) -> bool {
         self.0 & flag_constants::LOCAL_FRAME_ONLY == flag_constants::LOCAL_FRAME_ONLY
     }
 
-    pub fn is_loop_variable(&self) -> bool {
+    pub const fn is_loop_variable(&self) -> bool {
         self.0 & flag_constants::LOOP_VARIABLE == flag_constants::LOOP_VARIABLE
     }
 }
@@ -64,12 +49,6 @@ impl Debug for VariableFlags {
 
         if self.0 & flag_constants::READ_ONLY == flag_constants::READ_ONLY {
             buffer.push("READ_ONLY")
-        }
-
-        if self.0 & flag_constants::PUBLIC == flag_constants::PUBLIC {
-            buffer.push("PUBLIC")
-        } else {
-            buffer.push("PRIVATE")
         }
 
         write!(f, "{buffer:?}")
