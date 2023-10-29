@@ -915,15 +915,9 @@ pub mod implementations {
                 bail!("`export_name` requires a name")
             };
 
-            if ctx.stack_size() != 1 {
-                bail!("`export_name` can only store a single item (found: {:?})", ctx.get_local_operating_stack());
-            }
+            let pair = ctx.load_local(name).with_context(|| format!("`{name}` is not in scope and cannot be exported"))?;
 
-            let arg = ctx.pop().unwrap();
-
-            let arg = unsafe { arg.move_out_of_heap_primitive() };
-
-            let pair = Rc::new(RefCell::new((arg, VariableFlags::new_public())));
+            log::trace!("exporting {name} = {pair:?}");
 
             ctx.register_export(name.to_owned(), pair)?;
 

@@ -7,7 +7,7 @@ use std::hash::Hash;
 use anyhow::{bail, Context, Result};
 use once_cell::sync::Lazy;
 
-use crate::parser::{AssocFileData, Node, Parser};
+use crate::parser::{AssocFileData, Node, Parser, Rule};
 
 use super::r#type::TypeLayout;
 use super::{new_err, CompilationState, Compile, CompiledItem, Dependencies, Dependency};
@@ -220,6 +220,8 @@ impl Ident {
 
 impl Parser {
     pub fn ident(input: Node) -> Result<Ident> {
+        debug_assert_eq!(input.as_rule(), Rule::ident);
+    
         let name = input.as_str();
 
         if KEYWORDS.contains(name) {
