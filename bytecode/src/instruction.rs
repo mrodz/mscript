@@ -861,7 +861,7 @@ pub mod implementations {
                 if let Some(new_primitive) = optional {
                     *primitive = *new_primitive.clone();
                 } else {
-                    let span = args.get(0).map(String::as_str);
+                    let span = args.first().map(String::as_str);
                     bail!("LOGIC ERROR IN CODE >> {} >> unwrap of `nil`", span.unwrap_or("<no details>"));
                 }
             }
@@ -874,7 +874,7 @@ pub mod implementations {
                 bail!("`jmp_not_nil` requires a primitive at the top of the local operating stack");
             };
 
-            let Some(lines_to_jump) = args.get(0) else {
+            let Some(lines_to_jump) = args.first() else {
                 bail!("`jmp_not_nil` requires lines_to_jump");
             };
 
@@ -1131,7 +1131,7 @@ pub mod implementations {
                 bail!("`lookup` requires a single item on the stack (found {:?})", ctx.get_local_operating_stack());
             }
 
-            let Some(name) = args.get(0) else {
+            let Some(name) = args.first() else {
                 bail!("`lookup` requires a name argument");
             };
 
@@ -1148,7 +1148,7 @@ pub mod implementations {
         }
 
         ld_self(ctx, args) {
-            let Some(name) = args.get(0) else {
+            let Some(name) = args.first() else {
                 bail!("`ld_self` requires a name argument");
             };
 
@@ -1340,7 +1340,7 @@ pub mod implementations {
 
     instruction! {
         call_lib(ctx, args) {
-            let (Some(lib_name), Some(func_name)) = (args.get(0), args.get(1)) else {
+            let (Some(lib_name), Some(func_name)) = (args.first(), args.get(1)) else {
                 bail!("expected syntax: call_lib path/to/lib.dll function_name")
             };
 
