@@ -21,9 +21,9 @@ impl std::ops::Add for &Primitive {
         }
 
         Ok(match (self, rhs) {
-            (Str(x), Str(y)) => string!(x.to_owned() + &y),
+            (Str(x), Str(y)) => string!(x.to_owned() + y),
             (Str(x), y) => string!(x.to_owned() + &y.to_string()),
-            (x, Str(y)) => string!(x.to_string() + &y),
+            (x, Str(y)) => string!(x.to_string() + y),
             (Vector(x), Vector(y)) => {
                 let mut x = Vec::clone(x.borrow().as_ref());
 

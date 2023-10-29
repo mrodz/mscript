@@ -1,0 +1,18 @@
+function __module__
+	int 1
+	store_fast i
+	int 10
+	load_fast i
+	fast_rev2
+	bin_op <
+	while_loop 8
+	load i
+	printn *
+	void
+	int 1
+	bin_op_assign i +=
+	void
+	jmp_pop -9
+	delete_name_scoped i
+	ret
+end

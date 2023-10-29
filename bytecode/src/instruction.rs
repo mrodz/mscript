@@ -223,6 +223,8 @@ pub mod implementations {
                 bail!("bin_op requires two items on the local operating stack (found {:?})", ctx.get_local_operating_stack())
             };
 
+            log::debug!("{left} {symbols} {right}");
+
             let left = unsafe { left.move_out_of_heap_primitive() };
             let right = unsafe { right.move_out_of_heap_primitive() };
 
@@ -263,23 +265,23 @@ pub mod implementations {
                 match op.as_str() {
                     "+=" => {
                         let no_mut: &Primitive = value;
-                        (no_mut + &view.0)?
+                        (&view.0 + no_mut)?
                     }
                     "-=" => {
                         let no_mut: &Primitive = value;
-                        (no_mut - &view.0)?
+                        (&view.0 - no_mut)?
                     }
                     "*=" => {
                         let no_mut: &Primitive = value;
-                        (no_mut * &view.0)?
+                        (&view.0 * no_mut)?
                     }
                     "/=" => {
                         let no_mut: &Primitive = value;
-                        (no_mut / &view.0)?
+                        (&view.0 / no_mut)?
                     }
                     "%=" => {
                         let no_mut: &Primitive = value;
-                        (no_mut % &view.0)?
+                        (&view.0 % no_mut)?
                     }
                     _ => bail!("unknown assignment operation: {op}")
                 }
@@ -1142,8 +1144,6 @@ pub mod implementations {
             let primitive = ctx.pop().unwrap();
 
             let result: Rc<RefCell<(Primitive, VariableFlags)>> = primitive.lookup(name).with_context(|| format!("`{name}` does not exist on `{primitive:?}`"))?;
-
-            // println!("LOOKING UP ON: {primitive:?}\nLOOKUP RETURNED: {result:?}");
 
             let heap_primitive = Primitive::HeapPrimitive(HeapPrimitive::new_lookup_view(result));
 

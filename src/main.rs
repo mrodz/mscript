@@ -142,7 +142,9 @@ fn main() -> Result<()> {
                     unreachable!();
                 };
 
-                println!("Running...\n");
+                if verbose {
+                    println!("Running...\n");
+                }
 
                 stdout().flush()?;
 

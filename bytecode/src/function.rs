@@ -10,6 +10,7 @@ use std::fmt::{Debug, Display};
 use std::path::Path;
 use std::rc::{Rc, Weak};
 
+use crate::compilation_bridge::raw_byte_instruction_to_string_representation;
 use crate::context::{Ctx, SpecialScope};
 use crate::file::MScriptFile;
 use crate::instruction::{run_instruction, Instruction};
@@ -310,8 +311,6 @@ impl Function {
             run_instruction(&mut context, instruction)
                 .context("failed to run instruction")
                 .with_context(|| {
-                    use crate::compilation_bridge::raw_byte_instruction_to_string_representation;
-
                     let instruction_as_str =
                         raw_byte_instruction_to_string_representation(instruction.id)
                             .unwrap_or(Cow::Borrowed("Unknown Instruction"));
@@ -385,7 +384,7 @@ impl Function {
                     goto_fn(*offset)?;
 
                     for _ in 0..*frames_to_pop {
-                        log::trace!("{x:?} at i#{old_ptr_location} of {}, new location is {instruction_ptr}", self.get_qualified_name());
+                        log::trace!("{x:?} at i#{old_ptr_location} of {}, new location is {instruction_ptr} ({:?})", self.get_qualified_name(), raw_byte_instruction_to_string_representation(self.instructions[instruction_ptr].id));
 
                         context.pop_frame();
                     }
