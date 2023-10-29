@@ -135,6 +135,7 @@ pub mod implementations {
     use crate::variables::HeapPrimitive;
     use crate::{bool, function, int, object, optional, vector};
     use std::collections::HashMap;
+    use std::ops::Deref;
     use std::rc::Rc;
 
     instruction! {
@@ -222,6 +223,8 @@ pub mod implementations {
                 bail!("bin_op requires two items on the local operating stack (found {:?})", ctx.get_local_operating_stack())
             };
 
+            log::debug!("{left} {symbols} {right}");
+
             let left = unsafe { left.move_out_of_heap_primitive() };
             let right = unsafe { right.move_out_of_heap_primitive() };
 
@@ -243,6 +246,50 @@ pub mod implementations {
             }.context("invalid binary operation")?;
 
             ctx.clear_and_set_stack(result);
+
+            Ok(())
+        }
+
+        bin_op_assign(ctx, args) {
+
+            let name = args.first().context("you must supply a name")?;
+            let op = args.get(1).context("Expected an operation [+=,-=,*=,/=,%=]")?;
+
+            let bundle = ctx.load_variable(name).with_context(|| format!("{name} has not been mapped"))?;
+            let value: &mut Primitive = ctx.get_last_op_item_mut().context("there must be a value at the top of the stack for a `bin_op_assign`")?;
+
+            let result = {
+                let view = bundle.borrow();
+                let view = view.deref();
+
+                match op.as_str() {
+                    "+=" => {
+                        let no_mut: &Primitive = value;
+                        (&view.0 + no_mut)?
+                    }
+                    "-=" => {
+                        let no_mut: &Primitive = value;
+                        (&view.0 - no_mut)?
+                    }
+                    "*=" => {
+                        let no_mut: &Primitive = value;
+                        (&view.0 * no_mut)?
+                    }
+                    "/=" => {
+                        let no_mut: &Primitive = value;
+                        (&view.0 / no_mut)?
+                    }
+                    "%=" => {
+                        let no_mut: &Primitive = value;
+                        (&view.0 % no_mut)?
+                    }
+                    _ => bail!("unknown assignment operation: {op}")
+                }
+            };
+
+            let mut view = bundle.borrow_mut();
+            view.0 = result.clone(); 
+            *value = result;
 
             Ok(())
         }
@@ -1097,8 +1144,6 @@ pub mod implementations {
             let primitive = ctx.pop().unwrap();
 
             let result: Rc<RefCell<(Primitive, VariableFlags)>> = primitive.lookup(name).with_context(|| format!("`{name}` does not exist on `{primitive:?}`"))?;
-
-            // println!("LOOKING UP ON: {primitive:?}\nLOOKUP RETURNED: {result:?}");
 
             let heap_primitive = Primitive::HeapPrimitive(HeapPrimitive::new_lookup_view(result));
 

@@ -2,13 +2,22 @@ use crate::variables::Primitive::{self, *};
 use crate::*;
 use anyhow::{bail, Result};
 
+
 impl std::ops::Div for Primitive {
+    type Output = Result<Primitive>;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        &self / &rhs
+    }
+}
+
+impl std::ops::Div for &Primitive {
     type Output = Result<Primitive>;
 
     fn div(self, rhs: Self) -> Self::Output {
         match rhs {
             Int(0) | BigInt(0) => bail!("/ by 0"),
-            Float(f) if f == 0.0 => bail!("/ by 0"),
+            Float(f) if f == &0.0 => bail!("/ by 0"),
             _ => (),
         }
 

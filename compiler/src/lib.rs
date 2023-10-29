@@ -347,27 +347,14 @@ pub fn compile(
 
     logger.wrap_in_spinner(format!("Optimizing ({path_str}):"), || Ok(()))?;
 
+    if verbose {
+        println!("\n\nCompiled in {:?}", start_time.elapsed());
+    }
+
     if output_to_file {
         perform_file_io(&output_path, &logger, function_buffer, output_bin).to_err_vec()?;
-
-        if verbose {
-            print!("\n\n");
-        }
-
-        println!(
-            "Compiled in {:?}{}",
-            start_time.elapsed(),
-            if verbose { " ✔️" } else { "" }
-        );
-
         Ok(None)
     } else {
-        println!(
-            "Compiled in {:?}{}",
-            start_time.elapsed(),
-            if verbose { " ✔️" } else { "" }
-        );
-
         Ok(Some(
             seal_compiled_items(&output_path, function_buffer).to_err_vec()?,
         ))

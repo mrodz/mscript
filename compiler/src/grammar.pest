@@ -34,12 +34,20 @@ math_postfix = _{ dot_chain | callable | list_index }
 math_atom = _{ math_prefix? ~ math_primary ~ math_postfix? }
 math_expr = { math_atom ~ (bin_op ~ math_atom)* }
 
-bin_op = _{ add | subtract | multiply | divide | modulo | lte | gte | lt | gt | eq | neq | and | or | xor }
+bin_op = _{ op_assign | add | subtract | multiply | divide | modulo | lte | gte | lt | gt | eq | neq | and | or | xor }
 add = { "+" }
 subtract = { "-" }
 multiply = { "*" }
 divide = { "/" }
 modulo = { "%" }
+
+op_assign = _{ add_assign | sub_assign | mul_assign | div_assign | mod_assign }
+
+add_assign = { "+=" }
+sub_assign = { "-=" }
+mul_assign = { "*=" }
+div_assign = { "/=" }
+mod_assign = { "%=" }
 
 lt = { "<" }
 gt = { ">" }
@@ -130,7 +138,7 @@ continue_statement = { "continue" }
 break_statement = { "break" }
 
 print_statement = { "print " ~ value }
-assertion = { "assert" ~  value }
+assertion = { "assert" ~ value }
 
 return_statement = { "return " ~ value? }
 
@@ -144,7 +152,7 @@ class_body = { "{" ~ class_feature*  ~ "}" }
 
 class = { "class" ~ ident ~ class_body }
 
-declaration = { class | reassignment | assignment | unwrap_expr | value_unwrap | print_statement | assertion | return_statement | continue_statement | break_statement | if_statement | while_loop | number_loop | math_expr }
+declaration = { class | reassignment | assignment | value_unwrap | print_statement | assertion | return_statement | continue_statement | break_statement | if_statement | while_loop | number_loop | value }
 
 file = {
     SOI ~

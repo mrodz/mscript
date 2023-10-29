@@ -527,6 +527,15 @@ impl TypeLayout {
     pub fn get_output_type(&self, other: &Self, op: &Op) -> Option<TypeLayout> {
         use TypeLayout::*;
 
+        match op {
+            Op::AddAssign => return self.get_output_type(other, &Op::Add),
+            Op::SubAssign => return self.get_output_type(other, &Op::Subtract),
+            Op::MulAssign => return self.get_output_type(other, &Op::Multiply),
+            Op::DivAssign => return self.get_output_type(other, &Op::Divide),
+            Op::ModAssign => return self.get_output_type(other, &Op::Modulo),
+            _ => (),
+        }
+
         if self == other && matches!(op, Eq | Neq) {
             return Some(BOOL_TYPE.to_owned());
         }

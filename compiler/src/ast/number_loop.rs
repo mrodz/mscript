@@ -108,6 +108,10 @@ impl Compile for NumberLoop {
 
         // ^^^ done with bounds init
 
+        let pre_condition_len = result.len();
+
+        // START Condition
+
         result.push(instruction!(load_fast loop_identity));
         result.push(instruction!(load_fast end_loop_register));
 
@@ -117,11 +121,15 @@ impl Compile for NumberLoop {
             result.push(instruction!(bin_op "<"))
         }
 
+        // END Condition
+
+        let condition_len: isize = (result.len() - pre_condition_len).try_into()?;
+
         // ^^^ condition
 
         let mut body_compiled = self.body.compile(state)?;
 
-        let mut step_compiled = vec![instruction!(load loop_identity)];
+        let mut step_compiled = vec![];
 
         if let Some(ref step) = self.step {
             step_compiled.append(&mut step.compile(state)?)
@@ -132,8 +140,8 @@ impl Compile for NumberLoop {
             })
         }
 
-        step_compiled.push(instruction!(bin_op "+"));
-        step_compiled.push(instruction!(store loop_identity));
+        // step_compiled.push(instruction!(bin_op "+"));
+        step_compiled.push(instruction!(bin_op_assign loop_identity "+="));
 
         let step_compiled_len = step_compiled.len();
 
@@ -145,9 +153,8 @@ impl Compile for NumberLoop {
         let offset_to_end_of_loop: isize = body_len + LENGTH_OF_JMP_INSTRUCTION_AND_SPACE;
 
         const LENGTH_OF_WHILE_INSTRUCTION: isize = 1;
-        const LENGTH_OF_CONDITION: isize = 3;
         let offset_to_start_of_loop: isize =
-            -LENGTH_OF_WHILE_INSTRUCTION - LENGTH_OF_CONDITION - body_len;
+            -LENGTH_OF_WHILE_INSTRUCTION - condition_len - body_len;
 
         result.push(instruction!(while_loop offset_to_end_of_loop));
         body_compiled.push(instruction!(jmp_pop offset_to_start_of_loop));

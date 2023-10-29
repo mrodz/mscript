@@ -6,9 +6,17 @@ impl std::ops::Rem for Primitive {
     type Output = Result<Primitive>;
 
     fn rem(self, rhs: Self) -> Self::Output {
+        &self % &rhs
+    }
+}
+
+impl std::ops::Rem for &Primitive {
+    type Output = Result<Primitive>;
+
+    fn rem(self, rhs: Self) -> Self::Output {
         match rhs {
             Int(0) | BigInt(0) => bail!("% by 0"),
-            Float(f) if f == 0.0 => bail!("% by 0"),
+            Float(f) if f == &0.0 => bail!("% by 0"),
             _ => (),
         }
 

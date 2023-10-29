@@ -10,15 +10,15 @@ use crate::{
 
 use super::{
     class::Class, Assertion, Assignment, Break, CompilationState, Compile, CompiledItem, Continue,
-    Dependencies, Dependency, Expr, IfStatement, NumberLoop, PrintStatement, Reassignment,
-    ReturnStatement, Unwrap, UnwrapExpr, WhileLoop,
+    Dependencies, Dependency, IfStatement, NumberLoop, PrintStatement, Reassignment,
+    ReturnStatement, Unwrap, WhileLoop, Value,
 };
 
 #[derive(Debug)]
 pub(crate) enum Declaration {
     Assignment(Assignment),
     Reassignment(Reassignment),
-    Expr(Expr),
+    // Expr(Expr),
     PrintStatement(PrintStatement),
     ReturnStatement(ReturnStatement),
     IfStatement(IfStatement),
@@ -28,15 +28,16 @@ pub(crate) enum Declaration {
     Break(Break),
     Assertion(Assertion),
     Class(Class),
-    UnwrapExpr(UnwrapExpr),
+    // UnwrapExpr(UnwrapExpr),
     ValueUnwrap(Unwrap),
+    Value(Value),
 }
 
 impl Dependencies for Declaration {
     fn supplies(&self) -> Vec<Dependency> {
         match self {
             Self::Assignment(assignment) => assignment.supplies(),
-            Self::Expr(expr) => expr.supplies(),
+            // Self::Expr(expr) => expr.supplies(),
             Self::PrintStatement(print_statement) => print_statement.supplies(),
             Self::ReturnStatement(return_statement) => return_statement.supplies(),
             Self::IfStatement(if_statement) => if_statement.supplies(),
@@ -44,7 +45,8 @@ impl Dependencies for Declaration {
             Self::NumberLoop(number_loop) => number_loop.supplies(),
             Self::Assertion(assertion) => assertion.supplies(),
             Self::Class(class) => class.supplies(),
-            Self::UnwrapExpr(unwrap_expr) => unwrap_expr.supplies(),
+            Self::Value(value) => value.supplies(),
+            // Self::UnwrapExpr(unwrap_expr) => unwrap_expr.supplies(),
             Self::ValueUnwrap(value_unwrap) => value_unwrap.supplies(),
             Self::Reassignment(reassignment) => reassignment.supplies(),
             Self::Continue(_) | Self::Break(_) => vec![],
@@ -54,7 +56,7 @@ impl Dependencies for Declaration {
     fn dependencies(&self) -> Vec<Dependency> {
         match self {
             Self::Assignment(assignment) => assignment.net_dependencies(),
-            Self::Expr(expr) => expr.net_dependencies(),
+            // Self::Expr(expr) => expr.net_dependencies(),
             Self::PrintStatement(print_statement) => print_statement.net_dependencies(),
             Self::ReturnStatement(return_statement) => return_statement.net_dependencies(),
             Self::IfStatement(if_statement) => if_statement.net_dependencies(),
@@ -63,7 +65,8 @@ impl Dependencies for Declaration {
             Self::Reassignment(reassignment) => reassignment.net_dependencies(),
             Self::Assertion(assertion) => assertion.net_dependencies(),
             Self::Class(class) => class.net_dependencies(),
-            Self::UnwrapExpr(unwrap_expr) => unwrap_expr.net_dependencies(),
+            Self::Value(value) => value.net_dependencies(),
+            // Self::UnwrapExpr(unwrap_expr) => unwrap_expr.net_dependencies(),
             Self::ValueUnwrap(value_unwrap) => value_unwrap.net_dependencies(),
             Self::Continue(_) | Self::Break(_) => vec![],
         }
@@ -74,11 +77,11 @@ impl Compile for Declaration {
     fn compile(&self, state: &CompilationState) -> Result<Vec<CompiledItem>> {
         match self {
             Self::PrintStatement(x) => x.compile(state),
-            Self::Expr(x) => {
-                let mut expr_compiled = x.compile(state)?;
-                expr_compiled.push(instruction!(void));
-                Ok(expr_compiled)
-            }
+            // Self::Expr(x) => {
+            //     let mut expr_compiled = x.compile(state)?;
+            //     expr_compiled.push(instruction!(void));
+            //     Ok(expr_compiled)
+            // }
             Self::Assignment(x) => x.compile(state),
             Self::Reassignment(x) => x.compile(state),
             Self::ReturnStatement(x) => x.compile(state),
@@ -89,11 +92,16 @@ impl Compile for Declaration {
             Self::NumberLoop(x) => x.compile(state),
             Self::Assertion(x) => x.compile(state),
             Self::Class(x) => x.compile(state),
-            Self::UnwrapExpr(x) => {
-                let mut unwrap_expr_compiled = x.compile(state)?;
-                unwrap_expr_compiled.push(instruction!(void));
-                Ok(unwrap_expr_compiled)
+            Self::Value(x) => {
+                let mut result = x.compile(state)?;
+                result.push(instruction!(void));
+                Ok(result)
             }
+            // Self::UnwrapExpr(x) => {
+            //     let mut unwrap_expr_compiled = x.compile(state)?;
+            //     unwrap_expr_compiled.push(instruction!(void));
+            //     Ok(unwrap_expr_compiled)
+            // }
             Self::ValueUnwrap(x) => {
                 let mut unwrap_compiled = x.compile(state)?;
                 unwrap_compiled.push(instruction!(void));
@@ -124,11 +132,12 @@ impl Parser {
             }
             Rule::break_statement => Declaration::Break(Self::break_statement(input).to_err_vec()?),
             Rule::number_loop => Declaration::NumberLoop(Self::number_loop(declaration)?),
-            Rule::math_expr => Declaration::Expr(Expr::parse(input)?),
+            // Rule::math_expr => Declaration::Expr(Expr::parse(input)?),
             Rule::reassignment => Declaration::Reassignment(Self::reassignment(declaration)?),
             Rule::assertion => Declaration::Assertion(Self::assertion(declaration)?),
             Rule::class => Declaration::Class(Self::class(declaration)?),
-            Rule::unwrap_expr => Declaration::UnwrapExpr(Self::unwrap_expr(declaration)?),
+            // Rule::unwrap_expr => Declaration::UnwrapExpr(Self::unwrap_expr(declaration)?),
+            Rule::value => Declaration::Value(Self::value(declaration)?),
             Rule::value_unwrap => Declaration::ValueUnwrap(Self::unwrap(declaration)?),
             x => unreachable!("{x:?} is not supported"),
         };
