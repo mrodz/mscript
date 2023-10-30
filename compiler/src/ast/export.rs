@@ -1,4 +1,6 @@
-use anyhow::Result;
+use std::{cell::RefCell, sync::Weak};
+
+use anyhow::{Result, Context};
 
 use crate::{
     instruction,
@@ -10,16 +12,16 @@ use super::{new_err, Compile, Dependencies, Ident};
 
 #[derive(Debug)]
 pub(crate) struct Export {
-    exports: Vec<Ident>,
+    pub(crate) exports: Weak<RefCell<Vec<Ident>>>,
 }
 
 impl Export {
-    pub const fn new() -> Self {
-        Self { exports: vec![] }
-    }
-
     pub fn add(&mut self, ident: Ident) {
-        self.exports.push(ident);
+        let exports = self.exports.upgrade().expect("[ADD] backing export reference was dropped");
+
+        let mut view = exports.borrow_mut();
+
+        view.push(ident);
     }
 }
 
@@ -30,9 +32,13 @@ impl Compile for Export {
         &self,
         _: &super::CompilationState,
     ) -> Result<Vec<super::CompiledItem>, anyhow::Error> {
-        let mut result = Vec::with_capacity(self.exports.len());
+        let exports = self.exports.upgrade().expect("[COMPILE] backing export reference was dropped");
 
-        for export in &self.exports {
+        let view = exports.borrow();
+
+        let mut result = Vec::with_capacity(view.len());
+
+        for export in view.iter() {
             result.push(instruction!(export_name(export.name())));
         }
 
@@ -50,7 +56,7 @@ impl Parser {
             )]);
         }
 
-        let mut result = Export::new();
+        let mut result = input.user_data().get_export_ref().to_err_vec()?;
 
         let mut errors = vec![];
 

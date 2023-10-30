@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::cell::Ref;
+use std::cell::{Ref, RefCell};
 use std::rc::Rc;
 use std::sync::{Arc, RwLock};
 
@@ -8,7 +8,7 @@ use pest_consume::Parser as ParserDerive;
 
 use crate::ast::{
     ClassType, CompilationState, Compile, CompiledFunctionId, CompiledItem, Declaration,
-    Dependencies, FunctionParameters, Ident, TypeLayout,
+    Dependencies, Export, FunctionParameters, Ident, IntoType, TypeLayout, ModuleType,
 };
 use crate::instruction;
 use crate::scope::{
@@ -28,6 +28,7 @@ pub(crate) struct AssocFileData {
     file_name: Arc<String>,
     source_name: Arc<String>,
     class_id_c: RwLock<usize>,
+    exports: RefCell<Option<Arc<RefCell<Vec<Ident>>>>>,
 }
 
 impl AssocFileData {
@@ -45,6 +46,7 @@ impl AssocFileData {
             file_name: Arc::new(destination_name),
             source_name: Arc::new(source_name),
             class_id_c: RwLock::new(0),
+            exports: RefCell::new(None),
         }
     }
 
@@ -139,6 +141,37 @@ impl AssocFileData {
         let result = *class_id;
         *class_id += 1;
         result
+    }
+
+    pub fn get_backing_export_struct(&self) -> Option<Arc<RefCell<Vec<Ident>>>> {
+        let mut window = self.exports.borrow_mut();
+        let result = window.take();
+        result
+    }
+
+    pub fn get_export_ref(&self) -> Result<Export> {
+        let window = self.exports.borrow();
+
+        if let Some(window) = window.as_ref() {
+            Ok(Export {
+                exports: Arc::downgrade(window),
+            })
+        } else {
+            drop(window);
+
+            let exports = Arc::new(RefCell::new(vec![]));
+
+            let weak_ref = Arc::downgrade(&exports);
+
+            {
+                let mut window = self.exports.borrow_mut();
+                *window = Some(exports);
+            }
+
+            let export = Export { exports: weak_ref };
+
+            Ok(export)
+        }
     }
 
     pub fn get_current_executing_function(
@@ -377,6 +410,14 @@ pub(crate) fn root_node_from_str(
 pub(crate) struct File {
     pub declarations: Vec<Declaration>,
     pub location: Arc<String>,
+    pub exports: Arc<RefCell<Vec<Ident>>>,
+}
+
+impl IntoType for File {
+    fn for_type(&self) -> Result<TypeLayout> {
+        let exported_members= Arc::downgrade(&self.exports);
+        Ok(TypeLayout::Module(ModuleType::new(exported_members, Arc::downgrade(&self.location))))
+    }
 }
 
 impl File {
@@ -447,6 +488,10 @@ impl Parser {
         if !errors.is_empty() {
             Err(errors)
         } else {
+            if let Some(exports) = input.user_data().get_backing_export_struct() {
+                result.exports = exports;
+            };
+
             Ok(result)
         }
     }

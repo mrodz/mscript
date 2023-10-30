@@ -13,6 +13,7 @@ mod function_parameters;
 mod function_return_type;
 mod ident;
 mod if_statement;
+mod import;
 mod list;
 mod loop_control_flow;
 mod math_expr;
@@ -47,10 +48,11 @@ pub(crate) use number_loop::NumberLoop;
 pub(crate) use optionals::{Unwrap, UnwrapExpr};
 pub(crate) use print_statement::PrintStatement;
 pub(crate) use r#return::ReturnStatement;
-pub(crate) use r#type::TypeLayout;
+pub(crate) use r#type::{TypeLayout, ModuleType};
 pub(crate) use reassignment::Reassignment;
 pub(crate) use value::{CompileTimeEvaluate, ConstexprEvaluation, Value};
 pub(crate) use while_loop::WhileLoop;
+pub(crate) use r#type::IntoType;
 
 #[allow(unused)]
 pub(crate) use r#type::{
@@ -298,7 +300,6 @@ macro_rules! instruction {
 
     }};
 }
-
 pub(crate) struct CompilationState {
     /// We use `UnsafeCell` for performance reasons. Normal `RefCell` is 20% slower, based on quick tests.
     function_buffer: UnsafeCell<Vec<CompiledItem>>,

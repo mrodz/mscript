@@ -23,6 +23,7 @@ fn compile(
     verbose: bool,
     output_to_file: bool,
 ) -> Result<Option<Rc<MScriptFile>>> {
+    
     let compilation = compile_file(path_str, output_bin, verbose, output_to_file);
     match compilation {
         Err(errors) => {

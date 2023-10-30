@@ -6,7 +6,15 @@ use crate::{
 };
 use anyhow::{bail, Context, Result};
 use pest::Span;
-use std::{borrow::Cow, fmt::Display, hash::Hash, ops::Deref, sync::Arc};
+use std::{
+    borrow::Cow,
+    cell::{Ref, RefCell},
+    fmt::Display,
+    hash::Hash,
+    ops::Deref,
+    pin::Pin,
+    sync::{Arc, Weak},
+};
 
 use super::{
     class::ClassType,
@@ -14,7 +22,7 @@ use super::{
     list::{ListBound, ListType},
     map_err,
     math_expr::Op,
-    FunctionParameters, Value,
+    FunctionParameters, Ident, Value,
 };
 
 pub(crate) struct SupportedTypesWrapper(Box<[Cow<'static, TypeLayout>]>);
@@ -159,6 +167,111 @@ impl Display for NativeType {
     }
 }
 
+#[derive(Debug, Clone)]
+struct WeakImpl<T: Deref>(Weak<T>)
+where
+    <T as Deref>::Target: Hash,
+    T: Deref;
+
+impl<T> Hash for WeakImpl<T>
+where
+    <T as Deref>::Target: Hash,
+    T: Deref,
+{
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.deref().hash(state);
+    }
+}
+
+unsafe impl<T> Send for WeakImpl<T>
+where
+    <T as Deref>::Target: Hash,
+    T: Deref,
+{
+}
+
+unsafe impl<T> Sync for WeakImpl<T>
+where
+    <T as Deref>::Target: Hash,
+    T: Deref,
+{
+}
+
+impl<T> Eq for WeakImpl<T>
+where
+    <T as Deref>::Target: Hash,
+    T: Deref,
+{
+}
+
+impl<T> PartialEq for WeakImpl<T>
+where
+    <T as Deref>::Target: Hash,
+    T: Deref,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self == other
+    }
+}
+
+impl<T> Deref for WeakImpl<T>
+where
+    <T as Deref>::Target: Hash,
+    T: Deref,
+{
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        let upgraded = self
+            .0
+            .upgrade()
+            .expect("[DEREF] backing allocation was dropped");
+        
+        unsafe {
+            &*Arc::as_ptr(&upgraded)
+        }
+    }
+}
+
+type ExportedMembersRaw = RefCell<Vec<Ident>>;
+
+#[derive(Debug, Clone)]
+#[repr(transparent)]
+struct ExportedMembers(ExportedMembersRaw);
+
+impl Deref for ExportedMembers {
+    type Target = [Ident];
+    fn deref(&self) -> &Self::Target {
+        // this is only meant to be used by #[derive] traits, which wouldn't borrow the RefCell's content mutably.
+        let x = unsafe {
+            self.0
+                .try_borrow_unguarded()
+                .expect("the backing export allocation was dropped")
+        };
+
+        x.as_ref()
+    }
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub(crate) struct ModuleType {
+    exported_members: WeakImpl<ExportedMembers>,
+    name: WeakImpl<String>,
+}
+
+impl ModuleType {
+    pub const fn new(exported_members: Weak<ExportedMembersRaw>, name: Weak<String>) -> Self {
+        // very hacky.
+        let exported_members_fixed = unsafe {
+            std::mem::transmute(exported_members)
+        };
+
+        ModuleType {
+            exported_members: WeakImpl(exported_members_fixed),
+            name: WeakImpl(name),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub(crate) enum TypeLayout {
     Function(FunctionType),
@@ -169,6 +282,7 @@ pub(crate) enum TypeLayout {
     List(ListType),
     ValidIndexes(ListBound, ListBound),
     Class(ClassType),
+    Module(ModuleType),
     ClassSelf,
     Void,
 }
@@ -186,6 +300,7 @@ impl Display for TypeLayout {
             Self::Optional(Some(ty)) => write!(f, "{ty}?"),
             Self::Optional(None) => write!(f, "!"),
             Self::Void => write!(f, "void"),
+            Self::Module(module) => write!(f, "<module {}>", module.name.deref()),
         }
     }
 }
