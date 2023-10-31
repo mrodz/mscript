@@ -70,15 +70,22 @@ use std::{
 
 use self::number_loop::NumberLoopRegister;
 
+/// A register for a variable to be used throughout various compilation 
+/// implementations to store intermediate values.
 #[derive(Debug)]
 pub struct TemporaryRegister {
+    /// The underlying value that this register holds.
     id: usize,
+    /// Whether the register has been manually freed.
     in_use: bool,
+    /// An unsafe raw pointer to a [`usize`] that will be used to check
+    /// for any register smashing when this instance is dropped.
     cleanup_pointer: Option<*mut usize>,
 }
 
 impl TemporaryRegister {
-    #[inline]
+    /// Create a new ghost register, that is to say, a register that does not
+    /// modify the underlying counter in any way.
     unsafe fn new_ghost_register(mock_count: usize) -> Self {
         log::trace!("reg. -G--m {mock_count}");
         Self {
@@ -88,7 +95,8 @@ impl TemporaryRegister {
         }
     }
 
-    #[inline]
+    /// Create a new [`TemporaryRegister`] with an id and a raw 
+    /// pointer to the backing counter.
     fn new(id: usize, cleanup_ptr: *mut usize) -> Self {
         log::trace!("reg. -n--- {id}");
         Self {
@@ -98,8 +106,9 @@ impl TemporaryRegister {
         }
     }
 
-    #[inline]
-    #[allow(unused)]
+    /// Create a new [`TemporaryRegister`] that will not run any
+    /// cleanup code when it goes out of scope. It must be manually dropped
+    /// using [`TemporaryRegister::free`]
     fn new_require_explicit_drop(id: usize) -> Self {
         log::trace!("reg. -n-e- {id}");
 
@@ -110,6 +119,8 @@ impl TemporaryRegister {
         }
     }
 
+    /// Manually clean up a [`TemporaryRegister`], which will cause its
+    /// cleanup code to run now instead of when the variable goes out of scope.
     fn free(mut self, current_count: usize) {
         if self.id != current_count {
             unreachable!("dropped out of order");
@@ -118,11 +129,6 @@ impl TemporaryRegister {
         self.in_use = false;
 
         log::trace!("reg. F--e- {}", self.id);
-    }
-
-    #[inline]
-    unsafe fn free_many(count: usize) {
-        log::trace!("reg. F--em {count}");
     }
 }
 
@@ -150,9 +156,16 @@ impl Drop for TemporaryRegister {
     }
 }
 
+/// Grouping of either:
+/// - a **generated** id, typically reserved for anonymous functions
+/// - a **specified** id, used for named functions, classes, etc.
 #[derive(Debug, Clone)]
 pub(crate) enum CompiledFunctionId {
+    /// An id dealt out by the compiler sequentially.
     Generated(isize),
+    /// A custom, user-specified ID. 
+    /// # Note
+    /// Supplying an ASCII number as this variant's input is undefined behavior. 
     Custom(String),
 }
 
@@ -175,6 +188,12 @@ impl From<CompiledItem> for Instruction {
     }
 }
 
+/// The backbone of the compiler's output.
+/// Every program goes from:
+/// 1. Source
+/// 2. AST (`[crate::parser::Node]`)
+/// 3. [`CompiledItem`] (Not Optimized) <<
+/// 4. [`CompiledItem`] (Optimized) <<
 #[derive(Debug, Clone)]
 pub(crate) enum CompiledItem {
     Function {
@@ -387,7 +406,7 @@ impl CompilationState {
 
     #[inline]
     pub unsafe fn free_many_temporary_registers(&self, count: usize) {
-        TemporaryRegister::free_many(count);
+        log::trace!("reg. F--em {count}");
         self.temporary_register_c
             .set(self.temporary_register_c.get() - count);
     }
