@@ -1,67 +1,30 @@
-use std::{fmt::Display, path::{Path, PathBuf}};
+use std::{path::{Path, PathBuf}, borrow::Cow};
 
 use anyhow::{Result, Context};
 
-use crate::{parser::{Parser, Node, Rule, File}, perform_file_io_in, ast_file_from_str, VecErr, compile};
+use crate::{parser::{Parser, Node, Rule, File}, perform_file_io_in, ast_file_from_str, VecErr, instruction, CompilationError};
 
-use super::{Compile, Dependencies, new_err};
-
-#[derive(Debug)]
-pub(crate) enum ImportPathFeature {
-	RelativeSelf,
-	RelativeParent,
-	Directory(Box<str>),
-	File(Box<str>),
-}
-
-impl Display for ImportPathFeature {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "{}", match self {
-			Self::RelativeSelf => ".",
-			Self::RelativeParent => "..",
-			Self::Directory(name) | Self::File(name)=> name,
-		})
-	}
-}
-
-#[derive(Debug)]
-pub(crate) struct ImportPath {
-	this: ImportPathFeature,
-	next: Option<Box<ImportPath>>,
-}
-
-const PATH_SEP: &str = "/";
-
-impl Display for ImportPath {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "{}", self.this)?;
-
-		if let Some(next) = &self.next {
-			write!(f, "{PATH_SEP}{next}")?;
-		}
-
-		Ok(())
-	}
-}
+use super::{Compile, Dependencies, new_err, Ident, IntoType};
 
 #[derive(Debug)]
 pub(crate) enum Import {
 	Standard {
 		path: PathBuf,
 		file: File,
+		store: Ident,
 	}
 }
 
 impl Compile for Import {
 	fn compile(&self, state: &super::CompilationState) -> anyhow::Result<Vec<super::CompiledItem>, anyhow::Error> {
 		match self {
-			Self::Standard { path, file } => {
-				todo!()
-				// compile(, output_bin, verbose, output_to_file)
+			Self::Standard { path, file, store } => {
 
+				state.queue_compilation(file.clone());
+
+				let module_loader = format!("{:?}#__module__", path.with_extension("mmm"));
+				return Ok(vec![instruction!(call module_loader), instruction!(store (store.name()))]);
 			}
-
-
 		}
 	}
 }
@@ -101,13 +64,21 @@ impl Parser {
 
 		let path_node = children.next().unwrap();
 
-		let path = Self::import_path(path_node).to_err_vec()?;
+		let path = Self::import_path(path_node).to_err_vec()?.canonicalize().context("path not found").to_err_vec()?;
 
 		let in_buffer = perform_file_io_in(&path).to_err_vec()?;
 		let file = ast_file_from_str(&path, &path.with_extension("mmm"), &in_buffer)?;
 
+		let file_name = path.file_name().expect("not a file");
+
+		let mut ident = Ident::new(file_name.to_string_lossy().into_owned(), None, true);
+
+		let module_type = file.for_type().details(input.as_span(), &input.user_data().get_source_file_name(), "Could not get the type of this module.").to_err_vec()?;
+
+		ident.link_force_no_inherit(input.user_data(), Cow::Owned(module_type)).to_err_vec()?;
+
 		// Self::file
-		Ok(Import::Standard { path, file })
+		Ok(Import::Standard { path, file, store: ident })
 	}
 
 	pub fn import(input: Node) -> Result<Import, Vec<anyhow::Error>> {

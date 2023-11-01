@@ -48,11 +48,11 @@ pub(crate) use number_loop::NumberLoop;
 pub(crate) use optionals::{Unwrap, UnwrapExpr};
 pub(crate) use print_statement::PrintStatement;
 pub(crate) use r#return::ReturnStatement;
-pub(crate) use r#type::{TypeLayout, ModuleType};
+pub(crate) use r#type::IntoType;
+pub(crate) use r#type::{ModuleType, TypeLayout};
 pub(crate) use reassignment::Reassignment;
 pub(crate) use value::{CompileTimeEvaluate, ConstexprEvaluation, Value};
 pub(crate) use while_loop::WhileLoop;
-pub(crate) use r#type::IntoType;
 
 #[allow(unused)]
 pub(crate) use r#type::{
@@ -64,11 +64,14 @@ use bytecode::compilation_bridge::{raw_byte_instruction_to_string_representation
 use pest::Span;
 use std::{
     borrow::Cow,
-    cell::{Cell, UnsafeCell},
+    cell::{Cell, RefCell, UnsafeCell},
     fmt::{Debug, Display},
     ops::SubAssign,
     sync::Arc,
 };
+
+use crate::logger;
+use crate::parser::File;
 
 use self::number_loop::NumberLoopRegister;
 
@@ -300,12 +303,51 @@ macro_rules! instruction {
 
     }};
 }
+
+pub(crate) struct CompilationStep {
+    file: File,
+    next: Option<Box<CompilationStep>>,
+}
+
+impl CompilationStep {
+    pub const fn new(file: File) -> Self {
+        Self { file, next: None }
+    }
+
+    pub fn compile(self, shared_state: &CompilationState) -> Result<(), Vec<anyhow::Error>> {
+        let output = shared_state.compile_step(self)?;
+        shared_state.process_compiled_output(output)?;
+        Ok(())
+    }
+
+    pub fn extend_with_file(&mut self, file: File) -> &mut Self {
+        let mut new_obj = Self::new(file);
+
+        if let Some(next) = self.next.take() {
+            new_obj.next = Some(next);
+        }
+
+        self.next = Some(Box::new(new_obj));
+        self.next.as_deref_mut().unwrap()
+    }
+
+    pub fn extend(&mut self, mut next: Self) -> &mut Self {
+        if let Some(old_next) = self.next.take() {
+            next.next = Some(old_next);
+        }
+
+        self.next = Some(Box::new(next));
+        self.next.as_deref_mut().unwrap()
+    }
+}
+
 pub(crate) struct CompilationState {
     /// We use `UnsafeCell` for performance reasons. Normal `RefCell` is 20% slower, based on quick tests.
     function_buffer: UnsafeCell<Vec<CompiledItem>>,
     function_id_c: Cell<isize>,
     loop_register_c: Cell<usize>,
     temporary_register_c: Cell<usize>,
+    compilation_queue: RefCell<Option<Box<CompilationStep>>>,
 }
 
 impl CompilationState {
@@ -315,10 +357,30 @@ impl CompilationState {
             function_id_c: Cell::new(0),
             loop_register_c: Cell::new(0),
             temporary_register_c: Cell::new(0),
+            compilation_queue: RefCell::new(None),
         }
     }
 
-    #[inline]
+    pub fn queue_compilation(&self, file: File) {
+        let mut view = self.compilation_queue.borrow_mut();
+
+        let mut result = CompilationStep::new(file);
+
+        if let Some(moved) = view.take() {
+            result.next = Some(moved);
+        }
+
+        *view = Some(Box::new(result));
+    }
+
+    fn compile_step(&self, step: CompilationStep) -> Result<Vec<CompiledItem>, Vec<anyhow::Error>> {
+        step.file.compile(self)
+    }
+
+    fn process_compiled_output(&self, output: Vec<CompiledItem>) -> Result<(), Vec<anyhow::Error>> {
+        todo!()
+    }
+
     pub fn poll_function_id(&self) -> CompiledFunctionId {
         let id = self.function_id_c.get();
         let result = CompiledFunctionId::Generated(id);
@@ -328,14 +390,12 @@ impl CompilationState {
         result
     }
 
-    #[inline]
     pub fn poll_loop_register(&self) -> NumberLoopRegister {
         let id = self.loop_register_c.get();
         self.loop_register_c.set(id + 1);
         NumberLoopRegister::Generated(id + 1)
     }
 
-    #[inline]
     pub fn free_loop_register(&self, register: NumberLoopRegister) {
         if let NumberLoopRegister::Generated(id) = register {
             assert!(self.loop_register_c.get() == id);

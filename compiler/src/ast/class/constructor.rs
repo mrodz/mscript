@@ -51,6 +51,7 @@ impl Constructor {
 
 impl Compile for Constructor {
     fn compile(&self, state: &CompilationState) -> Result<Vec<CompiledItem>, anyhow::Error> {
+        let symbolic_id = self.symbolic_id();
         let mut args = self.parameters.compile(state)?;
         let mut body = self.body.compile(state)?;
 
@@ -63,7 +64,7 @@ impl Compile for Constructor {
 
         args.append(&mut body);
 
-        let id = CompiledFunctionId::Custom(self.symbolic_id());
+        let id = CompiledFunctionId::Custom(symbolic_id);
 
         let real_function = CompiledItem::Function {
             content: Some(args),

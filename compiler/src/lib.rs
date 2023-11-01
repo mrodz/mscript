@@ -15,7 +15,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context, Result};
-use ast::{map_err, new_err, CompilationState, Compile};
+use ast::{map_err, new_err, CompilationState, Compile, CompilationStep};
 use bytecode::compilation_bridge::{Instruction, MScriptFile, MScriptFileBuilder};
 use bytecode::Program;
 use indicatif::{MultiProgress, ProgressBar, ProgressFinish, ProgressStyle};
@@ -239,15 +239,21 @@ pub(crate) fn compile_from_str(
     output_path: &Path,
     mscript_code: &str,
 ) -> Result<Vec<CompiledItem>, Vec<anyhow::Error>> {
-    let file = ast_file_from_str(input_path, output_path, mscript_code)?;
-
     let state: CompilationState = CompilationState::new();
 
-    logger().wrap_in_spinner(format!("Validating AST ({}):", input_path.to_string_lossy()), || {
-        file.compile(&state)?;
+    let file = ast_file_from_str(input_path, output_path, mscript_code)?;
 
-        Ok(())
-    })?;
+    let chain = CompilationStep::new(file);
+
+    chain.compile(&state);
+
+    // logger().wrap_in_spinner(format!("Validating AST ({}):", input_path.to_string_lossy()), || {
+    //     file.compile(&state)?;
+
+    //     Ok(())
+    // })?;
+
+
 
     Ok(state.into_function_buffer())
 }
@@ -340,7 +346,9 @@ pub(crate) fn logger() -> &'static VerboseLogger {
     LOGGER_INSTANCE.get().expect("logger has not been initialized")
 } 
 
+pub struct CompilationQueue {
 
+}
  
 pub fn compile(
     path_str: &str,

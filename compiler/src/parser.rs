@@ -406,9 +406,9 @@ pub(crate) fn root_node_from_str(
         .map_err(|e| vec![anyhow!(e)])
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub(crate) struct File {
-    pub declarations: Vec<Declaration>,
+    pub declarations: Arc<RefCell<Vec<Declaration>>>,
     pub location: Arc<String>,
     pub exports: Arc<RefCell<Vec<Ident>>>,
 }
@@ -422,16 +422,20 @@ impl IntoType for File {
 
 impl File {
     fn add_declaration(&mut self, declaration: Declaration) {
-        self.declarations.push(declaration)
+        let mut view = self.declarations.borrow_mut();
+        view.push(declaration);
     }
 }
 
 impl Dependencies for File {
     fn dependencies(&self) -> Vec<crate::ast::Dependency> {
         let mut result = vec![];
-        for declaration in &self.declarations {
+        let view = unsafe {&*self.declarations.as_ptr()};
+
+        for declaration in view.iter() {
             result.append(&mut declaration.net_dependencies());
         }
+
         result
     }
 }
@@ -442,7 +446,9 @@ impl Compile<Vec<anyhow::Error>> for File {
 
         let mut errors = vec![];
 
-        for declaration in &self.declarations {
+        let view = self.declarations.borrow();
+
+        for declaration in view.iter() {
             match declaration.compile(state) {
                 Ok(mut compiled) => global_scope_code.append(&mut compiled),
                 Err(e) => errors.push(e),
