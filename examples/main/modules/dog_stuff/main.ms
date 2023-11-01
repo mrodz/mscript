@@ -1,1 +1,3 @@
 import dog
+
+print dog

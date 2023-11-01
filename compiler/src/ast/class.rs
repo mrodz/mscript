@@ -192,7 +192,7 @@ impl Parser {
                 )
                 .to_err_vec()?;
 
-            log::trace!("+class {}", ident.name());
+            log::trace!("class {} {{ ... }}", ident.name());
 
             input.user_data().set_self_type_of_class(class_type);
 

@@ -210,7 +210,7 @@ pub struct Function {
     /// A list of the instructions this subroutine consists of.
     instructions: Box<[Instruction]>,
     /// The name of this function.
-    name: String,
+    name: Rc<String>,
 }
 
 impl Debug for Function {
@@ -235,7 +235,7 @@ impl Function {
     /// Initialize a [`Function`] given its fields.
     pub(crate) const fn new(
         location: Weak<MScriptFile>,
-        name: String,
+        name: Rc<String>,
         instructions: Box<[Instruction]>,
     ) -> Self {
         Self {
@@ -461,14 +461,14 @@ impl<'a> Functions {
     pub(crate) fn add_function(
         &mut self,
         file: Weak<MScriptFile>,
-        name: String,
+        name: Rc<String>,
         bytecode: Box<[Instruction]>,
     ) -> Option<Function> {
-        let function = Function::new(file, name.clone(), bytecode);
+        let function = Function::new(file, Rc::clone(&name), bytecode);
 
         // TODO: If Rc<name> == self.map.name, we can change Function::name to be the same Rc.
 
-        self.map.insert(Rc::new(name), function)
+        self.map.insert(name, function)
     }
 
     // /// Get all functions whose name starts with `name`

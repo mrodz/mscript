@@ -219,7 +219,7 @@ pub(crate) fn seal_compiled_items(
         };
 
         file_builder.add_function(
-            id.to_string(),
+            Rc::new(id.to_string()),
             content.into_iter().map(Into::<Instruction>::into).collect(),
         );
     }

@@ -197,6 +197,17 @@ pub(crate) enum CompiledItem {
     Continue(usize),
 }
 
+impl Display for CompiledItem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Break(..) => write!(f, "!BREAK"),
+            Self::Continue(..) => write!(f, "!CONTINUE"),
+            Self::Instruction { id, arguments } => write!(f, "{:?} {arguments:?}", raw_byte_instruction_to_string_representation(*id)),
+            Self::Function { id, location, .. } => write!(f, "Function `{id}` -- {location:?}")
+        }
+    }
+}
+
 impl CompiledItem {
     pub fn is_loop_instruction(&self) -> bool {
         const WHILE_LOOP: u8 = 0x31;
@@ -465,6 +476,8 @@ impl CompilationState {
     }
 
     pub fn push_function(&self, compiled_function: CompiledItem) {
+        log::debug!("[ADD_FN] {compiled_function:?}");
+
         assert!(
             matches!(compiled_function, CompiledItem::Function { .. }),
             "Attempting to push a non-function to the function buffer"

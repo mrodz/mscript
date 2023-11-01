@@ -44,7 +44,9 @@ impl MScriptFileBuilder {
         }
     }
 
-    pub fn add_function(&mut self, name: String, bytecode: Box<[Instruction]>) {
+    pub fn add_function(&mut self, name: Rc<String>, bytecode: Box<[Instruction]>) {
+        log::debug!("[BLDR ADD_FN @ {}] `{name}`", self.building.path);
+
         let functions = &self.building.functions;
 
         let mut functions = functions.borrow_mut();
@@ -123,7 +125,7 @@ impl MScriptFile {
             exports: Rc::new(RefCell::new(VariableMapping::default())),
         });
 
-        let functions = Self::get_functions(&new_uninit)?;
+        let functions = new_uninit.get_functions()?;
 
         {
             let mut borrow = new_uninit.functions.borrow_mut();
@@ -210,11 +212,11 @@ impl MScriptFile {
     /// variant will be returned. Can also error if a function that
     /// the parser encounters has a name that's non-UTF-8. Errors in
     /// a function's layout are also problematic.
-    fn get_functions(rc_of_self: &Rc<Self>) -> Result<Functions> {
-        let path = rc_of_self.path();
+    fn get_functions(self: &Rc<Self>) -> Result<Functions> {
+        let path = self.path();
         let mut reader = BufReader::new(
             File::open(path)
-                .with_context(|| format!("failed opening file `{path}` ({rc_of_self:?})"))?,
+                .with_context(|| format!("failed opening file `{path}` ({self:?})"))?,
         );
         let mut buffer = Vec::new();
 
@@ -238,23 +240,25 @@ impl MScriptFile {
             match &buffer[..] {
                 // function label syntax: `f function_name_utf8\0`
                 [b'f', b' ', name @ .., 0x00] if !in_function => {
-                    current_function_name = Some(String::from_utf8(name.to_vec())?);
+                    let str = String::from_utf8(name.to_vec())?;
+                    log::debug!("loading bytecode function `{str}` in `{}`", self.path());
+                    current_function_name = Some(str);
                     in_function = true;
                 }
                 // end function syntax: `e\0`
                 [b'e', 0x00] | [b'e', .., 0x00] if in_function => {
                     in_function = false;
 
-                    let current_function_name = current_function_name
+                    let current_function_name = Rc::new(current_function_name
                         .take()
-                        .context("found `end` outside of a function")?;
+                        .context("found `end` outside of a function")?);
 
                     let function = Function::new(
-                        Rc::downgrade(rc_of_self),
-                        current_function_name,
+                        Rc::downgrade(self),
+                        current_function_name.clone(),
                         instruction_buffer.into_boxed_slice(),
                     );
-                    functions.insert(Rc::new(function.get_qualified_name()), function);
+                    functions.insert(current_function_name, function);
                     instruction_buffer = Vec::new();
                 }
                 // instruction (w. Args) syntax: `{id} arg1 arg2 "multi arg" arg4\0`

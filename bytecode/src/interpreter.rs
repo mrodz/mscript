@@ -115,7 +115,7 @@ impl Program {
             last_hash -= 1;
         }
 
-        let (path, ..) = destination_label.split_at(last_hash);
+        let (path, label) = destination_label.split_at(last_hash);
 
         let path = path.to_string().replace('\\', "/");
         let path_ref = &path;
@@ -129,7 +129,7 @@ impl Program {
         let callback_state = request.callback_state.as_ref().cloned();
 
         let return_value = file.run_function(
-            destination_label,
+            &label[1..].to_owned(),
             // &symbol.to_owned(),
             Cow::Borrowed(&request.arguments),
             Rc::clone(&request.stack),
