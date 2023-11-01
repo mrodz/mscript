@@ -62,6 +62,7 @@ pub(crate) use r#type::{
 use anyhow::{anyhow, bail, Context, Error, Result};
 use bytecode::compilation_bridge::{raw_byte_instruction_to_string_representation, Instruction};
 use pest::Span;
+use std::path::PathBuf;
 use std::{
     borrow::Cow,
     cell::{Cell, RefCell, UnsafeCell},
@@ -70,8 +71,8 @@ use std::{
     sync::Arc,
 };
 
-use crate::logger;
 use crate::parser::File;
+use crate::{logger, VecErr};
 
 use self::number_loop::NumberLoopRegister;
 
@@ -185,7 +186,7 @@ pub(crate) enum CompiledItem {
     Function {
         id: CompiledFunctionId,
         content: Option<Vec<CompiledItem>>,
-        location: Arc<String>,
+        location: Arc<PathBuf>,
     },
     Instruction {
         id: u8,
@@ -314,10 +315,29 @@ impl CompilationStep {
         Self { file, next: None }
     }
 
-    pub fn compile(self, shared_state: &CompilationState) -> Result<(), Vec<anyhow::Error>> {
-        let output = shared_state.compile_step(self)?;
-        shared_state.process_compiled_output(output)?;
-        Ok(())
+    pub fn compile(self, shared_state: &CompilationState, mut driver: impl FnMut(&File, Vec<CompiledItem>) -> Result<(), anyhow::Error>) -> Result<(), Vec<anyhow::Error>> {
+        self.compile_recursive(shared_state, None, &mut driver)
+    }
+
+    pub fn compile_recursive(
+        self,
+        shared_state: &CompilationState,
+        depth_limit: Option<usize>,
+        driver: &mut impl FnMut(&File, Vec<CompiledItem>) -> Result<(), anyhow::Error>,
+    ) -> Result<(), Vec<anyhow::Error>> {
+        if let Some(0) = depth_limit {
+            panic!("depth limit exceeded");
+        }
+
+        if let Some(next) = self.next {
+            next.compile_recursive(&CompilationState::new(), depth_limit.map(|l| l - 1), driver)?;
+        }
+
+        self.file.compile(shared_state)?;
+
+        driver(&self.file, shared_state.into_function_buffer())
+            .context("driver failed processing compiled queue items")
+            .to_err_vec()
     }
 
     pub fn extend_with_file(&mut self, file: File) -> &mut Self {
@@ -340,6 +360,10 @@ impl CompilationStep {
         self.next.as_deref_mut().unwrap()
     }
 }
+
+// pub(crate) struct CompilationSettings {
+
+// }
 
 pub(crate) struct CompilationState {
     /// We use `UnsafeCell` for performance reasons. Normal `RefCell` is 20% slower, based on quick tests.
@@ -371,14 +395,6 @@ impl CompilationState {
         }
 
         *view = Some(Box::new(result));
-    }
-
-    fn compile_step(&self, step: CompilationStep) -> Result<Vec<CompiledItem>, Vec<anyhow::Error>> {
-        step.file.compile(self)
-    }
-
-    fn process_compiled_output(&self, output: Vec<CompiledItem>) -> Result<(), Vec<anyhow::Error>> {
-        todo!()
     }
 
     pub fn poll_function_id(&self) -> CompiledFunctionId {
@@ -453,7 +469,7 @@ impl CompilationState {
             .set(self.temporary_register_c.get() - count);
     }
 
-    pub fn into_function_buffer(self) -> Vec<CompiledItem> {
+    pub fn into_function_buffer(&self) -> Vec<CompiledItem> {
         unsafe { (*self.function_buffer.get()).clone() }
     }
 

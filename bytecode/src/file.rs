@@ -37,7 +37,7 @@ impl MScriptFileBuilder {
     pub fn new(path_to_file: String) -> Self {
         Self {
             building: Rc::new(MScriptFile {
-                path: Rc::new(path_to_file.replace('\\', "/")),
+                path: Rc::new(dbg!(path_to_file.replace('\\', "/"))),
                 functions: RefCell::new(Some(Functions::new_empty())),
                 exports: RefCell::new(VariableMapping::default()),
             }),
@@ -118,7 +118,7 @@ impl MScriptFile {
     /// # Errors
     pub fn open(path: Rc<String>) -> Result<Rc<Self>> {
         let new_uninit = Rc::new(Self {
-            path,
+            path: dbg!(path),
             functions: RefCell::new(None),
             exports: RefCell::new(VariableMapping::default()),
         });
@@ -153,6 +153,8 @@ impl MScriptFile {
         let Some(functions) = functions.as_ref() else {
             unreachable!()
         };
+
+        dbg!(self);
 
         functions.run_function(name, args, current_frame, callback_state, jump_callback)
 

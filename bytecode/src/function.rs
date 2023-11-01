@@ -452,7 +452,7 @@ impl<'a> Functions {
         jump_callback: &mut impl Fn(&JumpRequest) -> Result<ReturnValue>,
     ) -> Result<ReturnValue> {
         let Some(function) = &self.map.get(name) else {
-            panic!("not found");
+            panic!("not found: {name} in {self:?}");
         };
 
         function.run(args, current_frame, callback_state, jump_callback)

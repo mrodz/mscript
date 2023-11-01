@@ -1,6 +1,6 @@
-use std::{borrow::Cow, sync::Arc};
+use std::{borrow::Cow, sync::Arc, path::PathBuf};
 
-use anyhow::Result;
+use anyhow::{Result, Context};
 use bytecode::compilation_bridge::id::{MAKE_FUNCTION, RET};
 
 use crate::{
@@ -20,7 +20,7 @@ use super::WalkForType;
 pub struct Constructor {
     parameters: FunctionParameters,
     body: Block,
-    path_str: Arc<String>,
+    path_str: Arc<PathBuf>,
     class_name: Arc<String>,
     class_id: usize,
 }
@@ -31,7 +31,7 @@ impl Constructor {
     }
 
     pub fn default_constructor(
-        path_str: Arc<String>,
+        path_str: Arc<PathBuf>,
         class_name: Arc<String>,
         class_id: usize,
     ) -> Self {
@@ -78,7 +78,7 @@ impl Compile for Constructor {
 
         let mut arguments = Vec::with_capacity(dependencies.len() + 1);
 
-        let x = self.path_str.replace('\\', "/");
+        let x = self.path_str.to_str().context("path contains non-standard characters")?.replace('\\', "/");
 
         arguments.push(format!("{x}#{id}"));
 
@@ -173,7 +173,7 @@ impl Parser {
             .get_owned_type_of_executing_class()
             .unwrap();
 
-        let path_str = input.user_data().get_file_name();
+        let path_str = input.user_data().bytecode_path();
 
         Ok(Constructor {
             parameters,

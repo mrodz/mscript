@@ -15,7 +15,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context, Result};
-use ast::{map_err, new_err, CompilationState, Compile, CompilationStep};
+use ast::{map_err, new_err, CompilationState, CompilationStep, Compile};
 use bytecode::compilation_bridge::{Instruction, MScriptFile, MScriptFileBuilder};
 use bytecode::Program;
 use indicatif::{MultiProgress, ProgressBar, ProgressFinish, ProgressStyle};
@@ -176,6 +176,7 @@ pub fn eval(mscript_code: &str) -> Result<(), Vec<anyhow::Error>> {
         Path::new(&input_path),
         Path::new(&output_path),
         mscript_code,
+        true,
     )?;
 
     let eval_environment: Rc<MScriptFile> =
@@ -238,6 +239,7 @@ pub(crate) fn compile_from_str(
     input_path: &Path,
     output_path: &Path,
     mscript_code: &str,
+    eval_env: bool,
 ) -> Result<Vec<CompiledItem>, Vec<anyhow::Error>> {
     let state: CompilationState = CompilationState::new();
 
@@ -245,22 +247,22 @@ pub(crate) fn compile_from_str(
 
     let chain = CompilationStep::new(file);
 
-    chain.compile(&state);
+    let mut result = None;
 
-    // logger().wrap_in_spinner(format!("Validating AST ({}):", input_path.to_string_lossy()), || {
-    //     file.compile(&state)?;
+    chain.compile(&state, &mut |src: &ASTFile, compiled_items| {
+        if result.is_none() {
+            result = Some(compiled_items);
+        } else {
+            perform_file_io_out(&src.location, compiled_items, true)?
+        }
+        Ok(())
+    })?;
 
-    //     Ok(())
-    // })?;
-
-
-
-    Ok(state.into_function_buffer())
+    Ok(result.unwrap())
 }
 
 fn perform_file_io_out(
     output_path: &Path,
-    logger: &VerboseLogger,
     function_buffer: Vec<CompiledItem>,
     output_bin: bool,
 ) -> Result<()> {
@@ -271,7 +273,7 @@ fn perform_file_io_out(
         .truncate(true)
         .open(output_path)?;
 
-    let writing_pb = logger.add(|| {
+    let writing_pb = logger().add(|| {
         let template =
             "[{elapsed_precise:.bold.green}] {prefix:.bold.dim} [{bar:40.blue/red}] {msg:.yellow}";
         let style = ProgressStyle::with_template(template)
@@ -317,6 +319,8 @@ fn perform_file_io_out(
         writing_pb.finish_with_message(format!("Done in {} ms", writing_pb.elapsed().as_millis()))
     });
 
+    new_file.flush()?;
+
     Ok(())
 }
 
@@ -343,38 +347,49 @@ pub(crate) fn perform_file_io_in(input_path: &Path) -> Result<String> {
 static LOGGER_INSTANCE: OnceCell<VerboseLogger> = OnceCell::new();
 
 pub(crate) fn logger() -> &'static VerboseLogger {
-    LOGGER_INSTANCE.get().expect("logger has not been initialized")
-} 
-
-pub struct CompilationQueue {
-
+    LOGGER_INSTANCE
+        .get()
+        .expect("logger has not been initialized")
 }
- 
+
+pub struct CompilationQueue {}
+
 pub fn compile(
-    path_str: &str,
+    input_path: impl AsRef<Path>,
     output_bin: bool,
     verbose: bool,
     output_to_file: bool,
 ) -> Result<Option<Rc<MScriptFile>>, Vec<anyhow::Error>> {
-    LOGGER_INSTANCE.set(VerboseLogger::new(verbose)).expect("logger has already been initialized");
+    LOGGER_INSTANCE
+        .set(VerboseLogger::new(verbose))
+        .expect("logger has already been initialized");
 
     let start_time = Instant::now();
 
-    let input_path = Path::new(path_str);
+    let input_path = input_path
+        .as_ref();
+        // .canonicalize()
+        // .context("Could not get this file's path! Does it exist?")
+        // .to_err_vec()?;
+
     let output_path = input_path.with_extension("mmm");
 
-    let file_contents = perform_file_io_in(input_path).to_err_vec()?;
+    let file_contents = perform_file_io_in(input_path.as_ref()).to_err_vec()?;
 
-    let function_buffer = compile_from_str(input_path, &output_path, &file_contents)?;
+    let function_buffer =
+        compile_from_str(input_path.as_ref(), &output_path, &file_contents, false)?;
 
-    logger().wrap_in_spinner(format!("Optimizing ({path_str}):"), || Ok(()))?;
+    logger().wrap_in_spinner(
+        format!("Optimizing ({:?}):", input_path),
+        || Ok(()),
+    )?;
 
     if verbose {
         println!("\n\nCompiled in {:?}", start_time.elapsed());
     }
 
     if output_to_file {
-        perform_file_io_out(&output_path, logger(), function_buffer, output_bin).to_err_vec()?;
+        perform_file_io_out(&output_path, function_buffer, output_bin).to_err_vec()?;
         Ok(None)
     } else {
         Ok(Some(

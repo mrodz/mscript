@@ -64,7 +64,7 @@ impl Parser {
 
 		let path_node = children.next().unwrap();
 
-		let path = Self::import_path(path_node).to_err_vec()?.canonicalize().context("path not found").to_err_vec()?;
+		let path = Self::import_path(path_node).to_err_vec()?; //.canonicalize().context("path not found").to_err_vec()?;
 
 		let in_buffer = perform_file_io_in(&path).to_err_vec()?;
 		let file = ast_file_from_str(&path, &path.with_extension("mmm"), &in_buffer)?;

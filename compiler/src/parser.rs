@@ -1,9 +1,11 @@
 use std::borrow::Cow;
 use std::cell::{Ref, RefCell};
+use std::ffi::OsStr;
+use std::path::{PathBuf, Path};
 use std::rc::Rc;
 use std::sync::{Arc, RwLock};
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Result, Context};
 use pest_consume::Parser as ParserDerive;
 
 use crate::ast::{
@@ -25,36 +27,47 @@ pub(crate) struct Parser;
 #[derive(Debug)]
 pub(crate) struct AssocFileData {
     scopes: Scopes,
-    file_name: Arc<String>,
-    source_name: Arc<String>,
+    file_name: Arc<PathBuf>,
+    source_name: Arc<PathBuf>,
     class_id_c: RwLock<usize>,
     exports: RefCell<Option<Arc<RefCell<Vec<Ident>>>>>,
 }
 
 impl AssocFileData {
-    pub fn new(destination_name: String) -> Self {
-        let source_name = if destination_name.ends_with(".mmm") {
-            let mut owned = destination_name[..destination_name.len() - 3].to_owned();
-            owned.push_str("ms");
-            owned
-        } else {
-            panic!("destination must be .mmm")
-        };
+    pub fn new(destination_unknown: impl AsRef<Path>) -> Self {
+        // let destination: Path = destination_name.into();
+        let destination = destination_unknown.as_ref();
+
+        if !destination.with_extension("ms").is_file() {
+            panic!("not a file!");
+        }
+
+        let dst_file_ext = destination.extension().expect("no file extension").to_str().expect("this file name contains non-standard characters");
+
+        assert_eq!(dst_file_ext, "mmm", "destination must be .mmm");
 
         Self {
             scopes: Scopes::new(),
-            file_name: Arc::new(destination_name),
-            source_name: Arc::new(source_name),
+            file_name: Arc::new(destination.to_path_buf()),
+            source_name: Arc::new(destination.with_extension("ms").to_path_buf()),
             class_id_c: RwLock::new(0),
             exports: RefCell::new(None),
         }
     }
 
-    pub fn get_source_file_name(&self) -> Arc<String> {
+    pub fn get_source_file_name(&self) -> &str {
+        self.source_name.to_str().expect("non standard characters in source file name")
+    }
+
+    pub fn source_path(&self) -> Arc<PathBuf> {
         self.source_name.clone()
     }
 
-    pub fn get_file_name(&self) -> Arc<String> {
+    pub fn get_file_name(&self) -> &str {
+        self.file_name.to_str().expect("non standard characters in bytecode file name")
+    }
+
+    pub fn bytecode_path(&self) -> Arc<PathBuf> {
         self.file_name.clone()
     }
 
@@ -347,7 +360,7 @@ pub(crate) mod util {
         parse_with_userdata(rule, input_str, user_data.clone()).map_err(|error| {
             Box::new(
                 error
-                    .with_path(&user_data.source_name)
+                    .with_path(&user_data.source_name.to_string_lossy())
                     .renamed_rules(rename! {
                         math_expr => "expression",
                         function_return_type => "return type",
@@ -409,7 +422,7 @@ pub(crate) fn root_node_from_str(
 #[derive(Debug, Default, Clone)]
 pub(crate) struct File {
     pub declarations: Arc<RefCell<Vec<Declaration>>>,
-    pub location: Arc<String>,
+    pub location: Arc<PathBuf>,
     pub exports: Arc<RefCell<Vec<Ident>>>,
 }
 

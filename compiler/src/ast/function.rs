@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt::Display, hash::Hash, sync::Arc};
+use std::{borrow::Cow, fmt::Display, hash::Hash, sync::Arc, path::PathBuf};
 
 use anyhow::{anyhow, Result};
 use bytecode::compilation_bridge::id::{MAKE_FUNCTION, RET};
@@ -21,7 +21,7 @@ pub(crate) struct Function {
     pub parameters: Arc<FunctionParameters>,
     pub body: Block,
     pub return_type: ScopeReturnStatus,
-    pub path_str: Arc<String>,
+    pub path_str: Arc<PathBuf>,
 }
 
 #[derive(Debug, Clone, Eq)]
@@ -210,7 +210,7 @@ impl Function {
         parameters: Arc<FunctionParameters>,
         body: Block,
         return_type: ScopeReturnStatus,
-        path_str: Arc<String>,
+        path_str: Arc<PathBuf>,
     ) -> Self {
         Self {
             parameters,
@@ -257,7 +257,7 @@ impl Function {
 
         let mut arguments = Vec::with_capacity(dependencies.len() + 1);
 
-        let x = location.replace('\\', "/");
+        let x = location.to_str().expect("non-standard characters in function location").replace('\\', "/");
 
         arguments.push(format!("{x}#{id}"));
 
@@ -310,7 +310,7 @@ impl Compile for Function {
 
 impl Parser {
     pub fn function(input: Node) -> Result<Function, Vec<anyhow::Error>> {
-        let path_str = input.user_data().get_file_name();
+        let path_str = input.user_data().bytecode_path();
 
         let mut children = input.children();
         let parameters = children.next().unwrap();

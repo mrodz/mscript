@@ -13,7 +13,7 @@ use std::{
     hash::Hash,
     ops::Deref,
     pin::Pin,
-    sync::{Arc, Weak},
+    sync::{Arc, Weak}, path::PathBuf,
 };
 
 use super::{
@@ -255,11 +255,11 @@ impl Deref for ExportedMembers {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub(crate) struct ModuleType {
     exported_members: WeakImpl<ExportedMembers>,
-    name: WeakImpl<String>,
+    name: WeakImpl<PathBuf>,
 }
 
 impl ModuleType {
-    pub const fn new(exported_members: Weak<ExportedMembersRaw>, name: Weak<String>) -> Self {
+    pub const fn new(exported_members: Weak<ExportedMembersRaw>, name: Weak<PathBuf>) -> Self {
         // very hacky.
         let exported_members_fixed = unsafe {
             std::mem::transmute(exported_members)
@@ -300,7 +300,7 @@ impl Display for TypeLayout {
             Self::Optional(Some(ty)) => write!(f, "{ty}?"),
             Self::Optional(None) => write!(f, "!"),
             Self::Void => write!(f, "void"),
-            Self::Module(module) => write!(f, "<module {}>", module.name.deref()),
+            Self::Module(module) => write!(f, "<module {:?}>", module.name.as_os_str()),
         }
     }
 }

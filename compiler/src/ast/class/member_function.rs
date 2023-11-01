@@ -1,4 +1,4 @@
-use std::{borrow::Cow, sync::Arc};
+use std::{borrow::Cow, sync::Arc, path::PathBuf};
 
 use anyhow::Result;
 use bytecode::compilation_bridge::id::{MAKE_FUNCTION, RET};
@@ -21,7 +21,7 @@ pub(crate) struct MemberFunction {
     ident: Ident,
     parameters: FunctionParameters,
     body: Block,
-    path_str: Arc<String>,
+    path_str: Arc<PathBuf>,
     class_name: Arc<String>,
     class_id: usize,
 }
@@ -65,7 +65,7 @@ impl Compile for MemberFunction {
 
         let mut arguments = Vec::with_capacity(dependencies.len() + 1);
 
-        let x = self.path_str.replace('\\', "/");
+        let x = self.path_str.to_str().expect("non standard characters in path_str").replace('\\', "/");
 
         arguments.push(format!("{x}#{id}"));
 
@@ -167,7 +167,7 @@ impl Parser {
         Ok(MemberFunction {
             ident,
             parameters,
-            path_str: input.user_data().get_file_name(),
+            path_str: input.user_data().bytecode_path(),
             body,
             class_id: class_type.id,
             class_name: class_type.arced_name(),
