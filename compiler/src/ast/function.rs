@@ -8,7 +8,7 @@ use crate::{
     instruction,
     parser::{Node, Parser, Rule},
     scope::ScopeReturnStatus,
-    VecErr,
+    VecErr, BytecodePathStr,
 };
 
 use super::{
@@ -257,7 +257,7 @@ impl Function {
 
         let mut arguments = Vec::with_capacity(dependencies.len() + 1);
 
-        let x = location.to_str().expect("non-standard characters in function location").replace('\\', "/");
+        let x = location.bytecode_str();
 
         arguments.push(format!("{x}#{id}"));
 

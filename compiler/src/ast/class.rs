@@ -18,7 +18,7 @@ use crate::{
     instruction,
     parser::{Node, Parser},
     scope::ScopeReturnStatus,
-    VecErr,
+    VecErr, BytecodePathStr,
 };
 
 use super::{
@@ -57,7 +57,7 @@ impl Compile for Class {
 
         let name = self.ident.name();
 
-        let function_name = format!("{}#{id}", self.path_str.to_str().expect("path_str contains non-standard characters"));
+        let function_name = format!("{}#{id}", self.path_str.bytecode_str());
 
         Ok(vec![
             instruction!(make_function function_name),

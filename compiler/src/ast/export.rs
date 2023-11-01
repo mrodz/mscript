@@ -1,6 +1,6 @@
 use std::{cell::RefCell, sync::Weak};
 
-use anyhow::{Result, Context};
+use anyhow::Result;
 
 use crate::{
     instruction,

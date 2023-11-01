@@ -115,11 +115,9 @@ impl Program {
             last_hash -= 1;
         }
 
-        let (path, symbol) = destination_label.split_at(last_hash);
+        let (path, ..) = destination_label.split_at(last_hash);
 
         let path = path.to_string().replace('\\', "/");
-        let symbol = &symbol[1..];
-
         let path_ref = &path;
 
         rc_of_self.add_file(Rc::new(path.clone()))?;
@@ -131,7 +129,8 @@ impl Program {
         let callback_state = request.callback_state.as_ref().cloned();
 
         let return_value = file.run_function(
-            &symbol.to_owned(),
+            destination_label,
+            // &symbol.to_owned(),
             Cow::Borrowed(&request.arguments),
             Rc::clone(&request.stack),
             callback_state,

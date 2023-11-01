@@ -1,18 +1,17 @@
 use std::borrow::Cow;
 use std::cell::{Ref, RefCell};
-use std::ffi::OsStr;
 use std::path::{PathBuf, Path};
 use std::rc::Rc;
 use std::sync::{Arc, RwLock};
 
-use anyhow::{anyhow, bail, Result, Context};
+use anyhow::{anyhow, bail, Result};
 use pest_consume::Parser as ParserDerive;
 
 use crate::ast::{
     ClassType, CompilationState, Compile, CompiledFunctionId, CompiledItem, Declaration,
     Dependencies, Export, FunctionParameters, Ident, IntoType, TypeLayout, ModuleType,
 };
-use crate::instruction;
+use crate::{instruction, BytecodePathStr};
 use crate::scope::{
     Scope, ScopeHandle, ScopeIter, ScopeReturnStatus, ScopeType, Scopes, TypeSearchResult,
 };
@@ -38,11 +37,14 @@ impl AssocFileData {
         // let destination: Path = destination_name.into();
         let destination = destination_unknown.as_ref();
 
+        /*
+        // this version checks if it exists:
         if !destination.with_extension("ms").is_file() {
             panic!("not a file!");
         }
+        */
 
-        let dst_file_ext = destination.extension().expect("no file extension").to_str().expect("this file name contains non-standard characters");
+        let dst_file_ext = destination.extension().expect("no file extension").bytecode_str();
 
         assert_eq!(dst_file_ext, "mmm", "destination must be .mmm");
 
@@ -55,16 +57,17 @@ impl AssocFileData {
         }
     }
 
-    pub fn get_source_file_name(&self) -> &str {
-        self.source_name.to_str().expect("non standard characters in source file name")
+    pub fn get_source_file_name(&self) -> String {
+        self.source_name.bytecode_str()
     }
 
+    #[allow(unused)]
     pub fn source_path(&self) -> Arc<PathBuf> {
         self.source_name.clone()
     }
 
-    pub fn get_file_name(&self) -> &str {
-        self.file_name.to_str().expect("non standard characters in bytecode file name")
+    pub fn get_file_name(&self) -> String {
+        self.file_name.bytecode_str()
     }
 
     pub fn bytecode_path(&self) -> Arc<PathBuf> {
@@ -472,7 +475,7 @@ impl Compile<Vec<anyhow::Error>> for File {
             return Err(errors);
         }
 
-        global_scope_code.push(instruction!(ret));
+        global_scope_code.push(instruction!(ret_mod));
 
         let main_function = CompiledItem::Function {
             id: CompiledFunctionId::Custom("__module__".to_owned()),
@@ -490,6 +493,8 @@ impl Compile<Vec<anyhow::Error>> for File {
 impl Parser {
     pub fn file<'a>(input: Node) -> Result<File, Vec<anyhow::Error>> {
         let mut result = File::default();
+
+        result.location = input.user_data().bytecode_path();
 
         let mut errors = vec![];
 

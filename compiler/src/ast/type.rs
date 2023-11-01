@@ -8,11 +8,10 @@ use anyhow::{bail, Context, Result};
 use pest::Span;
 use std::{
     borrow::Cow,
-    cell::{Ref, RefCell},
+    cell::RefCell,
     fmt::Display,
     hash::Hash,
     ops::Deref,
-    pin::Pin,
     sync::{Arc, Weak}, path::PathBuf,
 };
 

@@ -1,6 +1,6 @@
 use std::{borrow::Cow, sync::Arc, path::PathBuf};
 
-use anyhow::{Result, Context};
+use anyhow::Result;
 use bytecode::compilation_bridge::id::{MAKE_FUNCTION, RET};
 
 use crate::{
@@ -11,7 +11,7 @@ use crate::{
     instruction,
     parser::{Node, Parser},
     scope::ScopeReturnStatus,
-    VecErr,
+    VecErr, BytecodePathStr,
 };
 
 use super::WalkForType;
@@ -78,7 +78,7 @@ impl Compile for Constructor {
 
         let mut arguments = Vec::with_capacity(dependencies.len() + 1);
 
-        let x = self.path_str.to_str().context("path contains non-standard characters")?.replace('\\', "/");
+        let x = self.path_str.bytecode_str();
 
         arguments.push(format!("{x}#{id}"));
 

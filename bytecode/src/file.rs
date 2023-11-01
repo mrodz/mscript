@@ -25,7 +25,7 @@ pub struct MScriptFile {
     /// The functions in the file. Even though it is an `Option`, by the time an [`MScriptFile`]
     /// is initialized, this field will be propagated.
     functions: RefCell<Option<Functions>>,
-    exports: RefCell<VariableMapping>,
+    exports: Rc<RefCell<VariableMapping>>,
 }
 
 #[derive(Debug)]
@@ -37,9 +37,9 @@ impl MScriptFileBuilder {
     pub fn new(path_to_file: String) -> Self {
         Self {
             building: Rc::new(MScriptFile {
-                path: Rc::new(dbg!(path_to_file.replace('\\', "/"))),
+                path: Rc::new(path_to_file.replace('\\', "/")),
                 functions: RefCell::new(Some(Functions::new_empty())),
-                exports: RefCell::new(VariableMapping::default()),
+                exports: Rc::new(RefCell::new(VariableMapping::default())),
             }),
         }
     }
@@ -118,9 +118,9 @@ impl MScriptFile {
     /// # Errors
     pub fn open(path: Rc<String>) -> Result<Rc<Self>> {
         let new_uninit = Rc::new(Self {
-            path: dbg!(path),
+            path,
             functions: RefCell::new(None),
-            exports: RefCell::new(VariableMapping::default()),
+            exports: Rc::new(RefCell::new(VariableMapping::default())),
         });
 
         let functions = Self::get_functions(&new_uninit)?;
@@ -154,7 +154,7 @@ impl MScriptFile {
             unreachable!()
         };
 
-        dbg!(self);
+        // dbg!(self);
 
         functions.run_function(name, args, current_frame, callback_state, jump_callback)
 
@@ -179,6 +179,10 @@ impl MScriptFile {
         let functions = self.functions.borrow();
 
         Ref::filter_map(functions, |functions| functions.as_ref()).ok()
+    }
+
+    pub(crate) fn get_exports(&self) -> Rc<RefCell<VariableMapping>> {
+        self.exports.clone()
     }
 
     pub fn add_export(

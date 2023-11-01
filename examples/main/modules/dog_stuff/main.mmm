@@ -1,0 +1,5 @@
+function __module__
+	call ./dog.mmm#__module__
+	store dog.ms
+	ret_mod
+end

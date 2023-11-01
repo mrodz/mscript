@@ -2,7 +2,7 @@ use std::{path::{Path, PathBuf}, borrow::Cow};
 
 use anyhow::{Result, Context};
 
-use crate::{parser::{Parser, Node, Rule, File}, perform_file_io_in, ast_file_from_str, VecErr, instruction, CompilationError};
+use crate::{parser::{Parser, Node, Rule, File}, perform_file_io_in, ast_file_from_str, VecErr, instruction, CompilationError, BytecodePathStr};
 
 use super::{Compile, Dependencies, new_err, Ident, IntoType};
 
@@ -22,7 +22,7 @@ impl Compile for Import {
 
 				state.queue_compilation(file.clone());
 
-				let module_loader = format!("{:?}#__module__", path.with_extension("mmm"));
+				let module_loader = format!("{}#__module__", path.with_extension("mmm").bytecode_str());
 				return Ok(vec![instruction!(call module_loader), instruction!(store (store.name()))]);
 			}
 		}
@@ -41,8 +41,6 @@ impl Parser {
 		let attempted_path = Path::new(as_str);
 
 		let path = path.parent().context("no parent")?.join(attempted_path);
-
-		dbg!(&path);
 
 		let path_exists = path.try_exists()?;
 

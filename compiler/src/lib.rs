@@ -15,7 +15,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context, Result};
-use ast::{map_err, new_err, CompilationState, CompilationStep, Compile};
+use ast::{map_err, new_err, CompilationState};
 use bytecode::compilation_bridge::{Instruction, MScriptFile, MScriptFileBuilder};
 use bytecode::Program;
 use indicatif::{MultiProgress, ProgressBar, ProgressFinish, ProgressStyle};
@@ -141,6 +141,19 @@ impl VerboseLogger {
     }
 }
 
+pub(crate) trait BytecodePathStr {
+    fn bytecode_str(&self) -> String;
+}
+
+impl <T>BytecodePathStr for T 
+where 
+    T: AsRef<Path>
+{
+    fn bytecode_str(&self) -> String {
+        self.as_ref().to_str().expect("path contains non-standard characters").replace('\\', "/")
+    }
+}
+
 pub trait Maybe<T> {
     type Output;
     fn maybe(&self, action: impl FnOnce(&T)) -> &Self::Output;
@@ -167,7 +180,7 @@ impl<T, E: Into<anyhow::Error>> VecErr<T> for std::result::Result<T, E> {
 }
 
 pub fn eval(mscript_code: &str) -> Result<(), Vec<anyhow::Error>> {
-    LOGGER_INSTANCE.set(VerboseLogger::new(false)).unwrap();
+    let _ = LOGGER_INSTANCE.set(VerboseLogger::new(false));
 
     let input_path = "$__EVAL_ENV__.ms";
     let output_path = "$__EVAL_ENV__.mmm";
@@ -176,7 +189,6 @@ pub fn eval(mscript_code: &str) -> Result<(), Vec<anyhow::Error>> {
         Path::new(&input_path),
         Path::new(&output_path),
         mscript_code,
-        true,
     )?;
 
     let eval_environment: Rc<MScriptFile> =
@@ -239,24 +251,36 @@ pub(crate) fn compile_from_str(
     input_path: &Path,
     output_path: &Path,
     mscript_code: &str,
-    eval_env: bool,
 ) -> Result<Vec<CompiledItem>, Vec<anyhow::Error>> {
     let state: CompilationState = CompilationState::new();
 
     let file = ast_file_from_str(input_path, output_path, mscript_code)?;
 
-    let chain = CompilationStep::new(file);
+    state.queue_compilation(file);
 
     let mut result = None;
+    let mut c = 0;
 
-    chain.compile(&state, &mut |src: &ASTFile, compiled_items| {
+    state.compile_recursive(&mut |src: &ASTFile, compiled_items: Vec<CompiledItem>| {
+        c += 1;
+        // dbg!(&src.location);
         if result.is_none() {
+            #[cfg(feature = "debug")]
+            perform_file_io_out(&src.location, compiled_items.clone(), false).context("The `--debug` feature flag failed to dump the HR Bytecode")?;
+                
             result = Some(compiled_items);
         } else {
             perform_file_io_out(&src.location, compiled_items, true)?
         }
         Ok(())
     })?;
+
+    // state.start_compilation();
+    // let chain = CompilationStep::new(file);
+
+    // chain.compile(&state, )?;
+
+    // panic!("{c}");
 
     Ok(result.unwrap())
 }
@@ -271,7 +295,7 @@ fn perform_file_io_out(
         .read(true)
         .write(true)
         .truncate(true)
-        .open(output_path)?;
+        .open(output_path).with_context(|| format!("Could not get file descriptor for {output_path:?}"))?;
 
     let writing_pb = logger().add(|| {
         let template =
@@ -377,7 +401,7 @@ pub fn compile(
     let file_contents = perform_file_io_in(input_path.as_ref()).to_err_vec()?;
 
     let function_buffer =
-        compile_from_str(input_path.as_ref(), &output_path, &file_contents, false)?;
+        compile_from_str(input_path.as_ref(), &output_path, &file_contents)?;
 
     logger().wrap_in_spinner(
         format!("Optimizing ({:?}):", input_path),

@@ -63,6 +63,7 @@ use anyhow::{anyhow, bail, Context, Error, Result};
 use bytecode::compilation_bridge::{raw_byte_instruction_to_string_representation, Instruction};
 use pest::Span;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::{
     borrow::Cow,
     cell::{Cell, RefCell, UnsafeCell},
@@ -72,7 +73,7 @@ use std::{
 };
 
 use crate::parser::File;
-use crate::{logger, VecErr};
+use crate::VecErr;
 
 use self::number_loop::NumberLoopRegister;
 
@@ -305,6 +306,7 @@ macro_rules! instruction {
     }};
 }
 
+#[derive(Debug)]
 pub(crate) struct CompilationStep {
     file: File,
     next: Option<Box<CompilationStep>>,
@@ -313,51 +315,6 @@ pub(crate) struct CompilationStep {
 impl CompilationStep {
     pub const fn new(file: File) -> Self {
         Self { file, next: None }
-    }
-
-    pub fn compile(self, shared_state: &CompilationState, mut driver: impl FnMut(&File, Vec<CompiledItem>) -> Result<(), anyhow::Error>) -> Result<(), Vec<anyhow::Error>> {
-        self.compile_recursive(shared_state, None, &mut driver)
-    }
-
-    pub fn compile_recursive(
-        self,
-        shared_state: &CompilationState,
-        depth_limit: Option<usize>,
-        driver: &mut impl FnMut(&File, Vec<CompiledItem>) -> Result<(), anyhow::Error>,
-    ) -> Result<(), Vec<anyhow::Error>> {
-        if let Some(0) = depth_limit {
-            panic!("depth limit exceeded");
-        }
-
-        if let Some(next) = self.next {
-            next.compile_recursive(&CompilationState::new(), depth_limit.map(|l| l - 1), driver)?;
-        }
-
-        self.file.compile(shared_state)?;
-
-        driver(&self.file, shared_state.into_function_buffer())
-            .context("driver failed processing compiled queue items")
-            .to_err_vec()
-    }
-
-    pub fn extend_with_file(&mut self, file: File) -> &mut Self {
-        let mut new_obj = Self::new(file);
-
-        if let Some(next) = self.next.take() {
-            new_obj.next = Some(next);
-        }
-
-        self.next = Some(Box::new(new_obj));
-        self.next.as_deref_mut().unwrap()
-    }
-
-    pub fn extend(&mut self, mut next: Self) -> &mut Self {
-        if let Some(old_next) = self.next.take() {
-            next.next = Some(old_next);
-        }
-
-        self.next = Some(Box::new(next));
-        self.next.as_deref_mut().unwrap()
     }
 }
 
@@ -371,7 +328,7 @@ pub(crate) struct CompilationState {
     function_id_c: Cell<isize>,
     loop_register_c: Cell<usize>,
     temporary_register_c: Cell<usize>,
-    compilation_queue: RefCell<Option<Box<CompilationStep>>>,
+    compilation_queue: Rc<RefCell<Option<Box<CompilationStep>>>>,
 }
 
 impl CompilationState {
@@ -381,7 +338,7 @@ impl CompilationState {
             function_id_c: Cell::new(0),
             loop_register_c: Cell::new(0),
             temporary_register_c: Cell::new(0),
-            compilation_queue: RefCell::new(None),
+            compilation_queue: Rc::new(RefCell::new(None)),
         }
     }
 
@@ -396,6 +353,40 @@ impl CompilationState {
 
         *view = Some(Box::new(result));
     }
+
+    pub fn compile_recursive(&self, driver: &mut impl FnMut(&File, Vec<CompiledItem>) -> Result<()>) -> Result<(), Vec<anyhow::Error>> {
+        let mut view = self.compilation_queue.borrow_mut();
+
+        let mut node @ Some(..) = view.take() else {
+            return Ok(());
+        };
+
+
+        while let Some(h) = node {
+
+            let state_for_file = CompilationState::new();
+
+            h.file.compile(&state_for_file)?;
+
+            driver(&h.file, state_for_file.into_function_buffer()).to_err_vec()?;
+
+            state_for_file.compile_recursive(driver)?;
+
+            node = h.next;
+        }
+
+        Ok(())
+    }
+
+    // pub fn start_compilation(&self, shared_state: &CompilationState, mut driver: impl FnMut(&File, Vec<CompiledItem>) -> Result<(), anyhow::Error>) {
+    //     let mut view = self.compilation_queue.borrow_mut();
+
+    //     let Some(x) = view.take() else {
+    //         panic!("no items have been registered in the queue");
+    //     };
+
+    //     let mut head 
+    // }
 
     pub fn poll_function_id(&self) -> CompiledFunctionId {
         let id = self.function_id_c.get();
