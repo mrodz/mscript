@@ -15,18 +15,19 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context, Result};
-use ast::{map_err, new_err, CompilationState, Compile};
+use ast::{map_err, new_err, CompilationState};
 use bytecode::compilation_bridge::{Instruction, MScriptFile, MScriptFileBuilder};
 use bytecode::Program;
 use indicatif::{MultiProgress, ProgressBar, ProgressFinish, ProgressStyle};
 
-use once_cell::sync::Lazy;
-use parser::AssocFileData;
+use once_cell::sync::{Lazy, OnceCell};
+use parser::{AssocFileData, File as ASTFile};
 use pest::Span;
 
 use crate::ast::CompiledItem;
 use crate::parser::{root_node_from_str, Parser};
 
+#[derive(Debug)]
 struct VerboseLogger {
     progress_bars: Option<MultiProgress>,
 }
@@ -140,6 +141,19 @@ impl VerboseLogger {
     }
 }
 
+pub(crate) trait BytecodePathStr {
+    fn bytecode_str(&self) -> String;
+}
+
+impl <T>BytecodePathStr for T 
+where 
+    T: AsRef<Path>
+{
+    fn bytecode_str(&self) -> String {
+        self.as_ref().to_str().expect("path contains non-standard characters").replace('\\', "/")
+    }
+}
+
 pub trait Maybe<T> {
     type Output;
     fn maybe(&self, action: impl FnOnce(&T)) -> &Self::Output;
@@ -159,20 +173,19 @@ pub trait VecErr<T> {
     fn to_err_vec(self) -> Result<T, Vec<anyhow::Error>>;
 }
 
-impl<T> VecErr<T> for Result<T> {
+impl<T, E: Into<anyhow::Error>> VecErr<T> for std::result::Result<T, E> {
     fn to_err_vec(self) -> Result<T, Vec<anyhow::Error>> {
-        self.map_err(|e| vec![e])
+        self.map_err(|e| vec![anyhow!(e)])
     }
 }
 
 pub fn eval(mscript_code: &str) -> Result<(), Vec<anyhow::Error>> {
-    let logger = VerboseLogger::new(false);
+    let _ = LOGGER_INSTANCE.set(VerboseLogger::new(false));
 
     let input_path = "$__EVAL_ENV__.ms";
     let output_path = "$__EVAL_ENV__.mmm";
 
     let compiled_items = compile_from_str(
-        &logger,
         Path::new(&input_path),
         Path::new(&output_path),
         mscript_code,
@@ -206,7 +219,7 @@ pub(crate) fn seal_compiled_items(
         };
 
         file_builder.add_function(
-            id.to_string(),
+            Rc::new(id.to_string()),
             content.into_iter().map(Into::<Instruction>::into).collect(),
         );
     }
@@ -214,41 +227,60 @@ pub(crate) fn seal_compiled_items(
     Ok(file_builder.build())
 }
 
-pub(crate) fn compile_from_str(
-    logger: &VerboseLogger,
+pub(crate) fn ast_file_from_str(
     input_path: &Path,
     output_path: &Path,
     mscript_code: &str,
-) -> Result<Vec<CompiledItem>, Vec<anyhow::Error>> {
+) -> Result<ASTFile, Vec<anyhow::Error>> {
     let user_data = Rc::new(AssocFileData::new(
         output_path.to_string_lossy().to_string(),
     ));
 
     let input_path_str = input_path.to_string_lossy();
 
-    let input = logger.wrap_in_spinner(format!("Parsing ({input_path_str}):"), || {
+    let input = logger().wrap_in_spinner(format!("Parsing ({input_path_str}):"), || {
         root_node_from_str(mscript_code, user_data.clone())
     })?;
 
-    let file = logger.wrap_in_spinner(format!("Creating AST ({input_path_str}):"), || {
+    logger().wrap_in_spinner(format!("Creating AST ({input_path_str}):"), || {
         Parser::file(input)
-    })?;
+    })
+}
 
+pub(crate) fn compile_from_str(
+    input_path: &Path,
+    output_path: &Path,
+    mscript_code: &str,
+) -> Result<Vec<CompiledItem>, Vec<anyhow::Error>> {
     let state: CompilationState = CompilationState::new();
 
-    logger.wrap_in_spinner(format!("Validating AST ({input_path_str}):"), || {
-        file.compile(&state)?;
+    let file = ast_file_from_str(input_path, output_path, mscript_code)?;
 
+    state.queue_compilation(file);
+
+    let mut result = None;
+    let mut c = 0;
+
+    state.compile_recursive(&mut |src: &ASTFile, compiled_items: &Vec<CompiledItem>| {
+        c += 1;
+        // dbg!(&src.location);
+        if result.is_none() {
+            #[cfg(feature = "debug")]
+            perform_file_io_out(&src.location, compiled_items.clone(), false).context("The `--debug` feature flag failed to dump the HR Bytecode")?;
+                
+            result = Some(compiled_items.clone());
+        } else {
+            perform_file_io_out(&src.location, compiled_items, true)?
+        }
         Ok(())
     })?;
 
-    Ok(state.into_function_buffer())
+    Ok(result.unwrap())
 }
 
-fn perform_file_io(
+fn perform_file_io_out(
     output_path: &Path,
-    logger: &VerboseLogger,
-    function_buffer: Vec<CompiledItem>,
+    function_buffer: &Vec<CompiledItem>,
     output_bin: bool,
 ) -> Result<()> {
     let mut new_file = File::options()
@@ -256,17 +288,17 @@ fn perform_file_io(
         .read(true)
         .write(true)
         .truncate(true)
-        .open(output_path)?;
+        .open(output_path).with_context(|| format!("Could not get file descriptor for {output_path:?}"))?;
 
-    let writing_pb = logger.add(|| {
+    let writing_pb = logger().add(|| {
         let template =
-            "[{elapsed_precise:.bold.green}] {prefix:.bold.dim} [{bar:40.blue/red}] {msg:.yellow}";
+            "[{elapsed_precise:.bold.green}] {prefix:.bold.dim} {msg:.yellow}";
         let style = ProgressStyle::with_template(template)
             .unwrap()
             .progress_chars("=> ");
 
-        ProgressBar::new(function_buffer.len() as u64)
-            .with_prefix("Writing to file")
+        ProgressBar::new_spinner()
+            .with_prefix(format!("Writing ({})", output_path.bytecode_str()))
             .with_style(style)
     });
 
@@ -304,55 +336,77 @@ fn perform_file_io(
         writing_pb.finish_with_message(format!("Done in {} ms", writing_pb.elapsed().as_millis()))
     });
 
+    new_file.flush()?;
+
     Ok(())
 }
 
-pub fn compile(
-    path_str: &str,
-    output_bin: bool,
-    verbose: bool,
-    output_to_file: bool,
-) -> Result<Option<Rc<MScriptFile>>, Vec<anyhow::Error>> {
-    let start_time = Instant::now();
-
-    let input_path = Path::new(path_str);
-
+pub(crate) fn perform_file_io_in(input_path: &Path) -> Result<String> {
     let Some(ext) = input_path.extension() else {
-        return Err(anyhow!("no file extension")).to_err_vec();
+        bail!("no file extension");
     };
 
-    if !ext.eq_ignore_ascii_case("ms") {
-        return Err(anyhow!(
-            "MScript uses `.ms` file extensions. Please check your file extensions."
-        ))
-        .to_err_vec();
+    if ext != "ms" {
+        bail!("MScript uses `.ms` file extensions. Please check your file extensions.");
     }
 
-    let output_path = input_path.with_extension("mmm");
-
-    let file = File::open(input_path)
-        .map_err(|e| vec![anyhow!(e).context("Could not open file for parsing :(")])?;
+    let file = File::open(input_path).context("Could not open file for parsing :(")?;
 
     let mut reader = BufReader::new(file);
 
     let mut buffer = String::new();
 
-    reader
-        .read_to_string(&mut buffer)
-        .map_err(|e| vec![anyhow!(e)])?;
+    reader.read_to_string(&mut buffer)?;
 
-    let logger = VerboseLogger::new(verbose);
+    Ok(buffer)
+}
 
-    let function_buffer = compile_from_str(&logger, input_path, &output_path, &buffer)?;
+static LOGGER_INSTANCE: OnceCell<VerboseLogger> = OnceCell::new();
 
-    logger.wrap_in_spinner(format!("Optimizing ({path_str}):"), || Ok(()))?;
+pub(crate) fn logger() -> &'static VerboseLogger {
+    LOGGER_INSTANCE
+        .get()
+        .expect("logger has not been initialized")
+}
+
+pub struct CompilationQueue {}
+
+pub fn compile(
+    input_path: impl AsRef<Path>,
+    output_bin: bool,
+    verbose: bool,
+    output_to_file: bool,
+) -> Result<Option<Rc<MScriptFile>>, Vec<anyhow::Error>> {
+    LOGGER_INSTANCE
+        .set(VerboseLogger::new(verbose))
+        .expect("logger has already been initialized");
+
+    let start_time = Instant::now();
+
+    let input_path = input_path
+        .as_ref();
+        // .canonicalize()
+        // .context("Could not get this file's path! Does it exist?")
+        // .to_err_vec()?;
+
+    let output_path = input_path.with_extension("mmm");
+
+    let file_contents = perform_file_io_in(input_path).to_err_vec()?;
+
+    let function_buffer =
+        compile_from_str(input_path, &output_path, &file_contents)?;
+
+    logger().wrap_in_spinner(
+        format!("Optimizing ({}):", input_path.bytecode_str()),
+        || Ok(()),
+    )?;
 
     if verbose {
         println!("\n\nCompiled in {:?}", start_time.elapsed());
     }
 
     if output_to_file {
-        perform_file_io(&output_path, &logger, function_buffer, output_bin).to_err_vec()?;
+        perform_file_io_out(&output_path, &function_buffer, output_bin).to_err_vec()?;
         Ok(None)
     } else {
         Ok(Some(

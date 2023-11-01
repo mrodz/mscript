@@ -120,6 +120,11 @@ impl<'a> Ctx<'a> {
         Ok(())
     }
 
+    pub fn get_file_module(&self) -> Primitive {
+        let location = self.function.location().upgrade().expect("could not get a reference to the backing file");
+        Primitive::Module(location.get_exports())
+    }
+
     /// Loads the shared [`Primitive`] stored as a callback variable, along with its associated [`VariableFlags`].
     ///
     /// Will error if called on a [`Ctx`] that does not belong to a callback.

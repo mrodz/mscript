@@ -493,6 +493,18 @@ pub mod implementations {
 
             Ok(())
         }
+
+        ret_mod(ctx=ctx) {
+            if ctx.stack_size() != 0 {
+                bail!("ret_mod should have a clean operating stack");
+            }
+
+            let module = ctx.get_file_module();
+
+            ctx.signal(InstructionExitState::ReturnValue(ReturnValue::Value(module)));
+
+            Ok(())
+        }
     }
 
     make_type!(make_bool);
@@ -1463,7 +1475,7 @@ pub fn split_string(string: Cow<str>) -> Result<Box<[String]>> {
             }
             _ => {
                 if escaping {
-                    bail!("Unknown escape sequence: \\{}", char)
+                    bail!("Unknown escape sequence: \\{char} (src = {string:?})")
                 }
             }
         }

@@ -119,7 +119,7 @@ impl Parser {
         }
 
         let constructor = constructor.unwrap_or_else(|| {
-            let path_str = input.user_data().get_file_name();
+            let path_str = input.user_data().bytecode_path();
             let class_type = input
                 .user_data()
                 .get_type_of_executing_class_in_nth_frame(0)

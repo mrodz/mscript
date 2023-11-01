@@ -110,6 +110,17 @@ reassignment_primary = _{ ident | "(" ~ reassignment_expr ~ ")" }
 export_list = _{ (ident ~ ("," ~ ident)*) ~ ","? }
 export = !{ "export" ~ "{" ~ export_list? ~ "}" }
 
+relative_self = { "." }
+relative_parent = { ".." }
+
+path_feature = { relative_self | relative_parent | ident }
+path_sep = { "/" }
+import_path = @{ path_feature ~ ("/" ~ path_feature)* ~ ".ms"? }
+
+import_standard = { "import" ~ import_path }
+
+import = { import_standard }
+
 dot_name_lookup = { ident }
 dot_function_call = { ident ~ callable }
 dot_chain_option = _{ dot_function_call | dot_name_lookup }
@@ -151,7 +162,7 @@ class_body = { "{" ~ class_feature*  ~ "}" }
 
 class = { "class" ~ ident ~ class_body }
 
-declaration = { export | class | reassignment | assignment | value_unwrap | print_statement | assertion | return_statement | continue_statement | break_statement | if_statement | while_loop | number_loop | value }
+declaration = { export | import | class | reassignment | assignment | value_unwrap | print_statement | assertion | return_statement | continue_statement | break_statement | if_statement | while_loop | number_loop | value }
 
 file = {
     SOI ~

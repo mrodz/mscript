@@ -1,5 +1,6 @@
 use std::borrow::Cow;
-use std::cell::Ref;
+use std::cell::{Ref, RefCell};
+use std::path::{PathBuf, Path};
 use std::rc::Rc;
 use std::sync::{Arc, RwLock};
 
@@ -8,9 +9,9 @@ use pest_consume::Parser as ParserDerive;
 
 use crate::ast::{
     ClassType, CompilationState, Compile, CompiledFunctionId, CompiledItem, Declaration,
-    Dependencies, FunctionParameters, Ident, TypeLayout,
+    Dependencies, Export, FunctionParameters, Ident, IntoType, TypeLayout, ModuleType,
 };
-use crate::instruction;
+use crate::{instruction, BytecodePathStr};
 use crate::scope::{
     Scope, ScopeHandle, ScopeIter, ScopeReturnStatus, ScopeType, Scopes, TypeSearchResult,
 };
@@ -25,34 +26,51 @@ pub(crate) struct Parser;
 #[derive(Debug)]
 pub(crate) struct AssocFileData {
     scopes: Scopes,
-    file_name: Arc<String>,
-    source_name: Arc<String>,
+    file_name: Arc<PathBuf>,
+    source_name: Arc<PathBuf>,
     class_id_c: RwLock<usize>,
+    exports: RefCell<Option<Arc<RefCell<Vec<Ident>>>>>,
 }
 
 impl AssocFileData {
-    pub fn new(destination_name: String) -> Self {
-        let source_name = if destination_name.ends_with(".mmm") {
-            let mut owned = destination_name[..destination_name.len() - 3].to_owned();
-            owned.push_str("ms");
-            owned
-        } else {
-            panic!("destination must be .mmm")
-        };
+    pub fn new(destination_unknown: impl AsRef<Path>) -> Self {
+        // let destination: Path = destination_name.into();
+        let destination = destination_unknown.as_ref();
+
+        /*
+        // this version checks if it exists:
+        if !destination.with_extension("ms").is_file() {
+            panic!("not a file!");
+        }
+        */
+
+        let dst_file_ext = destination.extension().expect("no file extension").bytecode_str();
+
+        assert_eq!(dst_file_ext, "mmm", "destination must be .mmm");
 
         Self {
             scopes: Scopes::new(),
-            file_name: Arc::new(destination_name),
-            source_name: Arc::new(source_name),
+            file_name: Arc::new(destination.to_path_buf()),
+            source_name: Arc::new(destination.with_extension("ms").to_path_buf()),
             class_id_c: RwLock::new(0),
+            exports: RefCell::new(None),
         }
     }
 
-    pub fn get_source_file_name(&self) -> Arc<String> {
+    pub fn get_source_file_name(&self) -> String {
+        self.source_name.bytecode_str()
+    }
+
+    #[allow(unused)]
+    pub fn source_path(&self) -> Arc<PathBuf> {
         self.source_name.clone()
     }
 
-    pub fn get_file_name(&self) -> Arc<String> {
+    pub fn get_file_name(&self) -> String {
+        self.file_name.bytecode_str()
+    }
+
+    pub fn bytecode_path(&self) -> Arc<PathBuf> {
         self.file_name.clone()
     }
 
@@ -139,6 +157,36 @@ impl AssocFileData {
         let result = *class_id;
         *class_id += 1;
         result
+    }
+
+    pub fn get_backing_export_struct(&self) -> Option<Arc<RefCell<Vec<Ident>>>> {
+        let mut window = self.exports.borrow_mut();
+        window.take()
+    }
+
+    pub fn get_export_ref(&self) -> Result<Export> {
+        let window = self.exports.borrow();
+
+        if let Some(window) = window.as_ref() {
+            Ok(Export {
+                exports: Arc::downgrade(window),
+            })
+        } else {
+            drop(window);
+
+            let exports = Arc::new(RefCell::new(vec![]));
+
+            let weak_ref = Arc::downgrade(&exports);
+
+            {
+                let mut window = self.exports.borrow_mut();
+                *window = Some(exports);
+            }
+
+            let export = Export { exports: weak_ref };
+
+            Ok(export)
+        }
     }
 
     pub fn get_current_executing_function(
@@ -314,7 +362,7 @@ pub(crate) mod util {
         parse_with_userdata(rule, input_str, user_data.clone()).map_err(|error| {
             Box::new(
                 error
-                    .with_path(&user_data.source_name)
+                    .with_path(&user_data.source_name.to_string_lossy())
                     .renamed_rules(rename! {
                         math_expr => "expression",
                         function_return_type => "return type",
@@ -373,24 +421,45 @@ pub(crate) fn root_node_from_str(
         .map_err(|e| vec![anyhow!(e)])
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub(crate) struct File {
-    pub declarations: Vec<Declaration>,
-    pub location: Arc<String>,
+    pub declarations: Arc<RefCell<Vec<Declaration>>>,
+    pub location: Arc<PathBuf>,
+    pub exports: Arc<RefCell<Vec<Ident>>>,
+}
+
+impl File {
+    pub fn new_with_location(location: Arc<PathBuf>) -> Self {
+        Self {
+            location,
+            ..Default::default()
+        }
+    }
+}
+
+impl IntoType for File {
+    fn for_type(&self) -> Result<TypeLayout> {
+        let exported_members= Arc::downgrade(&self.exports);
+        Ok(TypeLayout::Module(ModuleType::new(exported_members, Arc::downgrade(&self.location))))
+    }
 }
 
 impl File {
     fn add_declaration(&mut self, declaration: Declaration) {
-        self.declarations.push(declaration)
+        let mut view = self.declarations.borrow_mut();
+        view.push(declaration);
     }
 }
 
 impl Dependencies for File {
     fn dependencies(&self) -> Vec<crate::ast::Dependency> {
         let mut result = vec![];
-        for declaration in &self.declarations {
+        let view = unsafe {&*self.declarations.as_ptr()};
+
+        for declaration in view.iter() {
             result.append(&mut declaration.net_dependencies());
         }
+
         result
     }
 }
@@ -401,7 +470,9 @@ impl Compile<Vec<anyhow::Error>> for File {
 
         let mut errors = vec![];
 
-        for declaration in &self.declarations {
+        let view = self.declarations.borrow();
+
+        for declaration in view.iter() {
             match declaration.compile(state) {
                 Ok(mut compiled) => global_scope_code.append(&mut compiled),
                 Err(e) => errors.push(e),
@@ -412,7 +483,7 @@ impl Compile<Vec<anyhow::Error>> for File {
             return Err(errors);
         }
 
-        global_scope_code.push(instruction!(ret));
+        global_scope_code.push(instruction!(ret_mod));
 
         let main_function = CompiledItem::Function {
             id: CompiledFunctionId::Custom("__module__".to_owned()),
@@ -429,7 +500,7 @@ impl Compile<Vec<anyhow::Error>> for File {
 #[pest_consume::parser]
 impl Parser {
     pub fn file<'a>(input: Node) -> Result<File, Vec<anyhow::Error>> {
-        let mut result = File::default();
+        let mut result = File::new_with_location(input.user_data().bytecode_path());
 
         let mut errors = vec![];
 
@@ -447,6 +518,10 @@ impl Parser {
         if !errors.is_empty() {
             Err(errors)
         } else {
+            if let Some(exports) = input.user_data().get_backing_export_struct() {
+                result.exports = exports;
+            };
+
             Ok(result)
         }
     }

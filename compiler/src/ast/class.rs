@@ -4,7 +4,7 @@ mod constructor;
 mod member_function;
 mod member_variable;
 
-use std::{borrow::Cow, fmt::Display, sync::Arc};
+use std::{borrow::Cow, fmt::Display, sync::Arc, path::PathBuf};
 
 use anyhow::Result;
 
@@ -18,7 +18,7 @@ use crate::{
     instruction,
     parser::{Node, Parser},
     scope::ScopeReturnStatus,
-    VecErr,
+    VecErr, BytecodePathStr,
 };
 
 use super::{
@@ -34,7 +34,7 @@ pub(in crate::ast::class) trait WalkForType {
 pub struct Class {
     ident: Ident,
     body: ClassBody,
-    path_str: Arc<String>,
+    path_str: Arc<PathBuf>,
 }
 
 impl Compile for Class {
@@ -57,7 +57,7 @@ impl Compile for Class {
 
         let name = self.ident.name();
 
-        let function_name = format!("{}#{id}", self.path_str);
+        let function_name = format!("{}#{id}", self.path_str.bytecode_str());
 
         Ok(vec![
             instruction!(make_function function_name),
@@ -70,7 +70,7 @@ impl Compile for Class {
 pub(crate) struct ClassType {
     name: Arc<String>,
     fields: Arc<[Ident]>,
-    path_str: Arc<String>,
+    path_str: Arc<PathBuf>,
     id: usize,
 }
 
@@ -180,7 +180,7 @@ impl Parser {
 
             let class_type = ClassType {
                 fields,
-                path_str: input.user_data().get_file_name(),
+                path_str: input.user_data().bytecode_path(),
                 name: Arc::new(ident.name().to_owned()),
                 id: input.user_data().request_class_id(),
             };
@@ -192,7 +192,7 @@ impl Parser {
                 )
                 .to_err_vec()?;
 
-            log::trace!("+class {}", ident.name());
+            log::trace!("class {} {{ ... }}", ident.name());
 
             input.user_data().set_self_type_of_class(class_type);
 
@@ -209,7 +209,7 @@ impl Parser {
         let result = Class {
             ident,
             body,
-            path_str: input.user_data().get_file_name(),
+            path_str: input.user_data().bytecode_path(),
         };
 
         Ok(result)

@@ -11,7 +11,7 @@ use crate::{
 use super::{
     class::Class, Assertion, Assignment, Break, CompilationState, Compile, CompiledItem, Continue,
     Dependencies, Dependency, IfStatement, NumberLoop, PrintStatement, Reassignment,
-    ReturnStatement, Unwrap, WhileLoop, Value, Export,
+    ReturnStatement, Unwrap, WhileLoop, Value, Export, import::Import,
 };
 
 #[derive(Debug)]
@@ -32,6 +32,7 @@ pub(crate) enum Declaration {
     ValueUnwrap(Unwrap),
     Value(Value),
     Export(Export),
+    Import(Import),
 }
 
 impl Dependencies for Declaration {
@@ -49,6 +50,7 @@ impl Dependencies for Declaration {
             Self::ValueUnwrap(value_unwrap) => value_unwrap.supplies(),
             Self::Reassignment(reassignment) => reassignment.supplies(),
             Self::Export(export) => export.supplies(),
+            Self::Import(import) => import.supplies(),
             Self::Continue(_) | Self::Break(_) => vec![],
         }
     }
@@ -67,6 +69,7 @@ impl Dependencies for Declaration {
             Self::Value(value) => value.net_dependencies(),
             Self::Export(export) => export.net_dependencies(),
             Self::ValueUnwrap(value_unwrap) => value_unwrap.net_dependencies(),
+            Self::Import(import) => import.net_dependencies(),
             Self::Continue(_) | Self::Break(_) => vec![],
         }
     }
@@ -96,6 +99,7 @@ impl Compile for Declaration {
                 unwrap_compiled.push(instruction!(void));
                 Ok(unwrap_compiled)
             }
+            Self::Import(x) => x.compile(state),
             Self::Export(x) => x.compile(state),
         }
     }
@@ -130,6 +134,7 @@ impl Parser {
             Rule::value => Declaration::Value(Self::value(declaration)?),
             Rule::value_unwrap => Declaration::ValueUnwrap(Self::unwrap(declaration)?),
             Rule::export => Declaration::Export(Self::export(declaration)?),
+            Rule::import => Declaration::Import(Self::import(declaration)?),
             x => unreachable!("{x:?} is not supported"),
         };
 

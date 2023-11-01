@@ -1,7 +1,7 @@
 //! The interpreter's primitive datatypes.
 //! Every "value" in the interpreter is a primitive.
 
-use crate::{bigint, bool, byte, float, int, stack::VariableFlags, string};
+use crate::{bigint, bool, byte, float, int, stack::{VariableFlags, VariableMapping}, string};
 use anyhow::{bail, Result};
 use std::{
     cell::{Ref, RefCell},
@@ -121,6 +121,7 @@ primitive! {
     Vector(Rc<RefCell<Vec<crate::variables::Primitive>>>),
     HeapPrimitive(HeapPrimitive),
     Object(Rc<RefCell<crate::variables::Object>>),
+    Module(Rc<RefCell<VariableMapping>>),
     // Supports Lazy Allocation
     Optional(Option<Box<crate::variables::Primitive>>),
 }
@@ -347,6 +348,9 @@ impl Primitive {
                 }
 
                 write!(f, "]")
+            }
+            Module(module) => {
+                write!(f, "<module @ {:#x}>", module.as_ptr() as usize)
             }
             // For all intents and purposes, this code is safe. We assume that if this code blows up,
             // something went SERIOUSLY wrong with the MScript compiler.

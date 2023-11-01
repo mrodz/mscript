@@ -10,4 +10,6 @@ class Dog {
 
 a = 10
 
+print "Hello World!"
+
 export { Dog, a }

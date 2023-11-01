@@ -1,0 +1,3 @@
+import dog
+
+print dog

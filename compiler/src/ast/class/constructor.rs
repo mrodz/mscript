@@ -1,4 +1,4 @@
-use std::{borrow::Cow, sync::Arc};
+use std::{borrow::Cow, sync::Arc, path::PathBuf};
 
 use anyhow::Result;
 use bytecode::compilation_bridge::id::{MAKE_FUNCTION, RET};
@@ -11,7 +11,7 @@ use crate::{
     instruction,
     parser::{Node, Parser},
     scope::ScopeReturnStatus,
-    VecErr,
+    VecErr, BytecodePathStr,
 };
 
 use super::WalkForType;
@@ -20,7 +20,7 @@ use super::WalkForType;
 pub struct Constructor {
     parameters: FunctionParameters,
     body: Block,
-    path_str: Arc<String>,
+    path_str: Arc<PathBuf>,
     class_name: Arc<String>,
     class_id: usize,
 }
@@ -31,7 +31,7 @@ impl Constructor {
     }
 
     pub fn default_constructor(
-        path_str: Arc<String>,
+        path_str: Arc<PathBuf>,
         class_name: Arc<String>,
         class_id: usize,
     ) -> Self {
@@ -51,6 +51,7 @@ impl Constructor {
 
 impl Compile for Constructor {
     fn compile(&self, state: &CompilationState) -> Result<Vec<CompiledItem>, anyhow::Error> {
+        let symbolic_id = self.symbolic_id();
         let mut args = self.parameters.compile(state)?;
         let mut body = self.body.compile(state)?;
 
@@ -63,7 +64,7 @@ impl Compile for Constructor {
 
         args.append(&mut body);
 
-        let id = CompiledFunctionId::Custom(self.symbolic_id());
+        let id = CompiledFunctionId::Custom(symbolic_id);
 
         let real_function = CompiledItem::Function {
             content: Some(args),
@@ -77,7 +78,7 @@ impl Compile for Constructor {
 
         let mut arguments = Vec::with_capacity(dependencies.len() + 1);
 
-        let x = self.path_str.replace('\\', "/");
+        let x = self.path_str.bytecode_str();
 
         arguments.push(format!("{x}#{id}"));
 
@@ -172,7 +173,7 @@ impl Parser {
             .get_owned_type_of_executing_class()
             .unwrap();
 
-        let path_str = input.user_data().get_file_name();
+        let path_str = input.user_data().bytecode_path();
 
         Ok(Constructor {
             parameters,

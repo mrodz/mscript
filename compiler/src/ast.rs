@@ -13,6 +13,7 @@ mod function_parameters;
 mod function_return_type;
 mod ident;
 mod if_statement;
+mod import;
 mod list;
 mod loop_control_flow;
 mod math_expr;
@@ -47,7 +48,8 @@ pub(crate) use number_loop::NumberLoop;
 pub(crate) use optionals::{Unwrap, UnwrapExpr};
 pub(crate) use print_statement::PrintStatement;
 pub(crate) use r#return::ReturnStatement;
-pub(crate) use r#type::TypeLayout;
+pub(crate) use r#type::IntoType;
+pub(crate) use r#type::{ModuleType, TypeLayout};
 pub(crate) use reassignment::Reassignment;
 pub(crate) use value::{CompileTimeEvaluate, ConstexprEvaluation, Value};
 pub(crate) use while_loop::WhileLoop;
@@ -60,13 +62,18 @@ pub(crate) use r#type::{
 use anyhow::{anyhow, bail, Context, Error, Result};
 use bytecode::compilation_bridge::{raw_byte_instruction_to_string_representation, Instruction};
 use pest::Span;
+use std::path::PathBuf;
+use std::rc::Rc;
 use std::{
     borrow::Cow,
-    cell::{Cell, UnsafeCell},
+    cell::{Cell, RefCell, UnsafeCell},
     fmt::{Debug, Display},
     ops::SubAssign,
     sync::Arc,
 };
+
+use crate::parser::File;
+use crate::VecErr;
 
 use self::number_loop::NumberLoopRegister;
 
@@ -199,7 +206,7 @@ pub(crate) enum CompiledItem {
     Function {
         id: CompiledFunctionId,
         content: Option<Vec<CompiledItem>>,
-        location: Arc<String>,
+        location: Arc<PathBuf>,
     },
     Instruction {
         id: u8,
@@ -207,6 +214,17 @@ pub(crate) enum CompiledItem {
     },
     Break(usize),
     Continue(usize),
+}
+
+impl Display for CompiledItem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Break(..) => write!(f, "!BREAK"),
+            Self::Continue(..) => write!(f, "!CONTINUE"),
+            Self::Instruction { id, arguments } => write!(f, "{:?} {arguments:?}", raw_byte_instruction_to_string_representation(*id)),
+            Self::Function { id, location, .. } => write!(f, "Function `{id}` -- {location:?}")
+        }
+    }
 }
 
 impl CompiledItem {
@@ -318,12 +336,29 @@ macro_rules! instruction {
     }};
 }
 
+#[derive(Debug)]
+pub(crate) struct CompilationStep {
+    file: File,
+    next: Option<Box<CompilationStep>>,
+}
+
+impl CompilationStep {
+    pub const fn new(file: File) -> Self {
+        Self { file, next: None }
+    }
+}
+
+// pub(crate) struct CompilationSettings {
+
+// }
+
 pub(crate) struct CompilationState {
     /// We use `UnsafeCell` for performance reasons. Normal `RefCell` is 20% slower, based on quick tests.
     function_buffer: UnsafeCell<Vec<CompiledItem>>,
     function_id_c: Cell<isize>,
     loop_register_c: Cell<usize>,
     temporary_register_c: Cell<usize>,
+    compilation_queue: Rc<RefCell<Option<Box<CompilationStep>>>>,
 }
 
 impl CompilationState {
@@ -333,10 +368,56 @@ impl CompilationState {
             function_id_c: Cell::new(0),
             loop_register_c: Cell::new(0),
             temporary_register_c: Cell::new(0),
+            compilation_queue: Rc::new(RefCell::new(None)),
         }
     }
 
-    #[inline]
+    pub fn queue_compilation(&self, file: File) {
+        let mut view = self.compilation_queue.borrow_mut();
+
+        let mut result = CompilationStep::new(file);
+
+        if let Some(moved) = view.take() {
+            result.next = Some(moved);
+        }
+
+        *view = Some(Box::new(result));
+    }
+
+    pub fn compile_recursive(&self, driver: &mut impl FnMut(&File, &Vec<CompiledItem>) -> Result<()>) -> Result<(), Vec<anyhow::Error>> {
+        let mut view = self.compilation_queue.borrow_mut();
+
+        let mut node @ Some(..) = view.take() else {
+            return Ok(());
+        };
+
+
+        while let Some(h) = node {
+
+            let mut state_for_file = CompilationState::new();
+
+            h.file.compile(&state_for_file)?;
+
+            driver(&h.file, state_for_file.get_function_buffer()).to_err_vec()?;
+
+            state_for_file.compile_recursive(driver)?;
+
+            node = h.next;
+        }
+
+        Ok(())
+    }
+
+    // pub fn start_compilation(&self, shared_state: &CompilationState, mut driver: impl FnMut(&File, Vec<CompiledItem>) -> Result<(), anyhow::Error>) {
+    //     let mut view = self.compilation_queue.borrow_mut();
+
+    //     let Some(x) = view.take() else {
+    //         panic!("no items have been registered in the queue");
+    //     };
+
+    //     let mut head 
+    // }
+
     pub fn poll_function_id(&self) -> CompiledFunctionId {
         let id = self.function_id_c.get();
         let result = CompiledFunctionId::Generated(id);
@@ -346,14 +427,12 @@ impl CompilationState {
         result
     }
 
-    #[inline]
     pub fn poll_loop_register(&self) -> NumberLoopRegister {
         let id = self.loop_register_c.get();
         self.loop_register_c.set(id + 1);
         NumberLoopRegister::Generated(id + 1)
     }
 
-    #[inline]
     pub fn free_loop_register(&self, register: NumberLoopRegister) {
         if let NumberLoopRegister::Generated(id) = register {
             assert!(self.loop_register_c.get() == id);
@@ -411,11 +490,13 @@ impl CompilationState {
             .set(self.temporary_register_c.get() - count);
     }
 
-    pub fn into_function_buffer(self) -> Vec<CompiledItem> {
-        unsafe { (*self.function_buffer.get()).clone() }
+    pub fn get_function_buffer(&mut self) -> &mut Vec<CompiledItem> {
+        self.function_buffer.get_mut()
     }
 
     pub fn push_function(&self, compiled_function: CompiledItem) {
+        log::debug!("[ADD_FN] {compiled_function:?}");
+
         assert!(
             matches!(compiled_function, CompiledItem::Function { .. }),
             "Attempting to push a non-function to the function buffer"
