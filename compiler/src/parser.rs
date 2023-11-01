@@ -161,8 +161,7 @@ impl AssocFileData {
 
     pub fn get_backing_export_struct(&self) -> Option<Arc<RefCell<Vec<Ident>>>> {
         let mut window = self.exports.borrow_mut();
-        let result = window.take();
-        result
+        window.take()
     }
 
     pub fn get_export_ref(&self) -> Result<Export> {
@@ -429,6 +428,15 @@ pub(crate) struct File {
     pub exports: Arc<RefCell<Vec<Ident>>>,
 }
 
+impl File {
+    pub fn new_with_location(location: Arc<PathBuf>) -> Self {
+        Self {
+            location,
+            ..Default::default()
+        }
+    }
+}
+
 impl IntoType for File {
     fn for_type(&self) -> Result<TypeLayout> {
         let exported_members= Arc::downgrade(&self.exports);
@@ -492,9 +500,7 @@ impl Compile<Vec<anyhow::Error>> for File {
 #[pest_consume::parser]
 impl Parser {
     pub fn file<'a>(input: Node) -> Result<File, Vec<anyhow::Error>> {
-        let mut result = File::default();
-
-        result.location = input.user_data().bytecode_path();
+        let mut result = File::new_with_location(input.user_data().bytecode_path());
 
         let mut errors = vec![];
 

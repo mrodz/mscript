@@ -23,7 +23,7 @@ impl Compile for Import {
 				state.queue_compilation(file.clone());
 
 				let module_loader = format!("{}#__module__", path.with_extension("mmm").bytecode_str());
-				return Ok(vec![instruction!(call module_loader), instruction!(store (store.name()))]);
+				Ok(vec![instruction!(call module_loader), instruction!(store (store.name()))])
 			}
 		}
 	}
@@ -84,7 +84,7 @@ impl Parser {
 
 		match unwrapped.as_rule() {
 			Rule::import_standard => {
-				return Self::import_standard(unwrapped)
+				Self::import_standard(unwrapped)
 			}
 			x => unreachable!("{x:?}")
 		}

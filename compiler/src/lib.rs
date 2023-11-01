@@ -261,33 +261,26 @@ pub(crate) fn compile_from_str(
     let mut result = None;
     let mut c = 0;
 
-    state.compile_recursive(&mut |src: &ASTFile, compiled_items: Vec<CompiledItem>| {
+    state.compile_recursive(&mut |src: &ASTFile, compiled_items: &Vec<CompiledItem>| {
         c += 1;
         // dbg!(&src.location);
         if result.is_none() {
             #[cfg(feature = "debug")]
             perform_file_io_out(&src.location, compiled_items.clone(), false).context("The `--debug` feature flag failed to dump the HR Bytecode")?;
                 
-            result = Some(compiled_items);
+            result = Some(compiled_items.clone());
         } else {
             perform_file_io_out(&src.location, compiled_items, true)?
         }
         Ok(())
     })?;
 
-    // state.start_compilation();
-    // let chain = CompilationStep::new(file);
-
-    // chain.compile(&state, )?;
-
-    // panic!("{c}");
-
     Ok(result.unwrap())
 }
 
 fn perform_file_io_out(
     output_path: &Path,
-    function_buffer: Vec<CompiledItem>,
+    function_buffer: &Vec<CompiledItem>,
     output_bin: bool,
 ) -> Result<()> {
     let mut new_file = File::options()
@@ -299,13 +292,13 @@ fn perform_file_io_out(
 
     let writing_pb = logger().add(|| {
         let template =
-            "[{elapsed_precise:.bold.green}] {prefix:.bold.dim} [{bar:40.blue/red}] {msg:.yellow}";
+            "[{elapsed_precise:.bold.green}] {prefix:.bold.dim} {msg:.yellow}";
         let style = ProgressStyle::with_template(template)
             .unwrap()
             .progress_chars("=> ");
 
-        ProgressBar::new(function_buffer.len() as u64)
-            .with_prefix("Writing to file")
+        ProgressBar::new_spinner()
+            .with_prefix(format!("Writing ({})", output_path.bytecode_str()))
             .with_style(style)
     });
 
@@ -398,13 +391,13 @@ pub fn compile(
 
     let output_path = input_path.with_extension("mmm");
 
-    let file_contents = perform_file_io_in(input_path.as_ref()).to_err_vec()?;
+    let file_contents = perform_file_io_in(input_path).to_err_vec()?;
 
     let function_buffer =
-        compile_from_str(input_path.as_ref(), &output_path, &file_contents)?;
+        compile_from_str(input_path, &output_path, &file_contents)?;
 
     logger().wrap_in_spinner(
-        format!("Optimizing ({:?}):", input_path),
+        format!("Optimizing ({}):", input_path.bytecode_str()),
         || Ok(()),
     )?;
 
@@ -413,7 +406,7 @@ pub fn compile(
     }
 
     if output_to_file {
-        perform_file_io_out(&output_path, function_buffer, output_bin).to_err_vec()?;
+        perform_file_io_out(&output_path, &function_buffer, output_bin).to_err_vec()?;
         Ok(None)
     } else {
         Ok(Some(

@@ -492,7 +492,7 @@ fn compile_depth(
 
 impl Compile for Expr {
     fn compile(&self, state: &CompilationState) -> Result<Vec<super::CompiledItem>> {
-        compile_depth(&self, state, state.poll_temporary_register())
+        compile_depth(self, state, state.poll_temporary_register())
     }
 }
 
