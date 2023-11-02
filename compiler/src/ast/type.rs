@@ -409,7 +409,7 @@ impl TypeLayout {
         }
     }
 
-    pub fn is_callable<'a>(&'a self) -> Option<Cow<'a, FunctionType>> {
+    pub fn is_callable(&self) -> Option<Cow<FunctionType>> {
         let me = self.get_type_recursively();
 
         match me {

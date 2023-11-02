@@ -471,7 +471,7 @@ pub mod implementations {
 
             let maybe_name = args.first();
 
-            print!("[!!] BREAKPOINT{}\n[!!] options\n[!!] - continue\n[!!] - dump\n[!!] Enter Option: ", maybe_name.map(|x| " ".to_owned() + x).unwrap_or(String::new()));
+            print!("[!!] BREAKPOINT{}\n[!!] options\n[!!] - continue\n[!!] - dump\n[!!] Enter Option: ", maybe_name.map(|x| " ".to_owned() + x).unwrap_or_default());
 
             let mut buf = String::new();
             stdout().flush()?;
