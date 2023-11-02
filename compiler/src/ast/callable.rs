@@ -65,6 +65,9 @@ impl Compile for Callable<'_> {
             })
             .collect();
 
+        // args_init.insert(0, instruction!(breakpoint "CALL PREINIT args"));
+        // args_init.push(instruction!(breakpoint "CALL POSTINIT args"));
+
         if let Some(register_start) = register_start {
             for register_idx in register_start..register_start + register_count {
                 unsafe {
@@ -92,16 +95,6 @@ impl Compile for Callable<'_> {
         if let Some(name) = self_register {
             args_init.push(instruction!(ld_self name));
         }
-
-        // let func_name = ident.name();
-
-        // let load_instruction = match ident.ty()? {
-        //     Cow::Owned(TypeLayout::CallbackVariable(..))
-        //     | Cow::Borrowed(TypeLayout::CallbackVariable(..)) => {
-        //         instruction!(load_callback func_name)
-        //     }
-        //     _ => instruction!(load func_name),
-        // };
 
         args_init.push(load_instruction.clone());
         args_init.push(instruction!(call));

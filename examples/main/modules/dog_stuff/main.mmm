@@ -1,0 +1,41 @@
+function __module__
+	call ./dog.mmm#__module__
+	store dog
+	load dog
+	breakpoint "TOP DotLookupOption"
+	lookup Dog
+	store_fast #2
+	breakpoint "POST store function name in lhs_register"
+	breakpoint "CALL PREINIT args"
+	string 111
+	store_fast #3
+	string 222
+	store_fast #4
+	breakpoint "CALL POSTINIT args"
+	load_fast #3
+	load_fast #4
+	load_fast #2
+	breakpoint "CALLABLE precall"
+	call
+	breakpoint "POST function-arg compiled"
+	store muna
+	load muna
+	breakpoint "TOP DotLookupOption"
+	store_fast #1
+	load_fast #1
+	lookup to_string
+	store_fast #2
+	breakpoint "POST store function name in lhs_register"
+	breakpoint "CALL PREINIT args"
+	breakpoint "CALL POSTINIT args"
+	breakpoint "before `ld_self`"
+	ld_self #1
+	breakpoint "after `ld_self`"
+	load_fast #2
+	breakpoint "CALLABLE precall"
+	call
+	breakpoint "POST function-arg compiled"
+	printn *
+	void
+	ret_mod
+end

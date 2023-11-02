@@ -179,7 +179,13 @@ impl Display for Object {
         write!(
             f,
             "[object {} @ {:#x}]",
-            self.name, self as *const Self as usize
-        )
+            self.name, self as *const Self as usize,
+        )?;
+
+        if cfg!(feature = "debug") {
+            write!(f, " (--debug {:?})", self.object_variables)?;
+        }
+
+        Ok(())
     }
 }

@@ -186,14 +186,14 @@ fn parse_path(
 
                 let (dot_chain, expected_type) = Parser::dot_chain(
                     Node::new_with_user_data(op, Rc::clone(&user_data)),
-                    &lhs_ty,
+                    Cow::Borrowed(&lhs_ty),
                 )?;
 
                 Ok((
                     ReassignmentPath::DotLookup {
                         lhs: Box::new(lhs),
                         dot_chain,
-                        expected_type: expected_type.to_owned(),
+                        expected_type: expected_type.into_owned(),
                     },
                     lhs_span,
                 ))

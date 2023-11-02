@@ -219,6 +219,9 @@ impl Primitive {
                 let property = obj.borrow().get_property(property, true)?;
                 Some(property)
             }
+            P::Module(module) => {
+                module.borrow().get(property)
+            }
             _ => None,
         }
     }

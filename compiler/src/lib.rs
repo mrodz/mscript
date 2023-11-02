@@ -263,10 +263,9 @@ pub(crate) fn compile_from_str(
 
     state.compile_recursive(&mut |src: &ASTFile, compiled_items: &Vec<CompiledItem>| {
         c += 1;
-        // dbg!(&src.location);
         if result.is_none() {
             #[cfg(feature = "debug")]
-            perform_file_io_out(&src.location, compiled_items.clone(), false).context("The `--debug` feature flag failed to dump the HR Bytecode")?;
+            perform_file_io_out(&src.location, compiled_items, false).context("The `--debug` feature flag failed to dump the HR Bytecode")?;
                 
             result = Some(compiled_items.clone());
         } else {

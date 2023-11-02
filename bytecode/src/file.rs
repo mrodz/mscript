@@ -156,8 +156,6 @@ impl MScriptFile {
             unreachable!()
         };
 
-        // dbg!(self);
-
         functions.run_function(name, args, current_frame, callback_state, jump_callback)
 
         // let functions = self.functions.borrow_mut();
@@ -194,7 +192,7 @@ impl MScriptFile {
     ) -> Result<()> {
         let mut view = self.exports.borrow_mut();
 
-        log::trace!("Exporting {name:?} = {var:?}");
+        log::trace!("[add_export()] Exporting {name:?} = {var:?}");
 
         view.update_once(name, var)
             .context("Double export: name is already exported")

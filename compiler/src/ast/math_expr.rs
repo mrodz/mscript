@@ -473,7 +473,7 @@ fn compile_depth(
             callable.compile(state)
         }
         Expr::ReferenceToConstructor(class_type) => {
-            let id = class_type.abs_id();
+            let id = class_type.name();
             Ok(vec![instruction!(load_self_export id)])
         }
         Expr::Index { lhs_raw, index } => {
@@ -695,12 +695,12 @@ fn parse_expr(
 
                 let index: Pair<Rule> = op;
                 let index: Node = Node::new_with_user_data(index, Rc::clone(&user_data));
-                let (dot_chain, final_output_type) = Parser::dot_chain(index, &lhs_ty)?;
+                let (dot_chain, final_output_type) = Parser::dot_chain(index, Cow::Borrowed(&lhs_ty))?;
 
                 let expected_type = if final_output_type.is_class_self() {
                     lhs_ty
                 } else {
-                    final_output_type.to_owned()
+                    final_output_type.into_owned()
                 };
 
                 Ok((Expr::DotLookup { lhs: Box::new(lhs), dot_chain, expected_type }, None))

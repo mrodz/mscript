@@ -125,9 +125,8 @@ impl Parser {
                 .get_type_of_executing_class_in_nth_frame(0)
                 .unwrap();
             let class_name = class_type.arced_name();
-            let class_id = class_type.id;
 
-            Constructor::default_constructor(path_str, class_name, class_id)
+            Constructor::default_constructor(path_str, class_name)
         });
 
         Ok(ClassBody::new(class_features, constructor))

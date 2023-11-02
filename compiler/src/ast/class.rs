@@ -45,7 +45,7 @@ impl Compile for Class {
             unreachable!()
         };
 
-        let id = CompiledFunctionId::Custom(format!("{}_{}", ty.name(), ty.id));
+        let id = CompiledFunctionId::Custom(ty.name().to_owned());
 
         let compiled_class = CompiledItem::Function {
             id: id.clone(),
@@ -75,10 +75,6 @@ pub(crate) struct ClassType {
 }
 
 impl ClassType {
-    pub(crate) fn abs_id(&self) -> String {
-        format!("{}_{}", self.name, self.id)
-    }
-
     pub fn constructor(&self) -> FunctionType {
         let return_type = ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Class(self.clone())));
 

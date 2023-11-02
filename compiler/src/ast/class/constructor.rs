@@ -22,18 +22,16 @@ pub struct Constructor {
     body: Block,
     path_str: Arc<PathBuf>,
     class_name: Arc<String>,
-    class_id: usize,
 }
 
 impl Constructor {
     pub fn symbolic_id(&self) -> String {
-        format!("{}_{}::$constructor", self.class_name, self.class_id)
+        format!("{}::$constructor", self.class_name)
     }
 
     pub fn default_constructor(
         path_str: Arc<PathBuf>,
         class_name: Arc<String>,
-        class_id: usize,
     ) -> Self {
         Self {
             parameters: FunctionParameters::Named(vec![Ident::new(
@@ -44,7 +42,6 @@ impl Constructor {
             body: Block::empty_body(),
             path_str,
             class_name,
-            class_id,
         }
     }
 }
@@ -53,6 +50,7 @@ impl Compile for Constructor {
     fn compile(&self, state: &CompilationState) -> Result<Vec<CompiledItem>, anyhow::Error> {
         let symbolic_id = self.symbolic_id();
         let mut args = self.parameters.compile(state)?;
+        // args.push(instruction!(breakpoint));
         let mut body = self.body.compile(state)?;
 
         if let Some(CompiledItem::Instruction { id: RET, .. }) = body.last() {
@@ -109,6 +107,7 @@ impl Compile for Constructor {
 
         result.extend_from_slice(&[
             instruction!(load_fast constructor_register),
+            // instruction!(breakpoint),
             instruction!(call),
             instruction!(delete_name_scoped constructor_register),
             instruction!(load_fast obj_register),
@@ -180,7 +179,6 @@ impl Parser {
             body,
             path_str,
             class_name: class_type.arced_name(),
-            class_id: class_type.id,
         })
     }
 }
