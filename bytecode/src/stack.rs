@@ -64,7 +64,7 @@ impl Display for VariableMapping {
 
         for (key, value) in self.0.iter() {
             let value = value.borrow();
-            result.push(format!("{key} = {} (attr: {:?})", value.0, value.1));
+            result.push(format!("\n\t`{key}` = {} (attr: {:?})", value.0, value.1));
         }
 
         let string = if result.is_empty() {

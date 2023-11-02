@@ -337,8 +337,6 @@ impl Function {
                     bail!("goto position index {new_val} is too big, instruction length is {instruction_len}.");
                 }
 
-                // println!("\twent from {instruction_ptr} to {new_val}");
-
                 instruction_ptr = new_val;
                 Ok(())
             };

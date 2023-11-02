@@ -19,6 +19,7 @@ colored = "2.0.4"
 debug_runtime = ["bytecode/debug"]
 debug_compiler = ["compiler/debug"]
 debug = ["bytecode/debug", "compiler/debug"]
+skip_breakpoint = ["bytecode/skip_breakpoint"]
 
 [workspace]
 members = ["bytecode", "bytecode_dev_transpiler", "compiler"]

@@ -6,10 +6,12 @@ class Dog {
 		self.name = name
 		self.breed = breed
 	}
+
+	fn to_string(self) -> str {
+		return "Dog { name: " + self.name + ", breed: " + self.breed + "}"
+	}
 }
 
-a = 10
+my_dog_name = "Scout"
 
-print "Hello World!"
-
-export { Dog, a }
+export { Dog, my_dog_name }

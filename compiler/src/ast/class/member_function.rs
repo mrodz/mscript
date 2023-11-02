@@ -23,15 +23,13 @@ pub(crate) struct MemberFunction {
     body: Block,
     path_str: Arc<PathBuf>,
     class_name: Arc<String>,
-    class_id: usize,
 }
 
 impl MemberFunction {
     pub fn symbolic_id(&self) -> String {
         format!(
-            "{}_{}::{}",
+            "{}::{}",
             self.class_name,
-            self.class_id,
             self.ident().name()
         )
     }
@@ -169,7 +167,6 @@ impl Parser {
             parameters,
             path_str: input.user_data().bytecode_path(),
             body,
-            class_id: class_type.id,
             class_name: class_type.arced_name(),
         })
     }

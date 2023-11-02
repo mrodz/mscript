@@ -180,7 +180,17 @@ pub mod implementations {
                 let stack = ctx.get_call_stack_string();
 
                 println!("\nFunction: {}", ctx.owner());
-                println!("\nOperating Stack: {:?}", ctx.get_local_operating_stack());
+
+                let mut operating_stack_str = String::new();
+
+                for (idx, op_item) in ctx.get_local_operating_stack().iter().enumerate() {
+                    operating_stack_str += "\n\t[";
+                    operating_stack_str += &idx.to_string();
+                    operating_stack_str += "] ";
+                    operating_stack_str += &op_item.to_string();
+                }
+
+                println!("\nOperating Stack:{operating_stack_str}");
                 println!("\nStack Trace:\n{stack}");
                 println!("\nThis Frame's Variables:\n\t{}\n", ctx.get_frame_variables()?);
             }
@@ -456,7 +466,12 @@ pub mod implementations {
 
     instruction! {
         breakpoint(ctx, args) {
-            print!("[!!] BREAKPOINT\n[!!] options\n[!!] - continue\n[!!] - dump\n[!!] Enter Option: ");
+            #[cfg(feature = "skip_breakpoint")]
+            return Ok(());
+
+            let maybe_name = args.first();
+
+            print!("[!!] BREAKPOINT{}\n[!!] options\n[!!] - continue\n[!!] - dump\n[!!] Enter Option: ", maybe_name.map(|x| " ".to_owned() + x).unwrap_or(String::new()));
 
             let mut buf = String::new();
             stdout().flush()?;
@@ -465,7 +480,7 @@ pub mod implementations {
             match buf.trim_end() {
                 "continue" => Ok(()),
                 "dump" => {
-                    stack_dump(ctx, args)
+                    stack_dump(ctx, &[])
                 }
                 buf => {
                     println!("[!!]\n[!!] BREAKPOINT\n[!!] '{buf}' is not a valid option.\n[!!]");
@@ -929,7 +944,7 @@ pub mod implementations {
 
             let pair = ctx.load_local(name).with_context(|| format!("`{name}` is not in scope and cannot be exported"))?;
 
-            log::trace!("exporting {name} = {pair:?}");
+            log::trace!("exporting: {name} = {pair:?}");
 
             ctx.register_export(name.to_owned(), pair)?;
 

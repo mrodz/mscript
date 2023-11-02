@@ -67,7 +67,8 @@ impl Parser {
 		let in_buffer = perform_file_io_in(&path).to_err_vec()?;
 		let file = ast_file_from_str(&path, &path.with_extension("mmm"), &in_buffer)?;
 
-		let file_name = path.file_name().expect("not a file");
+		let no_extension = path.with_extension(""); 
+		let file_name = no_extension.file_name().expect("not a file");
 
 		let mut ident = Ident::new(file_name.to_string_lossy().into_owned(), None, true);
 

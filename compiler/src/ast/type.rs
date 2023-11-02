@@ -9,7 +9,7 @@ use pest::Span;
 use std::{
     borrow::Cow,
     cell::RefCell,
-    fmt::Display,
+    fmt::{Display, Debug},
     hash::Hash,
     ops::Deref,
     sync::{Arc, Weak}, path::PathBuf,
@@ -166,16 +166,26 @@ impl Display for NativeType {
     }
 }
 
-#[derive(Debug, Clone)]
-struct WeakImpl<T: Deref>(Weak<T>)
+#[derive(Clone)]
+struct WeakImpl<T>(Weak<T>)
 where
     <T as Deref>::Target: Hash,
-    T: Deref;
+    T: Deref + Debug;
+
+impl <T>Debug for WeakImpl<T>
+where
+    <T as Deref>::Target: Hash,
+    T: Deref + Debug
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.0.upgrade().expect("backing was dropped when trying to debug"))
+    }
+}
 
 impl<T> Hash for WeakImpl<T>
 where
     <T as Deref>::Target: Hash,
-    T: Deref,
+    T: Deref + Debug,
 {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.deref().hash(state);
@@ -185,28 +195,28 @@ where
 unsafe impl<T> Send for WeakImpl<T>
 where
     <T as Deref>::Target: Hash,
-    T: Deref,
+    T: Deref + Debug,
 {
 }
 
 unsafe impl<T> Sync for WeakImpl<T>
 where
     <T as Deref>::Target: Hash,
-    T: Deref,
+    T: Deref + Debug,
 {
 }
 
 impl<T> Eq for WeakImpl<T>
 where
     <T as Deref>::Target: Hash,
-    T: Deref,
+    T: Deref + Debug,
 {
 }
 
 impl<T> PartialEq for WeakImpl<T>
 where
     <T as Deref>::Target: Hash,
-    T: Deref,
+    T: Deref + Debug,
 {
     fn eq(&self, other: &Self) -> bool {
         self == other
@@ -216,7 +226,7 @@ where
 impl<T> Deref for WeakImpl<T>
 where
     <T as Deref>::Target: Hash,
-    T: Deref,
+    T: Deref + Debug,
 {
     type Target = T;
     fn deref(&self) -> &Self::Target {
@@ -251,7 +261,7 @@ impl Deref for ExportedMembers {
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub(crate) struct ModuleType {
     exported_members: WeakImpl<ExportedMembers>,
     name: WeakImpl<PathBuf>,
@@ -268,6 +278,10 @@ impl ModuleType {
             exported_members: WeakImpl(exported_members_fixed),
             name: WeakImpl(name),
         }
+    }
+
+    pub fn get_property<'a>(&'a self, name: &str) -> Option<&'a Ident> {
+        self.exported_members.iter().find(|&field| field.name() == name)
     }
 }
 
@@ -334,6 +348,12 @@ impl TypeLayout {
         matches!(me, TypeLayout::ClassSelf)
     }
 
+    pub fn is_class(&self) -> bool {
+        let me = self.get_type_recursively();
+
+        matches!(me, TypeLayout::Class(..))
+    }
+
     pub fn get_error_hint_between_types(&self, incompatible: &Self) -> Option<&'static str> {
         use NativeType::*;
         use TypeLayout::*;
@@ -389,6 +409,16 @@ impl TypeLayout {
         }
     }
 
+    pub fn is_callable<'a>(&'a self) -> Option<Cow<'a, FunctionType>> {
+        let me = self.get_type_recursively();
+
+        match me {
+            Self::Class(class_type) => Some(Cow::Owned(class_type.constructor())),
+            Self::Function(f) => Some(Cow::Borrowed(f)),
+            _ => None,
+        }
+    }
+
     pub fn is_function(&self) -> Option<&FunctionType> {
         let me = self.get_type_recursively();
 
@@ -437,6 +467,12 @@ impl TypeLayout {
 
                 Some(property_type)
             }
+            Self::Module(module_type) => {
+                let ident = module_type.get_property(property_name)?;
+                let property_type: &'a Cow<'static, TypeLayout> = ident.ty().ok()?;
+
+                Some(property_type)
+            }
             _ => None,
         }
     }
@@ -449,15 +485,23 @@ impl TypeLayout {
 
                 let mut result = vec![];
 
-                // let fields = fields.map(|x| x.).collect();
+                for field in fields {
+                    result.push(field.to_string());
+                }
+
+                result
+            }
+            Self::Module(module_type) => {
+                let fields = &module_type.exported_members;
+                let fields = fields.iter();
+
+                let mut result = vec![];
 
                 for field in fields {
                     result.push(field.to_string());
                 }
 
                 result
-
-                // fields
             }
             _ => vec![],
         }

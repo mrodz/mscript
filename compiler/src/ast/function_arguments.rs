@@ -56,7 +56,7 @@ impl Parser {
 
             let maybe_class_type = allow_self_type.map(|x| {
                 let TypeLayout::Class(class_type) = x else {
-                    unreachable!();
+                    unreachable!("{x}");
                 };
 
                 class_type

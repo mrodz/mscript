@@ -440,7 +440,10 @@ impl File {
 impl IntoType for File {
     fn for_type(&self) -> Result<TypeLayout> {
         let exported_members= Arc::downgrade(&self.exports);
-        Ok(TypeLayout::Module(ModuleType::new(exported_members, Arc::downgrade(&self.location))))
+
+        let module_type = ModuleType::new(exported_members, Arc::downgrade(&self.location));
+
+        Ok(TypeLayout::Module(module_type))
     }
 }
 
