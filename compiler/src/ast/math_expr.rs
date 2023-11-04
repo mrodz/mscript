@@ -272,17 +272,24 @@ impl IntoType for Expr {
         match self {
             Expr::Value(val) => val.for_type(),
             Expr::BinOp { lhs, op, rhs } => {
-                if op.is_op_assign() {
-                    let Expr::Value(Value::Ident(ident)) = lhs.as_ref() else {
-                        unreachable!()
-                    };
 
-                    if ident.is_const() {
-                        bail!("cannot reassign using {op} to {}, which is const", ident.name())
+                let lhs = if op.is_op_assign() {
+                    match lhs.as_ref() {
+                        Expr::Value(Value::Ident(ident)) => {
+                            if ident.is_const() {
+                                bail!("cannot reassign using {op} to {}, which is const", ident.name())
+                            }
+                            Cow::Owned(lhs.for_type()?)
+                        }
+                        Expr::DotLookup { expected_type, .. } => {
+                            Cow::Borrowed(expected_type)
+                        }
+                        _ => bail!("invalid left operand for {op}"),
                     }
-                }
+                } else {
+                    Cow::Owned(lhs.for_type()?)
+                };
 
-                let lhs = lhs.for_type()?;
                 let rhs = rhs.for_type()?;
 
                 lhs.get_output_type(&rhs, op).with_context(|| {
@@ -421,14 +428,24 @@ fn compile_depth(
                     return Ok(lhs);
                 }
                 Op::AddAssign | Op::SubAssign | Op::MulAssign | Op::DivAssign | Op::ModAssign => {
-                    let Expr::Value(Value::Ident(ident)) = lhs_raw.as_ref() else {
-                        unreachable!()
-                    };
+                    match lhs_raw.as_ref() {
+                        Expr::Value(Value::Ident(ident)) => {
+                            rhs.push(instruction!(bin_op_assign (op.symbol()) (ident.name())));
 
-                    // lhs.push(instruction!(store_fast depth));
-                    rhs.push(instruction!(bin_op_assign (ident.name()) (op.symbol())));
+                            return Ok(rhs)
+                        }
+                        Expr::DotLookup { .. } => {
+                            
+                            rhs.push(instruction!(store_fast depth));
+                            rhs.append(&mut lhs);
+                            rhs.push(instruction!(load_fast depth));
+                            rhs.push(instruction!(bin_op_assign (op.symbol())));
 
-                    return Ok(rhs)
+                            return Ok(rhs)
+
+                        }
+                        lhs => unimplemented!("bin_op_asign has not been implemented for this left hand operand: {lhs:?}")
+                    }
                 }
                 _ => {
                     // store the initialization to the "second part", prep for bin_op

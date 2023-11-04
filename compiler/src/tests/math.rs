@@ -197,3 +197,49 @@ fn mod_equals() {
 		assert b == 0
 	"#).unwrap();
 }
+
+#[test]
+fn bin_op_assign() {
+	eval(r#"
+
+		class Person {
+			first_name: str
+			last_name: str
+			age: int
+	  
+			constructor(self, first_name: str, last_name: str, age: int) {
+				self.first_name = first_name
+				self.last_name = last_name
+				self.age = age
+			}
+	  
+			fn grow_up(self) {
+				self.age += 1
+			}
+	  
+			fn get_full_name(self) -> str {
+				return self.first_name + " " + self.last_name + " is " + self.age + " years old"
+			}
+		}
+		
+		mateo = Person("Mateo", "Rodriguez", 16)
+		
+		assert mateo.get_full_name() == "Mateo Rodriguez is 16 years old"
+		
+		mateo.grow_up()
+		
+		assert mateo.get_full_name() == "Mateo Rodriguez is 17 years old"
+
+		
+		class Wrapper {
+	    	field: int
+	    	constructor(self, field: int) {
+    	    	self.field = field
+	    	}
+		}
+
+		a = Wrapper(17)
+		a.field += 3
+		assert a.field == 20
+	"#).unwrap();
+}

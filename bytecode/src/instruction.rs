@@ -262,44 +262,55 @@ pub mod implementations {
 
         bin_op_assign(ctx, args) {
 
-            let name = args.first().context("you must supply a name")?;
-            let op = args.get(1).context("Expected an operation [+=,-=,*=,/=,%=]")?;
+            let op = args.first().context("Expected an operation [+=,-=,*=,/=,%=]")?;
 
-            let bundle = ctx.load_variable(name).with_context(|| format!("{name} has not been mapped"))?;
-            let value: &mut Primitive = ctx.get_last_op_item_mut().context("there must be a value at the top of the stack for a `bin_op_assign`")?;
+            if let Some(name) = args.get(1) {
+                let bundle = ctx.load_variable(name).with_context(|| format!("{name} has not been mapped"))?;
+                let value: &mut Primitive = ctx.get_last_op_item_mut().context("there must be a value at the top of the stack for a `bin_op_assign`")?;
 
-            let result = {
-                let view = bundle.borrow();
-                let view = view.deref();
+                let result = {
+                    let view = bundle.borrow();
+                    let view = view.deref();
 
-                match op.as_str() {
-                    "+=" => {
-                        let no_mut: &Primitive = value;
-                        (&view.0 + no_mut)?
+                    let no_mut: &Primitive = value;
+
+                    match op.as_str() {
+                        "+=" => (&view.0 + no_mut)?,
+                        "-=" => (&view.0 - no_mut)?,
+                        "*=" => (&view.0 * no_mut)?,
+                        "/=" => (&view.0 / no_mut)?,
+                        "%=" => (&view.0 % no_mut)?,
+                        _ => bail!("unknown assignment operation: {op}")
                     }
-                    "-=" => {
-                        let no_mut: &Primitive = value;
-                        (&view.0 - no_mut)?
-                    }
-                    "*=" => {
-                        let no_mut: &Primitive = value;
-                        (&view.0 * no_mut)?
-                    }
-                    "/=" => {
-                        let no_mut: &Primitive = value;
-                        (&view.0 / no_mut)?
-                    }
-                    "%=" => {
-                        let no_mut: &Primitive = value;
-                        (&view.0 % no_mut)?
-                    }
-                    _ => bail!("unknown assignment operation: {op}")
-                }
+                };
+
+                let mut view = bundle.borrow_mut();
+                view.0 = result.clone();
+                *value = result;
+            } else {
+                let value = ctx.pop().context("there must be a value at the top of the stack for a `bin_op_assign`")?;
+
+                let Some(maybe_ptr) = ctx.get_last_op_item_mut() else {
+                    bail!("`bin_op_assign` without a name argument will attempt to modify a pointer that is second to last on the stack, but no primitive was there");
+                };
+
+                let Primitive::HeapPrimitive(ptr) = maybe_ptr else {
+                    bail!("`bin_op_assign` tried to modify a pointer, but {maybe_ptr} is not a HeapPrimitive");
+                };
+
+                let result = unsafe {
+                    ptr.update(|current| Ok(match op.as_str() {
+                        "+=" => (current + &value)?,
+                        "-=" => (current - &value)?,
+                        "*=" => (current * &value)?,
+                        "/=" => (current / &value)?,
+                        "%=" => (current % &value)?,
+                        _ => bail!("unknown assignment operation: {op}"),
+                    }))?
+                };
+
+                *maybe_ptr = result;
             };
-
-            let mut view = bundle.borrow_mut();
-            view.0 = result.clone(); 
-            *value = result;
 
             Ok(())
         }
@@ -627,7 +638,7 @@ pub mod implementations {
             }
 
             let Some(arg) = args.first() else {
-                let vec = ctx.get_local_operating_stack();
+                let vec = ctx.get_local_operating_stack().clone();
                 // ^^ new capacity = old length
 
                 ctx.clear_stack();
@@ -697,7 +708,7 @@ pub mod implementations {
 
             let callback_state = Some(o.borrow().object_variables.clone());
 
-            let arguments = ctx.get_local_operating_stack();
+            let arguments = ctx.get_local_operating_stack().clone();
             ctx.clear_stack();
 
             ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
@@ -761,7 +772,7 @@ pub mod implementations {
                     destination,
                     callback_state,
                     stack: ctx.rced_call_stack(),
-                    arguments: ctx.get_local_operating_stack(),
+                    arguments: ctx.get_local_operating_stack().clone(),
                 }));
 
                 ctx.clear_stack();
@@ -769,7 +780,7 @@ pub mod implementations {
                 return Ok(())
             };
 
-            let arguments = ctx.get_local_operating_stack();
+            let arguments = ctx.get_local_operating_stack().clone();
 
             ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                 destination: JumpRequestDestination::Standard(first.clone()),
@@ -784,7 +795,7 @@ pub mod implementations {
         }
 
         call_self(ctx, _args) {
-            let arguments = ctx.get_local_operating_stack();
+            let arguments = ctx.get_local_operating_stack().clone();
 
             let callback_state = ctx.get_callback_variables();
 
@@ -1371,7 +1382,7 @@ pub mod implementations {
                 bail!("expected syntax: call_lib path/to/lib.dll function_name")
             };
 
-            let arguments = ctx.get_local_operating_stack();
+            let arguments = ctx.get_local_operating_stack().clone();
 
             ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
                 destination: JumpRequestDestination::Library {

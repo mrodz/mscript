@@ -1,0 +1,153 @@
+function Person::grow_up
+	arg 0
+	store self
+	int 1
+	store_fast #0
+	load_fast self
+	lookup age
+	load_fast #0
+	bin_op_assign +=
+	void
+	void
+	ret
+end
+function Person::get_full_name
+	arg 0
+	store self
+	load_fast self
+	lookup first_name
+	store_fast #4
+	string " "
+	load_fast #4
+	fast_rev2
+	bin_op +
+	store_fast #3
+	load_fast self
+	lookup last_name
+	load_fast #3
+	fast_rev2
+	bin_op +
+	store_fast #2
+	string " is "
+	load_fast #2
+	fast_rev2
+	bin_op +
+	store_fast #1
+	load_fast self
+	lookup age
+	load_fast #1
+	fast_rev2
+	bin_op +
+	store_fast #0
+	string " years old"
+	load_fast #0
+	fast_rev2
+	bin_op +
+	ret
+end
+function Person::$constructor
+	arg 0
+	store self
+	arg 1
+	store first_name
+	arg 2
+	store last_name
+	arg 3
+	store age
+	load first_name
+	store #0
+	load_fast self
+	lookup first_name
+	load_fast #0
+	ptr_mut
+	delete_name_scoped #0
+	load last_name
+	store #0
+	load_fast self
+	lookup last_name
+	load_fast #0
+	ptr_mut
+	delete_name_scoped #0
+	load age
+	store #0
+	load_fast self
+	lookup age
+	load_fast #0
+	ptr_mut
+	delete_name_scoped #0
+	void
+	ret
+end
+function Person
+	reserve_primitive
+	store_fast first_name
+	reserve_primitive
+	store_fast last_name
+	reserve_primitive
+	store_fast age
+	make_function ./person.mmm#Person::grow_up
+	store_fast Person::grow_up
+	make_function ./person.mmm#Person::get_full_name
+	store_fast Person::get_full_name
+	make_object
+	store_fast #1
+	make_function ./person.mmm#Person::$constructor
+	store_fast #0
+	load_fast #1
+	arg 0
+	arg 1
+	arg 2
+	load_fast #0
+	call
+	delete_name_scoped #0
+	load_fast #1
+	ret
+end
+function __module__
+	make_function ./person.mmm#Person
+	export_special Person Person
+	load Person
+	store_fast #1
+	string Mateo
+	store_fast #2
+	string Rodriguez
+	store_fast #3
+	int 16
+	store_fast #4
+	load_fast #2
+	load_fast #3
+	load_fast #4
+	load_fast #1
+	call
+	store mateo
+	load mateo
+	store_fast #1
+	load_fast #1
+	lookup get_full_name
+	store_fast #2
+	ld_self #1
+	load_fast #2
+	call
+	printn *
+	void
+	load mateo
+	store_fast #1
+	load_fast #1
+	lookup grow_up
+	store_fast #2
+	ld_self #1
+	load_fast #2
+	call
+	void
+	load mateo
+	store_fast #1
+	load_fast #1
+	lookup get_full_name
+	store_fast #2
+	ld_self #1
+	load_fast #2
+	call
+	printn *
+	void
+	ret_mod
+end
