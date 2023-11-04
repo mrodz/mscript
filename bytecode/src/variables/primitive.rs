@@ -1,12 +1,11 @@
 //! The interpreter's primitive datatypes.
 //! Every "value" in the interpreter is a primitive.
 
-use crate::{bigint, bool, byte, float, int, stack::{VariableFlags, VariableMapping}, string};
+use crate::{bigint, bool, byte, float, int, stack::{VariableMapping, PrimitiveFlagsPair}, string};
 use anyhow::{bail, Result};
 use std::{
-    cell::{Ref, RefCell, RefMut},
+    cell::RefCell,
     fmt::{Debug, Display},
-    ops::Deref,
     rc::Rc,
 };
 
@@ -54,7 +53,7 @@ pub enum HeapPrimitive {
     /// To test for corruption:
     /// * `rustup default stable-x86-64-pc-windows-msvc`
     /// * `cargo +nightly r -Zbuild-std --target x86_64-pc-windows-msvc -Zbuild-std-features=core/debug_refcell --features debug -- run PATH/TO/FILE.ms --verbose`
-    Lookup(Rc<RefCell<(Primitive, VariableFlags)>>),
+    Lookup(PrimitiveFlagsPair),
 }
 
 impl HeapPrimitive {
@@ -62,7 +61,7 @@ impl HeapPrimitive {
         Self::ArrayPtr(pinned_ptr)
     }
 
-    pub const fn new_lookup_view(shared_ptr: Rc<RefCell<(Primitive, VariableFlags)>>) -> Self {
+    pub const fn new_lookup_view(shared_ptr: PrimitiveFlagsPair) -> Self {
         Self::Lookup(shared_ptr)
     }
 
@@ -70,8 +69,7 @@ impl HeapPrimitive {
         match self {
             Self::ArrayPtr(mut_ptr) => (**mut_ptr).clone(),
             Self::Lookup(cell) => {
-                let view = cell.borrow();
-                view.0.to_owned()
+                cell.primitive().clone()
             }
         }
     }
@@ -79,7 +77,7 @@ impl HeapPrimitive {
     pub(crate) unsafe fn set(&self, new_val: Primitive) {
         match self {
             Self::Lookup(cell) => {
-                cell.replace_with(|(_, flags)| (new_val, flags.to_owned()));
+                cell.set_primitive(new_val);
             }
             Self::ArrayPtr(mut_ptr) => {
                 **mut_ptr = new_val;
@@ -87,33 +85,37 @@ impl HeapPrimitive {
         }
     }
 
-    pub(crate) unsafe fn update<F>(&self, setter: F) -> Result<Primitive>
+    pub(crate) unsafe fn update<F>(&self, setter: F) -> Result<&Primitive>
     where
         F: FnOnce(&Primitive) -> Result<Primitive>,
     {
         match self {
             Self::Lookup(lookup) => {
-                let mut view = RefMut::map(lookup.borrow_mut(), |(primitive, _)| primitive);
-                *view = setter(&view)?;
-                Ok(view.to_owned())
+                let new_value = lookup.update_primitive(setter)?;
+                // lookup.set_primitive(setter())
+                // let mut view = RefMut::map(lookup.borrow_mut(), |(primitive, _)| primitive);
+                // *view = setter(&view)?;
+                Ok(new_value)
             }
             Self::ArrayPtr(raw_ptr) => {
                 let new_val = setter(&**raw_ptr)?;
-                **raw_ptr = new_val.clone();
-                Ok(new_val)
+                **raw_ptr = new_val;
+                Ok(&**raw_ptr)
             }
         }
     }
 
-    unsafe fn borrow(&self) -> Box<dyn Deref<Target = Primitive> + '_> {
+    unsafe fn borrow(&self) -> &Primitive {
         match self {
-            Self::Lookup(shared_ptr) => Box::new(Ref::map(shared_ptr.borrow(), |view| &view.0)),
+            Self::Lookup(shared_ptr) => {
+                shared_ptr.primitive()
+            },
             Self::ArrayPtr(raw_mut_ptr) => {
                 let as_ref = raw_mut_ptr
                     .as_ref()
                     .expect("could not get compliant reference from [mut array ptr]");
 
-                Box::new(as_ref)
+                as_ref
             }
         }
     }
@@ -232,7 +234,7 @@ impl Primitive {
         }
     }
 
-    pub fn lookup(&self, property: &str) -> Option<Rc<RefCell<(Primitive, VariableFlags)>>> {
+    pub fn lookup(&self, property: &str) -> Option<PrimitiveFlagsPair> {
         use Primitive as P;
         match self {
             P::Object(obj) => {
@@ -379,7 +381,6 @@ impl Primitive {
             // something went SERIOUSLY wrong with the MScript compiler.
             HeapPrimitive(hp) => {
                 let view = unsafe { hp.borrow() };
-                let view = &**view;
                 write!(f, "&{view}")
             }
             Object(o) => write!(f, "{}", o.borrow()),

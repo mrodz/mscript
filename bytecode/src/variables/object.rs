@@ -1,6 +1,4 @@
-use super::Primitive;
-use crate::stack::{VariableFlags, VariableMapping};
-use std::cell::RefCell;
+use crate::stack::{VariableMapping, PrimitiveFlagsPair};
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::rc::Rc;
@@ -92,7 +90,7 @@ impl Object {
         &self,
         property_name: &str,
         include_functions: bool,
-    ) -> Option<Rc<RefCell<(Primitive, VariableFlags)>>> {
+    ) -> Option<PrimitiveFlagsPair> {
         let maybe_property = self.has_variable(property_name);
 
         if maybe_property.is_some() {
@@ -111,7 +109,7 @@ impl Object {
     pub fn has_variable(
         &self,
         variable_name: &str,
-    ) -> Option<Rc<RefCell<(Primitive, VariableFlags)>>> {
+    ) -> Option<PrimitiveFlagsPair> {
         self.object_variables.get(variable_name)
     }
 
@@ -119,12 +117,12 @@ impl Object {
         &self,
         function_name: &str,
         include_class_name: Option<&str>,
-    ) -> Option<Rc<RefCell<(Primitive, VariableFlags)>>> {
+    ) -> Option<PrimitiveFlagsPair> {
         if let Some(class_name) = include_class_name {
             let joined_name = class_name.to_owned() + "::" + function_name;
             let maybe_function_ptr = self.object_variables.get(&joined_name);
             if let Some(bundle) = maybe_function_ptr {
-                let bundle_view = bundle.borrow().0.is_function();
+                let bundle_view = bundle.primitive().is_function();
 
                 if bundle_view {
                     return Some(bundle);
@@ -138,7 +136,7 @@ impl Object {
             return None;
         };
 
-        let bundle = field.borrow().0.is_function();
+        let bundle = field.primitive().is_function();
 
         if bundle {
             Some(field)

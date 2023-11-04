@@ -12,7 +12,7 @@ use anyhow::{bail, Context, Result};
 
 use crate::function::Function;
 use crate::instruction::{split_string, Instruction, JumpRequest};
-use crate::stack::{Stack, VariableFlags, VariableMapping};
+use crate::stack::{Stack, VariableMapping, PrimitiveFlagsPair};
 use crate::Primitive;
 
 use super::function::Functions;
@@ -188,7 +188,7 @@ impl MScriptFile {
     pub fn add_export(
         &self,
         name: String,
-        var: Rc<RefCell<(Primitive, VariableFlags)>>,
+        var: PrimitiveFlagsPair,
     ) -> Result<()> {
         let mut view = self.exports.borrow_mut();
 
@@ -198,7 +198,7 @@ impl MScriptFile {
             .context("Double export: name is already exported")
     }
 
-    pub fn get_export(&self, name: &str) -> Option<Rc<RefCell<(Primitive, VariableFlags)>>> {
+    pub fn get_export(&self, name: &str) -> Option<PrimitiveFlagsPair> {
         let exports = self.exports.borrow();
         exports.get(name)
     }
