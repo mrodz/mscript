@@ -95,12 +95,12 @@ impl HeapPrimitive {
             Self::Lookup(lookup) => {
                 let mut view = RefMut::map(lookup.borrow_mut(), |(primitive, _)| primitive);
                 *view = setter(&view)?;
-                return Ok(view.to_owned());
+                Ok(view.to_owned())
             }
             Self::ArrayPtr(raw_ptr) => {
                 let new_val = setter(&**raw_ptr)?;
                 **raw_ptr = new_val.clone();
-                return Ok(new_val);
+                Ok(new_val)
             }
         }
     }
