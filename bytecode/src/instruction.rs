@@ -131,11 +131,10 @@ pub mod implementations {
     use crate::context::SpecialScope;
     use crate::function::{PrimitiveFunction, ReturnValue};
     use crate::stack::flag_constants::READ_ONLY;
-    use crate::stack::VariableFlags;
+    use crate::stack::{VariableFlags, PrimitiveFlagsPair};
     use crate::variables::HeapPrimitive;
     use crate::{bool, function, int, object, optional, vector};
     use std::collections::HashMap;
-    use std::ops::Deref;
     use std::rc::Rc;
 
     instruction! {
@@ -269,23 +268,22 @@ pub mod implementations {
                 let value: &mut Primitive = ctx.get_last_op_item_mut().context("there must be a value at the top of the stack for a `bin_op_assign`")?;
 
                 let result = {
-                    let view = bundle.borrow();
-                    let view = view.deref();
+                    // let view = bundle.borrow();
+                    // let view = view.deref();
 
                     let no_mut: &Primitive = value;
 
                     match op.as_str() {
-                        "+=" => (&view.0 + no_mut)?,
-                        "-=" => (&view.0 - no_mut)?,
-                        "*=" => (&view.0 * no_mut)?,
-                        "/=" => (&view.0 / no_mut)?,
-                        "%=" => (&view.0 % no_mut)?,
+                        "+=" => (bundle.primitive() + no_mut)?,
+                        "-=" => (bundle.primitive() - no_mut)?,
+                        "*=" => (bundle.primitive() * no_mut)?,
+                        "/=" => (bundle.primitive() / no_mut)?,
+                        "%=" => (bundle.primitive() % no_mut)?,
                         _ => bail!("unknown assignment operation: {op}")
                     }
                 };
 
-                let mut view = bundle.borrow_mut();
-                view.0 = result.clone();
+                bundle.set_primitive(result.clone());
                 *value = result;
             } else {
                 let value = ctx.pop().context("there must be a value at the top of the stack for a `bin_op_assign`")?;
@@ -309,7 +307,7 @@ pub mod implementations {
                     }))?
                 };
 
-                *maybe_ptr = result;
+                *maybe_ptr = result.to_owned();
             };
 
             Ok(())
@@ -346,12 +344,12 @@ pub mod implementations {
 
                 let new_val = ctx.pop().unwrap();
 
-                let primitive_with_flags: Rc<RefCell<(Primitive, VariableFlags)>> = ctx.load_local(&op_name[1..]).context("vector not found for pushing")?;
+                let primitive_with_flags: PrimitiveFlagsPair = ctx.load_local(&op_name[1..]).context("vector not found for pushing")?;
 
-                let primitive_with_flags = primitive_with_flags.borrow();
+                // let primitive_with_flags = primitive_with_flags.borrow();
                 // let primitive_with_flags: &mut (Primitive, VariableFlags) = Rc::make_mut(&mut primitive_with_flags);
 
-                let Primitive::Vector(ref vector) = primitive_with_flags.0 else {
+                let Primitive::Vector(ref vector) = primitive_with_flags.primitive() else {
                     bail!("not a vector, trying to push")
                 };
 
@@ -373,10 +371,10 @@ pub mod implementations {
                         if !byte.is_ascii_digit() {
                             let index_as_str = std::str::from_utf8(index)?;
                             let variable = ctx.load_local(index_as_str).with_context(|| format!("'{index_as_str}' is not a literal number nor a name that has been mapped locally"))?;
-                            let variable = variable.borrow();
-                            let primitive_part: &Primitive = &variable.0;
+                            // let variable = variable.borrow();
+                            // let primitive_part: &Primitive = &variable.0;
 
-                            let as_index: usize = primitive_part.try_into_numeric_index()?;
+                            let as_index: usize = variable.primitive().try_into_numeric_index()?;
 
                             break 'index_gen as_index;
                         }
@@ -737,14 +735,17 @@ pub mod implementations {
             // this bypass of Rc protections is messy and should be refactored.
             let obj_view = o.borrow();
             let has_variable = obj_view.has_variable(var_name).context("variable does not exist on object")?;
-            let mut var = has_variable.borrow_mut();
+            // let mut var = has_variable.borrow_mut();
 
-            if var.0.ty() != new_item.ty() {
-                bail!("mismatched types in assignment ({:?} & {:?})", var.0.ty(), new_item.ty())
+            let ty_lhs = has_variable.primitive().ty();
+            let ty_rhs = new_item.ty();
+
+            if ty_lhs != ty_rhs {
+                bail!("mismatched types in assignment ({ty_lhs:?} & {ty_rhs:?})")
             }
 
             // let () = rc_to_ref(&var.0);
-            var.0 = new_item;
+            has_variable.set_primitive(new_item);
             // let x = &mut rc_to_ref(&var).0;
             // *x = new_item;
             // var.0 = new_item;
@@ -967,11 +968,11 @@ pub mod implementations {
                 bail!("`load_self_export` requires a source name")
             };
 
-            let primitive = ctx
+            let bundle = ctx
                 .load_self_export(src)
                 .with_context(|| format!("`{src}` has not been exported from the executing module."))?;
 
-            let primitive = primitive.borrow().0.clone();
+            let primitive = bundle.primitive().clone();
 
             ctx.push(primitive);
             // ctx.ref_variable(Cow::Owned(s.to_owned()), primitive);
@@ -994,10 +995,11 @@ pub mod implementations {
 
             let arg = unsafe { arg.move_out_of_heap_primitive() };
 
-            let pair = Rc::new(RefCell::new((arg, VariableFlags(READ_ONLY))));
+            let variable = PrimitiveFlagsPair::new(arg, VariableFlags(READ_ONLY));
+            // let pair = Rc::new(RefCell::new((arg, VariableFlags(READ_ONLY))));
 
-            ctx.register_export(export_name.to_owned(), Rc::clone(&pair))?;
-            ctx.ref_variable(Cow::Owned(name.to_owned()), pair);
+            ctx.register_export(export_name.to_owned(), variable.clone())?;
+            ctx.ref_variable(Cow::Owned(name.to_owned()), variable);
 
             Ok(())
         }
@@ -1108,7 +1110,7 @@ pub mod implementations {
                 bail!("load before store (`{name}` not in scope)")
             };
 
-            ctx.push(var.borrow().0.clone());
+            ctx.push(var.primitive().clone());
 
             Ok(())
         }
@@ -1120,7 +1122,7 @@ pub mod implementations {
 
             let var = ctx.load_local(name).with_context(|| format!("load before store (`{name}` not in this stack frame)\nframe `{:?}`'s variables:\n{:?}", ctx.rced_call_stack().borrow().get_frame_label(), ctx.get_frame_variables()))?;
 
-            ctx.push(var.borrow().0.clone());
+            ctx.push(var.primitive().clone());
 
             Ok(())
         }
@@ -1132,7 +1134,7 @@ pub mod implementations {
 
             let var = ctx.load_callback_variable(name)?;
 
-            ctx.push(var.borrow().0.clone());
+            ctx.push(var.primitive().clone());
 
             Ok(())
         }
@@ -1156,8 +1158,8 @@ pub mod implementations {
 
             let name = args.first().unwrap();
 
-            let deleted: Rc<RefCell<(Primitive, VariableFlags)>> = ctx.delete_variable_local(name)?;
-            let primitive: Primitive = deleted.borrow().0.clone();
+            let deleted: PrimitiveFlagsPair = ctx.delete_variable_local(name)?;
+            let primitive: Primitive = deleted.primitive().clone();
 
             ctx.push(primitive);
 
@@ -1175,7 +1177,7 @@ pub mod implementations {
 
             let primitive = ctx.pop().unwrap();
 
-            let result: Rc<RefCell<(Primitive, VariableFlags)>> = primitive.lookup(name).with_context(|| format!("`{name}` does not exist on `{primitive:?}`"))?;
+            let result: PrimitiveFlagsPair = primitive.lookup(name).with_context(|| format!("`{name}` does not exist on `{primitive:?}`"))?;
 
             let heap_primitive = Primitive::HeapPrimitive(HeapPrimitive::new_lookup_view(result));
 
@@ -1192,7 +1194,7 @@ pub mod implementations {
 
             let var = ctx.load_local(name).with_context(|| format!("load before store (`{name}` not in this stack frame)\nframe `{:?}`'s variables:\n{:?}", ctx.rced_call_stack().borrow().get_frame_label(), ctx.get_frame_variables()))?;
 
-            ctx.push_front(var.borrow().0.clone());
+            ctx.push_front(var.primitive().clone());
 
             Ok(())
         }

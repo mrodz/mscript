@@ -4,7 +4,7 @@
 use super::function::{Function, InstructionExitState};
 use super::stack::VariableMapping;
 use super::variables::Primitive;
-use crate::stack::{Stack, VariableFlags};
+use crate::stack::{Stack, VariableFlags, PrimitiveFlagsPair};
 use anyhow::{bail, Context, Result};
 use std::borrow::Cow;
 use std::cell::{Ref, RefCell};
@@ -137,7 +137,7 @@ impl<'a> Ctx<'a> {
     pub fn load_callback_variable(
         &self,
         name: &str,
-    ) -> Result<Rc<RefCell<(Primitive, VariableFlags)>>> {
+    ) -> Result<PrimitiveFlagsPair> {
         let Some(ref mapping) = self.callback_state else {
             bail!("this function is not a callback")
         };
@@ -283,7 +283,7 @@ impl<'a> Ctx<'a> {
     pub(crate) fn register_export(
         &self,
         name: String,
-        var: Rc<RefCell<(Primitive, VariableFlags)>>,
+        var: PrimitiveFlagsPair,
     ) -> Result<()> {
         let file = self
             .function
@@ -302,7 +302,7 @@ impl<'a> Ctx<'a> {
     pub(crate) fn ref_variable(
         &self,
         name: Cow<'static, str>,
-        var: Rc<RefCell<(Primitive, VariableFlags)>>,
+        var: PrimitiveFlagsPair,
     ) {
         self.call_stack.borrow_mut().ref_variable(name, var)
     }
@@ -317,7 +317,7 @@ impl<'a> Ctx<'a> {
     pub(crate) fn delete_variable_local(
         &self,
         name: &str,
-    ) -> Result<Rc<RefCell<(Primitive, VariableFlags)>>> {
+    ) -> Result<PrimitiveFlagsPair> {
         self.call_stack.borrow_mut().delete_variable_local(name)
     }
 
@@ -332,14 +332,14 @@ impl<'a> Ctx<'a> {
     pub(crate) fn load_variable(
         &self,
         name: &str,
-    ) -> Option<Rc<RefCell<(Primitive, VariableFlags)>>> {
+    ) -> Option<PrimitiveFlagsPair> {
         self.call_stack.borrow().find_name(name)
     }
 
     pub(crate) fn load_self_export(
         &self,
         name: &str,
-    ) -> Option<Rc<RefCell<(Primitive, VariableFlags)>>> {
+    ) -> Option<PrimitiveFlagsPair> {
         let file = self
             .function
             .location()
@@ -367,7 +367,7 @@ impl<'a> Ctx<'a> {
     ///
     /// Will search _exclusively_ in the current stack frame, which makes this function more performant
     /// when searching for variables that should exist in the same stack frame.
-    pub(crate) fn load_local(&self, name: &str) -> Result<Rc<RefCell<(Primitive, VariableFlags)>>> {
+    pub(crate) fn load_local(&self, name: &str) -> Result<PrimitiveFlagsPair> {
         self.call_stack
             .borrow()
             .get_frame_variables()
