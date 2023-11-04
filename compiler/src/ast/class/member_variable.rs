@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 use crate::{
     ast::{
@@ -9,7 +9,7 @@ use crate::{
     },
     instruction,
     parser::{Node, Parser, Rule},
-    VecErr,
+    CompilationError, VecErr,
 };
 
 use super::WalkForType;
@@ -44,7 +44,16 @@ impl WalkForType for MemberVariable {
             children.next().unwrap()
         };
 
-        let ty_node = children.next().context("no type")?;
+        let ty_node = children.next().details_lazy_message(
+            input.as_span(),
+            &input.user_data().get_source_file_name(),
+            || {
+                format!(
+                    "when declaring a member variable, you must specify a type (eg. `{}: int`)",
+                    ident_node.as_str()
+                )
+            },
+        )?;
 
         let mut ident = Parser::ident(ident_node)?;
 

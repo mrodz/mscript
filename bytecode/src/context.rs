@@ -204,8 +204,8 @@ impl<'a> Ctx<'a> {
     }
 
     /// Creates a **COPY** of the local operating stack.
-    pub fn get_local_operating_stack(&self) -> Vec<Primitive> {
-        self.stack.clone()
+    pub fn get_local_operating_stack(&self) -> &Vec<Primitive> {
+        &self.stack
     }
 
     pub fn ref_local_operating_stack(&self) -> &[Primitive] {

@@ -141,7 +141,7 @@ impl Compile for NumberLoop {
         }
 
         // step_compiled.push(instruction!(bin_op "+"));
-        step_compiled.push(instruction!(bin_op_assign loop_identity "+="));
+        step_compiled.push(instruction!(bin_op_assign "+=" loop_identity));
 
         let step_compiled_len = step_compiled.len();
 

@@ -137,17 +137,6 @@ impl Dependencies for Ident {
 }
 
 impl Ident {
-    #[allow(dead_code)]
-    pub fn load_type(&mut self, user_data: &AssocFileData) -> Result<()> {
-        let (ident, _) = user_data
-            .get_dependency_flags_from_name(&self.name)
-            .context("variable has not been mapped")?;
-
-        self.ty = Some(ident.ty.clone().context("no type")?);
-
-        Ok(())
-    }
-
     pub fn set_type_no_link(&mut self, ty: Cow<'static, TypeLayout>) {
         self.ty = Some(ty);
     }
@@ -199,7 +188,6 @@ impl Ident {
             });
 
             self.ty = new_ty;
-            // self.ty = Some(ident.ty.clone().context("no type")?);
 
             true
         } else {

@@ -4,7 +4,7 @@
 use crate::{bigint, bool, byte, float, int, stack::{VariableFlags, VariableMapping}, string};
 use anyhow::{bail, Result};
 use std::{
-    cell::{Ref, RefCell},
+    cell::{Ref, RefCell, RefMut},
     fmt::{Debug, Display},
     ops::Deref,
     rc::Rc,
@@ -51,6 +51,9 @@ macro_rules! primitive {
 #[derive(Debug, Clone)]
 pub enum HeapPrimitive {
     ArrayPtr(*mut Primitive),
+    /// To test for corruption:
+    /// * `rustup default stable-x86-64-pc-windows-msvc`
+    /// * `cargo +nightly r -Zbuild-std --target x86_64-pc-windows-msvc -Zbuild-std-features=core/debug_refcell --features debug -- run PATH/TO/FILE.ms --verbose`
     Lookup(Rc<RefCell<(Primitive, VariableFlags)>>),
 }
 
@@ -76,8 +79,7 @@ impl HeapPrimitive {
     pub(crate) unsafe fn set(&self, new_val: Primitive) {
         match self {
             Self::Lookup(cell) => {
-                let mut view = cell.borrow_mut();
-                view.0 = new_val;
+                cell.replace_with(|(_, flags)| (new_val, flags.to_owned()));
             }
             Self::ArrayPtr(mut_ptr) => {
                 **mut_ptr = new_val;
@@ -85,7 +87,25 @@ impl HeapPrimitive {
         }
     }
 
-    pub(crate) unsafe fn borrow(&self) -> Box<dyn Deref<Target = Primitive> + '_> {
+    pub(crate) unsafe fn update<F>(&self, setter: F) -> Result<Primitive>
+    where
+        F: FnOnce(&Primitive) -> Result<Primitive>,
+    {
+        match self {
+            Self::Lookup(lookup) => {
+                let mut view = RefMut::map(lookup.borrow_mut(), |(primitive, _)| primitive);
+                *view = setter(&view)?;
+                Ok(view.to_owned())
+            }
+            Self::ArrayPtr(raw_ptr) => {
+                let new_val = setter(&**raw_ptr)?;
+                **raw_ptr = new_val.clone();
+                Ok(new_val)
+            }
+        }
+    }
+
+    unsafe fn borrow(&self) -> Box<dyn Deref<Target = Primitive> + '_> {
         match self {
             Self::Lookup(shared_ptr) => Box::new(Ref::map(shared_ptr.borrow(), |view| &view.0)),
             Self::ArrayPtr(raw_mut_ptr) => {
