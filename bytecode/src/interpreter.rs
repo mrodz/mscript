@@ -23,13 +23,29 @@ pub struct Program {
 }
 
 impl Program {
-    pub fn new_from_file(entrypoint: Rc<MScriptFile>) -> Result<Self> {
-        let file_path = entrypoint.path_shared();
+    pub fn new_from_files(
+        entrypoint_path: Rc<String>,
+        files_in_use: HashMap<Rc<String>, Rc<MScriptFile>>,
+    ) -> Result<Self> {
+        if !files_in_use.contains_key(&entrypoint_path) {
+            bail!(
+                "{entrypoint_path} is not the key used for any of these files: {files_in_use:#?}"
+            );
+        }
 
         Ok(Self {
+            entrypoint: Rc::downgrade(&entrypoint_path),
+            files_in_use: RefCell::new(files_in_use),
+        })
+    }
+
+    pub fn new_from_file(entrypoint: Rc<MScriptFile>) -> Self {
+        let file_path = entrypoint.path_shared();
+
+        Self {
             entrypoint: Rc::downgrade(&file_path),
             files_in_use: RefCell::new(HashMap::from([(file_path, entrypoint)])),
-        })
+        }
     }
 
     /// Create a new program given a path.
