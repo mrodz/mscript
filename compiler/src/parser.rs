@@ -11,7 +11,7 @@ use crate::ast::{
     ClassType, CompilationState, Compile, CompiledFunctionId, CompiledItem, Declaration,
     Dependencies, Export, FunctionParameters, Ident, IntoType, TypeLayout, ModuleType,
 };
-use crate::{instruction, BytecodePathStr};
+use crate::{instruction, BytecodePathStr, FileTracker, perform_file_io_in, ast_file_from_str, VecErr};
 use crate::scope::{
     Scope, ScopeHandle, ScopeIter, ScopeReturnStatus, ScopeType, Scopes, TypeSearchResult,
 };
@@ -30,19 +30,13 @@ pub(crate) struct AssocFileData {
     source_name: Arc<PathBuf>,
     class_id_c: RwLock<usize>,
     exports: RefCell<Option<Arc<RefCell<Vec<Ident>>>>>,
+    files_loaded: FileTracker
 }
 
 impl AssocFileData {
-    pub fn new(destination_unknown: impl AsRef<Path>) -> Self {
+    pub fn new(destination_unknown: impl AsRef<Path>, files_loaded: FileTracker) -> Self {
         // let destination: Path = destination_name.into();
         let destination = destination_unknown.as_ref();
-
-        /*
-        // this version checks if it exists:
-        if !destination.with_extension("ms").is_file() {
-            panic!("not a file!");
-        }
-        */
 
         let dst_file_ext = destination.extension().expect("no file extension").bytecode_str();
 
@@ -54,6 +48,7 @@ impl AssocFileData {
             source_name: Arc::new(destination.with_extension("ms").to_path_buf()),
             class_id_c: RwLock::new(0),
             exports: RefCell::new(None),
+            files_loaded
         }
     }
 
@@ -90,6 +85,20 @@ impl AssocFileData {
         }
 
         bail!("no loop found")
+    }
+
+    pub fn was_path_preloaded(&self, path: impl AsRef<Path>) -> bool {
+        self.files_loaded.file_exists(&path.bytecode_str())
+    }
+
+    pub fn ast_from_path(&self, path: impl AsRef<Path>) -> Result<File, Vec<anyhow::Error>> {
+        let source = if let Some(code) = self.files_loaded.get_file(&path.bytecode_str()) {
+            Cow::Borrowed(code) 
+        } else {
+            Cow::Owned(perform_file_io_in(path.as_ref()).to_err_vec()?)
+        };
+
+        ast_file_from_str(&path, path.as_ref().with_extension("mmm"), &source, self.files_loaded.clone())
     }
 
     pub fn is_at_module_level(&self) -> bool {
@@ -146,10 +155,6 @@ impl AssocFileData {
     ) -> Option<Ref<ClassType>> {
         self.scopes.get_type_of_executing_class(skip_n_frames)
     }
-
-    // pub fn get_name_of_executing_class_in_nth_frame(&self, skip_n_frames: usize) -> Result<&str> {
-    //     self.scopes.get_name_of_executing_class(step_n_frames)
-    // }
 
     /// This function should **ONLY** be called when creating the AST Node for a Class Type.
     pub fn request_class_id(&self) -> usize {

@@ -2,7 +2,7 @@ use std::{path::{Path, PathBuf}, borrow::Cow};
 
 use anyhow::{Result, Context};
 
-use crate::{parser::{Parser, Node, Rule, File}, perform_file_io_in, ast_file_from_str, VecErr, instruction, CompilationError, BytecodePathStr};
+use crate::{parser::{Parser, Node, Rule, File, AssocFileData}, VecErr, instruction, CompilationError, BytecodePathStr};
 
 use super::{Compile, Dependencies, new_err, Ident, IntoType};
 
@@ -31,30 +31,38 @@ impl Compile for Import {
 
 impl Dependencies for Import {}
 
+impl Import {
+	pub fn path_from_parts(user_data: &AssocFileData, str_part: &str) -> Result<PathBuf> {
+		let src: &str = &user_data.get_source_file_name();
+		let path = Path::new(src);
+		let attempted_path = Path::new(str_part);
+		let path = path.parent().context("no parent")?.join(attempted_path);
+		Ok(path)
+	}
+}
+
 impl Parser {
 	pub fn import_path(input: Node) -> Result<PathBuf> {
-		let src: &str = &input.user_data().get_source_file_name();
-		let path = Path::new(src);
+		let path = Import::path_from_parts(input.user_data(), input.as_str())?;
 
-		let as_str = input.as_str();
-		// let mut children = input.children();
-		let attempted_path = Path::new(as_str);
+		let with_extension = path.with_extension("ms");
 
-		let path = path.parent().context("no parent")?.join(attempted_path);
+		if input.user_data().was_path_preloaded(&with_extension) {
+			return Ok(path);
+		}
 
 		let path_exists = path.try_exists()?;
 
-		let with_extension = path.with_extension("ms");
 		
 		if with_extension.try_exists()? {
 			return Ok(with_extension.to_path_buf())
 		}
 
 		if path_exists && path.is_dir() {
-			return Err(new_err(input.as_span(), src, "This is a directory, and not a file".to_owned()));
+			return Err(new_err(input.as_span(), &input.user_data().get_source_file_name(), "This is a directory, and not a file".to_owned()));
 		}
 		
-		Err(new_err(input.as_span(), src, "This path does not exist".to_owned()))
+		Err(new_err(input.as_span(), &input.user_data().get_source_file_name(), "This path does not exist".to_owned()))
 	}
 
 	pub fn import_standard(input: Node) -> Result<Import, Vec<anyhow::Error>> {
@@ -62,10 +70,9 @@ impl Parser {
 
 		let path_node = children.next().unwrap();
 
-		let path = Self::import_path(path_node).to_err_vec()?; //.canonicalize().context("path not found").to_err_vec()?;
+		let path = Self::import_path(path_node).to_err_vec()?;
 
-		let in_buffer = perform_file_io_in(&path).to_err_vec()?;
-		let file = ast_file_from_str(&path, &path.with_extension("mmm"), &in_buffer)?;
+		let file = input.user_data().ast_from_path(path.with_extension("ms"))?;
 
 		let no_extension = path.with_extension(""); 
 		let file_name = no_extension.file_name().expect("not a file");

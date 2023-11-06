@@ -5,6 +5,7 @@ mod functions;
 mod r#if;
 mod math;
 mod modify_edge_cases;
+mod modules;
 mod number_loop;
 mod optionals;
 mod r#while;

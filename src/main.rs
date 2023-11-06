@@ -149,7 +149,7 @@ fn main() -> Result<()> {
 
                 stdout().flush()?;
 
-                let program = Program::new_from_file(product)?;
+                let program = Program::new_from_file(product);
                 program.execute()
             })?;
 

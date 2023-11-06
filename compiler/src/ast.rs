@@ -384,7 +384,7 @@ impl CompilationState {
         *view = Some(Box::new(result));
     }
 
-    pub fn compile_recursive(&self, driver: &mut impl FnMut(&File, &Vec<CompiledItem>) -> Result<()>) -> Result<(), Vec<anyhow::Error>> {
+    pub fn compile_recursive(&self, driver: &mut impl FnMut(&File, Vec<CompiledItem>) -> Result<()>) -> Result<(), Vec<anyhow::Error>> {
         let mut view = self.compilation_queue.borrow_mut();
 
         let mut node @ Some(..) = view.take() else {
@@ -398,7 +398,7 @@ impl CompilationState {
 
             h.file.compile(&state_for_file)?;
 
-            driver(&h.file, state_for_file.get_function_buffer()).to_err_vec()?;
+            driver(&h.file, state_for_file.take_function_buffer()).to_err_vec()?;
 
             state_for_file.compile_recursive(driver)?;
 
@@ -492,6 +492,10 @@ impl CompilationState {
 
     pub fn get_function_buffer(&mut self) -> &mut Vec<CompiledItem> {
         self.function_buffer.get_mut()
+    }
+
+    pub fn take_function_buffer(&mut self) -> Vec<CompiledItem> {
+        std::mem::take(self.function_buffer.get_mut()) 
     }
 
     pub fn push_function(&self, compiled_function: CompiledItem) {
