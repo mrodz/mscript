@@ -1,19 +1,21 @@
 use std::borrow::Cow;
 use std::cell::{Ref, RefCell};
-use std::path::{PathBuf, Path};
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Result};
 use pest_consume::Parser as ParserDerive;
 
 use crate::ast::{
     ClassType, CompilationState, Compile, CompiledFunctionId, CompiledItem, Declaration,
-    Dependencies, Export, FunctionParameters, Ident, IntoType, TypeLayout, ModuleType,
+    Dependencies, Export, FunctionParameters, Ident, IntoType, ModuleType, TypeLayout,
 };
-use crate::{instruction, BytecodePathStr, FileTracker, perform_file_io_in, ast_file_from_str, VecErr};
 use crate::scope::{
     Scope, ScopeHandle, ScopeIter, ScopeReturnStatus, ScopeType, Scopes, TypeSearchResult,
+};
+use crate::{
+    instruction, perform_file_io_in, root_ast_from_str, BytecodePathStr, FileManager, VecErr,
 };
 
 #[allow(unused)]
@@ -28,17 +30,20 @@ pub(crate) struct AssocFileData {
     scopes: Scopes,
     file_name: Arc<PathBuf>,
     source_name: Arc<PathBuf>,
-    class_id_c: RwLock<usize>,
+    // class_id_c: RwLock<usize>,
     exports: RefCell<Option<Arc<RefCell<Vec<Ident>>>>>,
-    files_loaded: FileTracker
+    files: FileManager,
 }
 
 impl AssocFileData {
-    pub fn new(destination_unknown: impl AsRef<Path>, files_loaded: FileTracker) -> Self {
+    pub fn new(destination_unknown: impl AsRef<Path>, files_loaded: FileManager) -> Self {
         // let destination: Path = destination_name.into();
         let destination = destination_unknown.as_ref();
 
-        let dst_file_ext = destination.extension().expect("no file extension").bytecode_str();
+        let dst_file_ext = destination
+            .extension()
+            .expect("no file extension")
+            .bytecode_str();
 
         assert_eq!(dst_file_ext, "mmm", "destination must be .mmm");
 
@@ -46,9 +51,9 @@ impl AssocFileData {
             scopes: Scopes::new(),
             file_name: Arc::new(destination.to_path_buf()),
             source_name: Arc::new(destination.with_extension("ms").to_path_buf()),
-            class_id_c: RwLock::new(0),
+            // class_id_c: RwLock::new(0),
             exports: RefCell::new(None),
-            files_loaded
+            files: files_loaded,
         }
     }
 
@@ -88,17 +93,44 @@ impl AssocFileData {
     }
 
     pub fn was_path_preloaded(&self, path: impl AsRef<Path>) -> bool {
-        self.files_loaded.file_exists(&path.bytecode_str())
+        self.files.preloaded_file_exists(&path.bytecode_str())
     }
 
-    pub fn ast_from_path(&self, path: impl AsRef<Path>) -> Result<File, Vec<anyhow::Error>> {
-        let source = if let Some(code) = self.files_loaded.get_file(&path.bytecode_str()) {
-            Cow::Borrowed(code) 
+    pub fn import(&self, path: PathBuf) -> Result<(ModuleType, bool), Vec<anyhow::Error>> {
+        if let Some(module) = self.files.get_module_type(&path) {
+            return Ok((module.to_owned(), true));
+        }
+
+        log::debug!("Cache miss on {path:?}");
+
+        // else, cache miss
+
+        let source = if let Some(code) = self.files.get_preloaded_file(&path.bytecode_str()) {
+            Cow::Borrowed(code)
         } else {
             Cow::Owned(perform_file_io_in(path.as_ref()).to_err_vec()?)
         };
 
-        ast_file_from_str(&path, path.as_ref().with_extension("mmm"), &source, self.files_loaded.clone())
+        let with_ext = path.with_extension("mmm");
+
+        // let owned = path.to_owned()
+
+        let root = root_ast_from_str(&path, with_ext, &source, self.files.clone())?;
+
+        let module_type = ModuleType::from_node(&root).to_err_vec()?;
+
+        log::info!("+ mod {path:?} {module_type:?}");
+
+        let module = self
+            .files
+            .register_module(Arc::new(path.to_owned()), module_type)
+            .to_owned();
+
+        assert_eq!(&root.user_data().files, &self.files);
+
+        Parser::file(root)?;
+
+        Ok((module, false))
     }
 
     pub fn is_at_module_level(&self) -> bool {
@@ -157,12 +189,12 @@ impl AssocFileData {
     }
 
     /// This function should **ONLY** be called when creating the AST Node for a Class Type.
-    pub fn request_class_id(&self) -> usize {
-        let mut class_id = self.class_id_c.write().unwrap();
-        let result = *class_id;
-        *class_id += 1;
-        result
-    }
+    // pub fn request_class_id(&self) -> usize {
+    //     let mut class_id = self.class_id_c.write().unwrap();
+    //     let result = *class_id;
+    //     *class_id += 1;
+    //     result
+    // }
 
     pub fn get_backing_export_struct(&self) -> Option<Arc<RefCell<Vec<Ident>>>> {
         let mut window = self.exports.borrow_mut();
@@ -289,10 +321,11 @@ impl AssocFileData {
     }
 
     pub fn is_function_a_class_method(&self) -> bool {
+        dbg!(&self.scopes);
         let mut iter = self.scopes.iter();
 
         let this_frame = iter.next().unwrap();
-
+        dbg!(&this_frame);
         let parent_scope = iter.next().unwrap();
 
         this_frame.is_class() || parent_scope.is_class()
@@ -380,6 +413,11 @@ pub(crate) mod util {
                         multiply => "*",
                         divide => "/",
                         modulo => "%",
+                        add_assign => "+=",
+                        sub_assign => "-=",
+                        mul_assign => "*=",
+                        div_assign => "/=",
+                        mod_assign => "%=",
                         lt => "<",
                         gt => ">",
                         lte => "<=",
@@ -390,9 +428,11 @@ pub(crate) mod util {
                         or => "||",
                         xor => "^",
                         assignment_flag => "assignment flag",
+                        assignment_unpack => "assignment unpack",
                         dot_chain => "dot chain",
                         class_constructor => "constructor",
                         class_bound_function => "member function",
+                        class_flag => "class flag",
                     }),
             )
         })
@@ -444,9 +484,7 @@ impl File {
 
 impl IntoType for File {
     fn for_type(&self) -> Result<TypeLayout> {
-        let exported_members= Arc::downgrade(&self.exports);
-
-        let module_type = ModuleType::new(exported_members, Arc::downgrade(&self.location));
+        let module_type = ModuleType::new_initialized(self.exports.clone(), self.location.clone());
 
         Ok(TypeLayout::Module(module_type))
     }
@@ -462,7 +500,7 @@ impl File {
 impl Dependencies for File {
     fn dependencies(&self) -> Vec<crate::ast::Dependency> {
         let mut result = vec![];
-        let view = unsafe {&*self.declarations.as_ptr()};
+        let view = unsafe { &*self.declarations.as_ptr() };
 
         for declaration in view.iter() {
             result.append(&mut declaration.net_dependencies());
@@ -507,7 +545,7 @@ impl Compile<Vec<anyhow::Error>> for File {
 
 #[pest_consume::parser]
 impl Parser {
-    pub fn file<'a>(input: Node) -> Result<File, Vec<anyhow::Error>> {
+    pub fn file<'a>(input: Node<'a>) -> Result<(), Vec<anyhow::Error>> {
         let mut result = File::new_with_location(input.user_data().bytecode_path());
 
         let mut errors = vec![];
@@ -530,7 +568,13 @@ impl Parser {
                 result.exports = exports;
             };
 
-            Ok(result)
+            // panic!();
+            input
+                .user_data()
+                .files
+                .register_ast(input.user_data().source_path(), result);
+
+            Ok(())
         }
     }
 }

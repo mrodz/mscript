@@ -80,7 +80,8 @@ fn lazy_eval() {
 
 #[test]
 fn bin_op_assignment() {
-	eval(r#"
+    eval(
+        r#"
 		a = 7
 
 		print_number = fn(input: int) {
@@ -92,42 +93,54 @@ fn bin_op_assignment() {
 		print_number(a += 3)
 	
 		assert a == 10
-	"#).unwrap();
+	"#,
+    )
+    .unwrap();
 }
 
 #[test]
 #[should_panic = "cannot reassign using += to a, which is const"]
 fn const_bin_op_mod() {
-	eval(r#"
+    eval(
+        r#"
 		const a = 7
 		a += 1
 		assert a == 8
-	"#).unwrap();
+	"#,
+    )
+    .unwrap();
 }
 
 #[test]
 fn string_bin_op_assignment() {
-	eval(r#"
+    eval(
+        r#"
 		result = "Fizz"
 
 		result += "Buzz"
 
 		assert result == "FizzBuzz"
-	"#).unwrap();
+	"#,
+    )
+    .unwrap();
 }
 
 #[test]
 #[should_panic = "invalid operation: int *= bool"]
 fn type_mismatch_bin_op_assignment() {
-	eval(r#"
+    eval(
+        r#"
 		value = 10
 		value *= false
-	"#).unwrap();
+	"#,
+    )
+    .unwrap();
 }
 
 #[test]
 fn string_int_bin_op_assignment() {
-	eval(r#"
+    eval(
+        r#"
 		greeting = "Hello"
 		greeting *= 3
 
@@ -140,67 +153,85 @@ fn string_int_bin_op_assignment() {
 		greeting += "\n\t"
 
 		assert greeting == "HelloHelloHello777\n\t"
-	"#).unwrap();
+	"#,
+    )
+    .unwrap();
 }
 
 #[test]
 fn plus_equals() {
-	eval(r#"
+    eval(
+        r#"
 		a = 20
 		b = a += 5
 
 		assert a == 25
 		assert b == 25
-	"#).unwrap();
+	"#,
+    )
+    .unwrap();
 }
 
 #[test]
 fn minus_equals() {
-	eval(r#"
+    eval(
+        r#"
 		a = 20
 		b = a -= 5
 
 		assert a == 15
 		assert b == 15
-	"#).unwrap();
+	"#,
+    )
+    .unwrap();
 }
 
 #[test]
 fn times_equals() {
-	eval(r#"
+    eval(
+        r#"
 		a = 20
 		b = a *= 5
 
 		assert a == 100
 		assert b == 100
-	"#).unwrap();
+	"#,
+    )
+    .unwrap();
 }
 
 #[test]
 fn div_equals() {
-	eval(r#"
+    eval(
+        r#"
 		a = 20
 		b = a /= 5
 
 		assert a == 4
 		assert b == 4
-	"#).unwrap();
+	"#,
+    )
+    .unwrap();
 }
 
 #[test]
 fn mod_equals() {
-	eval(r#"
+    eval(
+        r#"
 		a = 20
 		b = a %= 5
 
 		assert a == 0
 		assert b == 0
-	"#).unwrap();
+	"#,
+    )
+    .unwrap();
 }
 
 #[test]
 fn bin_op_assign() {
-	eval(r#"
+    eval(
+        r#"
 
 		class Person {
 			first_name: str
@@ -241,5 +272,7 @@ fn bin_op_assign() {
 		a = Wrapper(17)
 		a.field += 3
 		assert a.field == 20
-	"#).unwrap();
+	"#,
+    )
+    .unwrap();
 }

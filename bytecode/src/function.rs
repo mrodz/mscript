@@ -349,8 +349,7 @@ impl Function {
                     return Ok(ret.clone());
                 }
                 InstructionExitState::JumpRequest(jump_request) => {
-                    let result = jump_callback(jump_request)
-                        .with_context(|| context.get_call_stack_string())?;
+                    let result = jump_callback(jump_request)?;
 
                     if let ReturnValue::FFIError(message) = result {
                         bail!("FFI: {message}")

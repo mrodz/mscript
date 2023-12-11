@@ -13,7 +13,7 @@ use crate::{
 
 use super::{
     new_err,
-    r#type::{IntoType, NativeType, INT_TYPE},
+    r#type::{IntoType, NativeType},
     BinaryOperation, CompilationState, Compile, Dependencies, TypeLayout, Value,
 };
 
@@ -261,7 +261,10 @@ impl Parser {
 
         let rhs = step
             .as_ref()
-            .map_or_else(|| Ok(INT_TYPE.clone()), |(val, _)| val.for_type())
+            .map_or_else(
+                || Ok(TypeLayout::Native(NativeType::Int)),
+                |(val, _)| val.for_type(),
+            )
             .to_err_vec()?;
 
         let Some(step_output_type) = start_ty.get_output_type(&rhs, &BinaryOperation::Add) else {

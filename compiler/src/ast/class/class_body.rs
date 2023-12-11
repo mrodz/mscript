@@ -4,8 +4,8 @@ use anyhow::Result;
 
 use crate::{
     ast::{
-        class::WalkForType, get_net_dependencies, new_err, CompilationState, Compile, CompiledItem,
-        Dependencies, Dependency, Ident,
+        get_net_dependencies, new_err, CompilationState, Compile, CompiledItem, Dependencies,
+        Dependency, Ident, WalkForType,
     },
     instruction,
     parser::{Node, Parser, Rule},

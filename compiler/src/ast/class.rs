@@ -4,7 +4,7 @@ mod constructor;
 mod member_function;
 mod member_variable;
 
-use std::{borrow::Cow, fmt::Display, sync::Arc, path::PathBuf};
+use std::{borrow::Cow, fmt::Display, path::PathBuf, rc::Rc, sync::Arc};
 
 use anyhow::Result;
 
@@ -16,9 +16,9 @@ pub(crate) use member_variable::MemberVariable;
 use crate::{
     ast::TypeLayout,
     instruction,
-    parser::{Node, Parser},
+    parser::{Node, Parser, Rule},
     scope::ScopeReturnStatus,
-    VecErr, BytecodePathStr,
+    BytecodePathStr, VecErr,
 };
 
 use super::{
@@ -26,14 +26,11 @@ use super::{
     Dependencies, Dependency, FunctionParameters, Ident,
 };
 
-pub(in crate::ast::class) trait WalkForType {
-    fn type_from_node(input: &Node) -> Result<Ident>;
-}
-
 #[derive(Debug)]
 pub struct Class {
     ident: Ident,
     body: ClassBody,
+    flags: ClassFlags,
     path_str: Arc<PathBuf>,
 }
 
@@ -59,6 +56,10 @@ impl Compile for Class {
 
         let function_name = format!("{}#{id}", self.path_str.bytecode_str());
 
+        if self.flags.export {
+            log::info!("{function_name} will be exported internally, but is not visible to other source files")
+        }
+
         Ok(vec![
             instruction!(make_function function_name),
             instruction!(export_special name id),
@@ -71,10 +72,55 @@ pub(crate) struct ClassType {
     name: Arc<String>,
     fields: Arc<[Ident]>,
     path_str: Arc<PathBuf>,
-    id: usize,
+}
+
+#[derive(Default, Debug, Clone)]
+pub(crate) struct ClassFlags {
+    export: bool,
+}
+
+impl ClassFlags {
+    pub fn is_export(&self) -> bool {
+        self.export
+    }
+}
+
+impl Parser {
+    pub fn class_flags(input: Node) -> Result<ClassFlags> {
+        assert_eq!(input.as_rule(), Rule::class_flags);
+
+        let mut result = ClassFlags::default();
+
+        for flag in input.children() {
+            match flag.as_str() {
+                "export" => {
+                    if result.export {
+                        return Err(new_err(flag.as_span(), &input.user_data().get_source_file_name(), "the `export` flag was already set; duplicate modifiers are not allowed".to_owned()));
+                    }
+                    result.export = true;
+                }
+                _ => {
+                    return Err(new_err(
+                        flag.as_span(),
+                        &input.user_data().get_source_file_name(),
+                        "this flag does not exist".to_owned(),
+                    ));
+                }
+            }
+        }
+
+        Ok(result)
+    }
 }
 
 impl ClassType {
+    pub fn new(name: Arc<String>, fields: Arc<[Ident]>, path_str: Arc<PathBuf>) -> Self {
+        Self {
+            name,
+            fields,
+            path_str,
+        }
+    }
     pub fn constructor(&self) -> FunctionType {
         let return_type = ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Class(self.clone())));
 
@@ -91,7 +137,7 @@ impl ClassType {
 
         // use default constructor if a class doesn't have one.
 
-        let empty_parameters = Arc::new(FunctionParameters::TypesOnly(vec![]));
+        let empty_parameters = Rc::new(FunctionParameters::TypesOnly(vec![]));
 
         FunctionType::new(empty_parameters, return_type)
     }
@@ -155,7 +201,25 @@ impl Parser {
     pub fn class(input: Node) -> Result<Class, Vec<anyhow::Error>> {
         let mut children = input.children();
 
-        let ident_node = children.next().unwrap();
+        let maybe_ident_node = children.next().unwrap();
+
+        let flags_node;
+
+        // for now, discard class flags because they aren't used.
+        let ident_node = if maybe_ident_node.as_rule() == Rule::ident {
+            flags_node = None;
+            maybe_ident_node
+        } else {
+            flags_node = Some(maybe_ident_node);
+            children.next().unwrap()
+        };
+
+        let flags = if let Some(flags_node) = flags_node {
+            Self::class_flags(flags_node).to_err_vec()?
+        } else {
+            ClassFlags::default()
+        };
+
         let ident_span = ident_node.as_span();
 
         let mut ident = Self::ident(ident_node).to_err_vec()?;
@@ -174,12 +238,11 @@ impl Parser {
 
             let fields = ClassBody::get_members(&body_node).to_err_vec()?;
 
-            let class_type = ClassType {
+            let class_type = ClassType::new(
+                Arc::new(ident.name().to_owned()),
                 fields,
-                path_str: input.user_data().bytecode_path(),
-                name: Arc::new(ident.name().to_owned()),
-                id: input.user_data().request_class_id(),
-            };
+                input.user_data().bytecode_path(),
+            );
 
             ident
                 .link_force_no_inherit(
@@ -205,6 +268,7 @@ impl Parser {
         let result = Class {
             ident,
             body,
+            flags,
             path_str: input.user_data().bytecode_path(),
         };
 

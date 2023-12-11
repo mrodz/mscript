@@ -1,5 +1,5 @@
 use crate::{
-    ast::{new_err, value::ValToUsize},
+    ast::{class::ClassBody, new_err, value::ValToUsize, Assignment},
     parser::{AssocFileData, Node, Parser, Rule},
     scope::{ScopeReturnStatus, SuccessTypeSearchResult, TypeSearchResult},
     CompilationError,
@@ -8,11 +8,13 @@ use anyhow::{bail, Context, Result};
 use pest::Span;
 use std::{
     borrow::Cow,
-    cell::RefCell,
-    fmt::{Display, Debug},
+    cell::{Ref, RefCell},
+    fmt::{Debug, Display},
     hash::Hash,
     ops::Deref,
-    sync::{Arc, Weak}, path::PathBuf,
+    path::PathBuf,
+    rc::Rc,
+    sync::Arc,
 };
 
 use super::{
@@ -21,19 +23,10 @@ use super::{
     list::{ListBound, ListType},
     map_err,
     math_expr::Op,
-    FunctionParameters, Ident, Value,
+    FunctionParameters, Ident, Value, WalkForType,
 };
 
 pub(crate) struct SupportedTypesWrapper(Box<[Cow<'static, TypeLayout>]>);
-
-pub(crate) static BIGINT_TYPE: TypeLayout = TypeLayout::Native(NativeType::BigInt);
-pub(crate) static BOOL_TYPE: TypeLayout = TypeLayout::Native(NativeType::Bool);
-pub(crate) static BYTE_TYPE: TypeLayout = TypeLayout::Native(NativeType::Byte);
-pub(crate) static FLOAT_TYPE: TypeLayout = TypeLayout::Native(NativeType::Float);
-pub(crate) static INT_TYPE: TypeLayout = TypeLayout::Native(NativeType::Int);
-pub(crate) static STR_TYPE: TypeLayout =
-    TypeLayout::Native(NativeType::Str(StrWrapper::unknown_size()));
-pub(crate) static SELF_TYPE: TypeLayout = TypeLayout::ClassSelf;
 
 impl Display for SupportedTypesWrapper {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -166,122 +159,223 @@ impl Display for NativeType {
     }
 }
 
-#[derive(Clone)]
-struct WeakImpl<T>(Weak<T>)
-where
-    <T as Deref>::Target: Hash,
-    T: Deref + Debug;
+// #[derive(Clone)]
+// struct WeakImpl<T>(Weak<T>)
+// where
+//     <T as Deref>::Target: Hash,
+//     T: Deref + Debug;
 
-impl <T>Debug for WeakImpl<T>
-where
-    <T as Deref>::Target: Hash,
-    T: Deref + Debug
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.0.upgrade().expect("backing was dropped when trying to debug"))
-    }
-}
+// impl <T>Debug for WeakImpl<T>
+// where
+//     <T as Deref>::Target: Hash,
+//     T: Deref + Debug
+// {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         write!(f, "{:?}", self.0.upgrade().expect("backing was dropped when trying to debug"))
+//     }
+// }
 
-impl<T> Hash for WeakImpl<T>
-where
-    <T as Deref>::Target: Hash,
-    T: Deref + Debug,
-{
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.deref().hash(state);
-    }
-}
+// impl<T> Hash for WeakImpl<T>
+// where
+//     <T as Deref>::Target: Hash,
+//     T: Deref + Debug,
+// {
+//     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+//         self.deref().hash(state);
+//     }
+// }
 
-unsafe impl<T> Send for WeakImpl<T>
-where
-    <T as Deref>::Target: Hash,
-    T: Deref + Debug,
-{
-}
+// unsafe impl<T> Send for WeakImpl<T>
+// where
+//     <T as Deref>::Target: Hash,
+//     T: Deref + Debug,
+// {
+// }
 
-unsafe impl<T> Sync for WeakImpl<T>
-where
-    <T as Deref>::Target: Hash,
-    T: Deref + Debug,
-{
-}
+// unsafe impl<T> Sync for WeakImpl<T>
+// where
+//     <T as Deref>::Target: Hash,
+//     T: Deref + Debug,
+// {
+// }
 
-impl<T> Eq for WeakImpl<T>
-where
-    <T as Deref>::Target: Hash,
-    T: Deref + Debug,
-{
-}
+// impl<T> Eq for WeakImpl<T>
+// where
+//     <T as Deref>::Target: Hash,
+//     T: Deref + Debug,
+// {
+// }
 
-impl<T> PartialEq for WeakImpl<T>
-where
-    <T as Deref>::Target: Hash,
-    T: Deref + Debug,
-{
-    fn eq(&self, other: &Self) -> bool {
-        self == other
-    }
-}
+// impl<T> PartialEq for WeakImpl<T>
+// where
+//     <T as Deref>::Target: Hash,
+//     T: Deref + Debug,
+// {
+//     fn eq(&self, other: &Self) -> bool {
+//         self == other
+//     }
+// }
 
-impl<T> Deref for WeakImpl<T>
-where
-    <T as Deref>::Target: Hash,
-    T: Deref + Debug,
-{
-    type Target = T;
-    fn deref(&self) -> &Self::Target {
-        let upgraded = self
-            .0
-            .upgrade()
-            .expect("[DEREF] backing allocation was dropped");
-        
-        unsafe {
-            &*Arc::as_ptr(&upgraded)
-        }
-    }
-}
+// impl<T> Deref for WeakImpl<T>
+// where
+//     <T as Deref>::Target: Hash,
+//     T: Deref + Debug,
+// {
+//     type Target = T;
+//     fn deref(&self) -> &Self::Target {
+//         let upgraded = self
+//             .0
+//             .upgrade()
+//             .expect("[DEREF] backing allocation was dropped");
 
-type ExportedMembersRaw = RefCell<Vec<Ident>>;
+//         unsafe {
+//             &*Arc::as_ptr(&upgraded)
+//         }
+//     }
+// }
 
-#[derive(Debug, Clone)]
-#[repr(transparent)]
-struct ExportedMembers(ExportedMembersRaw);
+// type ExportedMembersRaw = RefCell<Vec<Ident>>;
 
-impl Deref for ExportedMembers {
-    type Target = [Ident];
-    fn deref(&self) -> &Self::Target {
-        // this is only meant to be used by #[derive] traits, which wouldn't borrow the RefCell's content mutably.
-        let x = unsafe {
-            self.0
-                .try_borrow_unguarded()
-                .expect("the backing export allocation was dropped")
-        };
+// #[derive(Debug, Clone)]
+// #[repr(transparent)]
+// struct ExportedMembers(ExportedMembersRaw);
 
-        x.as_ref()
-    }
-}
+// impl Deref for ExportedMembers {
+//     type Target = [Ident];
+//     fn deref(&self) -> &Self::Target {
+//         // this is only meant to be used by #[derive] traits, which wouldn't borrow the RefCell's content mutably.
+//         let x = unsafe {
+//             self.0
+//                 .try_borrow_unguarded()
+//                 .expect("the backing export allocation was dropped")
+//         };
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+//         x.as_ref()
+//     }
+// }
+
+#[derive(Clone, Debug, Eq)]
 pub(crate) struct ModuleType {
-    exported_members: WeakImpl<ExportedMembers>,
-    name: WeakImpl<PathBuf>,
+    exported_members: Arc<RefCell<Vec<Ident>>>,
+    name: Arc<PathBuf>,
+}
+
+impl PartialEq for ModuleType {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+impl Hash for ModuleType {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.name.hash(state)
+    }
 }
 
 impl ModuleType {
-    pub const fn new(exported_members: Weak<ExportedMembersRaw>, name: Weak<PathBuf>) -> Self {
+    pub const fn new_initialized(
+        exported_members: Arc<RefCell<Vec<Ident>>>,
+        name: Arc<PathBuf>,
+    ) -> Self {
         // very hacky.
-        let exported_members_fixed = unsafe {
-            std::mem::transmute(exported_members)
-        };
-
         ModuleType {
-            exported_members: WeakImpl(exported_members_fixed),
-            name: WeakImpl(name),
+            exported_members,
+            name,
         }
     }
 
-    pub fn get_property<'a>(&'a self, name: &str) -> Option<&'a Ident> {
-        self.exported_members.iter().find(|&field| field.name() == name)
+    pub fn get_property<'a>(&'a self, name: &str) -> Option<Ref<'a, Ident>> {
+        let view = self.exported_members.borrow();
+        Ref::filter_map(view, |exported_members| {
+            exported_members.iter().find(|&field| field.name() == name)
+        })
+        .ok()
+    }
+
+    pub fn from_node(input: &Node) -> Result<Self> {
+        assert_eq!(input.as_rule(), Rule::file);
+
+        let mut export = input.user_data().get_export_ref()?;
+
+        for child in input.children() {
+            if child.as_rule() == Rule::declaration {
+                let child = child
+                    .children()
+                    .single()
+                    .expect("none or too many nodes for declaration");
+
+                match child.as_rule() {
+                    Rule::class => {
+                        let mut children = child.children();
+
+                        let class_flags;
+
+                        let maybe_ident_node = children.next().unwrap();
+
+                        let ident_node = if maybe_ident_node.as_rule() == Rule::ident {
+                            continue;
+                        } else {
+                            class_flags = maybe_ident_node;
+                            children.next().unwrap()
+                        };
+
+                        let class_flags = Parser::class_flags(class_flags)?;
+
+                        if !class_flags.is_export() {
+                            continue;
+                        }
+
+                        let name = ident_node.as_str();
+
+                        let body_node = children.next().expect("no body");
+
+                        let _class_scope = input.user_data().push_class_unknown_self();
+                        let fields = ClassBody::get_members(&body_node)?;
+
+                        let class_type = ClassType::new(
+                            Arc::new(name.to_owned()),
+                            fields,
+                            input.user_data().bytecode_path(),
+                        );
+
+                        let ident = Ident::new(
+                            name.to_owned(),
+                            Some(Cow::Owned(TypeLayout::Class(class_type))),
+                            true,
+                        );
+
+                        log::trace!(
+                            "Gen. mod {:?} -- adding class {ident:?}",
+                            input.user_data().source_path()
+                        );
+
+                        export.add(ident);
+                    }
+                    Rule::assignment => {
+                        if let Ok(assignment) = Assignment::type_from_node(&child) {
+                            log::trace!(
+                                "Gen. mod {:?} -- adding assignment {assignment:?}",
+                                input.user_data().source_path()
+                            );
+
+                            export.add(assignment)
+                        }
+                    }
+                    other => log::trace!(
+                        "Gen. mod {:?} -- skipping {other:?}",
+                        input.user_data().source_path()
+                    ),
+                }
+            }
+        }
+
+        Ok(ModuleType::new_initialized(
+            export
+                .exports
+                .upgrade()
+                .expect("exports backing ref was dropped"),
+            input.user_data().source_path(),
+        ))
     }
 }
 
@@ -459,19 +553,23 @@ impl TypeLayout {
         }
     }
 
-    pub fn get_property_type<'a>(&'a self, property_name: &str) -> Option<&'a TypeLayout> {
+    pub fn get_property_type<'a>(
+        &'a self,
+        property_name: &str,
+    ) -> Option<Box<dyn Deref<Target = Cow<'static, TypeLayout>> + 'a>> {
         match self {
             Self::Class(class_type) => {
                 let ident = class_type.get_property(property_name)?;
                 let property_type: &'a Cow<'static, TypeLayout> = ident.ty().ok()?;
 
-                Some(property_type)
+                Some(Box::new(property_type))
             }
             Self::Module(module_type) => {
                 let ident = module_type.get_property(property_name)?;
-                let property_type: &'a Cow<'static, TypeLayout> = ident.ty().ok()?;
+                let property_type: Ref<'a, Cow<'static, TypeLayout>> =
+                    Ref::filter_map(ident, |ident| ident.ty().ok()).ok()?;
 
-                Some(property_type)
+                Some(Box::new(property_type))
             }
             _ => None,
         }
@@ -493,11 +591,12 @@ impl TypeLayout {
             }
             Self::Module(module_type) => {
                 let fields = &module_type.exported_members;
-                let fields = fields.iter();
+                let view = fields.borrow();
+                // let fields = fields.iter();
 
                 let mut result = vec![];
 
-                for field in fields {
+                for field in view.iter() {
                     result.push(field.to_string());
                 }
 
@@ -601,7 +700,9 @@ impl TypeLayout {
                     return Ok(Cow::Owned(native_type));
                 }
                 (ValToUsize::Ok(..), None) | (ValToUsize::NotConstexpr, _) => {
-                    return Ok(Cow::Borrowed(&STR_TYPE));
+                    return Ok(Cow::Owned(TypeLayout::Native(NativeType::Str(StrWrapper(
+                        None,
+                    )))));
                 }
                 (ValToUsize::NaN, _) => bail!("str cannot be indexed by a non-int"),
             }
@@ -695,18 +796,18 @@ impl TypeLayout {
         }
 
         if self == other && matches!(op, Eq | Neq) {
-            return Some(BOOL_TYPE.to_owned());
+            return Some(TypeLayout::Native(NativeType::Bool));
         }
 
         if let (_, Optional(None), Eq | Neq) | (Optional(None), _, Eq | Neq) = (self, other, op) {
-            return Some(BOOL_TYPE.to_owned());
+            return Some(TypeLayout::Native(NativeType::Bool));
         }
 
         if let (yes, Optional(Some(maybe)), Eq | Neq) | (Optional(Some(maybe)), yes, Eq | Neq) =
             (self, other, op)
         {
             if yes == maybe.as_ref().as_ref() {
-                return Some(BOOL_TYPE.to_owned());
+                return Some(TypeLayout::Native(NativeType::Bool));
             }
         }
 
@@ -840,7 +941,7 @@ impl Parser {
                 None
             };
 
-        let types = Arc::new(FunctionParameters::TypesOnly(types));
+        let types = Rc::new(FunctionParameters::TypesOnly(types));
 
         Ok(FunctionType::new(
             types,

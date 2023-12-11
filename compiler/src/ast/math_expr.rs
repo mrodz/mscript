@@ -33,7 +33,7 @@
 //!
 //! END LICENSE
 
-use std::{borrow::Cow, rc::Rc, fmt::Display};
+use std::{borrow::Cow, fmt::Display, rc::Rc};
 
 use anyhow::{bail, Context, Result};
 use once_cell::sync::Lazy;
@@ -71,12 +71,7 @@ pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
         .op(infix!(unwrap))
         .op(infix!(or) | infix!(xor))
         .op(infix!(and))
-        .op(infix!(lt)
-            | infix!(lte)
-            | infix!(gt)
-            | infix!(gte)
-            | infix!(eq)
-            | infix!(neq))
+        .op(infix!(lt) | infix!(lte) | infix!(gt) | infix!(gte) | infix!(eq) | infix!(neq))
         .op(Op::prefix(not))
         .op(infix!(add) | infix!(subtract))
         .op(infix!(multiply) | infix!(divide) | infix!(modulo))
@@ -85,7 +80,11 @@ pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
             | Op::postfix(list_index)
             | Op::postfix(callable)
             | Op::postfix(dot_chain))
-        .op(infix!(add_assign) | infix!(sub_assign) | infix!(mul_assign) | infix!(div_assign) | infix!(mod_assign))
+        .op(infix!(add_assign)
+            | infix!(sub_assign)
+            | infix!(mul_assign)
+            | infix!(div_assign)
+            | infix!(mod_assign))
 });
 
 #[derive(Debug, Clone, PartialEq)]
@@ -146,7 +145,10 @@ impl Op {
 
     pub const fn is_op_assign(&self) -> bool {
         use Op::*;
-        matches!(self, AddAssign | SubAssign | MulAssign | DivAssign | ModAssign)
+        matches!(
+            self,
+            AddAssign | SubAssign | MulAssign | DivAssign | ModAssign
+        )
     }
 }
 
@@ -272,18 +274,18 @@ impl IntoType for Expr {
         match self {
             Expr::Value(val) => val.for_type(),
             Expr::BinOp { lhs, op, rhs } => {
-
                 let lhs = if op.is_op_assign() {
                     match lhs.as_ref() {
                         Expr::Value(Value::Ident(ident)) => {
                             if ident.is_const() {
-                                bail!("cannot reassign using {op} to {}, which is const", ident.name())
+                                bail!(
+                                    "cannot reassign using {op} to {}, which is const",
+                                    ident.name()
+                                )
                             }
                             Cow::Owned(lhs.for_type()?)
                         }
-                        Expr::DotLookup { expected_type, .. } => {
-                            Cow::Borrowed(expected_type)
-                        }
+                        Expr::DotLookup { expected_type, .. } => Cow::Borrowed(expected_type),
                         _ => bail!("invalid left operand for {op}"),
                     }
                 } else {
@@ -404,7 +406,11 @@ fn compile_depth(
 
             Ok(eval)
         }
-        Expr::BinOp { lhs: lhs_raw, op, rhs } => {
+        Expr::BinOp {
+            lhs: lhs_raw,
+            op,
+            rhs,
+        } => {
             let mut lhs = compile_depth(lhs_raw, state, state.poll_temporary_register())?;
             let mut rhs = compile_depth(rhs, state, state.poll_temporary_register())?;
 
@@ -415,7 +421,6 @@ fn compile_depth(
                     lhs.append(&mut rhs);
                     lhs.push(instruction!(load_fast depth));
                     lhs.push(instruction!(bin_op "&&"));
-    
                     return Ok(lhs);
                 }
                 Op::Or => {
@@ -424,7 +429,6 @@ fn compile_depth(
                     lhs.append(&mut rhs);
                     lhs.push(instruction!(load_fast depth));
                     lhs.push(instruction!(bin_op "||"));
-    
                     return Ok(lhs);
                 }
                 Op::AddAssign | Op::SubAssign | Op::MulAssign | Op::DivAssign | Op::ModAssign => {
@@ -435,7 +439,6 @@ fn compile_depth(
                             return Ok(rhs)
                         }
                         Expr::DotLookup { .. } => {
-                            
                             rhs.push(instruction!(store_fast depth));
                             rhs.append(&mut lhs);
                             rhs.push(instruction!(load_fast depth));
@@ -453,10 +456,10 @@ fn compile_depth(
                     lhs.push(instruction!(store_fast depth));
                     lhs.append(&mut rhs);
                     lhs.push(instruction!(load_fast depth));
-                    lhs.push(instruction!(fast_rev2));        
+                    lhs.push(instruction!(fast_rev2));
                 }
             }
-            
+
             match op {
                 Op::Eq => lhs.push(instruction!(equ)),
                 Op::Neq => lhs.push(instruction!(neq)),
@@ -517,7 +520,6 @@ fn parse_expr(
     pairs: Pairs<Rule>,
     user_data: Rc<AssocFileData>,
 ) -> Result<Expr, Vec<anyhow::Error>> {
-    log::debug!("parse_expr");
     let maybe_expr = PRATT_PARSER
         .map_primary(
             |primary| -> Result<(Expr, Option<Span>), Vec<anyhow::Error>> {

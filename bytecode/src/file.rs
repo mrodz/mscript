@@ -12,7 +12,7 @@ use anyhow::{bail, Context, Result};
 
 use crate::function::Function;
 use crate::instruction::{split_string, Instruction, JumpRequest};
-use crate::stack::{Stack, VariableMapping, PrimitiveFlagsPair};
+use crate::stack::{PrimitiveFlagsPair, Stack, VariableMapping};
 use crate::Primitive;
 
 use super::function::Functions;
@@ -185,11 +185,7 @@ impl MScriptFile {
         self.exports.clone()
     }
 
-    pub fn add_export(
-        &self,
-        name: String,
-        var: PrimitiveFlagsPair,
-    ) -> Result<()> {
+    pub fn add_export(&self, name: String, var: PrimitiveFlagsPair) -> Result<()> {
         let mut view = self.exports.borrow_mut();
 
         log::trace!("[add_export()] Exporting {name:?} = {var:?}");
@@ -213,8 +209,7 @@ impl MScriptFile {
     fn get_functions(self: &Rc<Self>) -> Result<Functions> {
         let path = self.path();
         let mut reader = BufReader::new(
-            File::open(path)
-                .with_context(|| format!("failed opening file `{path}` ({self:?})"))?,
+            File::open(path).with_context(|| format!("failed opening file `{path}` ({self:?})"))?,
         );
         let mut buffer = Vec::new();
 
@@ -247,9 +242,11 @@ impl MScriptFile {
                 [b'e', 0x00] | [b'e', .., 0x00] if in_function => {
                     in_function = false;
 
-                    let current_function_name = Rc::new(current_function_name
-                        .take()
-                        .context("found `end` outside of a function")?);
+                    let current_function_name = Rc::new(
+                        current_function_name
+                            .take()
+                            .context("found `end` outside of a function")?,
+                    );
 
                     let function = Function::new(
                         Rc::downgrade(self),

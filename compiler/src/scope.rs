@@ -8,10 +8,7 @@ use std::{
 
 use anyhow::{bail, Result};
 
-use crate::ast::{
-    ClassType, FunctionParameters, Ident, TypeLayout, BIGINT_TYPE, BOOL_TYPE, BYTE_TYPE,
-    FLOAT_TYPE, INT_TYPE, SELF_TYPE, STR_TYPE,
-};
+use crate::ast::{ClassType, FunctionParameters, Ident, StrWrapper, TypeLayout};
 
 #[derive(Debug, Clone, PartialEq, Hash)]
 pub(crate) enum ScopeType {
@@ -88,7 +85,7 @@ pub(crate) enum TypeSearchResult<'a> {
 
 #[derive(Debug)]
 pub(crate) enum SuccessTypeSearchResult<'a> {
-    Primitive(&'static TypeLayout),
+    // Primitive(&'static TypeLayout),
     Owned(TypeLayout),
     InScope(Ref<'a, TypeLayout>),
 }
@@ -107,7 +104,7 @@ impl TypeSearchResult<'_> {
 impl Clone for SuccessTypeSearchResult<'_> {
     fn clone(&self) -> Self {
         match self {
-            Self::Primitive(x) => Self::Primitive(x),
+            // Self::Primitive(x) => Self::Primitive(x),
             Self::Owned(x) => Self::Owned(x.clone()),
             Self::InScope(x) => Self::Owned((*x).clone()),
         }
@@ -117,20 +114,20 @@ impl Clone for SuccessTypeSearchResult<'_> {
 impl SuccessTypeSearchResult<'_> {
     pub fn into_cow(self) -> Cow<'static, TypeLayout> {
         match self {
-            Self::Primitive(x) => Cow::Borrowed(x),
+            // Self::Primitive(x) => Cow::Borrowed(x),
             Self::Owned(x) => Cow::Owned(x),
             Self::InScope(x) => Cow::Owned(x.clone()),
         }
     }
 
-    #[allow(unused)]
-    pub fn unwrap(self) -> TypeLayout {
-        match self {
-            Self::Primitive(x) => x.to_owned(),
-            Self::Owned(x) => x,
-            Self::InScope(x) => x.clone(),
-        }
-    }
+    // #[allow(unused)]
+    // pub fn unwrap(self) -> TypeLayout {
+    //     match self {
+    //         // Self::Primitive(x) => x.to_owned(),
+    //         Self::Owned(x) => x,
+    //         Self::InScope(x) => x.clone(),
+    //     }
+    // }
 }
 
 impl<'a> std::ops::Deref for TypeSearchResult<'a> {
@@ -149,7 +146,7 @@ impl<'a> std::ops::Deref for SuccessTypeSearchResult<'a> {
         match self {
             Self::InScope(x) => x,
             Self::Owned(x) => x,
-            Self::Primitive(x) => x.borrow(),
+            // Self::Primitive(x) => x.borrow(),
         }
     }
 }
@@ -219,15 +216,20 @@ impl Scopes {
     }
 
     pub(crate) fn get_type_from_str(&self, str: &str) -> TypeSearchResult {
+        use crate::ast::NativeType::*;
         use SuccessTypeSearchResult::*;
         match str {
-            "int" => return TypeSearchResult::Ok(Primitive(&INT_TYPE)),
-            "str" => return TypeSearchResult::Ok(Primitive(&STR_TYPE)),
-            "float" => return TypeSearchResult::Ok(Primitive(&FLOAT_TYPE)),
-            "bool" => return TypeSearchResult::Ok(Primitive(&BOOL_TYPE)),
-            "bigint" => return TypeSearchResult::Ok(Primitive(&BIGINT_TYPE)),
-            "byte" => return TypeSearchResult::Ok(Primitive(&BYTE_TYPE)),
-            "Self" => return TypeSearchResult::Ok(Primitive(&SELF_TYPE)),
+            "int" => return TypeSearchResult::Ok(Owned(TypeLayout::Native(Int))),
+            "str" => {
+                return TypeSearchResult::Ok(Owned(TypeLayout::Native(Str(
+                    StrWrapper::unknown_size(),
+                ))))
+            }
+            "float" => return TypeSearchResult::Ok(Owned(TypeLayout::Native(Float))),
+            "bool" => return TypeSearchResult::Ok(Owned(TypeLayout::Native(Bool))),
+            "bigint" => return TypeSearchResult::Ok(Owned(TypeLayout::Native(BigInt))),
+            "byte" => return TypeSearchResult::Ok(Owned(TypeLayout::Native(Byte))),
+            "Self" => return TypeSearchResult::Ok(Owned(TypeLayout::ClassSelf)),
             _ => (),
         }
 

@@ -11,9 +11,8 @@ use crate::{
 };
 
 use super::{
-    new_err,
-    r#type::{TypeLayout, SELF_TYPE},
-    CompilationState, Compile, CompiledItem, Dependencies, Dependency, Ident,
+    new_err, r#type::TypeLayout, CompilationState, Compile, CompiledItem, Dependencies, Dependency,
+    Ident,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -116,8 +115,11 @@ impl Parser {
                 let ident_str = ident_node.as_str();
                 if ident_str == "self" && input.user_data().is_function_a_class_method() {
                     if add_to_scope_dependencies {
-                        let ident =
-                            Ident::new("self".to_owned(), Some(Cow::Borrowed(&SELF_TYPE)), false);
+                        let ident = Ident::new(
+                            "self".to_owned(),
+                            Some(Cow::Owned(TypeLayout::ClassSelf)),
+                            false,
+                        );
                         input.user_data().add_dependency(&ident);
                         result.push(ident);
                     }

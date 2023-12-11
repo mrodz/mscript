@@ -8,22 +8,24 @@ mod scope;
 mod tests;
 
 use std::borrow::Cow;
-use std::cell::RefCell;
-use std::collections::HashMap;
+use std::cell::{Ref, RefCell};
+use std::collections::{HashMap, HashSet};
+use std::fmt::Display;
 use std::fs::File;
 use std::io::{BufReader, Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context, Result};
-use ast::{map_err, new_err, CompilationState};
+use ast::{map_err, new_err, CompilationState, ModuleType};
 use bytecode::compilation_bridge::{Instruction, MScriptFile, MScriptFileBuilder};
 use bytecode::Program;
 use indicatif::{MultiProgress, ProgressBar, ProgressFinish, ProgressStyle};
 
 use once_cell::sync::{Lazy, OnceCell};
-use parser::{AssocFileData, File as ASTFile};
+use parser::{AssocFileData, File as ASTFile, Node};
 use pest::Span;
 
 use crate::ast::CompiledItem;
@@ -185,43 +187,139 @@ impl<T, E: Into<anyhow::Error>> VecErr<T> for std::result::Result<T, E> {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct FileTracker {
-    content: Option<Rc<RefCell<HashMap<&'static str, &'static str>>>>,
+pub(crate) struct FileManager {
+    comptime_preloaded: Option<Rc<RefCell<HashMap<&'static str, &'static str>>>>,
+    loaded_modules: Rc<RefCell<HashMap<Arc<PathBuf>, ModuleType>>>,
+    completed_ast: Rc<RefCell<HashMap<Arc<PathBuf>, ASTFile>>>,
 }
 
-impl FileTracker {
+impl PartialEq for FileManager {
+    fn eq(&self, other: &Self) -> bool {
+        let v1 = self.completed_ast.borrow();
+        let v2 = other.completed_ast.borrow();
+
+        let k1: HashSet<String> = v1.keys().map(|x| x.bytecode_str()).collect();
+        let k2: HashSet<String> = v2.keys().map(|x| x.bytecode_str()).collect();
+
+        self.comptime_preloaded == other.comptime_preloaded
+            && self.loaded_modules == other.loaded_modules
+            && k1 == k2
+    }
+}
+
+impl Display for FileManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "\t - Static Preloads: ")?;
+        if let Some(preloaded) = &self.comptime_preloaded {
+            let view = preloaded.borrow();
+            write!(f, "{:?}", view.keys())?
+        } else {
+            write!(f, "<none>")?
+        }
+
+        let modules = self.loaded_modules.borrow();
+        let ast = self.completed_ast.borrow();
+
+        write!(
+            f,
+            "\n\t - Loaded Modules: {:?}\n\t - AST: {:?}",
+            modules.keys(),
+            ast.keys()
+        )
+    }
+}
+
+impl FileManager {
     pub fn new() -> Self {
         Self::new_with_capacity(1)
     }
 
     pub fn no_mock() -> Self {
         Self {
-            content: None,
+            comptime_preloaded: None,
+            loaded_modules: Rc::default(),
+            completed_ast: Rc::default(),
         }
     }
 
     pub fn new_with_capacity(capacity: usize) -> Self {
         Self {
-            content: Some(Rc::new(RefCell::new(HashMap::with_capacity(capacity)))),
+            comptime_preloaded: Some(Rc::new(RefCell::new(HashMap::with_capacity(capacity)))),
+            loaded_modules: Rc::default(),
+            completed_ast: Rc::default(),
         }
     }
 
-    pub fn register_file(&self, file: &'static str, content: &'static str) -> Option<&'static str> {
-        self.content.as_ref().expect("this instance was initialized as a `no-mock`, which means file registration is incorrect behavior").borrow_mut().insert(file, content)
+    pub fn register_preloaded_file(
+        &self,
+        file: &'static str,
+        content: &'static str,
+    ) -> Option<&'static str> {
+        self.comptime_preloaded.as_ref().expect("this instance was initialized as a `no-mock`, which means file registration is incorrect behavior").borrow_mut().insert(file, content)
     }
 
-    pub fn get_file(&self, path: &str) -> Option<&'static str> {
-        self.content.as_ref().and_then(|map_view| {
+    pub fn get_preloaded_file(&self, path: &str) -> Option<&'static str> {
+        self.comptime_preloaded.as_ref().and_then(|map_view| {
             let map_view = map_view.borrow();
             map_view.get(path).cloned()
         })
     }
 
-    pub fn file_exists(&self, path: &str) -> bool {
-        self.content.as_ref().map(|map_view| {
-            let map_view = map_view.borrow();
-            map_view.contains_key(path)
-        }).unwrap_or_default()
+    pub fn preloaded_file_exists(&self, path: &str) -> bool {
+        self.comptime_preloaded
+            .as_ref()
+            .map(|map_view| {
+                let map_view = map_view.borrow();
+                map_view.contains_key(path)
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn get_module_type(&self, path: &PathBuf) -> Option<Ref<ModuleType>> {
+        Ref::filter_map(self.loaded_modules.borrow(), |loaded_modules| {
+            loaded_modules.get(path)
+        })
+        .ok()
+    }
+
+    pub fn register_module(&self, path: Arc<PathBuf>, module: ModuleType) -> Ref<ModuleType> {
+        {
+            let mut view = self.loaded_modules.borrow_mut();
+
+            if let Some(prev) = view.insert(path.clone(), module) {
+                panic!("this module was already cached (prev: {prev:?})");
+            }
+        }
+
+        Ref::map(self.loaded_modules.borrow(), |modules| {
+            modules.get(&path).unwrap()
+        })
+
+        // RefMut::filter_map(self.loaded_modules.borrow_mut(), f)
+    }
+
+    pub fn get_ast_file(&self, path: &PathBuf) -> Option<Ref<ASTFile>> {
+        log::info!("polling compilation of `{path:?}`");
+        Ref::filter_map(self.completed_ast.borrow(), |completed_ast| {
+            completed_ast.get(path)
+        })
+        .ok()
+    }
+
+    pub fn register_ast(&self, path: Arc<PathBuf>, file: ASTFile) -> Ref<ASTFile> {
+        log::info!("registering completion of {path:?}");
+
+        {
+            let mut view = self.completed_ast.borrow_mut();
+
+            if let Some(prev) = view.insert(path.clone(), file) {
+                panic!("this ast file was already cached (prev: {prev:?})");
+            }
+        }
+
+        Ref::map(self.completed_ast.borrow(), |completed_ast| {
+            completed_ast.get(&path).unwrap()
+        })
     }
 }
 
@@ -232,9 +330,7 @@ pub struct EvalEnvironment {
 }
 
 impl EvalEnvironment {
-    fn validate_path(
-        file_name: &'static str,
-    ) -> Result<()> {
+    fn validate_path(file_name: &'static str) -> Result<()> {
         let input_path = Path::new(file_name);
 
         if input_path.extension().expect("no extension") != "ms" {
@@ -258,11 +354,7 @@ impl EvalEnvironment {
         })
     }
 
-    pub fn add(
-        &mut self,
-        file_name: &'static str,
-        code: &'static str,
-    ) -> Result<&mut Self> {
+    pub fn add(&mut self, file_name: &'static str, code: &'static str) -> Result<&mut Self> {
         Self::validate_path(file_name)?;
 
         let Some(ref mut hashmap) = self.files else {
@@ -277,30 +369,33 @@ impl EvalEnvironment {
     }
 
     pub fn run(&mut self) -> Result<(), Vec<anyhow::Error>> {
-
         let files = self.files.take().expect("no files registered");
 
-        let entrypoint_code = files.get(&self.entrypoint).expect("entrypoint code does not exist");
+        let entrypoint_code = files
+            .get(&self.entrypoint)
+            .expect("entrypoint code does not exist");
 
-        let file_tracker = FileTracker::new();
+        let file_tracker = FileManager::new();
 
         for (input_path, code) in files.iter() {
             // let bytecode_file = compile_from_str(input_path, output_path, code, file_tracker)?;
             // let sealed = seal_compiled_items(output_path, bytecode_file).to_err_vec()?;
-            file_tracker.register_file(input_path, code);
+            file_tracker.register_preloaded_file(input_path, code);
         }
-
 
         let output_path = Path::new(self.entrypoint).with_extension("mmm");
 
-        let program = compile_from_str(self.entrypoint, output_path, entrypoint_code, file_tracker)?;
+        let program =
+            compile_from_str(self.entrypoint, output_path, entrypoint_code, file_tracker)?;
 
         program.execute().to_err_vec()
     }
 }
 
 pub fn eval(mscript_code: &'static str) -> Result<(), Vec<anyhow::Error>> {
-    EvalEnvironment::entrypoint("$__EVAL_ENV__.ms", mscript_code).to_err_vec()?.run()?;
+    EvalEnvironment::entrypoint("$__EVAL_ENV__.ms", mscript_code)
+        .to_err_vec()?
+        .run()?;
     Ok(())
 }
 
@@ -330,59 +425,68 @@ pub(crate) fn seal_compiled_items(
     Ok(file_builder.build())
 }
 
-pub(crate) fn ast_file_from_str(
+pub(crate) fn root_ast_from_str(
     input_path: impl AsRef<Path>,
     output_path: impl AsRef<Path>,
     mscript_code: &str,
-    files_loaded: FileTracker
-) -> Result<ASTFile, Vec<anyhow::Error>> {
+    files_loaded: FileManager,
+) -> Result<Node, Vec<anyhow::Error>> {
     let input_path = input_path.as_ref();
     let output_path = output_path.as_ref();
 
     let user_data = Rc::new(AssocFileData::new(
         output_path.to_string_lossy().to_string(),
-        files_loaded
+        files_loaded,
     ));
 
-    let input_path_str = input_path.to_string_lossy();
+    let input_path_str = input_path.bytecode_str();
 
-    let input = logger().wrap_in_spinner(format!("Parsing ({input_path_str}):"), || {
+    logger().wrap_in_spinner(format!("Parsing ({input_path_str}):"), || {
         root_node_from_str(mscript_code, user_data.clone())
-    })?;
+    })
+}
 
-    logger().wrap_in_spinner(format!("Creating AST ({input_path_str}):"), || {
-        Parser::file(input)
+pub(crate) fn ast_file_from_str(node: Node, input_path: &str) -> Result<(), Vec<anyhow::Error>> {
+    logger().wrap_in_spinner(format!("Creating AST ({input_path}):"), || {
+        Parser::file(node)
     })
 }
 
 /// This function does not perform any I/O. Instead, it loads the entire bytecode executable program
 /// into memory on the heap and runs it. While this approach is faster than using files, it is not worth
 /// doing for large projects.
-/// 
-/// Bytecode files are loaded lazily, so if a source file is only used later on in a program's lifetime, it 
-/// will only be loaded when it is needed. Using this function bypasses the default behavior by ensuring every 
+///
+/// Bytecode files are loaded lazily, so if a source file is only used later on in a program's lifetime, it
+/// will only be loaded when it is needed. Using this function bypasses the default behavior by ensuring every
 /// single dependent bytecode source is loaded **before** execution.
-/// 
+///
 /// This behavior could be desired for mock environments, unit testing, and REPL environments, to name a few.
-/// 
+///
 /// For standard behavior, see [`compile_from_str_default_side_effects`]
 pub(crate) fn compile_from_str(
     input_path: impl AsRef<Path>,
     output_path: impl AsRef<Path>,
     mscript_code: &str,
-    files_loaded: FileTracker,
+    files_loaded: FileManager,
 ) -> Result<Program, Vec<anyhow::Error>> {
     let state: CompilationState = CompilationState::new();
 
-    let file = ast_file_from_str(input_path, output_path, mscript_code, files_loaded)?;
+    let node = root_ast_from_str(
+        input_path.as_ref(),
+        output_path,
+        mscript_code,
+        files_loaded.clone(),
+    )?;
 
-    state.queue_compilation(file);
+    ast_file_from_str(node, &input_path.bytecode_str())?;
+
+    state.queue_compilation(input_path.as_ref().into());
 
     let mut files_in_use = HashMap::new();
 
     let mut shared_ptr_entrypoint_path = None;
 
-    state.compile_recursive(&mut |src, compiled_items| {
+    state.compile_recursive(&files_loaded, &mut |src, compiled_items| {
         let compiled = seal_compiled_items(&src.location, compiled_items)?;
 
         // Check: is this the first file compiled?
@@ -395,35 +499,48 @@ pub(crate) fn compile_from_str(
         Ok(())
     })?;
 
-    Program::new_from_files(shared_ptr_entrypoint_path.expect("no files were compiled"), files_in_use).to_err_vec()
+    Program::new_from_files(
+        shared_ptr_entrypoint_path.expect("no files were compiled"),
+        files_in_use,
+    )
+    .to_err_vec()
 }
 
 pub(crate) fn compile_from_str_default_side_effects(
     input_path: impl AsRef<Path>,
     output_path: impl AsRef<Path>,
     mscript_code: &str,
-    files_loaded: FileTracker
+    files_loaded: FileManager,
 ) -> Result<Vec<CompiledItem>, Vec<anyhow::Error>> {
     let state: CompilationState = CompilationState::new();
 
-    let file = ast_file_from_str(input_path, output_path, mscript_code, files_loaded)?;
+    let node = root_ast_from_str(
+        input_path.as_ref(),
+        output_path,
+        mscript_code,
+        files_loaded.clone(),
+    )?;
+    ast_file_from_str(node, &input_path.bytecode_str())?;
 
-    state.queue_compilation(file);
+    state.queue_compilation(input_path.as_ref().into());
 
     let mut result = None;
 
-    state.compile_recursive(&mut |src: &ASTFile, compiled_items: Vec<CompiledItem>| {
-        if result.is_none() {
-            #[cfg(feature = "debug")]
-            perform_file_io_out(&src.location, compiled_items, false)
-                .context("The `--debug` feature flag failed to dump the HR Bytecode")?;
+    state.compile_recursive(
+        &files_loaded,
+        &mut |src: &ASTFile, compiled_items: Vec<CompiledItem>| {
+            if result.is_none() {
+                #[cfg(feature = "debug")]
+                perform_file_io_out(&src.location, &compiled_items, false)
+                    .context("The `--debug` feature flag failed to dump the HR Bytecode")?;
 
-            result = Some(compiled_items.clone());
-        } else {
-            perform_file_io_out(&src.location, &compiled_items, true)?
-        }
-        Ok(())
-    })?;
+                result = Some(compiled_items.clone());
+            } else {
+                perform_file_io_out(&src.location, &compiled_items, true)?
+            }
+            Ok(())
+        },
+    )?;
 
     Ok(result.unwrap())
 }
@@ -526,9 +643,10 @@ pub fn compile(
     output_bin: bool,
     verbose: bool,
     output_to_file: bool,
+    override_no_pb: bool,
 ) -> Result<Option<Rc<MScriptFile>>, Vec<anyhow::Error>> {
     LOGGER_INSTANCE
-        .set(VerboseLogger::new(verbose))
+        .set(VerboseLogger::new(verbose && !override_no_pb))
         .expect("logger has already been initialized");
 
     let start_time = Instant::now();
@@ -542,7 +660,12 @@ pub fn compile(
 
     let file_contents = perform_file_io_in(input_path).to_err_vec()?;
 
-    let function_buffer = compile_from_str_default_side_effects(input_path, &output_path, &file_contents, FileTracker::no_mock())?;
+    let function_buffer = compile_from_str_default_side_effects(
+        input_path,
+        &output_path,
+        &file_contents,
+        FileManager::no_mock(),
+    )?;
 
     logger().wrap_in_spinner(
         format!("Optimizing ({}):", input_path.bytecode_str()),
@@ -550,7 +673,10 @@ pub fn compile(
     )?;
 
     if verbose {
-        println!("\n\nCompiled in {:?}", start_time.elapsed());
+        if !override_no_pb {
+            print!("\n\n");
+        }
+        println!("Compiled in {:?}\n", start_time.elapsed());
     }
 
     if output_to_file {

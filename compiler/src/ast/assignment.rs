@@ -14,34 +14,68 @@ use crate::{
 
 use super::{
     map_err, new_err, value::Value, CompilationState, Compile, CompileTimeEvaluate,
-    ConstexprEvaluation, Dependencies, Dependency, Ident,
+    ConstexprEvaluation, Dependencies, Dependency, Ident, WalkForType,
 };
 
 #[derive(Debug)]
-pub(crate) enum Assignment {
-    Single {
-        ident: Ident,
-        value: Value,
-        flags: AssignmentFlag,
-    },
-    Multiple {
-        idents: Box<[Ident]>,
-        value: Value,
-        flags: AssignmentFlag,
-    },
+pub(crate) struct Assignment {
+    idents: Box<[Ident]>,
+    value: Value,
+    flags: AssignmentFlag,
+}
+
+impl WalkForType for Assignment {
+    fn type_from_node(input: &Node) -> Result<Ident> {
+        assert_eq!(input.as_rule(), Rule::assignment);
+
+        let mut children = input.children();
+
+        let maybe_flags_or_assignment = children.next().unwrap();
+
+        let (flags, assignment) = if maybe_flags_or_assignment.as_rule() == Rule::assignment_flags {
+            (
+                Some(Parser::assignment_flags(maybe_flags_or_assignment)?),
+                children.next().unwrap(),
+            )
+        } else {
+            (None, maybe_flags_or_assignment)
+        };
+
+        let Some(flags) = flags else {
+            bail!("not an error; no export, disregard")
+        };
+
+        if !flags.contains(AssignmentFlag::export()) {
+            bail!("not an error; no export, disregard")
+        }
+
+        match assignment.as_rule() {
+            Rule::assignment_type => {
+                let mut children = assignment.children();
+                let ident = children.next().unwrap();
+                let ty = children.next().unwrap();
+
+                let mut ident = Parser::ident(ident)?;
+                ident.link_force_no_inherit(input.user_data(), Parser::r#type(ty)?)?;
+
+                Ok(ident)
+            }
+            other => bail!("{other:?} does not support static type evaluation"),
+        }
+    }
 }
 
 impl Assignment {
-    pub const fn new(ident: Ident, value: Value) -> Self {
-        Self::Single {
-            ident,
+    pub fn new(ident: Ident, value: Value) -> Self {
+        Self {
+            idents: Box::new([ident]),
             value,
             flags: AssignmentFlag(0),
         }
     }
 
     pub const fn new_multi(idents: Box<[Ident]>, value: Value) -> Self {
-        Self::Multiple {
+        Self {
             idents,
             value,
             flags: AssignmentFlag(0),
@@ -50,14 +84,12 @@ impl Assignment {
 
     #[inline]
     pub const fn flags(&self) -> &AssignmentFlag {
-        let (Self::Single { flags, .. } | Self::Multiple { flags, .. }) = self;
-        flags
+        &self.flags
     }
 
     #[inline]
     pub const fn value(&self) -> &Value {
-        let (Self::Single { value, .. } | Self::Multiple { value, .. }) = self;
-        value
+        &self.value
     }
 
     pub fn can_modify_if_applicable(
@@ -65,13 +97,13 @@ impl Assignment {
         user_data: &AssocFileData,
         is_modify: bool,
     ) -> Result<bool> {
-        let Self::Single { ident, .. } = self else {
+        if self.idents.len() != 1 {
             bail!("cannot modify a pre-existing variable when unpacking");
         };
 
         let skip = if is_modify { 1 } else { 0 };
 
-        let name = ident.name();
+        let name = self.idents[0].name();
 
         if self.flags().contains(AssignmentFlag::modify()) {
             let (ident, _) = user_data
@@ -89,17 +121,14 @@ impl Assignment {
     }
 
     pub fn set_flags(&mut self, new_flags: AssignmentFlag) {
-        let (Self::Multiple { ref mut flags, .. } | Self::Single { ref mut flags, .. }) = self;
-        *flags = new_flags;
+        self.flags = new_flags;
     }
 }
 
 impl Dependencies for Assignment {
     fn supplies(&self) -> Vec<Dependency> {
-        if let Self::Single { ident, .. } = self {
-            if !self.flags().contains(AssignmentFlag::modify()) {
-                return vec![Dependency::new(Cow::Borrowed(ident))];
-            }
+        if self.idents.len() == 1 && !self.flags().contains(AssignmentFlag::modify()) {
+            return vec![Dependency::new(Cow::Borrowed(&self.idents[0]))];
         }
 
         // We are not introducing a new variable, just pointing to a callback variable.
@@ -111,10 +140,8 @@ impl Dependencies for Assignment {
     fn dependencies(&self) -> Vec<Dependency> {
         let mut base = self.value().net_dependencies();
 
-        if let Self::Single { ident, .. } = self {
-            if ident.is_instance_callback_variable().unwrap() {
-                base.push(Dependency::new(Cow::Borrowed(ident)));
-            }
+        if self.idents.len() == 1 && self.idents[0].is_instance_callback_variable().unwrap() {
+            base.push(Dependency::new(Cow::Borrowed(&self.idents[0])));
         }
 
         base
@@ -152,33 +179,34 @@ impl Compile for Assignment {
             self.value().compile(state)?
         };
 
-        match self {
-            Self::Single { ident, .. } => {
+        if self.idents.len() == 1 {
+            let name = self.idents[0].name();
+            let store_instruction = if self.flags().contains(AssignmentFlag::modify()) {
+                instruction!(store_object name)
+            } else {
+                instruction!(store name)
+            };
+
+            value_init.push(store_instruction);
+
+            if self.flags.contains(AssignmentFlag::export()) {
+                value_init.push(instruction!(export_name name));
+            }
+        } else {
+            let indexable = state.poll_temporary_register();
+            value_init.push(instruction!(store_fast indexable));
+
+            for (idx, ident) in self.idents.iter().enumerate() {
                 let name = ident.name();
-                let store_instruction = if self.flags().contains(AssignmentFlag::modify()) {
-                    instruction!(store_object name)
-                } else {
-                    instruction!(store name)
-                };
 
-                value_init.push(store_instruction);
+                value_init.append(&mut vec![
+                    instruction!(load_fast indexable),
+                    instruction!(vec_op(format!("[{idx}]"))),
+                    instruction!(store name),
+                ])
             }
-            Self::Multiple { idents, .. } => {
-                let indexable = state.poll_temporary_register();
-                value_init.push(instruction!(store_fast indexable));
 
-                for (idx, ident) in idents.iter().enumerate() {
-                    let name = ident.name();
-
-                    value_init.append(&mut vec![
-                        instruction!(load_fast indexable),
-                        instruction!(vec_op(format!("[{idx}]"))),
-                        instruction!(store name),
-                    ])
-                }
-
-                value_init.push(instruction!(delete_name_scoped indexable));
-            }
+            value_init.push(instruction!(delete_name_scoped indexable));
         }
 
         Ok(value_init)
@@ -188,6 +216,7 @@ impl Compile for Assignment {
 mod assignment_flag {
     pub const MODIFY: u8 = 0b00000001;
     pub const CONST: u8 = 0b00000010;
+    pub const EXPORT: u8 = 0b00000100;
 }
 
 #[derive(Clone, Copy, Default)]
@@ -201,6 +230,11 @@ impl Debug for AssignmentFlag {
 
         if self.contains(AssignmentFlag::modify()) {
             write!(f, "modify")?;
+            flagc += 1;
+        }
+
+        if self.contains(AssignmentFlag::export()) {
+            write!(f, "export")?;
             flagc += 1;
         }
 
@@ -229,6 +263,9 @@ impl AssignmentFlag {
     pub(crate) const fn constant() -> Self {
         Self(assignment_flag::CONST)
     }
+    pub(crate) const fn export() -> Self {
+        Self(assignment_flag::EXPORT)
+    }
 
     pub(crate) fn add_flag(&mut self, flag: AssignmentFlag) -> Result<()> {
         if self.0 & flag.0 == flag.0 {
@@ -247,7 +284,13 @@ impl AssignmentFlag {
         use self::assignment_flag::*;
 
         if self.contains(AssignmentFlag(CONST | MODIFY)) {
-            bail!("const is an invalid qualifier when mixed with modify in the same assignment")
+            bail!("`const` is an invalid qualifier when mixed with `modify` in the same assignment")
+        }
+
+        if self.contains(AssignmentFlag(EXPORT | MODIFY)) {
+            bail!(
+                "`modify` is an invalid qualifier when mixed with `export` in the same assignment"
+            )
         }
 
         Ok(())
@@ -259,6 +302,7 @@ impl From<&str> for AssignmentFlag {
         match value {
             "modify" => Self::modify(),
             "const" => Self::constant(),
+            "export" => Self::export(),
             other => unimplemented!("{other}"),
         }
     }
@@ -309,6 +353,18 @@ impl Parser {
             .as_ref()
             .map(|flags| flags.contains(AssignmentFlag::modify()))
             .unwrap_or(false);
+        let is_export = flags
+            .as_ref()
+            .map(|flags| flags.contains(AssignmentFlag::export()))
+            .unwrap_or(false);
+
+        if is_export && !input.user_data().is_at_module_level() {
+            return Err(vec![new_err(
+                flags_span,
+                &input.user_data().get_source_file_name(),
+                "exporting variables/constants must occur at the module level".to_owned(),
+            )]);
+        }
 
         let assignment_span = assignment.as_span();
 
@@ -318,16 +374,34 @@ impl Parser {
         let self_type = user_data.get_owned_type_of_executing_class();
 
         let (mut x, did_exist_before) = match assignment.as_rule() {
-            Rule::assignment_no_type => Self::assignment_no_type(assignment, is_const, is_modify)?,
+            Rule::assignment_no_type => {
+                if is_export {
+                    return Err(vec![new_err(
+                        flags_span,
+                        &input.user_data().get_source_file_name(),
+                        "Exports require an explicit type".to_owned(),
+                    )]);
+                }
+                Self::assignment_no_type(assignment, is_const, is_modify)?
+            }
             Rule::assignment_type => {
                 Self::assignment_type(assignment, is_const, is_modify, self_type)?
             }
-            Rule::assignment_unpack => Self::assignment_unpack(assignment, is_const, is_modify)?,
+            Rule::assignment_unpack => {
+                if is_export {
+                    return Err(vec![new_err(
+                        flags_span,
+                        &input.user_data().get_source_file_name(),
+                        "Seperate each name into its own `export NAME = ...`".to_owned(),
+                    )]);
+                }
+                Self::assignment_unpack(assignment, is_const, is_modify)?
+            }
             rule => unreachable!("{rule:?}"),
         };
 
-        if let Assignment::Single { ref ident, .. } = x {
-            let ident_ty = ident.ty().unwrap();
+        if x.idents.len() == 1 {
+            let ident_ty = x.idents[0].ty().unwrap();
             if let Some(list_type) = ident_ty.is_list() {
                 if list_type.must_be_const() && !is_const {
                     return Err(vec![new_err(
@@ -343,7 +417,7 @@ impl Parser {
             x.set_flags(flags)
         }
 
-        if let Assignment::Single { ref ident, .. } = x {
+        if x.idents.len() == 1 {
             let requires_check = did_exist_before || is_modify;
 
             let can_modify_if_applicable = map_err(
@@ -359,7 +433,7 @@ impl Parser {
                     &input.user_data().get_source_file_name(),
                     format!(
                         "cannot reassign to \"{}\", which is a const variable",
-                        ident.name()
+                        x.idents[0].name()
                     ),
                 )]);
             }

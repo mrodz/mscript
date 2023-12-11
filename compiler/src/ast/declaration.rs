@@ -9,9 +9,9 @@ use crate::{
 };
 
 use super::{
-    class::Class, Assertion, Assignment, Break, CompilationState, Compile, CompiledItem, Continue,
-    Dependencies, Dependency, IfStatement, NumberLoop, PrintStatement, Reassignment,
-    ReturnStatement, Unwrap, WhileLoop, Value, Export, import::Import,
+    Assertion, Assignment, Break, Class, CompilationState, Compile, CompiledItem, Continue,
+    Dependencies, Dependency, IfStatement, Import, NumberLoop, PrintStatement, Reassignment,
+    ReturnStatement, Unwrap, Value, WhileLoop,
 };
 
 #[derive(Debug)]
@@ -31,7 +31,6 @@ pub(crate) enum Declaration {
     // UnwrapExpr(UnwrapExpr),
     ValueUnwrap(Unwrap),
     Value(Value),
-    Export(Export),
     Import(Import),
 }
 
@@ -49,7 +48,6 @@ impl Dependencies for Declaration {
             Self::Value(value) => value.supplies(),
             Self::ValueUnwrap(value_unwrap) => value_unwrap.supplies(),
             Self::Reassignment(reassignment) => reassignment.supplies(),
-            Self::Export(export) => export.supplies(),
             Self::Import(import) => import.supplies(),
             Self::Continue(_) | Self::Break(_) => vec![],
         }
@@ -67,7 +65,6 @@ impl Dependencies for Declaration {
             Self::Assertion(assertion) => assertion.net_dependencies(),
             Self::Class(class) => class.net_dependencies(),
             Self::Value(value) => value.net_dependencies(),
-            Self::Export(export) => export.net_dependencies(),
             Self::ValueUnwrap(value_unwrap) => value_unwrap.net_dependencies(),
             Self::Import(import) => import.net_dependencies(),
             Self::Continue(_) | Self::Break(_) => vec![],
@@ -100,7 +97,6 @@ impl Compile for Declaration {
                 Ok(unwrap_compiled)
             }
             Self::Import(x) => x.compile(state),
-            Self::Export(x) => x.compile(state),
         }
     }
 }
@@ -133,7 +129,7 @@ impl Parser {
             // Rule::unwrap_expr => Declaration::UnwrapExpr(Self::unwrap_expr(declaration)?),
             Rule::value => Declaration::Value(Self::value(declaration)?),
             Rule::value_unwrap => Declaration::ValueUnwrap(Self::unwrap(declaration)?),
-            Rule::export => Declaration::Export(Self::export(declaration)?),
+            // Rule::export => Declaration::Export(Self::export(declaration)?),
             Rule::import => Declaration::Import(Self::import(declaration)?),
             x => unreachable!("{x:?} is not supported"),
         };

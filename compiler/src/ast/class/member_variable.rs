@@ -5,14 +5,12 @@ use anyhow::Result;
 use crate::{
     ast::{
         assignment::AssignmentFlag, new_err, CompilationState, Compile, CompiledItem, Dependencies,
-        Dependency, Ident,
+        Dependency, Ident, WalkForType,
     },
     instruction,
     parser::{Node, Parser, Rule},
     CompilationError, VecErr,
 };
-
-use super::WalkForType;
 
 #[derive(Debug)]
 pub(crate) struct MemberVariable {

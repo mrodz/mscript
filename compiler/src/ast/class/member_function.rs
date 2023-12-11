@@ -1,4 +1,4 @@
-use std::{borrow::Cow, sync::Arc, path::PathBuf};
+use std::{borrow::Cow, path::PathBuf, rc::Rc, sync::Arc};
 
 use anyhow::Result;
 use bytecode::compilation_bridge::id::{MAKE_FUNCTION, RET};
@@ -6,15 +6,13 @@ use bytecode::compilation_bridge::id::{MAKE_FUNCTION, RET};
 use crate::{
     ast::{
         function::FunctionType, Block, CompilationState, Compile, CompiledFunctionId, CompiledItem,
-        Dependencies, FunctionParameters, Ident, TypeLayout,
+        Dependencies, FunctionParameters, Ident, TypeLayout, WalkForType,
     },
     instruction,
     parser::{Node, Parser, Rule},
     scope::ScopeReturnStatus,
-    VecErr, BytecodePathStr,
+    BytecodePathStr, VecErr,
 };
-
-use super::WalkForType;
 
 #[derive(Debug)]
 pub(crate) struct MemberFunction {
@@ -27,11 +25,7 @@ pub(crate) struct MemberFunction {
 
 impl MemberFunction {
     pub fn symbolic_id(&self) -> String {
-        format!(
-            "{}::{}",
-            self.class_name,
-            self.ident().name()
-        )
+        format!("{}::{}", self.class_name, self.ident().name())
     }
 }
 
@@ -100,7 +94,7 @@ impl WalkForType for MemberFunction {
             ScopeReturnStatus::Void
         };
 
-        let function_type = FunctionType::new(Arc::new(parameters), return_type);
+        let function_type = FunctionType::new(Rc::new(parameters), return_type);
 
         ident.link_force_no_inherit(
             input.user_data(),
@@ -153,7 +147,7 @@ impl Parser {
 
         let parameters = Self::function_parameters(parameters, true, true, true).to_err_vec()?;
         let body = Self::block(body)?;
-        let function_type = FunctionType::new(Arc::new(parameters.clone()), return_type);
+        let function_type = FunctionType::new(Rc::new(parameters.clone()), return_type);
 
         ident.set_type_no_link(Cow::Owned(TypeLayout::Function(function_type)));
 
