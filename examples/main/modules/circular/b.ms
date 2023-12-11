@@ -1,5 +1,7 @@
 import a
 
-export NUM: int = 5
+export const SECRET_B_VALUE: int = 42
 
-export SPECIAL: int = a.NUM + NUM
+export add: fn() -> int = fn() -> int {
+  return a.SECRET_A_VALUE + SECRET_B_VALUE
+}

@@ -287,7 +287,7 @@ impl ModuleType {
     pub fn get_property<'a>(&'a self, name: &str) -> Option<Ref<'a, Ident>> {
         let view = self.exported_members.borrow();
         Ref::filter_map(view, |exported_members| {
-            exported_members.iter().find(|&field| field.name() == name)
+            exported_members.iter().find(|&field| dbg!(field.name()) == dbg!(name))
         })
         .ok()
     }
@@ -557,7 +557,7 @@ impl TypeLayout {
         &'a self,
         property_name: &str,
     ) -> Option<Box<dyn Deref<Target = Cow<'static, TypeLayout>> + 'a>> {
-        match self {
+        match self.get_type_recursively() {
             Self::Class(class_type) => {
                 let ident = class_type.get_property(property_name)?;
                 let property_type: &'a Cow<'static, TypeLayout> = ident.ty().ok()?;

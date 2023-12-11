@@ -132,6 +132,8 @@ impl Parser {
 
         let source_name = input.user_data().get_source_file_name();
 
+        dbg!(&lhs_ty);
+
         let type_of_property = lhs_ty
             .get_property_type(&ident_str)
             .details_lazy_message(ident_span, &source_name, || {

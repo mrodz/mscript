@@ -1,5 +1,7 @@
 import b
 
-export NUM: int = 10
+export const SECRET_A_VALUE: int = 10
 
-export SPECIAL: int = NUM * b.NUM
+export multiply: fn() -> int = fn() -> int {
+  return b.SECRET_B_VALUE * SECRET_A_VALUE
+}

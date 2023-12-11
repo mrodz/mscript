@@ -1,8 +1,10 @@
 import a
 import b
 
-print a.NUM
-print a.SPECIAL
+print a
+print b
 
-print b.NUM
-print b.SPECIAL
+###
+print a.multiply() # 420
+print b.add() # 52
+###
