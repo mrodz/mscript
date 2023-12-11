@@ -22,9 +22,15 @@ fn compile(
     output_bin: bool,
     verbose: bool,
     output_to_file: bool,
+    override_no_pb: bool,
 ) -> Result<Option<Rc<MScriptFile>>> {
-    
-    let compilation = compile_file(path_str, output_bin, verbose, output_to_file);
+    let compilation = compile_file(
+        path_str,
+        output_bin,
+        verbose,
+        output_to_file,
+        override_no_pb,
+    );
     match compilation {
         Err(errors) => {
             let cerr = errors.len();
@@ -93,7 +99,7 @@ impl log::Log for GlobalLogger {
         fn level_format(level: &Level) -> ColoredString {
             match level {
                 Level::Debug => "[ Debug ]".white().on_purple(),
-                Level::Error => "[ Error ]".bright_red().on_white(),
+                Level::Error => "[ Error ]".bright_white().on_red(),
                 Level::Warn => "[ Warning ]".black().on_yellow(),
                 Level::Info => "[ Info ]".white().on_bright_blue(),
                 Level::Trace => "[ Trace ]".on_green(),
@@ -121,6 +127,7 @@ fn main() -> Result<()> {
             stack_size,
             verbose,
             quick,
+            override_no_pb,
         } => {
             if verbose && !quick {
                 LOGGER.set_verbose();
@@ -139,7 +146,7 @@ fn main() -> Result<()> {
                 .stack_size(stack_size);
 
             let main_thread = builder.spawn(move || -> Result<()> {
-                let Some(product) = compile(&path, true, !quick, false)? else {
+                let Some(product) = compile(&path, true, !quick, false, override_no_pb)? else {
                     unreachable!();
                 };
 
@@ -200,7 +207,7 @@ fn main() -> Result<()> {
             };
 
             let output_bin = matches!(output_format, CompilationTargets::Binary);
-            compile(&path, output_bin, !quick, true)?;
+            compile(&path, output_bin, !quick, true, false)?;
         }
     }
 

@@ -1,11 +1,11 @@
 use anyhow::Result;
 
 use crate::{
-    ast::{CompilationState, Compile, CompiledItem, Dependencies, Ident},
+    ast::{CompilationState, Compile, CompiledItem, Dependencies, Ident, WalkForType},
     parser::{Node, Rule},
 };
 
-use super::{Constructor, MemberFunction, MemberVariable, WalkForType};
+use super::{Constructor, MemberFunction, MemberVariable};
 
 #[derive(Debug)]
 pub(crate) enum ClassFeature {

@@ -20,6 +20,8 @@ pub struct Program {
     entrypoint: Weak<String>,
     /// Keeps a record of the `.mmm` files in use.
     files_in_use: RefCell<HashMap<Rc<String>, Rc<MScriptFile>>>,
+    /// Module cache
+    module_cache: RefCell<HashMap<String, Option<ReturnValue>>>,
 }
 
 impl Program {
@@ -36,6 +38,7 @@ impl Program {
         Ok(Self {
             entrypoint: Rc::downgrade(&entrypoint_path),
             files_in_use: RefCell::new(files_in_use),
+            module_cache: RefCell::default(),
         })
     }
 
@@ -45,6 +48,7 @@ impl Program {
         Self {
             entrypoint: Rc::downgrade(&file_path),
             files_in_use: RefCell::new(HashMap::from([(file_path, entrypoint)])),
+            module_cache: RefCell::default(),
         }
     }
 
@@ -63,6 +67,7 @@ impl Program {
         Ok(Self {
             entrypoint: Rc::downgrade(&entrypoint),
             files_in_use: RefCell::new(files_in_use),
+            module_cache: RefCell::default(),
         })
     }
 
@@ -98,8 +103,8 @@ impl Program {
     ///
     /// # Errors
     /// Will fail if the file has not already been registered.
-    fn get_file(self_cell: Rc<Self>, path: &String) -> Result<Rc<MScriptFile>> {
-        let Some(file) = self_cell.is_file_loaded(path) else {
+    fn get_file(&self, path: &String) -> Result<Rc<MScriptFile>> {
+        let Some(file) = self.is_file_loaded(path) else {
             bail!("file is not loaded")
         };
 
@@ -114,11 +119,11 @@ impl Program {
     ///
     /// # Panics
     /// Will panic if `request` is not [`JumpRequestDestination::Standard`], per this function's name.
-    fn process_standard_jump_request(
-        rc_of_self: Rc<Self>,
-        request: &JumpRequest,
-    ) -> Result<ReturnValue> {
-        let JumpRequestDestination::Standard(ref destination_label) = request.destination else {
+    fn process_standard_jump_request(&self, request: &JumpRequest) -> Result<ReturnValue> {
+        use JumpRequestDestination as JD;
+        let (JD::Standard(destination_label) | JD::Module(destination_label)) =
+            &request.destination
+        else {
             unreachable!()
         };
 
@@ -136,13 +141,15 @@ impl Program {
         let path = path.to_string().replace('\\', "/");
         let path_ref = &path;
 
-        rc_of_self.add_file(Rc::new(path.clone()))?;
+        self.add_file(Rc::new(path.clone()))?;
         // rc_to_ref(&rc_of_self).add_file(Rc::new(path.clone()))?;
 
-        let file = Self::get_file(rc_of_self.clone(), path_ref)
+        let file = self
+            .get_file(path_ref)
             .with_context(|| format!("failed jumping to {path}"))?;
 
-        let callback_state = request.callback_state.as_ref().cloned();
+        let callback_state: Option<Rc<crate::stack::VariableMapping>> =
+            request.callback_state.as_ref().cloned();
 
         let return_value = file.run_function(
             &label[1..].to_owned(),
@@ -150,7 +157,7 @@ impl Program {
             Cow::Borrowed(&request.arguments),
             Rc::clone(&request.stack),
             callback_state,
-            &mut |req| Self::process_jump_request(rc_of_self.clone(), req),
+            &mut |req| self.process_jump_request(req),
         )?;
         // let Some(function) = rc_to_ref(&file).get_function(&symbol.to_owned()) else {
         //     bail!("could not find function (missing `{symbol}`, searching in {file:?})")
@@ -204,10 +211,39 @@ impl Program {
     /// If a user wishes to return the control flow back to the interpreter as an error state,
     /// they should use the [`ReturnValue::FFIError`] variant. Panics in FFI-land will kill the
     /// interpreter by design.
-    fn process_jump_request(rc_of_self: Rc<Self>, request: &JumpRequest) -> Result<ReturnValue> {
+    fn process_jump_request(&self, request: &JumpRequest) -> Result<ReturnValue> {
         match &request.destination {
-            JumpRequestDestination::Standard(_) => {
-                Self::process_standard_jump_request(rc_of_self, request)
+            JumpRequestDestination::Standard(_) => self.process_standard_jump_request(request),
+            JumpRequestDestination::Module(path) => {
+                {
+                    let view = self.module_cache.borrow();
+
+                    if let Some(cached) = view.get(path) {
+                        if let Some(cached) = cached {
+                            return Ok(cached.to_owned());
+                        }
+                        log::error!("Probable circular import (caused by {request:?} ... nonrealized cache hit on {view:?})");
+                        bail!("Attempting to import `{path}` gave a partially unitialized module, which is likely a sign of a circular dependency graph")
+                    } else {
+                        log::debug!("runtime @import cache miss on {path}");
+                    }
+                }
+
+                self.module_cache.borrow_mut().insert(path.to_owned(), None);
+
+                let result = self.process_standard_jump_request(request)?;
+
+                let ReturnValue::Value(BytecodePrimitive::Module(..)) = result else {
+                    bail!("{request:?} did not yield a module, but instead {result}");
+                };
+
+                assert!(self
+                    .module_cache
+                    .borrow_mut()
+                    .insert(path.to_owned(), Some(result.clone()))
+                    .is_some());
+
+                Ok(result)
             }
             JumpRequestDestination::Library {
                 lib_name,
@@ -228,7 +264,7 @@ impl Program {
         let path = &*rc_of_self.entrypoint.upgrade().unwrap();
 
         log::debug!("Loading instructions from file...");
-        let entrypoint = Self::get_file(rc_of_self.clone(), path)?;
+        let entrypoint = rc_of_self.get_file(path)?;
         log::debug!("Loaded instructions from file");
 
         log::debug!("Creating call stack...");
@@ -243,17 +279,18 @@ impl Program {
 
         log::debug!("Spawning interpreter...");
 
-        let main_ret = entrypoint.run_function(
-            &"__module__".to_owned(),
-            Cow::Owned(vec![]),
-            stack.clone(),
-            None,
-            &mut |req| Self::process_jump_request(rc_of_self.clone(), req),
-        );
+        let main_ret = entrypoint
+            .run_function(
+                &"__module__".to_owned(),
+                Cow::Owned(vec![]),
+                stack.clone(),
+                None,
+                &mut |req| rc_of_self.process_jump_request(req),
+            )
+            .with_context(|| stack.borrow().to_string());
 
         if let Err(e) = main_ret {
             stdout().lock().flush()?;
-
             eprintln!("\n******* MSCRIPT INTERPRETER FATAL RUNTIME ERROR *******\nCall stack trace:\n{e:?}\n\nPlease report this at https://github.com/mrodz/mscript-lang/issues/new\n");
             bail!("Interpreter crashed")
         }

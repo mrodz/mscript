@@ -31,7 +31,7 @@ mod while_loop;
 pub(crate) use assertion::Assertion;
 pub(crate) use assignment::Assignment;
 pub(crate) use callable::Callable;
-pub(crate) use class::ClassType;
+pub(crate) use class::{Class, ClassType};
 pub(crate) use declaration::Declaration;
 pub(crate) use export::Export;
 pub(crate) use function::Function;
@@ -40,6 +40,7 @@ pub(crate) use function_body::Block;
 pub(crate) use function_parameters::FunctionParameters;
 pub(crate) use ident::Ident;
 pub(crate) use if_statement::IfStatement;
+pub(crate) use import::Import;
 pub(crate) use list::List;
 pub(crate) use loop_control_flow::{Break, Continue};
 pub(crate) use math_expr::{Expr, Op as BinaryOperation};
@@ -48,16 +49,10 @@ pub(crate) use number_loop::NumberLoop;
 pub(crate) use optionals::{Unwrap, UnwrapExpr};
 pub(crate) use print_statement::PrintStatement;
 pub(crate) use r#return::ReturnStatement;
-pub(crate) use r#type::IntoType;
-pub(crate) use r#type::{ModuleType, TypeLayout};
+pub(crate) use r#type::{IntoType, ModuleType, NativeType, StrWrapper, TypeLayout};
 pub(crate) use reassignment::Reassignment;
 pub(crate) use value::{CompileTimeEvaluate, ConstexprEvaluation, Value};
 pub(crate) use while_loop::WhileLoop;
-
-#[allow(unused)]
-pub(crate) use r#type::{
-    BIGINT_TYPE, BOOL_TYPE, BYTE_TYPE, FLOAT_TYPE, INT_TYPE, SELF_TYPE, STR_TYPE,
-};
 
 use anyhow::{anyhow, bail, Context, Error, Result};
 use bytecode::compilation_bridge::{raw_byte_instruction_to_string_representation, Instruction};
@@ -72,12 +67,16 @@ use std::{
     sync::Arc,
 };
 
-use crate::parser::File;
-use crate::VecErr;
+use crate::parser::{File, Node};
+use crate::{FileManager, VecErr};
 
 use self::number_loop::NumberLoopRegister;
 
-/// A register for a variable to be used throughout various compilation 
+pub(crate) trait WalkForType {
+    fn type_from_node(input: &Node) -> Result<Ident>;
+}
+
+/// A register for a variable to be used throughout various compilation
 /// implementations to store intermediate values.
 #[derive(Debug)]
 pub struct TemporaryRegister {
@@ -102,7 +101,7 @@ impl TemporaryRegister {
         }
     }
 
-    /// Create a new [`TemporaryRegister`] with an id and a raw 
+    /// Create a new [`TemporaryRegister`] with an id and a raw
     /// pointer to the backing counter.
     fn new(id: usize, cleanup_ptr: *mut usize) -> Self {
         log::trace!("reg. -n--- {id}");
@@ -170,9 +169,9 @@ impl Drop for TemporaryRegister {
 pub(crate) enum CompiledFunctionId {
     /// An id dealt out by the compiler sequentially.
     Generated(isize),
-    /// A custom, user-specified ID. 
+    /// A custom, user-specified ID.
     /// # Note
-    /// Supplying an ASCII number as this variant's input is undefined behavior. 
+    /// Supplying an ASCII number as this variant's input is undefined behavior.
     Custom(String),
 }
 
@@ -221,8 +220,12 @@ impl Display for CompiledItem {
         match self {
             Self::Break(..) => write!(f, "!BREAK"),
             Self::Continue(..) => write!(f, "!CONTINUE"),
-            Self::Instruction { id, arguments } => write!(f, "{:?} {arguments:?}", raw_byte_instruction_to_string_representation(*id)),
-            Self::Function { id, location, .. } => write!(f, "Function `{id}` -- {location:?}")
+            Self::Instruction { id, arguments } => write!(
+                f,
+                "{:?} {arguments:?}",
+                raw_byte_instruction_to_string_representation(*id)
+            ),
+            Self::Function { id, location, .. } => write!(f, "Function `{id}` -- {location:?}"),
         }
     }
 }
@@ -338,13 +341,17 @@ macro_rules! instruction {
 
 #[derive(Debug)]
 pub(crate) struct CompilationStep {
-    file: File,
+    path: PathBuf,
     next: Option<Box<CompilationStep>>,
 }
 
 impl CompilationStep {
-    pub const fn new(file: File) -> Self {
-        Self { file, next: None }
+    pub fn new(file: PathBuf) -> Self {
+        log::trace!("Added compilation step: {file:?}");
+        Self {
+            path: file,
+            next: None,
+        }
     }
 }
 
@@ -372,10 +379,10 @@ impl CompilationState {
         }
     }
 
-    pub fn queue_compilation(&self, file: File) {
+    pub fn queue_compilation(&self, path: PathBuf) {
         let mut view = self.compilation_queue.borrow_mut();
 
-        let mut result = CompilationStep::new(file);
+        let mut result = CompilationStep::new(path);
 
         if let Some(moved) = view.take() {
             result.next = Some(moved);
@@ -384,23 +391,35 @@ impl CompilationState {
         *view = Some(Box::new(result));
     }
 
-    pub fn compile_recursive(&self, driver: &mut impl FnMut(&File, Vec<CompiledItem>) -> Result<()>) -> Result<(), Vec<anyhow::Error>> {
+    pub fn compile_recursive(
+        &self,
+        file_manager: &FileManager,
+        driver: &mut impl FnMut(&File, Vec<CompiledItem>) -> Result<()>,
+    ) -> Result<(), Vec<anyhow::Error>> {
         let mut view = self.compilation_queue.borrow_mut();
 
         let mut node @ Some(..) = view.take() else {
             return Ok(());
         };
 
-
         while let Some(h) = node {
-
             let mut state_for_file = CompilationState::new();
 
-            h.file.compile(&state_for_file)?;
+            let file = file_manager
+                .get_ast_file(&h.path)
+                .with_context(|| {
+                    format!(
+                        "`{:?}` has not completed. File manager:\n{file_manager})",
+                        h.path
+                    )
+                })
+                .to_err_vec()?;
 
-            driver(&h.file, state_for_file.take_function_buffer()).to_err_vec()?;
+            file.compile(&state_for_file)?;
 
-            state_for_file.compile_recursive(driver)?;
+            driver(&file, state_for_file.take_function_buffer()).to_err_vec()?;
+
+            state_for_file.compile_recursive(file_manager, driver)?;
 
             node = h.next;
         }
@@ -415,7 +434,7 @@ impl CompilationState {
     //         panic!("no items have been registered in the queue");
     //     };
 
-    //     let mut head 
+    //     let mut head
     // }
 
     pub fn poll_function_id(&self) -> CompiledFunctionId {
@@ -490,12 +509,8 @@ impl CompilationState {
             .set(self.temporary_register_c.get() - count);
     }
 
-    pub fn get_function_buffer(&mut self) -> &mut Vec<CompiledItem> {
-        self.function_buffer.get_mut()
-    }
-
     pub fn take_function_buffer(&mut self) -> Vec<CompiledItem> {
-        std::mem::take(self.function_buffer.get_mut()) 
+        std::mem::take(self.function_buffer.get_mut())
     }
 
     pub fn push_function(&self, compiled_function: CompiledItem) {

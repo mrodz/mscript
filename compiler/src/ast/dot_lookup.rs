@@ -132,6 +132,8 @@ impl Parser {
 
         let source_name = input.user_data().get_source_file_name();
 
+        dbg!(&lhs_ty);
+
         let type_of_property = lhs_ty
             .get_property_type(&ident_str)
             .details_lazy_message(ident_span, &source_name, || {
@@ -140,7 +142,8 @@ impl Parser {
                     lhs_ty.get_property_hint_from_input_no_lookup()
                 )
             })
-            .to_err_vec()?;
+            .to_err_vec()?
+            .clone();
 
         match input.as_rule() {
             Rule::dot_function_call => {
@@ -149,7 +152,8 @@ impl Parser {
                         ident_span,
                         &source_name,
                         format!(
-                            "this field has the type `{type_of_property}`, which is not callable"
+                            "this field has the type `{}`, which is not callable",
+                            type_of_property
                         ),
                     )]);
                 };
@@ -206,6 +210,8 @@ impl Parser {
                     .get_type()
                     .unwrap_or(&Cow::Owned(TypeLayout::Void));
 
+                // drop(type_of_property);
+
                 let output_type = if output_type.is_class_self() {
                     lhs_ty
                 } else {
@@ -219,7 +225,7 @@ impl Parser {
             }
             Rule::dot_name_lookup => Ok(DotLookup {
                 lookup_type: DotLookupOption::Name(ident_str),
-                output_type: Cow::Owned(type_of_property.clone()),
+                output_type: type_of_property.clone(),
             }),
             x => unreachable!("{x:?}"),
         }

@@ -1,4 +1,4 @@
-use crate::stack::{VariableMapping, PrimitiveFlagsPair};
+use crate::stack::{PrimitiveFlagsPair, VariableMapping};
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::rc::Rc;
@@ -106,10 +106,7 @@ impl Object {
         self.has_function(property_name, include_class_name)
     }
 
-    pub fn has_variable(
-        &self,
-        variable_name: &str,
-    ) -> Option<PrimitiveFlagsPair> {
+    pub fn has_variable(&self, variable_name: &str) -> Option<PrimitiveFlagsPair> {
         self.object_variables.get(variable_name)
     }
 
@@ -176,7 +173,7 @@ impl Display for Object {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "[object {} @ {:#x}]",
+            "<object {} @ {:#x}>",
             self.name, self as *const Self as usize,
         )?;
 

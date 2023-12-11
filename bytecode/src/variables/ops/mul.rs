@@ -10,7 +10,6 @@ impl std::ops::Mul for Primitive {
     }
 }
 
-
 impl std::ops::Mul for &Primitive {
     type Output = Result<Primitive>;
 
@@ -41,7 +40,9 @@ impl std::ops::Mul for &Primitive {
             (Str(x), BigInt(y)) => string!(x.repeat((*y).try_into()?)),
             (Int(y), Str(x)) => string!(x.repeat((*y).try_into()?)),
             (BigInt(y), Str(x)) => string!(x.repeat((*y).try_into()?)),
-            (Vector(ref x), Int(y)) => vector!(raw repeat_vec(x.borrow().as_ref(), (*y).try_into()?)?),
+            (Vector(ref x), Int(y)) => {
+                vector!(raw repeat_vec(x.borrow().as_ref(), (*y).try_into()?)?)
+            }
             (Vector(ref x), BigInt(y)) => {
                 vector!(raw repeat_vec(x.borrow().as_ref(), (*y).try_into()?)?)
             }

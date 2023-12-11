@@ -19,7 +19,7 @@ pub(crate) mod flag_constants {
 }
 
 #[derive(Clone)]
-pub struct PrimitiveFlagsPair(Rc<UnsafeCell<(Primitive, VariableFlags)>>); 
+pub struct PrimitiveFlagsPair(Rc<UnsafeCell<(Primitive, VariableFlags)>>);
 
 impl PrimitiveFlagsPair {
     pub fn new(primitive: Primitive, flags: VariableFlags) -> Self {
@@ -27,15 +27,11 @@ impl PrimitiveFlagsPair {
     }
 
     pub fn primitive(&self) -> &Primitive {
-        unsafe {
-            &(*self.0.get()).0
-        }
+        unsafe { &(*self.0.get()).0 }
     }
 
     pub fn flags(&self) -> &VariableFlags {
-        unsafe {
-            &(*self.0.get()).1
-        }
+        unsafe { &(*self.0.get()).1 }
     }
 
     pub fn set_primitive(&self, new_value: Primitive) -> Primitive {
@@ -44,7 +40,10 @@ impl PrimitiveFlagsPair {
         std::mem::replace(ptr, new_value)
     }
 
-    pub fn update_primitive(&self, setter: impl FnOnce(&Primitive) -> Result<Primitive>) -> Result<&Primitive> {
+    pub fn update_primitive(
+        &self,
+        setter: impl FnOnce(&Primitive) -> Result<Primitive>,
+    ) -> Result<&Primitive> {
         let new_value = setter(self.primitive())?;
         self.set_primitive(new_value);
         Ok(self.primitive())
@@ -121,7 +120,11 @@ impl Display for VariableMapping {
         let mut result = vec![];
 
         for (key, value) in self.0.iter() {
-            result.push(format!("\n\t`{key}` = {} (attr: {:?})", value.primitive(), value.flags()));
+            result.push(format!(
+                "\n\t`{key}` = {} (attr: {:?})",
+                value.primitive(),
+                value.flags()
+            ));
         }
 
         let string = if result.is_empty() {
@@ -163,11 +166,7 @@ impl VariableMapping {
         self.0.contains_key(key)
     }
 
-    pub fn update_once(
-        &mut self,
-        name: String,
-        value: PrimitiveFlagsPair,
-    ) -> Result<()> {
+    pub fn update_once(&mut self, name: String, value: PrimitiveFlagsPair) -> Result<()> {
         if let Some(export) = self.0.insert(name, value) {
             bail!("value already present: {export:?}");
         }
@@ -310,9 +309,7 @@ impl Stack {
         for stack_frame in self.0.iter().rev() {
             let tuple = stack_frame.variables.get(name);
             if let Some(packed) = tuple {
-                let is_exclusive = {
-                    packed.flags().is_exclusive_to_frame()
-                };
+                let is_exclusive = { packed.flags().is_exclusive_to_frame() };
 
                 if !is_exclusive {
                     return Some(packed);
@@ -330,11 +327,7 @@ impl Stack {
         self.register_variable_flags(name, var, VariableFlags::none())
     }
 
-    pub fn ref_variable(
-        &mut self,
-        name: Cow<'static, str>,
-        var: PrimitiveFlagsPair,
-    ) {
+    pub fn ref_variable(&mut self, name: Cow<'static, str>, var: PrimitiveFlagsPair) {
         let stack_frame = self.0.last_mut().expect("nothing in the stack");
         let variables = &mut stack_frame.variables.0;
         variables.insert(name.into_owned(), var);
@@ -355,10 +348,7 @@ impl Stack {
     }
 
     /// Delete a variable from the current stack frame.
-    pub fn delete_variable_local(
-        &mut self,
-        name: &str,
-    ) -> Result<PrimitiveFlagsPair> {
+    pub fn delete_variable_local(&mut self, name: &str) -> Result<PrimitiveFlagsPair> {
         let frame = self.0.last_mut().expect("no stack frame");
 
         frame.variables.0.remove(name).ok_or(anyhow!(

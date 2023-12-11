@@ -1,4 +1,4 @@
-use std::{borrow::Cow, sync::Arc, path::PathBuf};
+use std::{borrow::Cow, path::PathBuf, rc::Rc, sync::Arc};
 
 use anyhow::Result;
 use bytecode::compilation_bridge::id::{MAKE_FUNCTION, RET};
@@ -7,14 +7,13 @@ use crate::{
     ast::{
         function::FunctionType, r#type::IntoType, Block, CompilationState, Compile,
         CompiledFunctionId, CompiledItem, Dependencies, FunctionParameters, Ident, TypeLayout,
+        WalkForType,
     },
     instruction,
     parser::{Node, Parser},
     scope::ScopeReturnStatus,
-    VecErr, BytecodePathStr,
+    BytecodePathStr, VecErr,
 };
-
-use super::WalkForType;
 
 #[derive(Debug)]
 pub struct Constructor {
@@ -29,10 +28,7 @@ impl Constructor {
         format!("{}::$constructor", self.class_name)
     }
 
-    pub fn default_constructor(
-        path_str: Arc<PathBuf>,
-        class_name: Arc<String>,
-    ) -> Self {
+    pub fn default_constructor(path_str: Arc<PathBuf>, class_name: Arc<String>) -> Self {
         Self {
             parameters: FunctionParameters::Named(vec![Ident::new(
                 "self".to_owned(),
@@ -122,7 +118,7 @@ impl WalkForType for Constructor {
         let parameters = input.children().next().unwrap();
         let parameters = Parser::function_parameters(parameters, false, true, true)?;
 
-        let function_type = FunctionType::new(Arc::new(parameters), ScopeReturnStatus::Void);
+        let function_type = FunctionType::new(Rc::new(parameters), ScopeReturnStatus::Void);
 
         let ident = Ident::new(
             "$constructor".to_owned(),
@@ -137,7 +133,7 @@ impl WalkForType for Constructor {
 impl IntoType for Constructor {
     fn for_type(&self) -> Result<crate::ast::TypeLayout> {
         let function_type =
-            FunctionType::new(Arc::new(self.parameters.clone()), ScopeReturnStatus::Void);
+            FunctionType::new(Rc::new(self.parameters.clone()), ScopeReturnStatus::Void);
 
         Ok(TypeLayout::Function(function_type))
     }

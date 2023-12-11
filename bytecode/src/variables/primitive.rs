@@ -1,7 +1,11 @@
 //! The interpreter's primitive datatypes.
 //! Every "value" in the interpreter is a primitive.
 
-use crate::{bigint, bool, byte, float, int, stack::{VariableMapping, PrimitiveFlagsPair}, string};
+use crate::{
+    bigint, bool, byte, float, int,
+    stack::{PrimitiveFlagsPair, VariableMapping},
+    string,
+};
 use anyhow::{bail, Result};
 use std::{
     cell::RefCell,
@@ -68,9 +72,7 @@ impl HeapPrimitive {
     pub(crate) unsafe fn to_owned_primitive(&self) -> Primitive {
         match self {
             Self::ArrayPtr(mut_ptr) => (**mut_ptr).clone(),
-            Self::Lookup(cell) => {
-                cell.primitive().clone()
-            }
+            Self::Lookup(cell) => cell.primitive().clone(),
         }
     }
 
@@ -107,9 +109,7 @@ impl HeapPrimitive {
 
     unsafe fn borrow(&self) -> &Primitive {
         match self {
-            Self::Lookup(shared_ptr) => {
-                shared_ptr.primitive()
-            },
+            Self::Lookup(shared_ptr) => shared_ptr.primitive(),
             Self::ArrayPtr(raw_mut_ptr) => {
                 let as_ref = raw_mut_ptr
                     .as_ref()
@@ -241,9 +241,7 @@ impl Primitive {
                 let property = obj.borrow().get_property(property, true)?;
                 Some(property)
             }
-            P::Module(module) => {
-                module.borrow().get(property)
-            }
+            P::Module(module) => module.borrow().get(property),
             _ => None,
         }
     }
@@ -375,7 +373,11 @@ impl Primitive {
                 write!(f, "]")
             }
             Module(module) => {
-                write!(f, "<module @ {:#x}>", module.as_ptr() as usize)
+                if cfg!(debug) {
+                    write!(f, "{:#?}", module.borrow())
+                } else {
+                    write!(f, "<module @ {:#x}>", module.as_ptr() as usize)
+                }
             }
             // For all intents and purposes, this code is safe. We assume that if this code blows up,
             // something went SERIOUSLY wrong with the MScript compiler.

@@ -209,7 +209,7 @@ impl Ident {
 impl Parser {
     pub fn ident(input: Node) -> Result<Ident> {
         debug_assert_eq!(input.as_rule(), Rule::ident);
-    
+
         let name = input.as_str();
 
         if KEYWORDS.contains(name) {

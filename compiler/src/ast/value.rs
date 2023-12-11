@@ -8,8 +8,10 @@ use crate::{
 };
 
 use super::{
-    r#type::IntoType, string::AstString, CompilationState, Compile, CompiledItem, Dependencies,
-    Dependency, Expr, Function, Ident, List, Number, TypeLayout, Unwrap, UnwrapExpr, BOOL_TYPE,
+    r#type::{IntoType, NativeType},
+    string::AstString,
+    CompilationState, Compile, CompiledItem, Dependencies, Dependency, Expr, Function, Ident, List,
+    Number, TypeLayout, Unwrap, UnwrapExpr,
 };
 
 #[derive(Debug)]
@@ -234,7 +236,10 @@ impl Value {
                 ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
             }
             Value::UnwrapExpr(..) => {
-                ident.link_force_no_inherit(user_data, Cow::Borrowed(&BOOL_TYPE))?;
+                ident.link_force_no_inherit(
+                    user_data,
+                    Cow::Borrowed(&TypeLayout::Native(NativeType::Bool)),
+                )?;
             }
             Value::Unwrap(unwrap) => {
                 let ty = unwrap.for_type()?.get_owned_type_recursively();
@@ -257,7 +262,7 @@ impl IntoType for Value {
             Self::Boolean(boolean) => boolean.for_type(),
             Self::List(list) => list.for_type(),
             Self::Unwrap(unwrap_expr) => unwrap_expr.for_type(),
-            Self::UnwrapExpr(..) => Ok(BOOL_TYPE.to_owned()),
+            Self::UnwrapExpr(..) => Ok(TypeLayout::Native(NativeType::Bool)),
         }
     }
 }

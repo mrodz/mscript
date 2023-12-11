@@ -5,7 +5,6 @@ use anyhow::{bail, Result};
 use crate::instruction;
 use crate::parser::{Node, Parser, Rule};
 
-use super::r#type::{BIGINT_TYPE, BYTE_TYPE, FLOAT_TYPE, INT_TYPE};
 use super::{r#type::IntoType, Compile, Dependencies, TypeLayout};
 use super::{CompilationState, CompiledItem};
 
@@ -122,10 +121,10 @@ impl Dependencies for Number {}
 impl IntoType for Number {
     fn for_type(&self) -> Result<TypeLayout> {
         Ok(match self {
-            Self::Byte(_) => BYTE_TYPE.clone(),
-            Self::Integer(_) => INT_TYPE.clone(),
-            Self::BigInt(_) => BIGINT_TYPE.clone(),
-            Self::Float(_) => FLOAT_TYPE.clone(),
+            Self::Byte(_) => TypeLayout::Native(super::r#type::NativeType::Byte),
+            Self::Integer(_) => TypeLayout::Native(super::r#type::NativeType::Int),
+            Self::BigInt(_) => TypeLayout::Native(super::r#type::NativeType::BigInt),
+            Self::Float(_) => TypeLayout::Native(super::r#type::NativeType::Float),
         })
     }
 }

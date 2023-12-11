@@ -34,6 +34,8 @@ pub enum Commands {
         /// no debug or display info besides the minimum.
         #[arg(long = "quick", default_value = "false")]
         quick: bool,
+        #[arg(long = "no-pb", default_value = "false")]
+        override_no_pb: bool,
     },
     /// Build the interpreter and have it look for the
     /// entrypoint of a `.mmm` file

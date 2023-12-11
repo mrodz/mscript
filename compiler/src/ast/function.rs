@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt::Display, hash::Hash, sync::Arc, path::PathBuf};
+use std::{borrow::Cow, fmt::Display, hash::Hash, path::PathBuf, rc::Rc, sync::Arc};
 
 use anyhow::{anyhow, Result};
 use bytecode::compilation_bridge::id::{MAKE_FUNCTION, RET};
@@ -8,7 +8,7 @@ use crate::{
     instruction,
     parser::{Node, Parser, Rule},
     scope::ScopeReturnStatus,
-    VecErr, BytecodePathStr,
+    BytecodePathStr, VecErr,
 };
 
 use super::{
@@ -18,7 +18,7 @@ use super::{
 
 #[derive(Debug)]
 pub(crate) struct Function {
-    pub parameters: Arc<FunctionParameters>,
+    pub parameters: Rc<FunctionParameters>,
     pub body: Block,
     pub return_type: ScopeReturnStatus,
     pub path_str: Arc<PathBuf>,
@@ -26,7 +26,7 @@ pub(crate) struct Function {
 
 #[derive(Debug, Clone, Eq)]
 pub(crate) struct FunctionType {
-    parameters: Arc<FunctionParameters>,
+    parameters: Rc<FunctionParameters>,
     return_type: Box<ScopeReturnStatus>,
 }
 
@@ -43,8 +43,8 @@ impl FunctionType {
         &self.parameters
     }
 
-    pub(crate) fn arced_parameters(&self) -> Arc<FunctionParameters> {
-        Arc::clone(&self.parameters)
+    pub(crate) fn arced_parameters(&self) -> Rc<FunctionParameters> {
+        Rc::clone(&self.parameters)
     }
 }
 
@@ -81,24 +81,27 @@ impl Hash for FunctionType {
 
 #[cfg(test)]
 pub mod eq_hash_test {
-    use crate::{assert_proper_eq_hash, ast::*};
+    use crate::{
+        assert_proper_eq_hash,
+        ast::{r#type::NativeType, *},
+    };
 
     use super::*;
 
     #[test]
     fn names_names() {
         let lhs = FunctionType::new(
-            Arc::new(FunctionParameters::Named(vec![Ident::new(
+            Rc::new(FunctionParameters::Named(vec![Ident::new(
                 "a".into(),
-                Some(Cow::Borrowed(&INT_TYPE)),
+                Some(Cow::Owned(TypeLayout::Native(NativeType::Int))),
                 false,
             )])),
             ScopeReturnStatus::Void,
         );
         let rhs = FunctionType::new(
-            Arc::new(FunctionParameters::Named(vec![Ident::new(
+            Rc::new(FunctionParameters::Named(vec![Ident::new(
                 "a".into(),
-                Some(Cow::Borrowed(&INT_TYPE)),
+                Some(Cow::Owned(TypeLayout::Native(NativeType::Int))),
                 false,
             )])),
             ScopeReturnStatus::Void,
@@ -110,15 +113,15 @@ pub mod eq_hash_test {
     #[test]
     fn types_names() {
         let lhs = FunctionType::new(
-            Arc::new(FunctionParameters::TypesOnly(vec![Cow::Borrowed(
-                &INT_TYPE,
+            Rc::new(FunctionParameters::TypesOnly(vec![Cow::Owned(
+                TypeLayout::Native(NativeType::Int),
             )])),
             ScopeReturnStatus::Void,
         );
         let rhs = FunctionType::new(
-            Arc::new(FunctionParameters::Named(vec![Ident::new(
+            Rc::new(FunctionParameters::Named(vec![Ident::new(
                 "a".into(),
-                Some(Cow::Borrowed(&INT_TYPE)),
+                Some(Cow::Owned(TypeLayout::Native(NativeType::Int))),
                 false,
             )])),
             ScopeReturnStatus::Void,
@@ -130,17 +133,17 @@ pub mod eq_hash_test {
     #[test]
     fn different_names_same_types() {
         let lhs = FunctionType::new(
-            Arc::new(FunctionParameters::Named(vec![Ident::new(
+            Rc::new(FunctionParameters::Named(vec![Ident::new(
                 "a".into(),
-                Some(Cow::Borrowed(&INT_TYPE)),
+                Some(Cow::Owned(TypeLayout::Native(NativeType::Int))),
                 false,
             )])),
             ScopeReturnStatus::Void,
         );
         let rhs = FunctionType::new(
-            Arc::new(FunctionParameters::Named(vec![Ident::new(
+            Rc::new(FunctionParameters::Named(vec![Ident::new(
                 "b".into(),
-                Some(Cow::Borrowed(&INT_TYPE)),
+                Some(Cow::Owned(TypeLayout::Native(NativeType::Int))),
                 false,
             )])),
             ScopeReturnStatus::Void,
@@ -152,20 +155,20 @@ pub mod eq_hash_test {
     #[test]
     fn return_types_at_different_stages() {
         let lhs = FunctionType::new(
-            Arc::new(FunctionParameters::Named(vec![Ident::new(
+            Rc::new(FunctionParameters::Named(vec![Ident::new(
                 "a".into(),
-                Some(Cow::Borrowed(&INT_TYPE)),
+                Some(Cow::Owned(TypeLayout::Native(NativeType::Int))),
                 false,
             )])),
-            ScopeReturnStatus::Should(Cow::Borrowed(&BOOL_TYPE)),
+            ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Native(NativeType::Bool))),
         );
         let rhs = FunctionType::new(
-            Arc::new(FunctionParameters::Named(vec![Ident::new(
+            Rc::new(FunctionParameters::Named(vec![Ident::new(
                 "b".into(),
-                Some(Cow::Borrowed(&INT_TYPE)),
+                Some(Cow::Owned(TypeLayout::Native(NativeType::Int))),
                 false,
             )])),
-            ScopeReturnStatus::Did(Cow::Borrowed(&BOOL_TYPE)),
+            ScopeReturnStatus::Did(Cow::Owned(TypeLayout::Native(NativeType::Bool))),
         );
 
         assert_proper_eq_hash!(lhs, rhs);
@@ -173,7 +176,7 @@ pub mod eq_hash_test {
 }
 
 impl FunctionType {
-    pub fn new(parameters: Arc<FunctionParameters>, return_type: ScopeReturnStatus) -> Self {
+    pub fn new(parameters: Rc<FunctionParameters>, return_type: ScopeReturnStatus) -> Self {
         Self {
             parameters,
             return_type: Box::new(return_type),
@@ -207,7 +210,7 @@ impl Display for FunctionType {
 
 impl Function {
     pub const fn new(
-        parameters: Arc<FunctionParameters>,
+        parameters: Rc<FunctionParameters>,
         body: Block,
         return_type: ScopeReturnStatus,
         path_str: Arc<PathBuf>,
@@ -328,7 +331,7 @@ impl Parser {
                 .map_err(|e| vec![anyhow!(e)])?;
 
             return Ok(Function::new(
-                Arc::new(parameters),
+                Rc::new(parameters),
                 Block::empty_body(),
                 ScopeReturnStatus::Void,
                 path_str,
@@ -353,7 +356,7 @@ impl Parser {
             .push_function(ScopeReturnStatus::detect_should_return(return_type));
 
         let parameters =
-            Arc::new(Self::function_parameters(parameters, true, false, false).to_err_vec()?);
+            Rc::new(Self::function_parameters(parameters, true, false, false).to_err_vec()?);
 
         // input.user_data().register_function_parameters_to_scope(Arc::clone(&parameters));
 

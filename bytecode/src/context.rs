@@ -4,7 +4,7 @@
 use super::function::{Function, InstructionExitState};
 use super::stack::VariableMapping;
 use super::variables::Primitive;
-use crate::stack::{Stack, VariableFlags, PrimitiveFlagsPair};
+use crate::stack::{PrimitiveFlagsPair, Stack, VariableFlags};
 use anyhow::{bail, Context, Result};
 use std::borrow::Cow;
 use std::cell::{Ref, RefCell};
@@ -121,7 +121,11 @@ impl<'a> Ctx<'a> {
     }
 
     pub fn get_file_module(&self) -> Primitive {
-        let location = self.function.location().upgrade().expect("could not get a reference to the backing file");
+        let location = self
+            .function
+            .location()
+            .upgrade()
+            .expect("could not get a reference to the backing file");
         Primitive::Module(location.get_exports())
     }
 
@@ -134,10 +138,7 @@ impl<'a> Ctx<'a> {
     ///
     /// * `name` - the name of the callback variable
     /// * `value` - the [`Primitive`] value that will be stored in the same slot.
-    pub fn load_callback_variable(
-        &self,
-        name: &str,
-    ) -> Result<PrimitiveFlagsPair> {
+    pub fn load_callback_variable(&self, name: &str) -> Result<PrimitiveFlagsPair> {
         let Some(ref mapping) = self.callback_state else {
             bail!("this function is not a callback")
         };
@@ -280,11 +281,7 @@ impl<'a> Ctx<'a> {
         self.stack.pop()
     }
 
-    pub(crate) fn register_export(
-        &self,
-        name: String,
-        var: PrimitiveFlagsPair,
-    ) -> Result<()> {
+    pub(crate) fn register_export(&self, name: String, var: PrimitiveFlagsPair) -> Result<()> {
         let file = self
             .function
             .location()
@@ -299,11 +296,7 @@ impl<'a> Ctx<'a> {
         self.call_stack.borrow_mut().register_variable(name, var)
     }
 
-    pub(crate) fn ref_variable(
-        &self,
-        name: Cow<'static, str>,
-        var: PrimitiveFlagsPair,
-    ) {
+    pub(crate) fn ref_variable(&self, name: Cow<'static, str>, var: PrimitiveFlagsPair) {
         self.call_stack.borrow_mut().ref_variable(name, var)
     }
 
@@ -314,10 +307,7 @@ impl<'a> Ctx<'a> {
             .register_variable_local(name, var, VariableFlags::none())
     }
 
-    pub(crate) fn delete_variable_local(
-        &self,
-        name: &str,
-    ) -> Result<PrimitiveFlagsPair> {
+    pub(crate) fn delete_variable_local(&self, name: &str) -> Result<PrimitiveFlagsPair> {
         self.call_stack.borrow_mut().delete_variable_local(name)
     }
 
@@ -329,17 +319,11 @@ impl<'a> Ctx<'a> {
     /// Get the [`Primitive`] value and its associated [`VariableFlags`] from a name.
     ///
     /// Will start the search in the current function and bubble all the way up to the highest stack frame.
-    pub(crate) fn load_variable(
-        &self,
-        name: &str,
-    ) -> Option<PrimitiveFlagsPair> {
+    pub(crate) fn load_variable(&self, name: &str) -> Option<PrimitiveFlagsPair> {
         self.call_stack.borrow().find_name(name)
     }
 
-    pub(crate) fn load_self_export(
-        &self,
-        name: &str,
-    ) -> Option<PrimitiveFlagsPair> {
+    pub(crate) fn load_self_export(&self, name: &str) -> Option<PrimitiveFlagsPair> {
         let file = self
             .function
             .location()
