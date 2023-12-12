@@ -56,34 +56,56 @@ mod string_arithmetic {
     use super::Number::{self, *};
 
     macro_rules! compiler_math {
-        ($ty:ty: $lhs:ident $symbol:tt $rhs:ident) => {
-            ($lhs.parse::<$ty>()? $symbol $rhs.parse::<$ty>()?).to_string()
-        };
+        ($ty:ty: $lhs:ident $symbol:tt $rhs:ident) => {{
+            let left = $lhs.parse::<$ty>()?;
+            let right = $rhs.parse::<$ty>()?;
+
+            (<Option<_> as anyhow::Context<_, _>>::context(
+                <$ty>::$symbol(left, right),
+                "this operation is guaranteed to fail at runtime",
+            )?)
+            .to_string()
+        }};
+        ($ty:ty: $lhs:ident $symbol:tt $rhs:ident fp) => {{
+            let left = $lhs.parse::<$ty>()?;
+            let right = $rhs.parse::<$ty>()?;
+            (<$ty>::$symbol(left, right)).to_string()
+        }};
+        ($ty:ty: $lhs:ident $symbol:tt $rhs:ident fp nonzero) => {{
+            let left = $lhs.parse::<$ty>()?;
+            let right = $rhs.parse::<$ty>()?;
+
+            if right == 0.0 {
+                anyhow::bail!("right operand is zero; this is guaranteed to fail at runtime")
+            }
+
+            (<$ty>::$symbol(left, right)).to_string()
+        }};
     }
 
     macro_rules! number_impl {
-        (@type=$type:ty, @output=$output:ty: $op:tt as $trait:ident, $def:ident) => {
+        (@type=$type:ty, @output=$output:ty: $op:ident as $trait:ident, $def:ident) => {
             impl $trait for $type {
                 type Output = Result<$output>;
                 fn $def(self, rhs: $type) -> Self::Output {
                     let matched = match (self, rhs) {
                         (Integer(x), Integer(y)) => Integer(compiler_math!(i32: x $op y)),
-                        (Integer(x), Float(y)) => Float(compiler_math!(f64: x $op y)),
+                        (Integer(x), Float(y)) => Float(compiler_math!(f64: x $def y fp)),
                         (Integer(x), BigInt(y)) => BigInt(compiler_math!(i128: x $op y)),
                         (Integer(x), Byte(y)) => Integer(compiler_math!(i32: x $op y)),
                         /*******************************/
-                        (Float(x), Integer(y)) => Float(compiler_math!(f64: x $op y)),
-                        (Float(x), Float(y)) => Float(compiler_math!(f64: x $op y)),
-                        (Float(x), BigInt(y)) => Float(compiler_math!(f64: x $op y)),
-                        (Float(x), Byte(y)) => Float(compiler_math!(f64: x $op y)),
+                        (Float(x), Integer(y)) => Float(compiler_math!(f64: x $def y fp)),
+                        (Float(x), Float(y)) => Float(compiler_math!(f64: x $def y fp)),
+                        (Float(x), BigInt(y)) => Float(compiler_math!(f64: x $def y fp)),
+                        (Float(x), Byte(y)) => Float(compiler_math!(f64: x $def y fp)),
                         /*******************************/
                         (BigInt(x), Integer(y)) => BigInt(compiler_math!(i128: x $op y)),
-                        (BigInt(x), Float(y)) => Float(compiler_math!(f64: x $op y)),
+                        (BigInt(x), Float(y)) => Float(compiler_math!(f64: x $def y fp)),
                         (BigInt(x), BigInt(y)) => BigInt(compiler_math!(i128: x $op y)),
                         (BigInt(x), Byte(y)) => BigInt(compiler_math!(i128: x $op y)),
                         /*******************************/
                         (Byte(x), Integer(y)) => Integer(compiler_math!(i32: x $op y)),
-                        (Byte(x), Float(y)) => Float(compiler_math!(f64: x $op y)),
+                        (Byte(x), Float(y)) => Float(compiler_math!(f64: x $def y fp)),
                         (Byte(x), BigInt(y)) => BigInt(compiler_math!(i128: x $op y)),
                         (Byte(x), Byte(y)) => Byte(compiler_math!(u8: x $op y)),
                     };
@@ -92,17 +114,51 @@ mod string_arithmetic {
                 }
             }
         };
-        ($op:tt as $trait:ident, $def:ident) => {
+        (fpNonzero @type=$type:ty, @output=$output:ty: $op:ident as $trait:ident, $def:ident) => {
+            impl $trait for $type {
+                type Output = Result<$output>;
+                fn $def(self, rhs: $type) -> Self::Output {
+                    let matched = match (self, rhs) {
+                        (Integer(x), Integer(y)) => Integer(compiler_math!(i32: x $op y)),
+                        (Integer(x), Float(y)) => Float(compiler_math!(f64: x $def y fp nonzero)),
+                        (Integer(x), BigInt(y)) => BigInt(compiler_math!(i128: x $op y)),
+                        (Integer(x), Byte(y)) => Integer(compiler_math!(i32: x $op y)),
+                        /*******************************/
+                        (Float(x), Integer(y)) => Float(compiler_math!(f64: x $def y fp nonzero)),
+                        (Float(x), Float(y)) => Float(compiler_math!(f64: x $def y fp nonzero)),
+                        (Float(x), BigInt(y)) => Float(compiler_math!(f64: x $def y fp nonzero)),
+                        (Float(x), Byte(y)) => Float(compiler_math!(f64: x $def y fp nonzero)),
+                        /*******************************/
+                        (BigInt(x), Integer(y)) => BigInt(compiler_math!(i128: x $op y)),
+                        (BigInt(x), Float(y)) => Float(compiler_math!(f64: x $def y fp nonzero)),
+                        (BigInt(x), BigInt(y)) => BigInt(compiler_math!(i128: x $op y)),
+                        (BigInt(x), Byte(y)) => BigInt(compiler_math!(i128: x $op y)),
+                        /*******************************/
+                        (Byte(x), Integer(y)) => Integer(compiler_math!(i32: x $op y)),
+                        (Byte(x), Float(y)) => Float(compiler_math!(f64: x $def y fp nonzero)),
+                        (Byte(x), BigInt(y)) => BigInt(compiler_math!(i128: x $op y)),
+                        (Byte(x), Byte(y)) => Byte(compiler_math!(u8: x $op y)),
+                    };
+
+                    Ok(matched)
+                }
+            }
+        };
+        ($op:ident as $trait:ident, $def:ident) => {
             number_impl!(@type=Number, @output=Number: $op as $trait, $def);
             number_impl!(@type=&Number, @output=Number: $op as $trait, $def);
-        }
+        };
+        (fpNonzero $op:ident as $trait:ident, $def:ident) => {
+            number_impl!(fpNonzero @type=Number, @output=Number: $op as $trait, $def);
+            number_impl!(fpNonzero @type=&Number, @output=Number: $op as $trait, $def);
+        };
     }
 
-    number_impl!(+ as Add, add);
-    number_impl!(- as Sub, sub);
-    number_impl!(* as Mul, mul);
-    number_impl!(/ as Div, div);
-    number_impl!(% as Rem, rem);
+    number_impl!(checked_add as Add, add);
+    number_impl!(checked_sub as Sub, sub);
+    number_impl!(checked_mul as Mul, mul);
+    number_impl!(fpNonzero checked_div as Div, div);
+    number_impl!(fpNonzero checked_rem as Rem, rem);
 }
 
 impl Display for Number {

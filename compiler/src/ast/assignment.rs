@@ -9,7 +9,7 @@ use anyhow::{bail, Context, Result};
 use crate::{
     instruction,
     parser::{AssocFileData, Node, Parser, Rule},
-    VecErr,
+    CompilationError, VecErr,
 };
 
 use super::{
@@ -170,14 +170,13 @@ impl Dependencies for Assignment {
 impl Compile for Assignment {
     fn compile(&self, state: &CompilationState) -> Result<Vec<super::CompiledItem>> {
         // let name = self.ident.name();
+        let mut value_init = self.value().compile(state)?;
 
-        let maybe_constexpr_eval = self.value().try_constexpr_eval()?;
-
-        let mut value_init = if let ConstexprEvaluation::Owned(value) = maybe_constexpr_eval {
-            value.compile(state)?
-        } else {
-            self.value().compile(state)?
-        };
+        // let mut value_init = if let ConstexprEvaluation::Owned(value) = maybe_constexpr_eval {
+        //     value.compile(state)?
+        // } else {
+        //     self.value().compile(state)?
+        // };
 
         if self.idents.len() == 1 {
             let name = self.idents[0].name();
@@ -345,6 +344,8 @@ impl Parser {
             (None, maybe_flags_or_assignment)
         };
 
+        let value_node = assignment.children().next().unwrap().as_span();
+
         let is_const = flags
             .as_ref()
             .map(|flags| flags.contains(AssignmentFlag::constant()))
@@ -400,12 +401,25 @@ impl Parser {
             rule => unreachable!("{rule:?}"),
         };
 
+        if let ConstexprEvaluation::Owned(data) = x
+            .value()
+            .try_constexpr_eval()
+            .details(
+                assignment_span,
+                &input.user_data().get_source_file_name(),
+                "attempting to evaluate this expression at compile time resulted in an error",
+            )
+            .to_err_vec()?
+        {
+            x.value = data;
+        }
+
         if x.idents.len() == 1 {
             let ident_ty = x.idents[0].ty().unwrap();
             if let Some(list_type) = ident_ty.is_list() {
                 if list_type.must_be_const() && !is_const {
                     return Err(vec![new_err(
-                        assignment_span,
+                        value_node,
                         &user_data.get_source_file_name(),
                         "mixed-type arrays must be const in order to ensure type safety".to_owned(),
                     )]);
@@ -429,7 +443,7 @@ impl Parser {
 
             if requires_check && !can_modify_if_applicable {
                 return Err(vec![new_err(
-                    assignment_span,
+                    value_node,
                     &input.user_data().get_source_file_name(),
                     format!(
                         "cannot reassign to \"{}\", which is a const variable",
