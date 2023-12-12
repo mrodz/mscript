@@ -373,7 +373,7 @@ impl Primitive {
                 write!(f, "]")
             }
             Module(module) => {
-                if cfg!(debug) {
+                if cfg!(feature = "debug") {
                     write!(f, "{:#?}", module.borrow())
                 } else {
                     write!(f, "<module @ {:#x}>", module.as_ptr() as usize)

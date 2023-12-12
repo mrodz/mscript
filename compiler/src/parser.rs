@@ -321,11 +321,9 @@ impl AssocFileData {
     }
 
     pub fn is_function_a_class_method(&self) -> bool {
-        dbg!(&self.scopes);
         let mut iter = self.scopes.iter();
 
         let this_frame = iter.next().unwrap();
-        dbg!(&this_frame);
         let parent_scope = iter.next().unwrap();
 
         this_frame.is_class() || parent_scope.is_class()
