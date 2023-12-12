@@ -46,7 +46,6 @@ impl Compile for Constructor {
     fn compile(&self, state: &CompilationState) -> Result<Vec<CompiledItem>, anyhow::Error> {
         let symbolic_id = self.symbolic_id();
         let mut args = self.parameters.compile(state)?;
-        // args.push(instruction!(breakpoint));
         let mut body = self.body.compile(state)?;
 
         if let Some(CompiledItem::Instruction { id: RET, .. }) = body.last() {
@@ -103,7 +102,6 @@ impl Compile for Constructor {
 
         result.extend_from_slice(&[
             instruction!(load_fast constructor_register),
-            // instruction!(breakpoint),
             instruction!(call),
             instruction!(delete_name_scoped constructor_register),
             instruction!(load_fast obj_register),

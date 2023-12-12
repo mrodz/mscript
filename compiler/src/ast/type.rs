@@ -287,7 +287,7 @@ impl ModuleType {
     pub fn get_property<'a>(&'a self, name: &str) -> Option<Ref<'a, Ident>> {
         let view = self.exported_members.borrow();
         Ref::filter_map(view, |exported_members| {
-            exported_members.iter().find(|&field| dbg!(field.name()) == dbg!(name))
+            exported_members.iter().find(|&field| field.name() == name)
         })
         .ok()
     }

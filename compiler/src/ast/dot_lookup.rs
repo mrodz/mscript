@@ -57,7 +57,8 @@ impl Compile for DotLookupOption {
                 result.extend_from_slice(&[
                     instruction!(lookup function_name),
                     instruction!(store_fast lhs_register),
-                    // instruction!(breakpoint "POST store function name in lhs_register"),
+                    #[cfg(feature = "debug")]
+                    instruction!(breakpoint "POST store function name in lhs_register"),
                 ]);
 
                 // let load_register = if *assume_self_is_on_top {
@@ -70,6 +71,7 @@ impl Compile for DotLookupOption {
                     arguments,
                     instruction!(load_fast lhs_register),
                     if *assume_self_is_on_top {
+                        // None
                         Some(instance_register.to_string())
                     } else {
                         None
@@ -117,22 +119,17 @@ impl Parser {
 
     pub fn dot_chain_option<'a>(
         input: Node,
-        lhs_ty: Cow<'a, TypeLayout>,
+        lhs_ty_cow: Cow<'a, TypeLayout>,
     ) -> Result<DotLookup<'a>, Vec<anyhow::Error>> {
+        let lhs_ty = lhs_ty_cow.as_ref().get_type_recursively();
         let mut children = input.children();
 
         let ident = children.next().unwrap();
         let ident_str = ident.as_str().to_owned();
 
-        if ident_str == "to_string" {
-            // panic!("{lhs_ty:?}")
-        }
-
         let ident_span = ident.as_span();
 
         let source_name = input.user_data().get_source_file_name();
-
-        dbg!(&lhs_ty);
 
         let type_of_property = lhs_ty
             .get_property_type(&ident_str)
@@ -162,18 +159,21 @@ impl Parser {
 
                 assert_eq!(arguments.as_rule(), Rule::function_arguments);
 
-                let mut allow_self_type = Cow::Borrowed(lhs_ty.as_ref());
+                let mut allow_self_type = Cow::Borrowed(lhs_ty);
                 let mut assume_self_is_on_top = true;
 
-                if let TypeLayout::Module(module_type) = lhs_ty.as_ref() {
+                if let TypeLayout::Module(module_type) = lhs_ty {
                     if let Some(ident) = module_type.get_property(&ident_str) {
                         let ident_ty = ident.ty().expect("ident should have type");
 
                         assume_self_is_on_top = false;
 
                         if ident_ty.is_class() {
+                            // assume_self_is_on_top = false;
                             allow_self_type = Cow::Owned(ident_ty.clone().into_owned());
                         } else {
+                            // assume_self_is_on_top = true;
+
                             let callable_ty = ident_ty
                                 .is_callable()
                                 .details(
@@ -192,6 +192,7 @@ impl Parser {
                 let arguments = Self::function_arguments(
                     arguments,
                     function_type.parameters(),
+                    // Some(allow_self_type.as_ref()),
                     if assume_self_is_on_top {
                         Some(allow_self_type.as_ref())
                     } else {
@@ -213,7 +214,7 @@ impl Parser {
                 // drop(type_of_property);
 
                 let output_type = if output_type.is_class_self() {
-                    lhs_ty
+                    lhs_ty_cow
                 } else {
                     output_type.clone()
                 };

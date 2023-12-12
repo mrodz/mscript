@@ -1,0 +1,103 @@
+function D::drawPixel2
+	arg 0
+	store self
+	load_callback lib
+	lookup drawPixel
+	store_fast #2
+	breakpoint "POST store function name in lhs_register"
+	breakpoint "CALL PREINIT args"
+	int 40
+	store_fast #3
+	int 20
+	store_fast #4
+	breakpoint "CALL POSTINIT args"
+	load_fast #3
+	load_fast #4
+	load_fast #2
+	call
+	void
+	string BYEEEEE
+	ret
+end
+function D::$constructor
+	arg 0
+	store self
+	void
+	ret
+end
+function D
+	make_function ./main2.mmm#D::drawPixel2 lib
+	store_fast D::drawPixel2
+	make_object
+	store_fast #1
+	make_function ./main2.mmm#D::$constructor
+	store_fast #0
+	load_fast #1
+	load_fast #0
+	call
+	delete_name_scoped #0
+	load_fast #1
+	ret
+end
+function __module__
+	module_entry ./lib.mmm#__module__
+	store lib
+	make_function ./main2.mmm#D
+	export_special D D
+	string "
+
+Begin Test:
+"
+	printn *
+	void
+	load D
+	store_fast #2
+	breakpoint "CALL PREINIT args"
+	breakpoint "CALL POSTINIT args"
+	load_fast #2
+	call
+	store_fast #1
+	load_fast #1
+	lookup drawPixel2
+	store_fast #2
+	breakpoint "POST store function name in lhs_register"
+	breakpoint "CALL PREINIT args"
+	breakpoint "CALL POSTINIT args"
+	ld_self #1
+	load_fast #2
+	call
+	printn *
+	void
+	load lib
+	lookup drawPixel
+	store assoc_fn
+	load assoc_fn
+	store_fast #1
+	breakpoint "CALL PREINIT args"
+	int 6
+	store_fast #2
+	int 9
+	store_fast #3
+	breakpoint "CALL POSTINIT args"
+	load_fast #2
+	load_fast #3
+	load_fast #1
+	call
+	void
+	load lib
+	lookup drawPixel
+	store_fast #2
+	breakpoint "POST store function name in lhs_register"
+	breakpoint "CALL PREINIT args"
+	int 55
+	store_fast #3
+	int 55
+	store_fast #4
+	breakpoint "CALL POSTINIT args"
+	load_fast #3
+	load_fast #4
+	load_fast #2
+	call
+	void
+	ret_mod
+end

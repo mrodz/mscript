@@ -90,26 +90,26 @@ pub struct TemporaryRegister {
 }
 
 impl TemporaryRegister {
+    const fn new_rand(id: usize, in_use: bool, cleanup_pointer: Option<*mut usize>) -> Self {
+        Self {
+            id,
+            in_use,
+            cleanup_pointer,
+        }
+    }
+
     /// Create a new ghost register, that is to say, a register that does not
     /// modify the underlying counter in any way.
     unsafe fn new_ghost_register(mock_count: usize) -> Self {
         log::trace!("reg. -G--m {mock_count}");
-        Self {
-            id: mock_count,
-            in_use: false,
-            cleanup_pointer: None,
-        }
+        Self::new_rand(mock_count, false, None)
     }
 
     /// Create a new [`TemporaryRegister`] with an id and a raw
     /// pointer to the backing counter.
     fn new(id: usize, cleanup_ptr: *mut usize) -> Self {
         log::trace!("reg. -n--- {id}");
-        Self {
-            id,
-            in_use: true,
-            cleanup_pointer: Some(cleanup_ptr),
-        }
+        Self::new_rand(id, true, Some(cleanup_ptr))
     }
 
     /// Create a new [`TemporaryRegister`] that will not run any
@@ -117,12 +117,7 @@ impl TemporaryRegister {
     /// using [`TemporaryRegister::free`]
     fn new_require_explicit_drop(id: usize) -> Self {
         log::trace!("reg. -n-e- {id}");
-
-        Self {
-            id,
-            in_use: true,
-            cleanup_pointer: None,
-        }
+        Self::new_rand(id, true, None)
     }
 
     /// Manually clean up a [`TemporaryRegister`], which will cause its

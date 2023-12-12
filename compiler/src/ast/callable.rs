@@ -65,8 +65,11 @@ impl Compile for Callable<'_> {
             })
             .collect();
 
-        // args_init.insert(0, instruction!(breakpoint "CALL PREINIT args"));
-        // args_init.push(instruction!(breakpoint "CALL POSTINIT args"));
+        #[cfg(feature = "debug")]
+        {
+            args_init.insert(0, instruction!(breakpoint "CALL PREINIT args"));
+            args_init.push(instruction!(breakpoint "CALL POSTINIT args"));
+        }
 
         if let Some(register_start) = register_start {
             for register_idx in register_start..register_start + register_count {
