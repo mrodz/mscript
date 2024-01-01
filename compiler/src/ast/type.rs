@@ -13,7 +13,6 @@ use std::{
     hash::Hash,
     ops::Deref,
     path::PathBuf,
-    rc::Rc,
     sync::Arc,
 };
 
@@ -915,7 +914,7 @@ impl Parser {
                 None
             };
 
-        let types = Rc::new(FunctionParameters::TypesOnly(types));
+        let types = Arc::new(FunctionParameters::TypesOnly(types));
 
         Ok(FunctionType::new(
             types,

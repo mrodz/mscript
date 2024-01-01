@@ -541,7 +541,7 @@ impl PartialEq for Dependency<'_> {
 }
 
 impl<'a> Dependency<'a> {
-    pub fn name(&self) -> &String {
+    pub fn name(&self) -> &str {
         self.ident.as_ref().name()
     }
     pub const fn new(ident: Cow<'a, Ident>) -> Self {

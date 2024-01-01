@@ -92,6 +92,10 @@ impl AssocFileData {
         bail!("no loop found")
     }
 
+    pub fn register_function_parameters_to_scope(&self, parameters: Arc<FunctionParameters>) -> Option<Arc<FunctionParameters>> {
+        self.scopes.register_function_parameters(parameters)
+    }
+
     pub fn was_path_preloaded(&self, path: impl AsRef<Path>) -> bool {
         self.files.preloaded_file_exists(&path.bytecode_str())
     }
@@ -250,6 +254,7 @@ impl AssocFileData {
                                 return None;
                             }
                         }
+                        
                         unreachable!("function parameters should have been initialized");
                     };
 

@@ -4,7 +4,7 @@ mod constructor;
 mod member_function;
 mod member_variable;
 
-use std::{borrow::Cow, fmt::Display, path::PathBuf, rc::Rc, sync::Arc};
+use std::{borrow::Cow, fmt::Display, path::PathBuf, sync::Arc};
 
 use anyhow::Result;
 
@@ -137,7 +137,7 @@ impl ClassType {
 
         // use default constructor if a class doesn't have one.
 
-        let empty_parameters = Rc::new(FunctionParameters::TypesOnly(vec![]));
+        let empty_parameters = Arc::new(FunctionParameters::TypesOnly(vec![]));
 
         FunctionType::new(empty_parameters, return_type)
     }
@@ -259,7 +259,7 @@ impl Parser {
         };
 
         input.user_data().add_type(
-            ident.name().clone().into_boxed_str(),
+            ident.name().into(),
             ident.ty().unwrap().clone().into_owned(),
         );
 

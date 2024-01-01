@@ -139,10 +139,8 @@ fn main() -> Result<()> {
                 bail!("Error initializing logger: {err:?}")
             };
 
-            // let output_path = is_path_source(&path)?;
-
             let builder = thread::Builder::new()
-                .name("Main".into())
+                .name("mscript-runtime".into())
                 .stack_size(stack_size);
 
             let main_thread = builder.spawn(move || -> Result<()> {
@@ -168,7 +166,7 @@ fn main() -> Result<()> {
             transpile_first,
         } => {
             let builder = thread::Builder::new()
-                .name("Main".into())
+                .name("mscript-runtime".into())
                 .stack_size(stack_size);
 
             let main_thread = builder.spawn(move || -> Result<()> {
