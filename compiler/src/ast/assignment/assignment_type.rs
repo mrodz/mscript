@@ -2,8 +2,8 @@ use std::borrow::Cow;
 
 use anyhow::Result;
 
-use crate::ast::ClassType;
 use crate::ast::r#type::TypecheckFlags;
+use crate::ast::ClassType;
 use crate::ast::{new_err, r#type::IntoType, Assignment, Ident, TypeLayout, Value};
 use crate::parser::{Node, Parser};
 use crate::VecErr;
@@ -37,7 +37,7 @@ impl Parser {
         if let Ok(ref assignment_ty) = value.for_type() {
             if !ty.as_ref().get_type_recursively().eq_complex(
                 assignment_ty.get_type_recursively(),
-                &TypecheckFlags::use_class(self_type.as_ref()).lhs_unwrap(false)
+                &TypecheckFlags::use_class(self_type.as_ref()).lhs_unwrap(false),
             ) {
                 let hint = ty.get_error_hint_between_types(assignment_ty).map_or_else(
                     || Cow::Borrowed(""),

@@ -605,8 +605,6 @@ impl TypeLayout {
                 true
             };
 
-
-
             // return true;
             // return self.is_optional().0 ^ flags.force_lhs_to_be_unwrapped_rhs;
         }
@@ -618,10 +616,18 @@ impl TypeLayout {
             }
             (Self::Optional(None), ..) if flags.force_rhs_to_be_unwrapped_lhs => true,
             (Self::Optional(None), Self::Optional(Some(_)), _)
-            | (Self::Optional(Some(_)), Self::Optional(None), _) if !flags.force_rhs_to_be_unwrapped_lhs => true,
-            (Self::Optional(Some(x)), y, _) if flags.force_rhs_to_be_unwrapped_lhs => x.get_type_recursively() == y.get_type_recursively(),
+            | (Self::Optional(Some(_)), Self::Optional(None), _)
+                if !flags.force_rhs_to_be_unwrapped_lhs =>
+            {
+                true
+            }
+            (Self::Optional(Some(x)), y, _) if flags.force_rhs_to_be_unwrapped_lhs => {
+                x.get_type_recursively() == y.get_type_recursively()
+            }
             (Self::Optional(Some(x)), y, _) => x.eq_complex(y, flags),
-            (y, Self::Optional(Some(x)), _) if flags.lhs_allow_optional_unwrap => x.as_ref().as_ref() == y,
+            (y, Self::Optional(Some(x)), _) if flags.lhs_allow_optional_unwrap => {
+                x.as_ref().as_ref() == y
+            }
             _ => false,
         }
     }
@@ -726,7 +732,7 @@ impl TypeLayout {
     pub fn disregard_optional(&self) -> Option<&Self> {
         match self {
             Self::Optional(x) => x.as_ref().map(|x| &***x),
-            other => Some(other)
+            other => Some(other),
         }
     }
 
@@ -765,7 +771,7 @@ impl TypeLayout {
         if let Op::Unwrap = op {
             if self == other {
                 return Some(TypeLayout::Native(NativeType::Bool));
-            } 
+            }
             return None;
         }
 
@@ -779,7 +785,6 @@ impl TypeLayout {
         let Native(other) = rhs.get_type_recursively() else {
             return None;
         };
-
 
         // if let (yes, Optional(Some(maybe)), Eq | Neq) | (Optional(Some(maybe)), yes, Eq | Neq) =
         //     (self, other, op)

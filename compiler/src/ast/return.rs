@@ -9,7 +9,7 @@ use crate::{
     VecErr,
 };
 
-use super::{CompilationState, Compile, Dependencies, Value, r#type::TypecheckFlags};
+use super::{r#type::TypecheckFlags, CompilationState, Compile, Dependencies, Value};
 
 #[derive(Debug)]
 pub(crate) struct ReturnStatement(Option<Value>);
@@ -93,7 +93,10 @@ impl Parser {
 
         let class_type = input.user_data().get_type_of_executing_class();
 
-        if !expected_return_type.eq_complex(&Cow::Borrowed(supplied_type), &TypecheckFlags::use_class(class_type).lhs_unwrap(true)) {
+        if !expected_return_type.eq_complex(
+            &Cow::Borrowed(supplied_type),
+            &TypecheckFlags::use_class(class_type).lhs_unwrap(true),
+        ) {
             return Err(vec![new_err(
                 input.as_span(),
                 &input.user_data().get_source_file_name(),
