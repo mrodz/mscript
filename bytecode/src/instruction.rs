@@ -876,7 +876,7 @@ pub mod implementations {
             } else {
                 let span = args.first().map(String::as_str);
                 bail!(
-                    "LOGIC ERROR IN CODE >> {} >> unwrap of `nil`",
+                    "LOGIC ERROR IN CODE >> {}: unwrap of `nil`",
                     span.unwrap_or("<no details>")
                 );
             }

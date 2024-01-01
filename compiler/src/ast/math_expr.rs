@@ -1,4 +1,8 @@
-use std::{borrow::Cow, fmt::{Display, Debug}, rc::Rc};
+use std::{
+    borrow::Cow,
+    fmt::{Debug, Display},
+    rc::Rc,
+};
 
 use anyhow::{bail, Context, Result};
 use once_cell::sync::Lazy;
@@ -131,7 +135,7 @@ pub(crate) enum CallableContents {
 }
 
 pub(crate) trait UnwrapSpanDisplayable: Debug + Display {}
-impl <T>UnwrapSpanDisplayable for T where T: Debug + Display {}
+impl<T> UnwrapSpanDisplayable for T where T: Debug + Display {}
 
 #[derive(Debug)]
 pub(crate) enum Expr {
@@ -292,14 +296,8 @@ impl IntoType for Expr {
 
                 let rhs = rhs.for_type()?;
 
-                Ok(lhs.get_output_type(&rhs, op).with_context(|| {
-                    format!(
-                        "invalid operation: {} {} {}",
-                        lhs,
-                        op.symbol(),
-                        rhs,
-                    )
-                }).unwrap())
+                lhs.get_output_type(&rhs, op)
+                    .with_context(|| format!("invalid operation: {} {} {}", lhs, op.symbol(), rhs))
             }
             Expr::UnaryMinus(val) | Expr::UnaryNot(val) => val.for_type(),
             Expr::Callable(CallableContents::Standard { function, .. }) => {
@@ -705,18 +703,23 @@ fn parse_expr(
                 )]);
             }
 
-            Ok((bin_op, None))
+            Ok((bin_op, Some(span)))
         })
-        .map_prefix(|op, rhs| match op.as_rule() {
-            // Rule::unary_minus if op.as_str().len() % 2 != 0 => Expr::UnaryMinus(Box::new(rhs)),
-            // Rule::unary_minus => rhs,
-            Rule::unary_minus => Ok((Expr::UnaryMinus(Box::new(rhs?.0)), None)),
-            Rule::not => Ok((Expr::UnaryNot(Box::new(rhs?.0)), None)),
-            Rule::optional_unwrap => Ok((Expr::UnaryUnwrap {
-                value: Box::new(rhs?.0),
-                span: Box::new("")
-            }, None)),
-            _ => unreachable!(),
+        .map_prefix(|op, rhs| {
+            let (expr, pair) = rhs?;
+
+                match op.as_rule() {
+                    Rule::unary_minus => Ok((Expr::UnaryMinus(Box::new(expr)), pair)),
+                    Rule::not => Ok((Expr::UnaryNot(Box::new(expr)), pair)),
+                    Rule::optional_unwrap => {
+                        let (line, col) = pair.as_ref().unwrap().line_col();
+                        Ok((Expr::UnaryUnwrap {
+                            value: Box::new(expr),
+                            span: Box::new(format!("{}#{line}:{col}", user_data.get_source_file_name())),
+                        }, pair))
+                    }
+                    _ => unreachable!(),
+                }
         })
         .map_postfix(|lhs, op| match op.as_rule() {
             Rule::callable => {
@@ -733,13 +736,13 @@ fn parse_expr(
 
                         let (_, parameters) = user_data
                             .get_current_executing_function()
-                            .details(l_span.unwrap().as_span(), &user_data.get_source_file_name(), "`self` is not callable here".to_owned())
+                            .details(l_span.as_ref().unwrap().as_span(), &user_data.get_source_file_name(), "`self` is not callable here".to_owned())
                             .to_err_vec()?;
 
                         let arguments: FunctionArguments = Parser::function_arguments(function_arguments, &parameters, None)?;
 
 
-                        return Ok((Expr::Callable(CallableContents::ToSelf { return_type, arguments }), None))
+                        return Ok((Expr::Callable(CallableContents::ToSelf { return_type, arguments }), l_span))
                     }
                     Expr::ReferenceToConstructor(ref function_type) => {
                         let function_arguments: Pair<Rule> = op.into_inner().next().unwrap();
@@ -753,7 +756,7 @@ fn parse_expr(
 
                         // let function_type = function_type.clone();
 
-                        return Ok((Expr::Callable(CallableContents::Standard { lhs_raw: lhs, function: function_type, arguments }), None))
+                        return Ok((Expr::Callable(CallableContents::Standard { lhs_raw: lhs, function: function_type, arguments }), l_span))
                     }
                     _ => ()
                 }
@@ -764,28 +767,21 @@ fn parse_expr(
                     return Err(vec![new_err(l_span.unwrap().as_span(), &user_data.get_source_file_name(), "this is not callable".to_owned())]);
                 };
 
-                let function_arguments: Pair<Rule> = op.into_inner().next().unwrap();
+                let function_arguments: Pair<Rule> = op.clone().into_inner().next().unwrap();
                 let function_arguments: Node = Node::new_with_user_data(function_arguments, Rc::clone(&user_data));
                 let function_arguments: FunctionArguments = Parser::function_arguments(function_arguments, function_type.parameters(), None)?;
 
-                Ok((Expr::Callable(CallableContents::Standard { lhs_raw: lhs, function: function_type, arguments: function_arguments }), None))
+                Ok((Expr::Callable(CallableContents::Standard { lhs_raw: lhs, function: function_type, arguments: function_arguments }), Some(op)))
             },
             Rule::list_index => {
                 let lhs = lhs?.0;
 
                 let lhs_ty = lhs.for_type().to_err_vec()?;
 
-                let index: Pair<Rule> = op;
-                let index: Node = Node::new_with_user_data(index, Rc::clone(&user_data));
+                let index: Node = Node::new_with_user_data(op.clone(), Rc::clone(&user_data));
                 let index: Index = Parser::list_index(index, lhs_ty)?;
 
-                // let index_ty = index.for_type().to_err_vec()?;
-
-                // if !types_supported_for_index.contains(&index_ty) {
-                //     return Err(vec![new_err(l_span.unwrap(), &user_data.get_source_file_name(), format!("`{lhs_ty}` is not indexable with `{index_ty}` (Hint: this type supports indexes of {types_supported_for_index})"))]);
-                // }
-
-                Ok((Expr::Index { lhs_raw: Box::new(lhs), index }, None))
+                Ok((Expr::Index { lhs_raw: Box::new(lhs), index }, Some(op)))
             },
             Rule::dot_chain => {
                 let lhs = lhs?.0;
@@ -793,8 +789,7 @@ fn parse_expr(
                 let lhs_ty = lhs.for_type().to_err_vec()?;
                 let lhs_ty = lhs_ty.assume_type_of_self(&user_data);
 
-                let index: Pair<Rule> = op;
-                let index: Node = Node::new_with_user_data(index, Rc::clone(&user_data));
+                let index: Node = Node::new_with_user_data(op.clone(), Rc::clone(&user_data));
                 let (dot_chain, final_output_type) = Parser::dot_chain(index, Cow::Borrowed(&lhs_ty))?;
 
                 let expected_type = if final_output_type.is_class_self() {
@@ -803,12 +798,13 @@ fn parse_expr(
                     final_output_type.into_owned()
                 };
 
-                Ok((Expr::DotLookup { lhs: Box::new(lhs), dot_chain, expected_type }, None))
+                Ok((Expr::DotLookup { lhs: Box::new(lhs), dot_chain, expected_type }, Some(op)))
             }
             Rule::optional_or => {
                 let (lhs, l_span) = lhs?;
+                let l_span = l_span.unwrap();
 
-                let lhs_ty = lhs.for_type().to_err_vec()?;
+                let lhs_ty = lhs.for_type().details(l_span.as_span(), &user_data.get_source_file_name(), "the type of this value cannot be used in an unwrap").to_err_vec()?;
 
                 let fallback = op.into_inner().next().unwrap();
                 assert_eq!(fallback.as_rule(), Rule::value);
@@ -819,21 +815,21 @@ fn parse_expr(
 
                 let fallback = Parser::value(value_node)?;
 
-                let fallback_ty = fallback.for_type().to_err_vec()?;
+                let fallback_ty = fallback.for_type().details(value_span, &user_data.get_source_file_name(), format!("this value cannot be used as a fallback for `{lhs_ty}`")).to_err_vec()?;
 
-                if !lhs_ty.get_type_recursively().eq_complex(fallback_ty.get_type_recursively(), &TypecheckFlags::use_class(user_data.get_type_of_executing_class()).force_lhs_to_be_unwrapped_rhs(true)) {
+                if !lhs_ty.get_type_recursively().eq_complex(fallback_ty.get_type_recursively(), &TypecheckFlags::use_class(user_data.get_type_of_executing_class()).force_lhs_to_be_unwrapped_lhs(true)) {
                     return Err(vec![new_err(value_span, &user_data.get_source_file_name(), {
-                        let ty = if let (true, Some(ty)) = lhs_ty.is_optional() {
-                            Cow::Borrowed(ty)
+                        let ty = if let (true, ty) = lhs_ty.is_optional() {
+                            ty.map(Cow::Borrowed)
                         } else {
-                            Cow::Owned(Cow::Owned(lhs_ty))
+                            Some(Cow::Owned(Cow::Owned(lhs_ty)))
                         };
 
-                        format!("Expected type `{}`, found `{}`", ty, fallback_ty)
+                        format!("The `or` portion of this unwrap must yield `{}`, but `{}` was found", ty.map_or(Cow::Borrowed("<indeterminate !>"), |x| Cow::Owned(x.to_string())), fallback_ty)
                     })]);
                 }
 
-                Ok((Expr::NilEval { primary: Box::new(lhs), fallback }, l_span))
+                Ok((Expr::NilEval { primary: Box::new(lhs), fallback }, Some(l_span)))
             }
             _ => unreachable!(),
         })

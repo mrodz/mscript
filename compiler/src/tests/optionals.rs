@@ -91,6 +91,8 @@ fn iterative_approach() {
             }
 
             result = ""
+
+            next: str? = nil
         
             while next ?= get_char(idx) {
                 idx = idx + 1
@@ -108,6 +110,8 @@ fn iterative_approach() {
 fn non_null_eval() {
     eval(
         r#"
+            a: int? = nil
+
             if a ?= 5 {
                 # ...
             } else {
@@ -119,11 +123,12 @@ fn non_null_eval() {
 }
 
 #[test]
-#[should_panic = "use of undeclared variable"]
 fn proper_scoping_if() {
     eval(
         r#"
             const SOME_VALUE: str? = "Hello!"
+
+            a: str? = nil
 
             if a ?= SOME_VALUE {
                 # ...
@@ -136,14 +141,15 @@ fn proper_scoping_if() {
 }
 
 #[test]
-#[should_panic = "use of undeclared variable"]
 fn proper_scoping_while() {
     eval(
         r#"
             const SOME_VALUE: str? = "Hello!"
 
+            xyz: str? = nil
+
             while xyz ?= SOME_VALUE {
-                # break
+                break
             }
 
             assert xyz == "Hello!"
@@ -199,12 +205,23 @@ fn get_or_complex() {
             return "Moonshine"
         }
 
-        first_label = get give_booze(16) or "Oops! You're underage"
+        first_label = get (give_booze(16)) or "Oops! You're underage"
         assert first_label == "Oops! You're underage"
 
-        first_label = get give_booze(55) or "shhh this will never emerge"
+        first_label = get (give_booze(55)) or "shhh this will never emerge"
         assert first_label == "Moonshine"
         
+    "#,
+    )
+    .unwrap();
+}
+
+#[test]
+#[should_panic = "could not get the type"]
+fn abort_store_missing_type() {
+    eval(
+        r#"
+        y = get nil
     "#,
     )
     .unwrap();
@@ -215,7 +232,9 @@ fn get_or_complex() {
 fn abort_store() {
     eval(
         r#"
-        y = get nil
+        empty: bool? = nil
+
+        y = get empty
     "#,
     )
     .unwrap();
@@ -236,8 +255,9 @@ fn abort_declaration() {
 fn lazy_eval() {
     eval(
         r#"
-        die = fn() {
+        die = fn() -> str {
             assert false
+            return "never"
         }
 
         get "liberty" or die()
@@ -256,6 +276,20 @@ fn abort_in_or() {
         }
 
         get nil or die()
+    "#,
+    )
+    .unwrap();
+}
+
+#[test]
+#[should_panic = "The `or` portion of this unwrap must yield `int`, but `int?` was found"]
+fn type_safety_get_keyword() {
+    eval(
+        r#"
+        empty_int: int? = nil
+        another_empty_int: int? = nil
+
+        get empty_int or another_empty_int
     "#,
     )
     .unwrap();

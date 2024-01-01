@@ -100,6 +100,7 @@ fn if_else_inside_numeric_loop() {
         result_buffer = ""
 
         from 1 through 15, i {
+            label: str? = nil
             if label ?= fizz_buzz(i) {
                 result_buffer = result_buffer + label
             } else {
