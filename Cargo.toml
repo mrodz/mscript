@@ -16,6 +16,7 @@ log = "0.4.19"
 colored = "2.0.4"
 
 [features]
+default = ["skip_breakpoint"]
 debug_runtime = ["bytecode/debug"]
 debug_compiler = ["compiler/debug"]
 debug = ["bytecode/debug", "compiler/debug"]

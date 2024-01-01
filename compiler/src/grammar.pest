@@ -24,13 +24,16 @@ allow_bin_op = _{ nil | primitive | ident | function }
 
 math_primary = _{ allow_bin_op | "(" ~ math_expr ~ ")" }
 
-math_prefix = _{ unary_minus | not }
-math_postfix = _{ dot_chain | callable | list_index }
+optional_unwrap = ${ "get" ~ WHITESPACE }
+optional_or = ${ "or" ~ WHITESPACE ~ value }
+
+math_prefix = _{ unary_minus | not | optional_unwrap }
+math_postfix = _{ dot_chain | callable | list_index | optional_or }
 
 math_atom = _{ math_prefix? ~ math_primary ~ math_postfix? }
 math_expr = { math_atom ~ (bin_op ~ math_atom)* }
 
-bin_op = _{ op_assign | add | subtract | multiply | divide | modulo | lte | gte | lt | gt | eq | neq | and | or | xor }
+bin_op = _{ op_assign | add | subtract | multiply | divide | modulo | lte | gte | lt | gt | eq | neq | and | or | xor | unwrap }
 add = { "+" }
 subtract = { "-" }
 multiply = { "*" }
@@ -55,6 +58,8 @@ neq = { "!=" }
 and = { "&&" }
 or = { "||" }
 xor = { "^" }
+
+unwrap = { "?=" }
 
 escape_character = _{ "\\" | "r" | "n" }
 escape_sequence = @{ "\\" ~ escape_character }
@@ -88,12 +93,7 @@ list_type = { "[" ~ type? ~ ("," ~ (type ~ !("...")))* ~ ("," ~ open_ended_type)
 list_type_open_only = { "[" ~ open_ended_type ~ "]" }
 list_index = { ("[" ~ value ~ "]")+ }
 
-unwrap = _{ "?=" }
-unwrap_expr = { ident ~ unwrap ~ value }
-
-value_unwrap = ${ "get" ~ WHITESPACE ~ value ~ (WHITESPACE ~ "or" ~ WHITESPACE ~ value)? }
-
-value = { function | unwrap_expr | value_unwrap | math_expr | ident | list }
+value = { function | math_expr | ident | list }
 
 assignment_flag = { "modify" | "const" | "export" }
 // bad_assignment_flag = { &ident }
@@ -162,7 +162,7 @@ class_flags = ${ class_flag ~ (WHITESPACE ~ class_flag)* }
 
 class = { class_flags? ~ "class" ~ ident ~ class_body }
 
-declaration = { import | class | reassignment | assignment | value_unwrap | print_statement | assertion | return_statement | continue_statement | break_statement | if_statement | while_loop | number_loop | value }
+declaration = { import | class | reassignment | assignment | print_statement | assertion | return_statement | continue_statement | break_statement | if_statement | while_loop | number_loop | value }
 
 file = {
     SOI ~

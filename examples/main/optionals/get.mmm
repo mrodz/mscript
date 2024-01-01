@@ -1,0 +1,49 @@
+function __fn0
+	reserve_primitive
+	ret
+end
+function __module__
+	reserve_primitive
+	store empty
+	load empty
+	jmp_not_nil 2
+	int 5
+	unwrap 
+	store a
+	load a
+	printn *
+	void
+	load empty
+	jmp_not_nil 2
+	int 5
+	unwrap 
+	printn *
+	void
+	reserve_primitive
+	jmp_not_nil 2
+	int 5
+	unwrap 
+	printn *
+	void
+	reserve_primitive
+	jmp_not_nil 2
+	int 5
+	unwrap 
+	store idk
+	load idk
+	printn *
+	void
+	make_function ./get.mmm#__fn0
+	store give_five
+	load give_five
+	store_fast #2
+	breakpoint "CALL PREINIT args"
+	breakpoint "CALL POSTINIT args"
+	load_fast #2
+	call
+	jmp_not_nil 2
+	int 10
+	printn *
+	void
+	ret_mod
+end

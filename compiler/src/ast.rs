@@ -19,7 +19,6 @@ mod loop_control_flow;
 mod math_expr;
 mod number;
 mod number_loop;
-mod optionals;
 mod print_statement;
 mod reassignment;
 mod r#return;
@@ -46,7 +45,6 @@ pub(crate) use loop_control_flow::{Break, Continue};
 pub(crate) use math_expr::{Expr, Op as BinaryOperation};
 pub(crate) use number::Number;
 pub(crate) use number_loop::NumberLoop;
-pub(crate) use optionals::{Unwrap, UnwrapExpr};
 pub(crate) use print_statement::PrintStatement;
 pub(crate) use r#return::ReturnStatement;
 pub(crate) use r#type::{IntoType, ModuleType, NativeType, StrWrapper, TypeLayout};
@@ -509,8 +507,6 @@ impl CompilationState {
     }
 
     pub fn push_function(&self, compiled_function: CompiledItem) {
-        log::debug!("[ADD_FN] {compiled_function:?}");
-
         assert!(
             matches!(compiled_function, CompiledItem::Function { .. }),
             "Attempting to push a non-function to the function buffer"

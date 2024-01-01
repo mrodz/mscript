@@ -1,50 +1,18 @@
-//! The official Pest Book implements many of the the exact features needed.
-//! Some of this code is copied from their Github. See [this folder](https://github.com/pest-parser/book/blob/42a2889c6057b1192d2b1682b6cc53ff13799a34/examples/pest-calculator/src/main.rs)
-//! for the exact code.
-//!
-//! Huge thanks to the authors for supplying such a useful resource!
-//!
-//! BEGIN LICENSE
-//!
-//! MIT:
-//! Permission is hereby granted, free of charge, to any
-//! person obtaining a copy of this software and associated
-//! documentation files (the "Software"), to deal in the
-//! Software without restriction, including without
-//! limitation the rights to use, copy, modify, merge,
-//! publish, distribute, sublicense, and/or sell copies of
-//! the Software, and to permit persons to whom the Software
-//! is furnished to do so, subject to the following
-//! conditions:
-//!
-//! The above copyright notice and this permission notice
-//! shall be included in all copies or substantial portions
-//! of the Software.
-//!
-//! THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
-//! ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
-//! TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-//! PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
-//! SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-//! CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-//! OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
-//! IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-//! DEALINGS IN THE SOFTWARE.
-//!
-//! END LICENSE
-
-use std::{borrow::Cow, fmt::Display, rc::Rc};
+use std::{
+    borrow::Cow,
+    fmt::{Debug, Display},
+    rc::Rc,
+};
 
 use anyhow::{bail, Context, Result};
 use once_cell::sync::Lazy;
 use pest::{
     iterators::{Pair, Pairs},
     pratt_parser::PrattParser,
-    Span,
 };
 
 use crate::{
-    ast::{number, Callable, ConstexprEvaluation},
+    ast::{number, r#type::TypecheckFlags, Callable, ConstexprEvaluation},
     instruction,
     parser::{AssocFileData, Node, Parser, Rule},
     CompilationError, VecErr,
@@ -69,6 +37,7 @@ pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
 
     PrattParser::new()
         .op(infix!(unwrap))
+        .op(Op::prefix(optional_unwrap))
         .op(infix!(or) | infix!(xor))
         .op(infix!(and))
         .op(infix!(lt) | infix!(lte) | infix!(gt) | infix!(gte) | infix!(eq) | infix!(neq))
@@ -79,7 +48,7 @@ pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
         .op(Op::postfix(dot_chain)
             | Op::postfix(list_index)
             | Op::postfix(callable)
-            | Op::postfix(dot_chain))
+            | Op::postfix(optional_or))
         .op(infix!(add_assign)
             | infix!(sub_assign)
             | infix!(mul_assign)
@@ -165,6 +134,9 @@ pub(crate) enum CallableContents {
     },
 }
 
+pub(crate) trait UnwrapSpanDisplayable: Debug + Display {}
+impl<T> UnwrapSpanDisplayable for T where T: Debug + Display {}
+
 #[derive(Debug)]
 pub(crate) enum Expr {
     Nil,
@@ -173,6 +145,10 @@ pub(crate) enum Expr {
     ReferenceToConstructor(ClassType),
     UnaryMinus(Box<Expr>),
     UnaryNot(Box<Expr>),
+    UnaryUnwrap {
+        value: Box<Expr>,
+        span: Box<dyn UnwrapSpanDisplayable>,
+    },
     BinOp {
         lhs: Box<Expr>,
         op: Op,
@@ -187,6 +163,10 @@ pub(crate) enum Expr {
     Index {
         lhs_raw: Box<Expr>,
         index: Index,
+    },
+    NilEval {
+        primary: Box<Expr>,
+        fallback: Value,
     },
 }
 
@@ -261,10 +241,32 @@ impl CompileTimeEvaluate for Expr {
             }
             Self::ReferenceToSelf => Ok(ConstexprEvaluation::Impossible),
             Self::ReferenceToConstructor(..) => Ok(ConstexprEvaluation::Impossible),
-            Self::Nil => Ok(ConstexprEvaluation::Impossible),
+            Self::Nil => Ok(ConstexprEvaluation::Owned(Value::nil())),
             Self::Callable { .. } => Ok(ConstexprEvaluation::Impossible),
             Self::Index { .. } => Ok(ConstexprEvaluation::Impossible),
             Self::DotLookup { .. } => Ok(ConstexprEvaluation::Impossible),
+            Self::UnaryUnwrap { value, .. } => {
+                let ConstexprEvaluation::Owned(value) = value.try_constexpr_eval()? else {
+                    return Ok(ConstexprEvaluation::Impossible);
+                };
+
+                if value.is_nil() {
+                    bail!("at compile time, this operation was flagged because it always unwraps `nil`")
+                }
+
+                Ok(ConstexprEvaluation::Owned(value))
+            }
+            Self::NilEval { primary, fallback } => {
+                let ConstexprEvaluation::Owned(value) = primary.try_constexpr_eval()? else {
+                    return Ok(ConstexprEvaluation::Impossible);
+                };
+
+                if value.is_nil() {
+                    fallback.try_constexpr_eval()
+                } else {
+                    Ok(ConstexprEvaluation::Owned(value))
+                }
+            }
         }
     }
 }
@@ -294,13 +296,8 @@ impl IntoType for Expr {
 
                 let rhs = rhs.for_type()?;
 
-                lhs.get_output_type(&rhs, op).with_context(|| {
-                    format!(
-                        "invalid operation: {} {} {rhs}",
-                        lhs.get_type_recursively(),
-                        op.symbol()
-                    )
-                })
+                lhs.get_output_type(&rhs, op)
+                    .with_context(|| format!("invalid operation: {} {} {}", lhs, op.symbol(), rhs))
             }
             Expr::UnaryMinus(val) | Expr::UnaryNot(val) => val.for_type(),
             Expr::Callable(CallableContents::Standard { function, .. }) => {
@@ -325,6 +322,31 @@ impl IntoType for Expr {
             Expr::Index { index, .. } => index.for_type(),
             Expr::DotLookup { expected_type, .. } => Ok(expected_type.to_owned()),
             Expr::Nil => Ok(TypeLayout::Optional(None)),
+            Expr::UnaryUnwrap { value, span: _ } => {
+                let ty = value.for_type()?;
+
+                if let (true, Some(ty)) = ty.is_optional() {
+                    return Ok(ty.clone().into_owned());
+                }
+
+                Ok(ty)
+            }
+            Expr::NilEval { primary, fallback } => {
+                let primary = primary.for_type()?;
+                let fallback = fallback.for_type()?;
+                Ok(if let (true, ty) = primary.is_optional() {
+                    if let Some(ty) = ty {
+                        assert_eq!(ty.as_ref(), &fallback);
+                        ty.clone().into_owned()
+                    } else {
+                        // `lhs` is nil, use fallback to infer type
+                        fallback
+                    }
+                } else {
+                    assert_eq!(primary, fallback);
+                    primary
+                })
+            }
         }
     }
 }
@@ -360,6 +382,12 @@ impl Dependencies for Expr {
             E::ReferenceToSelf => vec![],
             E::ReferenceToConstructor(..) => vec![],
             E::Nil => vec![],
+            E::UnaryUnwrap { value, .. } => value.net_dependencies(),
+            E::NilEval { primary, fallback } => {
+                let mut primary = primary.net_dependencies();
+                primary.append(&mut fallback.net_dependencies());
+                primary
+            }
         }
     }
 }
@@ -450,6 +478,17 @@ fn compile_depth(
                         lhs => unimplemented!("bin_op_asign has not been implemented for this left hand operand: {lhs:?}")
                     }
                 }
+                Op::Unwrap => {
+                    let Expr::Value(Value::Ident(ident)) = lhs_raw.as_ref() else {
+                        unreachable!("Expected ident in lhs, but got {lhs_raw:#?}");
+                    };
+
+                    let name = ident.name();
+
+                    rhs.push(instruction!(unwrap_into name));
+
+                    return Ok(rhs);
+                }
                 _ => {
                     // store the initialization to the "second part", prep for bin_op
 
@@ -507,6 +546,26 @@ fn compile_depth(
             Ok(result)
         }
         Expr::Nil => Ok(vec![instruction!(reserve_primitive)]),
+        Expr::NilEval { primary, fallback } => {
+            let mut value_compiled = primary.compile(state)?;
+
+            let mut fallback_compiled = fallback.compile(state)?;
+
+            let instructions_to_skip = fallback_compiled.len() + 1;
+
+            value_compiled.push(instruction!(jmp_not_nil instructions_to_skip));
+
+            value_compiled.append(&mut fallback_compiled);
+
+            Ok(value_compiled)
+        }
+        Expr::UnaryUnwrap { value, span } => {
+            let mut value_compiled = value.compile(state)?;
+
+            value_compiled.push(instruction!(unwrap span));
+
+            Ok(value_compiled)
+        }
     }
 }
 
@@ -522,26 +581,28 @@ fn parse_expr(
 ) -> Result<Expr, Vec<anyhow::Error>> {
     let maybe_expr = PRATT_PARSER
         .map_primary(
-            |primary| -> Result<(Expr, Option<Span>), Vec<anyhow::Error>> {
+            |primary_pair| -> Result<(Expr, Option<Pair<'_, Rule>>), Vec<anyhow::Error>> {
+                let primary = Node::new_with_user_data(primary_pair.clone(), user_data.clone());
+
                 let primary_span = primary.as_span();
                 let expr: Expr = match primary.as_rule() {
                     Rule::number => {
                         let raw_string = primary.as_str();
-                        let child = primary.into_inner().next().unwrap();
+                        let child = primary.children().single().unwrap();
                         let number = map_err(number::number_from_string(raw_string, child.as_rule()), primary_span, &user_data.get_file_name(), "MScript does not recognize this number".to_owned()).to_err_vec()?;
 
                         Expr::Value(Value::Number(number))
                     }
                     Rule::nil => Expr::Nil,
                     Rule::string => {
-                        let ast_string = Parser::string(Node::new_with_user_data(primary, user_data.clone())).to_err_vec()?;
+                        let ast_string = Parser::string(primary).to_err_vec()?;
                         Expr::Value(Value::String(ast_string))
                     }
                     Rule::ident => {
                         let raw_string = primary.as_str();
 
                         if raw_string == "self" {
-                            return Ok((Expr::ReferenceToSelf, Some(primary_span)))
+                            return Ok((Expr::ReferenceToSelf, Some(primary_pair)))
                         }
 
                         if raw_string == "Self" {
@@ -552,10 +613,10 @@ fn parse_expr(
 
                             let class_ty = class.clone();
 
-                            return Ok((Expr::ReferenceToConstructor(class_ty), Some(primary_span)))
+                            return Ok((Expr::ReferenceToConstructor(class_ty), Some(primary_pair)))
                         }
 
-                        let file_name = user_data.get_file_name();
+                        let file_name = user_data.get_source_file_name();
 
                         let (ident, is_callback) = user_data
                             .get_dependency_flags_from_name(raw_string)
@@ -576,19 +637,20 @@ fn parse_expr(
 
                         Expr::Value(Value::Ident(cloned))
                     }
-                    Rule::math_expr => parse_expr(primary.into_inner(), user_data.clone())?,
+                    Rule::math_expr => parse_expr(primary_pair.clone().into_inner(), user_data.clone())?,
                     Rule::boolean => {
                         Expr::Value(Value::Boolean(boolean_from_str(primary.as_str())))
                     }
                     rule => unreachable!("Expr::parse expected atom, found {:?}", rule),
                 };
 
-                Ok((expr, Some(primary_span)))
+                Ok((expr, Some(primary_pair)))
             },
         )
         .map_infix(|lhs, op, rhs| {
             let (lhs, l_span) = lhs?;
-            let (rhs, _) = rhs?;
+            let (rhs, r_span) = rhs?;
+            let span = l_span.or(r_span).unwrap();
 
             let op = match op.as_rule() {
                 Rule::add => Op::Add,
@@ -605,7 +667,19 @@ fn parse_expr(
                 Rule::and => Op::And,
                 Rule::or => Op::Or,
                 Rule::xor => Op::Xor,
-                Rule::unwrap => Op::Unwrap,
+                Rule::unwrap => {
+                    if span.as_rule() != Rule::ident {
+                        log::error!("found `{:?}` instead of `ident`", span.as_rule());
+
+                        return Err(vec![new_err(
+                            span.as_span(),
+                            &user_data.get_source_file_name(),
+                            format!("this operation requires a name, but it found `{:?}`", span.as_rule()),
+                        )]);
+                    }
+
+                    Op::Unwrap
+                },
                 Rule::add_assign => Op::AddAssign,
                 Rule::sub_assign => Op::SubAssign,
                 Rule::mul_assign => Op::MulAssign,
@@ -613,6 +687,7 @@ fn parse_expr(
                 Rule::mod_assign => Op::ModAssign,
                 rule => unreachable!("Expr::parse expected infix operation, found {:?}", rule),
             };
+
 
             let bin_op = Expr::BinOp {
                 lhs: Box::new(lhs),
@@ -622,20 +697,29 @@ fn parse_expr(
 
             if let Err(e) = bin_op.validate() {
                 return Err(vec![new_err(
-                    l_span.unwrap_or_else(|| panic!("{}", e.to_string())),
+                    span.as_span(),
                     &user_data.get_source_file_name(),
                     e.to_string(),
                 )]);
             }
 
-            Ok((bin_op, None))
+            Ok((bin_op, Some(span)))
         })
-        .map_prefix(|op, rhs| match op.as_rule() {
-            // Rule::unary_minus if op.as_str().len() % 2 != 0 => Expr::UnaryMinus(Box::new(rhs)),
-            // Rule::unary_minus => rhs,
-            Rule::unary_minus => Ok((Expr::UnaryMinus(Box::new(rhs?.0)), None)),
-            Rule::not => Ok((Expr::UnaryNot(Box::new(rhs?.0)), None)),
-            _ => unreachable!(),
+        .map_prefix(|op, rhs| {
+            let (expr, pair) = rhs?;
+
+                match op.as_rule() {
+                    Rule::unary_minus => Ok((Expr::UnaryMinus(Box::new(expr)), pair)),
+                    Rule::not => Ok((Expr::UnaryNot(Box::new(expr)), pair)),
+                    Rule::optional_unwrap => {
+                        let (line, col) = pair.as_ref().unwrap().line_col();
+                        Ok((Expr::UnaryUnwrap {
+                            value: Box::new(expr),
+                            span: Box::new(format!("{}#{line}:{col}", user_data.get_source_file_name())),
+                        }, pair))
+                    }
+                    _ => unreachable!(),
+                }
         })
         .map_postfix(|lhs, op| match op.as_rule() {
             Rule::callable => {
@@ -652,13 +736,13 @@ fn parse_expr(
 
                         let (_, parameters) = user_data
                             .get_current_executing_function()
-                            .details(l_span.unwrap(), &user_data.get_source_file_name(), "`self` is not callable here".to_owned())
+                            .details(l_span.as_ref().unwrap().as_span(), &user_data.get_source_file_name(), "`self` is not callable here".to_owned())
                             .to_err_vec()?;
 
                         let arguments: FunctionArguments = Parser::function_arguments(function_arguments, &parameters, None)?;
 
 
-                        return Ok((Expr::Callable(CallableContents::ToSelf { return_type, arguments }), None))
+                        return Ok((Expr::Callable(CallableContents::ToSelf { return_type, arguments }), l_span))
                     }
                     Expr::ReferenceToConstructor(ref function_type) => {
                         let function_arguments: Pair<Rule> = op.into_inner().next().unwrap();
@@ -672,7 +756,7 @@ fn parse_expr(
 
                         // let function_type = function_type.clone();
 
-                        return Ok((Expr::Callable(CallableContents::Standard { lhs_raw: lhs, function: function_type, arguments }), None))
+                        return Ok((Expr::Callable(CallableContents::Standard { lhs_raw: lhs, function: function_type, arguments }), l_span))
                     }
                     _ => ()
                 }
@@ -680,31 +764,24 @@ fn parse_expr(
                 let lhs_ty = lhs.for_type().to_err_vec()?;
 
                 let Some(function_type) = lhs_ty.get_function() else {
-                    return Err(vec![new_err(l_span.unwrap(), &user_data.get_source_file_name(), "this is not callable".to_owned())]);
+                    return Err(vec![new_err(l_span.unwrap().as_span(), &user_data.get_source_file_name(), "this is not callable".to_owned())]);
                 };
 
-                let function_arguments: Pair<Rule> = op.into_inner().next().unwrap();
+                let function_arguments: Pair<Rule> = op.clone().into_inner().next().unwrap();
                 let function_arguments: Node = Node::new_with_user_data(function_arguments, Rc::clone(&user_data));
                 let function_arguments: FunctionArguments = Parser::function_arguments(function_arguments, function_type.parameters(), None)?;
 
-                Ok((Expr::Callable(CallableContents::Standard { lhs_raw: lhs, function: function_type, arguments: function_arguments }), None))
+                Ok((Expr::Callable(CallableContents::Standard { lhs_raw: lhs, function: function_type, arguments: function_arguments }), Some(op)))
             },
             Rule::list_index => {
                 let lhs = lhs?.0;
 
                 let lhs_ty = lhs.for_type().to_err_vec()?;
 
-                let index: Pair<Rule> = op;
-                let index: Node = Node::new_with_user_data(index, Rc::clone(&user_data));
+                let index: Node = Node::new_with_user_data(op.clone(), Rc::clone(&user_data));
                 let index: Index = Parser::list_index(index, lhs_ty)?;
 
-                // let index_ty = index.for_type().to_err_vec()?;
-
-                // if !types_supported_for_index.contains(&index_ty) {
-                //     return Err(vec![new_err(l_span.unwrap(), &user_data.get_source_file_name(), format!("`{lhs_ty}` is not indexable with `{index_ty}` (Hint: this type supports indexes of {types_supported_for_index})"))]);
-                // }
-
-                Ok((Expr::Index { lhs_raw: Box::new(lhs), index }, None))
+                Ok((Expr::Index { lhs_raw: Box::new(lhs), index }, Some(op)))
             },
             Rule::dot_chain => {
                 let lhs = lhs?.0;
@@ -712,8 +789,7 @@ fn parse_expr(
                 let lhs_ty = lhs.for_type().to_err_vec()?;
                 let lhs_ty = lhs_ty.assume_type_of_self(&user_data);
 
-                let index: Pair<Rule> = op;
-                let index: Node = Node::new_with_user_data(index, Rc::clone(&user_data));
+                let index: Node = Node::new_with_user_data(op.clone(), Rc::clone(&user_data));
                 let (dot_chain, final_output_type) = Parser::dot_chain(index, Cow::Borrowed(&lhs_ty))?;
 
                 let expected_type = if final_output_type.is_class_self() {
@@ -722,7 +798,38 @@ fn parse_expr(
                     final_output_type.into_owned()
                 };
 
-                Ok((Expr::DotLookup { lhs: Box::new(lhs), dot_chain, expected_type }, None))
+                Ok((Expr::DotLookup { lhs: Box::new(lhs), dot_chain, expected_type }, Some(op)))
+            }
+            Rule::optional_or => {
+                let (lhs, l_span) = lhs?;
+                let l_span = l_span.unwrap();
+
+                let lhs_ty = lhs.for_type().details(l_span.as_span(), &user_data.get_source_file_name(), "the type of this value cannot be used in an unwrap").to_err_vec()?;
+
+                let fallback = op.into_inner().next().unwrap();
+                assert_eq!(fallback.as_rule(), Rule::value);
+
+                let value_node = Node::new_with_user_data(fallback, Rc::clone(&user_data));
+
+                let value_span = value_node.as_span();
+
+                let fallback = Parser::value(value_node)?;
+
+                let fallback_ty = fallback.for_type().details(value_span, &user_data.get_source_file_name(), format!("this value cannot be used as a fallback for `{lhs_ty}`")).to_err_vec()?;
+
+                if !lhs_ty.get_type_recursively().eq_complex(fallback_ty.get_type_recursively(), &TypecheckFlags::use_class(user_data.get_type_of_executing_class()).force_lhs_to_be_unwrapped_lhs(true)) {
+                    return Err(vec![new_err(value_span, &user_data.get_source_file_name(), {
+                        let ty = if let (true, ty) = lhs_ty.is_optional() {
+                            ty.map(Cow::Borrowed)
+                        } else {
+                            Some(Cow::Owned(Cow::Owned(lhs_ty)))
+                        };
+
+                        format!("The `or` portion of this unwrap must yield `{}`, but `{}` was found", ty.map_or(Cow::Borrowed("<indeterminate !>"), |x| Cow::Owned(x.to_string())), fallback_ty)
+                    })]);
+                }
+
+                Ok((Expr::NilEval { primary: Box::new(lhs), fallback }, Some(l_span)))
             }
             _ => unreachable!(),
         })

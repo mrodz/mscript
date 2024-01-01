@@ -6,7 +6,9 @@ use crate::{
 };
 
 use super::{
-    new_err, r#type::IntoType, Dependencies, Dependency, FunctionParameters, TypeLayout, Value,
+    new_err,
+    r#type::{IntoType, TypecheckFlags},
+    Dependencies, Dependency, FunctionParameters, TypeLayout, Value,
 };
 
 #[derive(Debug)]
@@ -64,7 +66,10 @@ impl Parser {
 
             result_len += 1;
 
-            if !expected_ty_at_idx.eq_complex(user_gave, maybe_class_type, false) {
+            if !expected_ty_at_idx.eq_complex(
+                user_gave,
+                &TypecheckFlags::use_class(maybe_class_type).lhs_unwrap(false),
+            ) {
                 let argument_number = idx + 1;
                 let error_message = format!("type mismatch when calling function (argument #{argument_number} was expected to be `{expected_ty_at_idx}` based on type signature, instead found `{user_gave}`)");
                 errors.push(new_err(
