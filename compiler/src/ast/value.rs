@@ -8,10 +8,8 @@ use crate::{
 };
 
 use super::{
-    r#type::{IntoType, NativeType},
-    string::AstString,
-    CompilationState, Compile, CompiledItem, Dependencies, Dependency, Expr, Function, Ident, List,
-    Number, TypeLayout, Unwrap, UnwrapExpr,
+    r#type::IntoType, string::AstString, CompilationState, Compile, CompiledItem, Dependencies,
+    Dependency, Expr, Function, Ident, List, Number, TypeLayout,
 };
 
 #[derive(Debug)]
@@ -21,8 +19,6 @@ pub(crate) enum Value {
     Number(Number),
     String(AstString),
     MathExpr(Box<Expr>),
-    UnwrapExpr(UnwrapExpr),
-    Unwrap(Unwrap),
     Boolean(bool),
     List(List),
 }
@@ -35,6 +31,18 @@ pub(crate) enum ValToUsize {
 }
 
 impl Value {
+    pub fn nil() -> Self {
+        Self::MathExpr(Box::new(Expr::Nil))
+    }
+
+    pub fn is_nil(&self) -> bool {
+        if let Self::MathExpr(temp) = self {
+            matches!(temp.as_ref(), Expr::Nil)
+        } else {
+            false
+        }
+    }
+
     pub fn get_usize(&self) -> Result<ValToUsize> {
         let maybe_evaluable = self.try_constexpr_eval()?;
 
@@ -235,16 +243,6 @@ impl Value {
                 let ty = list.for_type_force_mixed()?.get_owned_type_recursively();
                 ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
             }
-            Value::UnwrapExpr(..) => {
-                ident.link_force_no_inherit(
-                    user_data,
-                    Cow::Borrowed(&TypeLayout::Native(NativeType::Bool)),
-                )?;
-            }
-            Value::Unwrap(unwrap) => {
-                let ty = unwrap.for_type()?.get_owned_type_recursively();
-                ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
-            }
         }
 
         Ok(())
@@ -261,8 +259,6 @@ impl IntoType for Value {
             Self::String(string) => string.for_type(),
             Self::Boolean(boolean) => boolean.for_type(),
             Self::List(list) => list.for_type(),
-            Self::Unwrap(unwrap_expr) => unwrap_expr.for_type(),
-            Self::UnwrapExpr(..) => Ok(TypeLayout::Native(NativeType::Bool)),
         }
     }
 }
@@ -278,8 +274,7 @@ impl Dependencies for Value {
             // Self::Callable(callable) => callable.net_dependencies(),
             Self::Boolean(boolean) => boolean.net_dependencies(),
             Self::List(list) => list.net_dependencies(),
-            Self::UnwrapExpr(unwrap_expr) => unwrap_expr.net_dependencies(),
-            Self::Unwrap(unwrap) => unwrap.net_dependencies(),
+            // Self::Unwrap(unwrap) => unwrap.net_dependencies(),
         }
     }
 }
@@ -294,25 +289,8 @@ impl Compile for Value {
             Self::MathExpr(math_expr) => math_expr.compile(state),
             Self::Boolean(boolean) => boolean.compile(state),
             Self::List(list) => list.compile(state),
-            Self::UnwrapExpr(unwrap_expr) => unwrap_expr.compile(state),
-            Self::Unwrap(unwrap) => unwrap.compile(state),
+            // Self::Unwrap(unwrap) => unwrap.compile(state),
         }
-    }
-}
-
-#[cfg(not)]
-impl Compile for Value {
-    fn compile(
-        &self,
-        function_buffer: &mut Vec<CompiledItem>,
-    ) -> Result<Vec<CompiledItem>, anyhow::Error> {
-        let mut value_compiled = self.0.compile(function_buffer)?;
-
-        if let Some(ref next) = self.1 {
-            value_compiled.append(&mut next.compile(function_buffer)?);
-        }
-
-        Ok(value_compiled)
     }
 }
 
@@ -329,11 +307,9 @@ impl Parser {
             Rule::number => Value::Number(Self::number(value).to_err_vec()?),
             Rule::string => Value::String(Self::string(value).to_err_vec()?),
             Rule::math_expr => Value::MathExpr(Box::new(Expr::parse(value)?)),
-            // Rule::callable => Value::Callable(Self::callable(value)?),
             Rule::list => Value::List(Self::list(value)?),
             Rule::WHITESPACE => unreachable!("{:?}", value.as_span()),
-            Rule::unwrap_expr => Value::UnwrapExpr(Self::unwrap_expr(value)?),
-            Rule::value_unwrap => Value::Unwrap(Self::unwrap(value)?),
+            // Rule::unwrap_expr => Value::UnwrapExpr(Self::unwrap_expr(value)?),
             x => unreachable!("not sure how to handle `{x:?}`"),
         };
 

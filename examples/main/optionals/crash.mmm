@@ -29,10 +29,11 @@ function __fn0
 	load_fast #0
 	fast_rev2
 	equ
-	if 13
+	if 14
 	load result
 	jmp_not_nil 2
 	string 
+	unwrap 
 	store preappend
 	load preappend
 	store_fast #0
@@ -48,38 +49,62 @@ end
 function __module__
 	make_function ./crash.mmm#__fn0
 	store fizz_buzz
+	string 
+	store result_buffer
 	int 1
-	store_fast i
-	int 10
-	store_fast L#1
-	load_fast i
-	load_fast L#1
-	bin_op <
-	while_loop 25
-	load fizz_buzz
-	store_fast #1
+	store i
 	load i
+	store_fast #0
+	int 15
+	load_fast #0
+	fast_rev2
+	bin_op <=
+	while_loop 40
+	reserve_primitive
+	store label
+	load fizz_buzz
 	store_fast #2
+	breakpoint "CALL PREINIT args"
+	load i
+	store_fast #3
+	breakpoint "CALL POSTINIT args"
+	load_fast #3
 	load_fast #2
-	load_fast #1
 	call
 	unwrap_into label
-	if 6
+	if 10
+	load result_buffer
+	store_fast #0
 	load label
-	printn *
-	void
+	load_fast #0
+	fast_rev2
+	bin_op +
+	store result_buffer
 	done
-	jmp 4
+	jmp 10
 	else
+	load result_buffer
+	store_fast #0
 	load i
-	printn *
-	void
+	load_fast #0
+	fast_rev2
+	bin_op +
+	store result_buffer
 	done
 	load i
+	store_fast #0
 	int 1
+	load_fast #0
+	fast_rev2
 	bin_op +
 	store i
-	jmp_pop -27
-	delete_name_scoped i L#1
-	ret
+	jmp_pop -45
+	load result_buffer
+	store_fast #0
+	string 12Fizz4BuzzFizz78FizzBuzz11Fizz1314FizzBuzz
+	load_fast #0
+	fast_rev2
+	equ
+	assert 685 754
+	ret_mod
 end

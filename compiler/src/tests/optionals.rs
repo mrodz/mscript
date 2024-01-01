@@ -47,7 +47,10 @@ fn normal_assignment_with_try_equals() {
     eval(
         r#"
             a = 5
+
+            b: int? = nil
             b ?= 10
+
             assert a + b == 15
         "#,
     )
@@ -59,6 +62,8 @@ fn assignment_as_expr() {
     eval(
         r#"
             c: int? = nil
+
+            b: int? = nil
 
             a = b ?= c
 

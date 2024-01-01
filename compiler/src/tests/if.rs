@@ -137,6 +137,7 @@ fn if_else_inside_while_loop() {
         i = 1
 
         while i <= 15 {
+            label: str? = nil
             if label ?= fizz_buzz(i) {
                 result_buffer = result_buffer + label
             } else {

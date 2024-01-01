@@ -61,7 +61,7 @@ pub mod implementations {
         'get_data: {
             if let Some(arg0) = args.first() {
                 if arg0 == "verbose" {
-                    dbg!(ctx);
+                    log::info!("Program Context = {ctx:?}");
                     break 'get_data;
                 } else {
                     bail!("unknown debug argument ({arg0})")
@@ -147,7 +147,7 @@ pub mod implementations {
             ("&&", Bool(x), Bool(y)) => Ok(bool!(*x && *y)),
             ("||", Bool(x), Bool(y)) => Ok(bool!(*x || *y)),
             ("^", Bool(x), Bool(y)) => Ok(bool!(*x ^ *y)),
-            _ => bail!("unknown operation: {symbols}"),
+            _ => bail!("unknown operation: {symbols} (got &{left}, &{right})"),
         }
         .context("invalid binary operation")?;
 
@@ -382,8 +382,9 @@ pub mod implementations {
     }
 
     pub(crate) fn breakpoint(ctx: &mut Ctx, args: &[String]) -> Result<()> {
-        #[cfg(feature = "skip_breakpoint")]
-        return Ok(());
+        if cfg!(feature = "skip_breakpoint") {
+            return Ok(());
+        }
 
         let maybe_name = args.first();
 

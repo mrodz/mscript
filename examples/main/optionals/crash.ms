@@ -1,22 +1,31 @@
 fizz_buzz = fn(input: int) -> str? {
-	result: str? = nil
+            result: str? = nil
+    
+            if input % 3 == 0 {
+                result = "Fizz"
+            }
+    
+            if input % 5 == 0 {
+                preappend = get result or ""
+                result = preappend + "Buzz"
+            }
+    
+            return result	
+        }
+    
+        result_buffer = ""
 
-	if input % 3 == 0 {
-		result = "Fizz"
-	}
+        i = 1
 
-	if input % 5 == 0 {
-		preappend = get result or ""
-		result = preappend + "Buzz"
-	}
+        while i <= 15 {
+            label: str? = nil
+            if label ?= fizz_buzz(i) {
+                result_buffer = result_buffer + label
+            } else {
+                result_buffer = result_buffer + i
+            }
 
-	return result	
-}
+            i = i + 1
+        }
 
-from 1 to 10, i {
-	if label ?= fizz_buzz(i) {
-		print label
-	} else {
-		print i
-	}
-}
+        assert result_buffer == "12Fizz4BuzzFizz78FizzBuzz11Fizz1314FizzBuzz"

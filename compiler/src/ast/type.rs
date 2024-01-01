@@ -398,7 +398,12 @@ impl Display for TypeLayout {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Function(function_type) => write!(f, "{function_type}"),
-            Self::CallbackVariable(cb) => write!(f, "{}", cb.get_type_recursively()),
+            Self::CallbackVariable(cb) => {
+                if cfg!(feature = "debug") {
+                    write!(f, "--debug-cb:")?;
+                }
+                write!(f, "{}", cb.get_type_recursively())
+            }
             Self::Native(native) => write!(f, "{native}"),
             Self::List(list) => write!(f, "{list}"),
             Self::ValidIndexes(lower, upper) => write!(f, "B({lower}..{upper})"),
@@ -409,6 +414,38 @@ impl Display for TypeLayout {
             Self::Void => write!(f, "void"),
             Self::Module(module) => write!(f, "<module {:?}>", module.name.as_os_str()),
         }
+    }
+}
+
+pub(crate) struct TypecheckFlags<T>
+where
+    T: Deref<Target = ClassType>,
+{
+    executing_class: Option<T>,
+    lhs_allow_optional_unwrap: bool,
+    force_lhs_to_be_unwrapped_rhs: bool,
+}
+
+impl<T> TypecheckFlags<T>
+where
+    T: Deref<Target = ClassType>,
+{
+    pub const fn use_class(class_type: Option<T>) -> Self {
+        Self {
+            executing_class: class_type,
+            lhs_allow_optional_unwrap: false,
+            force_lhs_to_be_unwrapped_rhs: false,
+        }
+    }
+
+    pub const fn lhs_unwrap(mut self, predicate: bool) -> Self {
+        self.lhs_allow_optional_unwrap = predicate;
+        self
+    }
+
+    pub const fn force_lhs_to_be_unwrapped_rhs(mut self, predicate: bool) -> Self {
+        self.force_lhs_to_be_unwrapped_rhs = predicate;
+        self
     }
 }
 
@@ -423,7 +460,7 @@ impl TypeLayout {
     pub fn is_optional(&self) -> (bool, Option<&Cow<'static, TypeLayout>>) {
         let me = self.get_type_recursively();
 
-        if let TypeLayout::Optional(x @ Some(..)) = me {
+        if let TypeLayout::Optional(x) = me {
             return (true, x.as_ref().map(|x| x.as_ref()));
         }
 
@@ -652,27 +689,25 @@ impl TypeLayout {
 
     /// - `Self` is the expected type
     /// - `rhs` is the supplied type
-    pub fn eq_complex(
-        &self,
-        rhs: &Self,
-        executing_class: Option<impl Deref<Target = ClassType>>,
-        lhs_allow_optional_unwrap: bool,
-    ) -> bool {
+    pub fn eq_complex<T>(&self, rhs: &Self, flags: impl Deref<Target = TypecheckFlags<T>>) -> bool
+    where
+        T: Deref<Target = ClassType>,
+    {
         if self == rhs {
             return true;
         }
 
-        match (self, rhs, executing_class) {
+        match (self, rhs, &flags.executing_class) {
             (Self::ClassSelf, TypeLayout::Class(other), Some(executing_class))
             | (TypeLayout::Class(other), Self::ClassSelf, Some(executing_class)) => {
                 executing_class.deref().eq(other)
             }
+            (Self::Optional(None), ..) if flags.force_lhs_to_be_unwrapped_rhs => true,
             (Self::Optional(None), Self::Optional(Some(_)), _)
-            | (Self::Optional(Some(_)), Self::Optional(None), _) => true,
-            (Self::Optional(Some(x)), y, _) => x.as_ref().as_ref() == y,
-            (y, Self::Optional(Some(x)), _) if lhs_allow_optional_unwrap => {
-                x.as_ref().as_ref() == y
-            }
+            | (Self::Optional(Some(_)), Self::Optional(None), _) if !flags.force_lhs_to_be_unwrapped_rhs => true,
+            (Self::Optional(Some(x)), y, _) if flags.force_lhs_to_be_unwrapped_rhs => x.get_type_recursively() == y.get_type_recursively(),
+            (Self::Optional(Some(x)), y, _) => x.eq_complex(y, flags),
+            (y, Self::Optional(Some(x)), _) if flags.lhs_allow_optional_unwrap => x.as_ref().as_ref() == y,
             _ => false,
         }
     }
@@ -774,6 +809,13 @@ impl TypeLayout {
         }
     }
 
+    pub fn disregard_optional(&self) -> Option<&Self> {
+        match self {
+            Self::Optional(x) => x.as_ref().map(|x| &***x),
+            other => Some(other)
+        }
+    }
+
     pub fn get_owned_type_recursively(self) -> Self {
         use TypeLayout::*;
 
@@ -799,26 +841,36 @@ impl TypeLayout {
             return Some(TypeLayout::Native(NativeType::Bool));
         }
 
+        if let Op::Unwrap = op {
+            if self == other {
+                return Some(TypeLayout::Native(NativeType::Bool));
+            } 
+            return None;
+        }
+
         if let (_, Optional(None), Eq | Neq) | (Optional(None), _, Eq | Neq) = (self, other, op) {
             return Some(TypeLayout::Native(NativeType::Bool));
         }
 
-        if let (yes, Optional(Some(maybe)), Eq | Neq) | (Optional(Some(maybe)), yes, Eq | Neq) =
-            (self, other, op)
-        {
-            if yes == maybe.as_ref().as_ref() {
-                return Some(TypeLayout::Native(NativeType::Bool));
-            }
-        }
+        let lhs = self.disregard_optional()?;
+        let rhs = other.disregard_optional()?;
 
-        let Native(me) = self.get_type_recursively() else {
+        let Native(me) = lhs.get_type_recursively() else {
             return None;
         };
 
-        let Native(other) = other.get_type_recursively() else {
+        let Native(other) = rhs.get_type_recursively() else {
             return None;
         };
 
+
+        // if let (yes, Optional(Some(maybe)), Eq | Neq) | (Optional(Some(maybe)), yes, Eq | Neq) =
+        //     (self, other, op)
+        // {
+        //     if yes == maybe.as_ref().as_ref() {
+        //         return Some(TypeLayout::Native(NativeType::Bool));
+        //     }
+        // }
         use NativeType::*;
         use Op::*;
 

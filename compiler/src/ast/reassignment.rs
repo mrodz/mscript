@@ -128,7 +128,7 @@ fn parse_path(
                 // return Ok(ReassignmentPath::ReferenceToSelf);
             }
 
-            let file_name = user_data.get_file_name();
+            let file_name = user_data.get_source_file_name();
 
             let (ident, is_callback) = user_data
                 .get_dependency_flags_from_name(raw_string)
