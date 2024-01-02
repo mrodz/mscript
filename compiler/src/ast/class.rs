@@ -260,7 +260,8 @@ impl Parser {
 
         input.user_data().add_type(
             ident.name().into(),
-            ident.ty().unwrap().clone().into_owned(),
+            ident.ty().unwrap().clone(),
+            false
         );
 
         input.user_data().add_dependency(&ident);

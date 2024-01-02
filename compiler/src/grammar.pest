@@ -162,7 +162,9 @@ class_flags = ${ class_flag ~ (WHITESPACE ~ class_flag)* }
 
 class = { class_flags? ~ "class" ~ ident ~ class_body }
 
-declaration = { import | class | reassignment | assignment | print_statement | assertion | return_statement | continue_statement | break_statement | if_statement | while_loop | number_loop | value }
+type_alias = ${ "type" ~ WHITESPACE ~ ident ~ WHITESPACE ~ type }
+
+declaration = { import | class | reassignment | assignment | type_alias | print_statement | assertion | return_statement | continue_statement | break_statement | if_statement | while_loop | number_loop | value }
 
 file = {
     SOI ~
