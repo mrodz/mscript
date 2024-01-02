@@ -92,7 +92,10 @@ impl AssocFileData {
         bail!("no loop found")
     }
 
-    pub fn register_function_parameters_to_scope(&self, parameters: Rc<FunctionParameters>) -> Option<Rc<FunctionParameters>> {
+    pub fn register_function_parameters_to_scope(
+        &self,
+        parameters: Rc<FunctionParameters>,
+    ) -> Option<Rc<FunctionParameters>> {
         self.scopes.register_function_parameters(parameters)
     }
 
@@ -254,7 +257,7 @@ impl AssocFileData {
                                 return None;
                             }
                         }
-                        
+
                         unreachable!("function parameters should have been initialized");
                     };
 

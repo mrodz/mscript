@@ -1,4 +1,4 @@
-use std::{borrow::Cow, path::PathBuf, sync::Arc, rc::Rc};
+use std::{borrow::Cow, path::PathBuf, rc::Rc, sync::Arc};
 
 use anyhow::Result;
 use bytecode::compilation_bridge::id::{MAKE_FUNCTION, RET};
@@ -145,7 +145,8 @@ impl Parser {
         // Using "_" or not saving it as a variable causes the scope to pop instantly.
         let _scope_handle = input.user_data().push_function(return_type.clone());
 
-        let parameters = Rc::new(Self::function_parameters(parameters, true, true, true).to_err_vec()?);
+        let parameters =
+            Rc::new(Self::function_parameters(parameters, true, true, true).to_err_vec()?);
         let body = Self::block(body)?;
         let function_type = FunctionType::new(parameters.clone(), return_type);
 

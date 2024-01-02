@@ -20,7 +20,11 @@ impl std::ops::Sub for &Primitive {
         if let Some(result) = math {
             Ok(result)
         } else {
-            bail!("<{:?} - {:?}> is invalid. (valid ops are: <num - num>)", t1.ty(), t2.ty());
+            bail!(
+                "<{:?} - {:?}> is invalid. (valid ops are: <num - num>)",
+                t1.ty(),
+                t2.ty()
+            );
         }
     }
 }

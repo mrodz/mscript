@@ -4,7 +4,7 @@ mod constructor;
 mod member_function;
 mod member_variable;
 
-use std::{borrow::Cow, fmt::Display, path::PathBuf, sync::Arc, rc::Rc};
+use std::{borrow::Cow, fmt::Display, path::PathBuf, rc::Rc, sync::Arc};
 
 use anyhow::Result;
 

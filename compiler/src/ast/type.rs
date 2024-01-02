@@ -13,7 +13,8 @@ use std::{
     hash::Hash,
     ops::Deref,
     path::PathBuf,
-    sync::Arc, rc::Rc,
+    rc::Rc,
+    sync::Arc,
 };
 
 use super::{

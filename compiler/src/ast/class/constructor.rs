@@ -1,4 +1,4 @@
-use std::{borrow::Cow, path::PathBuf, sync::Arc, rc::Rc};
+use std::{borrow::Cow, path::PathBuf, rc::Rc, sync::Arc};
 
 use anyhow::Result;
 use bytecode::compilation_bridge::id::{MAKE_FUNCTION, RET};
@@ -130,8 +130,7 @@ impl WalkForType for Constructor {
 
 impl IntoType for Constructor {
     fn for_type(&self) -> Result<crate::ast::TypeLayout> {
-        let function_type =
-            FunctionType::new(self.parameters.clone(), ScopeReturnStatus::Void);
+        let function_type = FunctionType::new(self.parameters.clone(), ScopeReturnStatus::Void);
 
         Ok(TypeLayout::Function(function_type))
     }
@@ -156,7 +155,8 @@ impl Parser {
         // Using "_" or not saving it as a variable causes the scope to pop instantly.
         let _scope_handle = input.user_data().push_function(ScopeReturnStatus::Void);
 
-        let parameters = Rc::new(Self::function_parameters(parameters, true, true, true).to_err_vec()?);
+        let parameters =
+            Rc::new(Self::function_parameters(parameters, true, true, true).to_err_vec()?);
 
         let body = children.next().unwrap();
         let body = Self::block(body)?;

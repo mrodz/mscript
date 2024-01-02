@@ -12,7 +12,8 @@ use std::{
     path::{Path, PathBuf},
     rc::Rc,
     sync::Mutex,
-    thread, time::Instant,
+    thread,
+    time::Instant,
 };
 
 use crate::cli::CompilationTargets;
@@ -128,17 +129,13 @@ fn main() -> Result<()> {
             verbose,
             quick,
             override_no_pb,
-            profile
+            profile,
         } => {
             if verbose && !quick {
                 LOGGER.set_verbose();
             }
 
-            let start = if profile {
-                Some(Instant::now())
-            } else {
-                None
-            };
+            let start = if profile { Some(Instant::now()) } else { None };
 
             if let Err(err) =
                 log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Trace))
@@ -169,11 +166,25 @@ fn main() -> Result<()> {
 
             if let (maybe_profile, Some(start)) = (memory_stats::memory_stats(), start) {
                 let duration = Instant::now().duration_since(start);
-                
-                println!("{}", format!("\nExecution Profile:\n  Program finished in {}s", duration.as_secs_f32()).black());
-                
+
+                println!(
+                    "{}",
+                    format!(
+                        "\nExecution Profile:\n  Program finished in {}s",
+                        duration.as_secs_f32()
+                    )
+                    .black()
+                );
+
                 if let Some(profile) = maybe_profile {
-                    println!("{}", format!("    Physical memory: {} bytes\n    Virtual memory: {} bytes\n", profile.physical_mem, profile.virtual_mem).black());
+                    println!(
+                        "{}",
+                        format!(
+                            "    Physical memory: {} bytes\n    Virtual memory: {} bytes\n",
+                            profile.physical_mem, profile.virtual_mem
+                        )
+                        .black()
+                    );
                 } else {
                     println!("{}", "    <system does not support memory stats>\n".red())
                 }

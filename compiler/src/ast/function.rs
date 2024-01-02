@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt::Display, hash::Hash, path::PathBuf, sync::Arc, rc::Rc};
+use std::{borrow::Cow, fmt::Display, hash::Hash, path::PathBuf, rc::Rc, sync::Arc};
 
 use anyhow::{anyhow, Result};
 use bytecode::compilation_bridge::id::{MAKE_FUNCTION, RET};
@@ -356,8 +356,13 @@ impl Parser {
         let parameters =
             Rc::new(Self::function_parameters(parameters, true, false, false).to_err_vec()?);
 
-        let maybe_previous = input.user_data().register_function_parameters_to_scope(parameters.clone());
-        assert!(maybe_previous.is_none(), "The function's parameters have already been set: found `{maybe_previous:?}`");
+        let maybe_previous = input
+            .user_data()
+            .register_function_parameters_to_scope(parameters.clone());
+        assert!(
+            maybe_previous.is_none(),
+            "The function's parameters have already been set: found `{maybe_previous:?}`"
+        );
 
         let body = if let Some(body) = body {
             Self::block(body)?
