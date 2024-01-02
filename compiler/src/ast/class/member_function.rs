@@ -17,7 +17,7 @@ use crate::{
 #[derive(Debug)]
 pub(crate) struct MemberFunction {
     ident: Ident,
-    parameters: FunctionParameters,
+    parameters: Rc<FunctionParameters>,
     body: Block,
     path_str: Arc<PathBuf>,
     class_name: Arc<String>,
@@ -62,7 +62,7 @@ impl Compile for MemberFunction {
         arguments.push(format!("{x}#{id}"));
 
         for dependency in dependencies {
-            arguments.push(dependency.name().clone());
+            arguments.push(dependency.name().to_owned());
         }
 
         let arguments = arguments.into_boxed_slice();
@@ -145,9 +145,10 @@ impl Parser {
         // Using "_" or not saving it as a variable causes the scope to pop instantly.
         let _scope_handle = input.user_data().push_function(return_type.clone());
 
-        let parameters = Self::function_parameters(parameters, true, true, true).to_err_vec()?;
+        let parameters =
+            Rc::new(Self::function_parameters(parameters, true, true, true).to_err_vec()?);
         let body = Self::block(body)?;
-        let function_type = FunctionType::new(Rc::new(parameters.clone()), return_type);
+        let function_type = FunctionType::new(parameters.clone(), return_type);
 
         ident.set_type_no_link(Cow::Owned(TypeLayout::Function(function_type)));
 

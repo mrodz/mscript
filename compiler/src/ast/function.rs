@@ -184,8 +184,6 @@ impl FunctionType {
     }
 }
 
-// type ReturnType = Option<Box<Cow<'static, TypeLayout>>>;
-
 impl Display for FunctionType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let return_type: Cow<'static, str> = if let ScopeReturnStatus::Should(return_type)
@@ -265,7 +263,7 @@ impl Function {
         arguments.push(format!("{x}#{id}"));
 
         for dependency in dependencies {
-            arguments.push(dependency.name().clone());
+            arguments.push(dependency.name().to_owned());
         }
 
         let arguments = arguments.into_boxed_slice();
@@ -358,7 +356,13 @@ impl Parser {
         let parameters =
             Rc::new(Self::function_parameters(parameters, true, false, false).to_err_vec()?);
 
-        // input.user_data().register_function_parameters_to_scope(Arc::clone(&parameters));
+        let maybe_previous = input
+            .user_data()
+            .register_function_parameters_to_scope(parameters.clone());
+        assert!(
+            maybe_previous.is_none(),
+            "The function's parameters have already been set: found `{maybe_previous:?}`"
+        );
 
         let body = if let Some(body) = body {
             Self::block(body)?

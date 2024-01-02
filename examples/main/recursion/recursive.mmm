@@ -1,0 +1,26 @@
+function __fn0
+	int 1
+	bin_op_assign += c
+	printn *
+	void
+	breakpoint "CALL PREINIT args"
+	breakpoint "CALL POSTINIT args"
+	call_self
+	void
+	void
+	ret
+end
+function __module__
+	int 0
+	store c
+	make_function ./recursive.mmm#__fn0 c
+	store r
+	load r
+	store_fast #1
+	breakpoint "CALL PREINIT args"
+	breakpoint "CALL POSTINIT args"
+	load_fast #1
+	call
+	void
+	ret_mod
+end

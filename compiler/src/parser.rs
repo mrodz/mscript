@@ -92,6 +92,13 @@ impl AssocFileData {
         bail!("no loop found")
     }
 
+    pub fn register_function_parameters_to_scope(
+        &self,
+        parameters: Rc<FunctionParameters>,
+    ) -> Option<Rc<FunctionParameters>> {
+        self.scopes.register_function_parameters(parameters)
+    }
+
     pub fn was_path_preloaded(&self, path: impl AsRef<Path>) -> bool {
         self.files.preloaded_file_exists(&path.bytecode_str())
     }
@@ -228,7 +235,7 @@ impl AssocFileData {
 
     pub fn get_current_executing_function(
         &self,
-    ) -> Result<(Ref<Scope>, Ref<Arc<FunctionParameters>>)> {
+    ) -> Result<(Ref<Scope>, Ref<Rc<FunctionParameters>>)> {
         let iter = self.scopes.iter();
 
         for scope in iter {
@@ -250,6 +257,7 @@ impl AssocFileData {
                                 return None;
                             }
                         }
+
                         unreachable!("function parameters should have been initialized");
                     };
 

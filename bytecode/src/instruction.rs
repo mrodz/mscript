@@ -552,7 +552,7 @@ pub mod implementations {
         };
 
         let function = ctx.owner();
-        let name = Rc::new(function.name().clone());
+        let name = function.name();
 
         let obj = unsafe {
             if !OBJECT_BUILDER.has_class_been_registered(&name) {
@@ -723,7 +723,7 @@ pub mod implementations {
                 bail!("missing argument, and the last item in the local stack ({last:?}, S:{:#?}) is not a function.", ctx.get_local_operating_stack())
             };
 
-            let destination = JumpRequestDestination::Standard(f.location().clone());
+            let destination = JumpRequestDestination::Standard(f.location().to_owned());
 
             let callback_state = f.callback_state().clone();
 

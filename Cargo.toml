@@ -14,6 +14,7 @@ bytecode_dev_transpiler = { path = "./bytecode_dev_transpiler" }
 compiler = { path = "./compiler" }
 log = "0.4.19"
 colored = "2.0.4"
+memory-stats = { version = "1.1.0", features = ["always_use_statm"]}
 
 [features]
 default = ["skip_breakpoint"]

@@ -17,7 +17,7 @@ use crate::{
 
 #[derive(Debug)]
 pub struct Constructor {
-    parameters: FunctionParameters,
+    parameters: Rc<FunctionParameters>,
     body: Block,
     path_str: Arc<PathBuf>,
     class_name: Arc<String>,
@@ -30,11 +30,11 @@ impl Constructor {
 
     pub fn default_constructor(path_str: Arc<PathBuf>, class_name: Arc<String>) -> Self {
         Self {
-            parameters: FunctionParameters::Named(vec![Ident::new(
+            parameters: Rc::new(FunctionParameters::Named(vec![Ident::new(
                 "self".to_owned(),
                 Some(Cow::Owned(TypeLayout::ClassSelf)),
                 true,
-            )]),
+            )])),
             body: Block::empty_body(),
             path_str,
             class_name,
@@ -76,7 +76,7 @@ impl Compile for Constructor {
         arguments.push(format!("{x}#{id}"));
 
         for dependency in dependencies {
-            arguments.push(dependency.name().clone());
+            arguments.push(dependency.name().to_owned());
         }
 
         let arguments = arguments.into_boxed_slice();
@@ -130,8 +130,7 @@ impl WalkForType for Constructor {
 
 impl IntoType for Constructor {
     fn for_type(&self) -> Result<crate::ast::TypeLayout> {
-        let function_type =
-            FunctionType::new(Rc::new(self.parameters.clone()), ScopeReturnStatus::Void);
+        let function_type = FunctionType::new(self.parameters.clone(), ScopeReturnStatus::Void);
 
         Ok(TypeLayout::Function(function_type))
     }
@@ -156,7 +155,8 @@ impl Parser {
         // Using "_" or not saving it as a variable causes the scope to pop instantly.
         let _scope_handle = input.user_data().push_function(ScopeReturnStatus::Void);
 
-        let parameters = Self::function_parameters(parameters, true, true, true).to_err_vec()?;
+        let parameters =
+            Rc::new(Self::function_parameters(parameters, true, true, true).to_err_vec()?);
 
         let body = children.next().unwrap();
         let body = Self::block(body)?;

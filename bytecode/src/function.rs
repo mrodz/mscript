@@ -73,7 +73,7 @@ impl PrimitiveFunction {
     }
 
     /// Get the location of the function.
-    pub(crate) fn location(&self) -> &String {
+    pub(crate) fn location(&self) -> &str {
         &self.location
     }
 
@@ -412,8 +412,8 @@ impl Function {
     }
 
     /// Get a function's name.
-    pub(crate) fn name(&self) -> &String {
-        &self.name
+    pub(crate) fn name(&self) -> Rc<String> {
+        self.name.clone()
     }
 
     /// Get a function's location.

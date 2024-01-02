@@ -13,6 +13,7 @@ use std::{
     rc::Rc,
     sync::Mutex,
     thread,
+    time::Instant,
 };
 
 use crate::cli::CompilationTargets;
@@ -128,10 +129,13 @@ fn main() -> Result<()> {
             verbose,
             quick,
             override_no_pb,
+            profile,
         } => {
             if verbose && !quick {
                 LOGGER.set_verbose();
             }
+
+            let start = if profile { Some(Instant::now()) } else { None };
 
             if let Err(err) =
                 log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Trace))
@@ -139,10 +143,8 @@ fn main() -> Result<()> {
                 bail!("Error initializing logger: {err:?}")
             };
 
-            // let output_path = is_path_source(&path)?;
-
             let builder = thread::Builder::new()
-                .name("Main".into())
+                .name("mscript-runtime".into())
                 .stack_size(stack_size);
 
             let main_thread = builder.spawn(move || -> Result<()> {
@@ -160,7 +162,35 @@ fn main() -> Result<()> {
                 program.execute()
             })?;
 
-            main_thread.join().unwrap()?;
+            let finished = main_thread.join();
+
+            if let (maybe_profile, Some(start)) = (memory_stats::memory_stats(), start) {
+                let duration = Instant::now().duration_since(start);
+
+                println!(
+                    "{}",
+                    format!(
+                        "\nExecution Profile:\n  Program finished in {}s",
+                        duration.as_secs_f32()
+                    )
+                    .dimmed()
+                );
+
+                if let Some(profile) = maybe_profile {
+                    println!(
+                        "{}",
+                        format!(
+                            "    Physical memory: {} bytes\n    Virtual memory: {} bytes\n",
+                            profile.physical_mem, profile.virtual_mem
+                        )
+                        .dimmed()
+                    );
+                } else {
+                    println!("{}", "    <system does not support memory stats>\n".red())
+                }
+            }
+
+            finished.expect("program did not exit successfully")?;
         }
         Commands::Execute {
             path,
@@ -168,7 +198,7 @@ fn main() -> Result<()> {
             transpile_first,
         } => {
             let builder = thread::Builder::new()
-                .name("Main".into())
+                .name("mscript-runtime".into())
                 .stack_size(stack_size);
 
             let main_thread = builder.spawn(move || -> Result<()> {

@@ -621,10 +621,18 @@ fn parse_expr(
                         let (ident, is_callback) = user_data
                             .get_dependency_flags_from_name(raw_string)
                             .with_context(|| {
+                                let hint = match primary.as_str() {
+                                    "print" => "\n    + hint: printing in MScript v1 uses the `print` keyword, like\n    +\n    +   print \"Hello World\"\n    +",
+                                    "null" => " (hint: an empty optional in MScript is represented by the `nil` keyword)",
+                                    "True" => " (hint: a truthy boolean value in MScript is represented by the `true` keyword)",
+                                    "False" => " (hint: a falsey boolean value in MScript is represented by the `false` keyword)",
+                                    _ => ""
+                                };
+
                                 new_err(
                                     primary.as_span(),
                                     &file_name,
-                                    "use of undeclared variable".into(),
+                                    format!("use of undeclared variable{hint}"),
                                 )
                             })
                             .to_err_vec()?;

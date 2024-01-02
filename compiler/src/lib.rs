@@ -610,14 +610,14 @@ fn perform_file_io_out(
 
 pub(crate) fn perform_file_io_in(input_path: &Path) -> Result<String> {
     let Some(ext) = input_path.extension() else {
-        bail!("no file extension");
+        bail!("MScript uses `.ms` file extensions. Please add this file extension.");
     };
 
     if ext != "ms" {
         bail!("MScript uses `.ms` file extensions. Please check your file extensions.");
     }
 
-    let file = File::open(input_path).context("Could not open file for parsing :(")?;
+    let file = File::open(input_path).with_context(|| format!("Could not open {input_path:?}"))?;
 
     let mut reader = BufReader::new(file);
 
