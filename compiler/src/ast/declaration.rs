@@ -9,9 +9,9 @@ use crate::{
 };
 
 use super::{
-    Assertion, Assignment, Break, Class, CompilationState, Compile, CompiledItem, Continue,
-    Dependencies, Dependency, IfStatement, Import, NumberLoop, PrintStatement, Reassignment,
-    ReturnStatement, Value, WhileLoop,
+    r#type::TypeAlias, Assertion, Assignment, Break, Class, CompilationState, Compile,
+    CompiledItem, Continue, Dependencies, Dependency, IfStatement, Import, NumberLoop,
+    PrintStatement, Reassignment, ReturnStatement, Value, WhileLoop,
 };
 
 #[derive(Debug)]
@@ -28,10 +28,9 @@ pub(crate) enum Declaration {
     Break(Break),
     Assertion(Assertion),
     Class(Class),
-    // UnwrapExpr(UnwrapExpr),
-    // ValueUnwrap(Unwrap),
     Value(Value),
     Import(Import),
+    TypeAlias(TypeAlias),
 }
 
 impl Dependencies for Declaration {
@@ -46,9 +45,9 @@ impl Dependencies for Declaration {
             Self::Assertion(assertion) => assertion.supplies(),
             Self::Class(class) => class.supplies(),
             Self::Value(value) => value.supplies(),
-            // Self::ValueUnwrap(value_unwrap) => value_unwrap.supplies(),
             Self::Reassignment(reassignment) => reassignment.supplies(),
             Self::Import(import) => import.supplies(),
+            Self::TypeAlias(type_alias) => type_alias.supplies(),
             Self::Continue(_) | Self::Break(_) => vec![],
         }
     }
@@ -65,8 +64,8 @@ impl Dependencies for Declaration {
             Self::Assertion(assertion) => assertion.net_dependencies(),
             Self::Class(class) => class.net_dependencies(),
             Self::Value(value) => value.net_dependencies(),
-            // Self::ValueUnwrap(value_unwrap) => value_unwrap.net_dependencies(),
             Self::Import(import) => import.net_dependencies(),
+            Self::TypeAlias(type_alias) => type_alias.net_dependencies(),
             Self::Continue(_) | Self::Break(_) => vec![],
         }
     }
@@ -91,12 +90,8 @@ impl Compile for Declaration {
                 result.push(instruction!(void));
                 Ok(result)
             }
-            // Self::ValueUnwrap(x) => {
-            //     let mut unwrap_compiled = x.compile(state)?;
-            //     unwrap_compiled.push(instruction!(void));
-            //     Ok(unwrap_compiled)
-            // }
             Self::Import(x) => x.compile(state),
+            Self::TypeAlias(x) => x.compile(state),
         }
     }
 }
@@ -122,15 +117,12 @@ impl Parser {
             }
             Rule::break_statement => Declaration::Break(Self::break_statement(input).to_err_vec()?),
             Rule::number_loop => Declaration::NumberLoop(Self::number_loop(declaration)?),
-            // Rule::math_expr => Declaration::Expr(Expr::parse(input)?),
             Rule::reassignment => Declaration::Reassignment(Self::reassignment(declaration)?),
             Rule::assertion => Declaration::Assertion(Self::assertion(declaration)?),
             Rule::class => Declaration::Class(Self::class(declaration)?),
-            // Rule::unwrap_expr => Declaration::UnwrapExpr(Self::unwrap_expr(declaration)?),
             Rule::value => Declaration::Value(Self::value(declaration)?),
-            // Rule::value_unwrap => Declaration::ValueUnwrap(Self::unwrap(declaration)?),
-            // Rule::export => Declaration::Export(Self::export(declaration)?),
             Rule::import => Declaration::Import(Self::import(declaration)?),
+            Rule::type_alias => Declaration::TypeAlias(Self::type_alias(declaration).to_err_vec()?),
             x => unreachable!("{x:?} is not supported"),
         };
 

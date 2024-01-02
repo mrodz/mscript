@@ -8,6 +8,7 @@ mod modify_edge_cases;
 mod modules;
 mod number_loop;
 mod optionals;
+mod types;
 mod r#while;
 
 #[macro_export]

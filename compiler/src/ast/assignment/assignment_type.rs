@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use crate::ast::r#type::TypecheckFlags;
 use crate::ast::ClassType;
-use crate::ast::{new_err, r#type::IntoType, Assignment, Ident, TypeLayout, Value};
+use crate::ast::{new_err, r#type::IntoType, Assignment, Ident, Value};
 use crate::parser::{Node, Parser};
 use crate::VecErr;
 
@@ -31,7 +31,7 @@ impl Parser {
             ident.mark_const();
         }
 
-        let ty: Cow<'static, TypeLayout> = Self::r#type(ty).to_err_vec()?;
+        let ty = Self::r#type(ty).to_err_vec()?;
         let value: Value = Self::value(value)?;
 
         if let Ok(ref assignment_ty) = value.for_type() {
@@ -41,14 +41,14 @@ impl Parser {
             ) {
                 let hint = ty.get_error_hint_between_types(assignment_ty).map_or_else(
                     || Cow::Borrowed(""),
-                    |str| Cow::Owned(format!("\n\t- hint: {str}")),
+                    |str| Cow::Owned(format!("\n    + hint: {str}")),
                 );
 
                 let message = if value.is_callable().to_err_vec()? {
-                    format!("declaration wanted {ty}, but value is a function that returns {assignment_ty}{hint}")
+                    format!("declaration wanted `{ty}`, but value is a function that returns `{assignment_ty}`{hint}")
                 } else {
                     // TODO: special check for function types.
-                    format!("declaration wanted {ty}, but value is {assignment_ty}{hint}")
+                    format!("declaration wanted `{ty}`, but value is `{assignment_ty}`{hint}")
                 };
 
                 return Err(vec![new_err(

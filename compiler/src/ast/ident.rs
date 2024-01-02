@@ -104,6 +104,10 @@ impl Ident {
         &self.name
     }
 
+    pub fn boxed_name(&self) -> Box<str> {
+        self.name.clone().into_boxed_str()
+    }
+
     pub fn ty_owned(self) -> Result<Cow<'static, TypeLayout>> {
         if let Some(ty) = self.ty {
             Ok(ty)

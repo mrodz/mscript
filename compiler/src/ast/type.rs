@@ -23,7 +23,7 @@ use super::{
     list::{ListBound, ListType},
     map_err,
     math_expr::Op,
-    FunctionParameters, Ident, Value, WalkForType,
+    Compile, Dependencies, FunctionParameters, Ident, Value, WalkForType,
 };
 
 pub(crate) struct SupportedTypesWrapper(Box<[Cow<'static, TypeLayout>]>);
@@ -284,9 +284,20 @@ impl ModuleType {
     }
 }
 
+#[derive(Debug)]
+pub(crate) struct TypeAlias;
+
+impl Dependencies for TypeAlias {}
+impl Compile for TypeAlias {
+    fn compile(&self, _state: &super::CompilationState) -> Result<Vec<super::CompiledItem>> {
+        Ok(vec![])
+    }
+}
+
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub(crate) enum TypeLayout {
     Function(FunctionType),
+    Alias(String, Box<Cow<'static, TypeLayout>>),
     /// metadata wrapper around a [TypeLayout]
     CallbackVariable(Box<TypeLayout>),
     Optional(Option<Box<Cow<'static, TypeLayout>>>),
@@ -302,6 +313,7 @@ pub(crate) enum TypeLayout {
 impl Display for TypeLayout {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Alias(alias, _) => write!(f, "{alias}"),
             Self::Function(function_type) => write!(f, "{function_type}"),
             Self::CallbackVariable(cb) => {
                 if cfg!(feature = "debug") {
@@ -390,16 +402,18 @@ impl TypeLayout {
         matches!(me, TypeLayout::Class(..))
     }
 
-    pub fn get_error_hint_between_types(&self, incompatible: &Self) -> Option<&'static str> {
+    pub fn get_error_hint_between_types(&self, incompatible: &Self) -> Option<Cow<'static, str>> {
+        use Cow::*;
         use NativeType::*;
         use TypeLayout::*;
         Some(match (self, incompatible) {
-            (Native(BigInt), Native(Int)) => "try adding 'B' before a number to convert it to a bigint, eg. `99` -> `B99` or `0x6` -> `B0x6`",
-            (Native(Int), Native(Float)) => "cast this floating point value to an integer",
-            (Native(Float), Native(Int | BigInt | Byte)) => "cast this integer type to a floating point",
-            (x, Optional(Some(y))) if x == y.as_ref().as_ref() => "unwrap this optional to use its value",
-            (Native(Str(..)), _) => "call `.to_str()` on this item to convert it into a str",
-            (Function(..), Function(..)) => "check the function type that you provided",
+            (Native(BigInt), Native(Int)) => Borrowed("try adding 'B' before a number to convert it to a bigint, eg. `99` -> `B99` or `0x6` -> `B0x6`"),
+            (Native(Int), Native(Float)) => Borrowed("cast this floating point value to an integer"),
+            (Native(Float), Native(Int | BigInt | Byte)) => Borrowed("cast this integer type to a floating point"),
+            (x, Optional(Some(y))) if x == y.as_ref().as_ref() => Borrowed("unwrap this optional to use its value"),
+            (Native(Str(..)), _) => Borrowed("call `.to_str()` on this item to convert it into a str"),
+            (Function(..), Function(..)) => Borrowed("check the function type that you provided"),
+            (Alias(str, ty), y) | (y, Alias(str, ty))=> Owned(format!("`{str}` is an alias for `{ty}`, which isn't compatible with `{y}` in this context")),
             _ => return None,
         })
     }
@@ -475,21 +489,6 @@ impl TypeLayout {
                     constructor.arced_parameters(),
                     ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Class(class_ty))),
                 ))
-
-                // let params = constructor.parameters().clone();
-                // let return_type = constructor.return_type();
-
-                // let types = params.to_types();
-
-                // let no_self = types.get(1..).unwrap_or(&[]);
-
-                // let params = FunctionParameters::TypesOnly(no_self.into());
-                // let params = Arc::new(params);
-
-                // let return_type = return_type.clone();
-
-                // todo!();
-                // Some(FunctionType::new(params, return_type))
             }
             _ => None,
         }
@@ -534,7 +533,6 @@ impl TypeLayout {
             Self::Module(module_type) => {
                 let fields = &module_type.exported_members;
                 let view = fields.borrow();
-                // let fields = fields.iter();
 
                 let mut result = vec![];
 
@@ -598,18 +596,27 @@ impl TypeLayout {
     where
         T: Deref<Target = ClassType>,
     {
-        if self == rhs {
+        let lhs = if let TypeLayout::Alias(_, ty) = self {
+            ty.as_ref()
+        } else {
+            self
+        };
+
+        let rhs = if let TypeLayout::Alias(_, ty) = rhs {
+            ty.as_ref()
+        } else {
+            rhs
+        };
+
+        if lhs == rhs {
             return if flags.force_rhs_to_be_unwrapped_lhs {
                 !rhs.is_optional().0
             } else {
                 true
             };
-
-            // return true;
-            // return self.is_optional().0 ^ flags.force_lhs_to_be_unwrapped_rhs;
         }
 
-        match (self, rhs, &flags.executing_class) {
+        match (lhs, rhs, &flags.executing_class) {
             (Self::ClassSelf, TypeLayout::Class(other), Some(executing_class))
             | (TypeLayout::Class(other), Self::ClassSelf, Some(executing_class)) => {
                 executing_class.deref().eq(other)
@@ -745,54 +752,56 @@ impl TypeLayout {
         }
     }
 
-    pub fn get_output_type(mut self: &Self, mut other: &Self, op: &Op) -> Option<TypeLayout> {
+    pub fn get_output_type(&self, other: &Self, op: &Op) -> Option<TypeLayout> {
         use TypeLayout::*;
 
-        if self == other && matches!(op, Eq | Neq) {
+        let lhs = if let Alias(_, ty) = self {
+            ty.as_ref()
+        } else {
+            self
+        };
+
+        let other = if let Alias(_, ty) = other {
+            ty.as_ref()
+        } else {
+            other
+        };
+
+        if lhs == other && matches!(op, Eq | Neq) {
             return Some(TypeLayout::Native(NativeType::Bool));
         }
 
-        if let (_, Optional(None), Eq | Neq) | (Optional(None), _, Eq | Neq) = (self, other, op) {
+        if let (_, Optional(None), Eq | Neq) | (Optional(None), _, Eq | Neq) = (lhs, other, op) {
             return Some(TypeLayout::Native(NativeType::Bool));
         }
 
-        self = self.disregard_optional()?;
-        other = other.disregard_optional()?;
+        let lhs = lhs.disregard_optional()?;
+        let other = other.disregard_optional()?;
 
         match op {
-            Op::AddAssign => return self.get_output_type(other, &Op::Add),
-            Op::SubAssign => return self.get_output_type(other, &Op::Subtract),
-            Op::MulAssign => return self.get_output_type(other, &Op::Multiply),
-            Op::DivAssign => return self.get_output_type(other, &Op::Divide),
-            Op::ModAssign => return self.get_output_type(other, &Op::Modulo),
+            Op::AddAssign => return lhs.get_output_type(other, &Op::Add),
+            Op::SubAssign => return lhs.get_output_type(other, &Op::Subtract),
+            Op::MulAssign => return lhs.get_output_type(other, &Op::Multiply),
+            Op::DivAssign => return lhs.get_output_type(other, &Op::Divide),
+            Op::ModAssign => return lhs.get_output_type(other, &Op::Modulo),
             _ => (),
         }
 
         if let Op::Unwrap = op {
-            if self == other {
+            if lhs == other {
                 return Some(TypeLayout::Native(NativeType::Bool));
             }
             return None;
         }
 
-        let lhs = self.disregard_optional()?;
-        let rhs = other.disregard_optional()?;
-
         let Native(me) = lhs.get_type_recursively() else {
             return None;
         };
 
-        let Native(other) = rhs.get_type_recursively() else {
+        let Native(other) = other.get_type_recursively() else {
             return None;
         };
 
-        // if let (yes, Optional(Some(maybe)), Eq | Neq) | (Optional(Some(maybe)), yes, Eq | Neq) =
-        //     (self, other, op)
-        // {
-        //     if yes == maybe.as_ref().as_ref() {
-        //         return Some(TypeLayout::Native(NativeType::Bool));
-        //     }
-        // }
         use NativeType::*;
         use Op::*;
 
@@ -982,8 +991,6 @@ impl Parser {
 
         let ty = children.next().unwrap();
 
-        // let ty = input.children().single().unwrap();
-
         let optional_modifier = children.next();
 
         let span = ty.as_span();
@@ -993,35 +1000,75 @@ impl Parser {
 
         const UNKNOWN_TYPE: &str = "unknown type";
 
-        let x =
-            match ty.as_rule() {
-                Rule::function_type => SuccessTypeSearchResult::Owned(Function(
-                    Self::function_type(ty).details(span, &file_name, UNKNOWN_TYPE)?,
-                )),
-                Rule::list_type_open_only => SuccessTypeSearchResult::Owned(List(
-                    Self::list_type_open_only(ty).details(span, &file_name, UNKNOWN_TYPE)?,
-                )),
-                Rule::list_type => SuccessTypeSearchResult::Owned(List(
-                    Self::list_type(ty).details(span, &file_name, UNKNOWN_TYPE)?,
-                )),
-                Rule::ident => {
-                    let ty = input.user_data().get_type_from_str(ty.as_str());
+        let ty_str = ty.as_str();
 
-                    let TypeSearchResult::Ok(ty) = ty else {
-                        return Err(new_err(span, &file_name, UNKNOWN_TYPE.to_owned()));
-                    };
+        let x = match ty.as_rule() {
+            Rule::function_type => SuccessTypeSearchResult::Owned(
+                Cow::Owned(Function(Self::function_type(ty).details(
+                    span,
+                    &file_name,
+                    UNKNOWN_TYPE,
+                )?)),
+                false,
+            ),
+            Rule::list_type_open_only => SuccessTypeSearchResult::Owned(
+                Cow::Owned(List(Self::list_type_open_only(ty).details(
+                    span,
+                    &file_name,
+                    UNKNOWN_TYPE,
+                )?)),
+                false,
+            ),
+            Rule::list_type => SuccessTypeSearchResult::Owned(
+                Cow::Owned(List(Self::list_type(ty).details(
+                    span,
+                    &file_name,
+                    UNKNOWN_TYPE,
+                )?)),
+                false,
+            ),
+            Rule::ident => {
+                let ty = input.user_data().get_type_from_str(ty_str);
 
-                    ty
-                }
-                x => unreachable!("{x:?} as a type hasn't been implemented"),
-            };
+                let TypeSearchResult::Ok(ty) = ty else {
+                    return Err(new_err(span, &file_name, UNKNOWN_TYPE.to_owned()));
+                };
 
+                ty
+            }
+            x => unreachable!("{x:?} as a type hasn't been implemented"),
+        };
+
+        let is_alias = x.is_alias();
         let x = x.into_cow();
+
+        let x = if is_alias {
+            Cow::Owned(TypeLayout::Alias(ty_str.into(), Box::new(x)))
+        } else {
+            x
+        };
 
         if optional_modifier.is_some() {
             Ok(Cow::Owned(TypeLayout::Optional(Some(Box::new(x)))))
         } else {
             Ok(x)
         }
+    }
+
+    pub fn type_alias(input: Node) -> Result<TypeAlias> {
+        let mut children = input.children();
+
+        let ident_node = children.next().unwrap();
+        let ty_node = children.next().unwrap();
+
+        let ident = Self::ident(ident_node)?;
+
+        let ty = Self::r#type(ty_node)?;
+
+        log::trace!("formally aliasing `{}` = {ty}", ident.name());
+
+        input.user_data().add_type(ident.boxed_name(), ty, true);
+
+        Ok(TypeAlias)
     }
 }

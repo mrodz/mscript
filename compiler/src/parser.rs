@@ -310,8 +310,8 @@ impl AssocFileData {
         self.scopes.add_variable(dependency)
     }
 
-    pub fn add_type(&self, name: Box<str>, ty: TypeLayout) {
-        self.scopes.add_type(name, ty)
+    pub fn add_type(&self, name: Box<str>, ty: Cow<'static, TypeLayout>, is_alias: bool) {
+        self.scopes.add_type(name, ty, is_alias)
     }
 
     pub fn has_name_been_mapped(&self, dependency: &str) -> bool {
@@ -358,8 +358,6 @@ impl AssocFileData {
         skip: usize,
     ) -> Option<(Ref<Ident>, bool)> {
         let mut is_callback = false;
-
-        // let mut c = 0;
 
         for (count, scope) in scopes.enumerate() {
             if let (true, Ok(flags)) = (
