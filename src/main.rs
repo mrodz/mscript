@@ -173,7 +173,7 @@ fn main() -> Result<()> {
                         "\nExecution Profile:\n  Program finished in {}s",
                         duration.as_secs_f32()
                     )
-                    .black()
+                    .dimmed()
                 );
 
                 if let Some(profile) = maybe_profile {
@@ -183,7 +183,7 @@ fn main() -> Result<()> {
                             "    Physical memory: {} bytes\n    Virtual memory: {} bytes\n",
                             profile.physical_mem, profile.virtual_mem
                         )
-                        .black()
+                        .dimmed()
                     );
                 } else {
                     println!("{}", "    <system does not support memory stats>\n".red())
