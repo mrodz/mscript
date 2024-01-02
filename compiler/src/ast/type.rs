@@ -807,20 +807,22 @@ impl TypeLayout {
 
         let matched = match (me, other, op) {
             (Str(..), Str(..), Eq | Neq) => Bool,
+            (lhs, rhs, And | Or | Xor) => {
+                match (lhs, rhs) {
+                    (Bool, Bool) => Bool,
+                    _ => return None,
+                }
+            }
             (lhs, rhs, Gt | Lt | Gte | Lte | Eq | Neq) => {
-                if lhs == rhs {
-                    Bool
-                } else {
-                    match (lhs, rhs) {
-                        (Int, BigInt | Float | Byte) => Bool,
-                        //======================
-                        (Float, Int | BigInt | Byte) => Bool,
-                        //======================
-                        (BigInt, Int | Float | Byte) => Bool,
-                        //======================
-                        (Byte, Int | BigInt | Float) => Bool,
-                        _ => return None,
-                    }
+                match (lhs, rhs) {
+                    (Int, Int | BigInt | Float | Byte) => Bool,
+                    //======================
+                    (Float, Float | Int | BigInt | Byte) => Bool,
+                    //======================
+                    (BigInt, BigInt | Int | Float | Byte) => Bool,
+                    //======================
+                    (Byte, Byte | Int | BigInt | Float) => Bool,
+                    _ => return None,
                 }
             }
             (Int, Int, ..) => Int,
@@ -846,7 +848,6 @@ impl TypeLayout {
             (Str(_), Int | BigInt, Multiply) => Str(StrWrapper(None)),
             (Int | BigInt, Str(_), Multiply) => Str(StrWrapper(None)),
             //======================
-            (Bool, Bool, And | Or | Xor) => Bool,
             _ => return None,
         };
 
