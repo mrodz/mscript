@@ -31,7 +31,7 @@ impl std::ops::Rem for &Primitive {
         if let Some(result) = math {
             Ok(result)
         } else {
-            bail!("valid ops: number % number")
+            bail!("<{:?} % {:?}> is invalid. (valid ops are: <num % num>)", t1.ty(), t2.ty());
         }
     }
 }

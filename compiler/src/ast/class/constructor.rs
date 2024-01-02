@@ -1,4 +1,4 @@
-use std::{borrow::Cow, path::PathBuf, sync::Arc};
+use std::{borrow::Cow, path::PathBuf, sync::Arc, rc::Rc};
 
 use anyhow::Result;
 use bytecode::compilation_bridge::id::{MAKE_FUNCTION, RET};
@@ -17,7 +17,7 @@ use crate::{
 
 #[derive(Debug)]
 pub struct Constructor {
-    parameters: Arc<FunctionParameters>,
+    parameters: Rc<FunctionParameters>,
     body: Block,
     path_str: Arc<PathBuf>,
     class_name: Arc<String>,
@@ -30,7 +30,7 @@ impl Constructor {
 
     pub fn default_constructor(path_str: Arc<PathBuf>, class_name: Arc<String>) -> Self {
         Self {
-            parameters: Arc::new(FunctionParameters::Named(vec![Ident::new(
+            parameters: Rc::new(FunctionParameters::Named(vec![Ident::new(
                 "self".to_owned(),
                 Some(Cow::Owned(TypeLayout::ClassSelf)),
                 true,
@@ -116,7 +116,7 @@ impl WalkForType for Constructor {
         let parameters = input.children().next().unwrap();
         let parameters = Parser::function_parameters(parameters, false, true, true)?;
 
-        let function_type = FunctionType::new(Arc::new(parameters), ScopeReturnStatus::Void);
+        let function_type = FunctionType::new(Rc::new(parameters), ScopeReturnStatus::Void);
 
         let ident = Ident::new(
             "$constructor".to_owned(),
@@ -156,7 +156,7 @@ impl Parser {
         // Using "_" or not saving it as a variable causes the scope to pop instantly.
         let _scope_handle = input.user_data().push_function(ScopeReturnStatus::Void);
 
-        let parameters = Arc::new(Self::function_parameters(parameters, true, true, true).to_err_vec()?);
+        let parameters = Rc::new(Self::function_parameters(parameters, true, true, true).to_err_vec()?);
 
         let body = children.next().unwrap();
         let body = Self::block(body)?;

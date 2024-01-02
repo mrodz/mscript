@@ -46,7 +46,7 @@ impl std::ops::Mul for &Primitive {
             (Vector(ref x), BigInt(y)) => {
                 vector!(raw repeat_vec(x.borrow().as_ref(), (*y).try_into()?)?)
             }
-            _ => bail!("valid ops: number * number, str * number, vec * number"),
+            (x, y) => bail!("<{:?} * {:?}> is invalid. (valid ops are: <num * num>, <str * int>, <str * bigint>, <int * str>, <bigint * str>, <vec * int>, <vec * bigint>)", x.ty(), y.ty()),
         })
     }
 }

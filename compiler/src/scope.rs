@@ -3,7 +3,7 @@ use std::{
     cell::{Ref, RefCell},
     collections::{HashMap, HashSet},
     fmt::Display,
-    sync::Arc,
+    rc::Rc,
 };
 
 use anyhow::{bail, Result};
@@ -13,7 +13,7 @@ use crate::ast::{ClassType, FunctionParameters, Ident, StrWrapper, TypeLayout};
 #[derive(Debug, Clone, PartialEq, Hash)]
 pub(crate) enum ScopeType {
     File,
-    Function(Option<Arc<FunctionParameters>>),
+    Function(Option<Rc<FunctionParameters>>),
     IfBlock,
     ElseBlock,
     WhileLoop,
@@ -206,7 +206,10 @@ impl Scopes {
         x.last_mut().unwrap().add_type(name, ty);
     }
 
-    pub(crate) fn register_function_parameters(&self, parameters: Arc<FunctionParameters>) -> Option<Arc<FunctionParameters>> {
+    pub(crate) fn register_function_parameters(
+        &self,
+        parameters: Rc<FunctionParameters>,
+    ) -> Option<Rc<FunctionParameters>> {
         let mut view = self.0.borrow_mut();
         for scope in view.iter_mut().rev() {
             if let ScopeType::Function(ref mut function) = scope.ty {

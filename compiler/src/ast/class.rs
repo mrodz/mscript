@@ -4,7 +4,7 @@ mod constructor;
 mod member_function;
 mod member_variable;
 
-use std::{borrow::Cow, fmt::Display, path::PathBuf, sync::Arc};
+use std::{borrow::Cow, fmt::Display, path::PathBuf, sync::Arc, rc::Rc};
 
 use anyhow::Result;
 
@@ -137,7 +137,7 @@ impl ClassType {
 
         // use default constructor if a class doesn't have one.
 
-        let empty_parameters = Arc::new(FunctionParameters::TypesOnly(vec![]));
+        let empty_parameters = Rc::new(FunctionParameters::TypesOnly(vec![]));
 
         FunctionType::new(empty_parameters, return_type)
     }

@@ -26,6 +26,7 @@ macro_rules! primitive {
 
         #[derive(Debug, Eq, PartialEq, Clone)]
         pub enum Type {
+            Nil,
             $(
                 $variant,
             )*
@@ -34,6 +35,7 @@ macro_rules! primitive {
         impl Primitive {
             pub fn ty(&self) -> Type {
                 match self {
+                    Primitive::Optional(None) => Type::Nil,
                     $(
                         Primitive::$variant(_) => Type::$variant,
                     )*

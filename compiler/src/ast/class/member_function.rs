@@ -1,4 +1,4 @@
-use std::{borrow::Cow, path::PathBuf, sync::Arc};
+use std::{borrow::Cow, path::PathBuf, sync::Arc, rc::Rc};
 
 use anyhow::Result;
 use bytecode::compilation_bridge::id::{MAKE_FUNCTION, RET};
@@ -17,7 +17,7 @@ use crate::{
 #[derive(Debug)]
 pub(crate) struct MemberFunction {
     ident: Ident,
-    parameters: Arc<FunctionParameters>,
+    parameters: Rc<FunctionParameters>,
     body: Block,
     path_str: Arc<PathBuf>,
     class_name: Arc<String>,
@@ -94,7 +94,7 @@ impl WalkForType for MemberFunction {
             ScopeReturnStatus::Void
         };
 
-        let function_type = FunctionType::new(Arc::new(parameters), return_type);
+        let function_type = FunctionType::new(Rc::new(parameters), return_type);
 
         ident.link_force_no_inherit(
             input.user_data(),
@@ -145,7 +145,7 @@ impl Parser {
         // Using "_" or not saving it as a variable causes the scope to pop instantly.
         let _scope_handle = input.user_data().push_function(return_type.clone());
 
-        let parameters = Arc::new(Self::function_parameters(parameters, true, true, true).to_err_vec()?);
+        let parameters = Rc::new(Self::function_parameters(parameters, true, true, true).to_err_vec()?);
         let body = Self::block(body)?;
         let function_type = FunctionType::new(parameters.clone(), return_type);
 

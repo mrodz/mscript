@@ -92,7 +92,7 @@ impl AssocFileData {
         bail!("no loop found")
     }
 
-    pub fn register_function_parameters_to_scope(&self, parameters: Arc<FunctionParameters>) -> Option<Arc<FunctionParameters>> {
+    pub fn register_function_parameters_to_scope(&self, parameters: Rc<FunctionParameters>) -> Option<Rc<FunctionParameters>> {
         self.scopes.register_function_parameters(parameters)
     }
 
@@ -232,7 +232,7 @@ impl AssocFileData {
 
     pub fn get_current_executing_function(
         &self,
-    ) -> Result<(Ref<Scope>, Ref<Arc<FunctionParameters>>)> {
+    ) -> Result<(Ref<Scope>, Ref<Rc<FunctionParameters>>)> {
         let iter = self.scopes.iter();
 
         for scope in iter {

@@ -30,7 +30,7 @@ impl std::ops::Add for &Primitive {
                 x.extend_from_slice(y.borrow().as_ref());
                 vector!(raw x)
             }
-            _ => bail!("valid ops: number + number, str + any, any + str, vec + vec"),
+            (x, y) => bail!("<{:?} + {:?}> is invalid. (valid ops are: <num + num>, <str + any>, <any + str>, <vec + vec>", x.ty(), y.ty()),
         })
     }
 }
