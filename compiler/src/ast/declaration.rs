@@ -9,9 +9,9 @@ use crate::{
 };
 
 use super::{
-    Assertion, Assignment, Break, Class, CompilationState, Compile, CompiledItem, Continue,
-    Dependencies, Dependency, IfStatement, Import, NumberLoop, PrintStatement, Reassignment,
-    ReturnStatement, Value, WhileLoop, r#type::TypeAlias,
+    r#type::TypeAlias, Assertion, Assignment, Break, Class, CompilationState, Compile,
+    CompiledItem, Continue, Dependencies, Dependency, IfStatement, Import, NumberLoop,
+    PrintStatement, Reassignment, ReturnStatement, Value, WhileLoop,
 };
 
 #[derive(Debug)]
@@ -30,7 +30,7 @@ pub(crate) enum Declaration {
     Class(Class),
     Value(Value),
     Import(Import),
-    TypeAlias(TypeAlias)
+    TypeAlias(TypeAlias),
 }
 
 impl Dependencies for Declaration {

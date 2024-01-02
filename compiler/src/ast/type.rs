@@ -23,7 +23,7 @@ use super::{
     list::{ListBound, ListType},
     map_err,
     math_expr::Op,
-    FunctionParameters, Ident, Value, WalkForType, Dependencies, Compile,
+    Compile, Dependencies, FunctionParameters, Ident, Value, WalkForType,
 };
 
 pub(crate) struct SupportedTypesWrapper(Box<[Cow<'static, TypeLayout>]>);
@@ -403,9 +403,9 @@ impl TypeLayout {
     }
 
     pub fn get_error_hint_between_types(&self, incompatible: &Self) -> Option<Cow<'static, str>> {
+        use Cow::*;
         use NativeType::*;
         use TypeLayout::*;
-        use Cow::*;
         Some(match (self, incompatible) {
             (Native(BigInt), Native(Int)) => Borrowed("try adding 'B' before a number to convert it to a bigint, eg. `99` -> `B99` or `0x6` -> `B0x6`"),
             (Native(Int), Native(Float)) => Borrowed("cast this floating point value to an integer"),
@@ -752,44 +752,53 @@ impl TypeLayout {
         }
     }
 
-    pub fn get_output_type(mut self: &Self, mut other: &Self, op: &Op) -> Option<TypeLayout> {
+    pub fn get_output_type(&self, other: &Self, op: &Op) -> Option<TypeLayout> {
         use TypeLayout::*;
 
-        if self == other && matches!(op, Eq | Neq) {
+        let lhs = if let Alias(_, ty) = self {
+            ty.as_ref()
+        } else {
+            self
+        };
+
+        let other = if let Alias(_, ty) = other {
+            ty.as_ref()
+        } else {
+            other
+        };
+
+        if lhs == other && matches!(op, Eq | Neq) {
             return Some(TypeLayout::Native(NativeType::Bool));
         }
 
-        if let (_, Optional(None), Eq | Neq) | (Optional(None), _, Eq | Neq) = (self, other, op) {
+        if let (_, Optional(None), Eq | Neq) | (Optional(None), _, Eq | Neq) = (lhs, other, op) {
             return Some(TypeLayout::Native(NativeType::Bool));
         }
 
-        self = self.disregard_optional()?;
-        other = other.disregard_optional()?;
+        let lhs = lhs.disregard_optional()?;
+        let other = other.disregard_optional()?;
 
         match op {
-            Op::AddAssign => return self.get_output_type(other, &Op::Add),
-            Op::SubAssign => return self.get_output_type(other, &Op::Subtract),
-            Op::MulAssign => return self.get_output_type(other, &Op::Multiply),
-            Op::DivAssign => return self.get_output_type(other, &Op::Divide),
-            Op::ModAssign => return self.get_output_type(other, &Op::Modulo),
+            Op::AddAssign => return lhs.get_output_type(other, &Op::Add),
+            Op::SubAssign => return lhs.get_output_type(other, &Op::Subtract),
+            Op::MulAssign => return lhs.get_output_type(other, &Op::Multiply),
+            Op::DivAssign => return lhs.get_output_type(other, &Op::Divide),
+            Op::ModAssign => return lhs.get_output_type(other, &Op::Modulo),
             _ => (),
         }
 
         if let Op::Unwrap = op {
-            if self == other {
+            if lhs == other {
                 return Some(TypeLayout::Native(NativeType::Bool));
             }
             return None;
         }
 
-        let lhs = self.disregard_optional()?;
-        let rhs = other.disregard_optional()?;
-
         let Native(me) = lhs.get_type_recursively() else {
             return None;
         };
 
-        let Native(other) = rhs.get_type_recursively() else {
+        let Native(other) = other.get_type_recursively() else {
             return None;
         };
 
@@ -993,28 +1002,42 @@ impl Parser {
 
         let ty_str = ty.as_str();
 
-        let x =
-            match ty.as_rule() {
-                Rule::function_type => SuccessTypeSearchResult::Owned(Cow::Owned(Function(
-                    Self::function_type(ty).details(span, &file_name, UNKNOWN_TYPE)?,
-                )), false),
-                Rule::list_type_open_only => SuccessTypeSearchResult::Owned(Cow::Owned(List(
-                    Self::list_type_open_only(ty).details(span, &file_name, UNKNOWN_TYPE)?,
-                )), false),
-                Rule::list_type => SuccessTypeSearchResult::Owned(Cow::Owned(List(
-                    Self::list_type(ty).details(span, &file_name, UNKNOWN_TYPE)?,
-                )), false),
-                Rule::ident => {
-                    let ty = input.user_data().get_type_from_str(ty_str);
+        let x = match ty.as_rule() {
+            Rule::function_type => SuccessTypeSearchResult::Owned(
+                Cow::Owned(Function(Self::function_type(ty).details(
+                    span,
+                    &file_name,
+                    UNKNOWN_TYPE,
+                )?)),
+                false,
+            ),
+            Rule::list_type_open_only => SuccessTypeSearchResult::Owned(
+                Cow::Owned(List(Self::list_type_open_only(ty).details(
+                    span,
+                    &file_name,
+                    UNKNOWN_TYPE,
+                )?)),
+                false,
+            ),
+            Rule::list_type => SuccessTypeSearchResult::Owned(
+                Cow::Owned(List(Self::list_type(ty).details(
+                    span,
+                    &file_name,
+                    UNKNOWN_TYPE,
+                )?)),
+                false,
+            ),
+            Rule::ident => {
+                let ty = input.user_data().get_type_from_str(ty_str);
 
-                    let TypeSearchResult::Ok(ty) = ty else {
-                        return Err(new_err(span, &file_name, UNKNOWN_TYPE.to_owned()));
-                    };
+                let TypeSearchResult::Ok(ty) = ty else {
+                    return Err(new_err(span, &file_name, UNKNOWN_TYPE.to_owned()));
+                };
 
-                    ty
-                }
-                x => unreachable!("{x:?} as a type hasn't been implemented"),
-            };
+                ty
+            }
+            x => unreachable!("{x:?} as a type hasn't been implemented"),
+        };
 
         let is_alias = x.is_alias();
         let x = x.into_cow();
@@ -1045,7 +1068,6 @@ impl Parser {
         log::trace!("formally aliasing `{}` = {ty}", ident.name());
 
         input.user_data().add_type(ident.boxed_name(), ty, true);
-
 
         Ok(TypeAlias)
     }

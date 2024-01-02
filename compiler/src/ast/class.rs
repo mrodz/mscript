@@ -258,11 +258,9 @@ impl Parser {
             Self::class_body(body_node)?
         };
 
-        input.user_data().add_type(
-            ident.name().into(),
-            ident.ty().unwrap().clone(),
-            false
-        );
+        input
+            .user_data()
+            .add_type(ident.name().into(), ident.ty().unwrap().clone(), false);
 
         input.user_data().add_dependency(&ident);
 

@@ -227,18 +227,29 @@ impl Scopes {
     pub(crate) fn get_type_from_str(&self, str: &str) -> TypeSearchResult {
         use crate::ast::NativeType::*;
         use SuccessTypeSearchResult::*;
-        
+
         match str {
-            "int" => return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(Int)), false)),
-            "str" => {
-                return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(Str(
-                    StrWrapper::unknown_size(),
-                ))), false))
+            "int" => {
+                return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(Int)), false))
             }
-            "float" => return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(Float)), false)),
-            "bool" => return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(Bool)), false)),
-            "bigint" => return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(BigInt)), false)),
-            "byte" => return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(Byte)), false)),
+            "str" => {
+                return TypeSearchResult::Ok(Owned(
+                    Cow::Owned(TypeLayout::Native(Str(StrWrapper::unknown_size()))),
+                    false,
+                ))
+            }
+            "float" => {
+                return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(Float)), false))
+            }
+            "bool" => {
+                return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(Bool)), false))
+            }
+            "bigint" => {
+                return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(BigInt)), false))
+            }
+            "byte" => {
+                return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(Byte)), false))
+            }
             "Self" => return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::ClassSelf), false)),
             _ => (),
         }
@@ -253,9 +264,7 @@ impl Scopes {
             .ok();
 
             if let Some(bundle) = maybe_ty {
-                let (ty, is_alias) = Ref::map_split(bundle, |bundle| {
-                    (&bundle.0, &bundle.1)
-                });
+                let (ty, is_alias) = Ref::map_split(bundle, |bundle| (&bundle.0, &bundle.1));
 
                 return TypeSearchResult::Ok(InScope(ty, *is_alias));
             }
