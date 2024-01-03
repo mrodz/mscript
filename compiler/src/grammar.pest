@@ -115,8 +115,9 @@ path_sep = { "/" }
 import_path = @{ path_feature ~ ("/" ~ path_feature)* ~ ".ms"? }
 
 import_standard = { "import" ~ import_path }
+import_names = ${ "import" ~ WHITESPACE ~ (ident ~  ("," ~ ident)*) ~ WHITESPACE ~ "from" ~ WHITESPACE ~ import_path }
 
-import = { import_standard }
+import = { import_names | import_standard }
 
 dot_name_lookup = { ident }
 dot_function_call = { ident ~ callable }

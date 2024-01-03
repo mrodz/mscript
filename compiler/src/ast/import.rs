@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use crate::{
     instruction,
     parser::{AssocFileData, Node, Parser, Rule},
-    BytecodePathStr, VecErr,
+    BytecodePathStr, CompilationError, VecErr,
 };
 
 use super::{new_err, Compile, Dependencies, Ident, TypeLayout};
@@ -18,6 +18,11 @@ pub(crate) enum Import {
     Standard {
         path: PathBuf,
         store: Ident,
+        cached: bool,
+    },
+    Names {
+        path: PathBuf,
+        names: Vec<Ident>,
         cached: bool,
     },
 }
@@ -43,9 +48,39 @@ impl Compile for Import {
 
                 let module_loader =
                     format!("{}#__module__", path.with_extension("mmm").bytecode_str());
+
                 Ok(vec![
                     instruction!(module_entry module_loader),
                     instruction!(store(store.name())),
+                ])
+            }
+            Self::Names {
+                path,
+                names,
+                cached,
+            } => {
+                log::debug!("@IMPORT(names) -- using cached: {cached}");
+
+                if !cached {
+                    log::debug!("queuing compilation of {path:?}");
+
+                    state.queue_compilation(path.clone());
+                }
+
+                let module_loader =
+                    format!("{}#__module__", path.with_extension("mmm").bytecode_str());
+
+                let mut names = names
+                    .iter()
+                    .map(Ident::name)
+                    .flat_map(|x| [x, " "])
+                    .collect::<String>();
+                names.pop();
+
+                Ok(vec![
+                    instruction!(module_entry module_loader),
+                    instruction!(split_lookup_store names),
+                    instruction!(pop),
                 ])
             }
         }
@@ -100,28 +135,91 @@ impl Parser {
 
         let path_node = children.next().unwrap();
 
+        let path_span = path_node.as_span();
+
         let path = Self::import_path(path_node).to_err_vec()?;
 
-        let (module_type, cached) = input.user_data().import(path.with_extension("ms"))?.clone();
-
         let no_extension = path.with_extension("");
-        let file_name = no_extension.file_name().expect("not a file");
+        let file_name = no_extension
+            .file_name()
+            .expect("not a file")
+            .to_string_lossy();
+
+        if input.user_data().has_name_been_mapped(&file_name) {
+            return Err(vec![new_err(
+                path_span,
+                &input.user_data().get_source_file_name(),
+                "duplicate: this name is already in use".to_owned(),
+            )]);
+        }
+
+        let (module_type, cached) = input.user_data().import(path.with_extension("ms"))?;
 
         let ident = Ident::new(
-            file_name.to_string_lossy().into_owned(),
+            file_name.into_owned(),
             Some(Cow::Owned(TypeLayout::Module(module_type))),
             true,
         );
 
-        // let module_type = file.for_type().details(input.as_span(), &input.user_data().get_source_file_name(), "Could not get the type of this module.").to_err_vec()?;
-
         input.user_data().add_dependency(&ident);
-        // ident.link_force_no_inherit(input.user_data(), Cow::Owned(module_type)).to_err_vec()?;
 
-        // Self::file
         Ok(Import::Standard {
             path,
             store: ident,
+            cached,
+        })
+    }
+
+    pub fn import_names(input: Node) -> Result<Import, Vec<anyhow::Error>> {
+        let path_node = input.children().last().unwrap();
+        let path = Self::import_path(path_node).to_err_vec()?;
+        let (module_type, cached) = input.user_data().import(path.with_extension("ms"))?;
+
+        let mut names = vec![];
+
+        for child in input.children() {
+            match child.as_rule() {
+                Rule::ident => {
+                    let maybe_property = child.as_str();
+
+                    let property = module_type
+                        .get_property(maybe_property)
+                        .details_lazy_message(
+                            child.as_span(),
+                            &input.user_data().get_source_file_name(),
+                            || {
+                                format!(
+                                    "{} has no exported member `{maybe_property}`",
+                                    module_type.name().bytecode_str()
+                                )
+                            },
+                        )
+                        .to_err_vec()?;
+
+                    if input.user_data().has_name_been_mapped(maybe_property) {
+                        return Err(vec![new_err(
+                            child.as_span(),
+                            &input.user_data().get_source_file_name(),
+                            "duplicate: this name is already in use".to_owned(),
+                        )]);
+                    }
+
+                    let ident = property.to_owned();
+
+                    input.user_data().add_dependency(&ident);
+
+                    names.push(ident);
+                }
+                Rule::import_path => {
+                    break;
+                }
+                unknown => unreachable!("{unknown:?}"),
+            }
+        }
+
+        Ok(Import::Names {
+            path,
+            names,
             cached,
         })
     }
@@ -131,6 +229,7 @@ impl Parser {
 
         match unwrapped.as_rule() {
             Rule::import_standard => Self::import_standard(unwrapped),
+            Rule::import_names => Self::import_names(unwrapped),
             x => unreachable!("{x:?}"),
         }
     }

@@ -133,3 +133,56 @@ fn different_call_forms() {
     .run()
     .unwrap()
 }
+
+#[test]
+fn import_name() {
+    EvalEnvironment::entrypoint(
+        "main.ms",
+        r#"
+        import Dog from doggies
+        import Cat from kitties.ms
+
+        pup1 = Dog("Scout")
+        cat1 = Cat(999)
+
+        import doggies
+        import kitties
+
+        pup2 = doggies.Dog("Scout")
+        cat2 = kitties.Cat(999)
+
+        assert cat1.cuteness == cat2.cuteness
+        assert pup1.name == pup2.name
+
+        assert Cat == kitties.Cat
+        assert Dog == doggies.Dog
+    "#,
+    )
+    .unwrap()
+    .add(
+        "doggies.ms",
+        r#"
+        export class Dog {
+            constructor(self, name: str) {
+                self.name = name
+            }
+            name: str
+        }
+    "#,
+    )
+    .unwrap()
+    .add(
+        "kitties.ms",
+        r#"
+        export class Cat {
+            cuteness: int
+            constructor(self, cuteness: int) {
+                self.cuteness = cuteness
+            }
+        }
+    "#,
+    )
+    .unwrap()
+    .run()
+    .unwrap()
+}

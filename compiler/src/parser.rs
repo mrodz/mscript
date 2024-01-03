@@ -21,6 +21,7 @@ use crate::{
 #[allow(unused)]
 pub(crate) type Node<'i> = pest_consume::Node<'i, Rule, Rc<AssocFileData>>;
 
+/// The AST parser for MScript. Various `impl` blocks define how each source code tree node should operate.
 #[derive(ParserDerive)]
 #[grammar = "grammar.pest"]
 pub(crate) struct Parser;
@@ -30,14 +31,12 @@ pub(crate) struct AssocFileData {
     scopes: Scopes,
     file_name: Arc<PathBuf>,
     source_name: Arc<PathBuf>,
-    // class_id_c: RwLock<usize>,
     exports: RefCell<Option<Arc<RefCell<Vec<Ident>>>>>,
     files: FileManager,
 }
 
 impl AssocFileData {
     pub fn new(destination_unknown: impl AsRef<Path>, files_loaded: FileManager) -> Self {
-        // let destination: Path = destination_name.into();
         let destination = destination_unknown.as_ref();
 
         let dst_file_ext = destination
@@ -51,7 +50,6 @@ impl AssocFileData {
             scopes: Scopes::new(),
             file_name: Arc::new(destination.to_path_buf()),
             source_name: Arc::new(destination.with_extension("ms").to_path_buf()),
-            // class_id_c: RwLock::new(0),
             exports: RefCell::new(None),
             files: files_loaded,
         }
@@ -119,8 +117,6 @@ impl AssocFileData {
         };
 
         let with_ext = path.with_extension("mmm");
-
-        // let owned = path.to_owned()
 
         let root = root_ast_from_str(&path, with_ext, &source, self.files.clone())?;
 
@@ -194,14 +190,6 @@ impl AssocFileData {
     ) -> Option<Ref<ClassType>> {
         self.scopes.get_type_of_executing_class(skip_n_frames)
     }
-
-    /// This function should **ONLY** be called when creating the AST Node for a Class Type.
-    // pub fn request_class_id(&self) -> usize {
-    //     let mut class_id = self.class_id_c.write().unwrap();
-    //     let result = *class_id;
-    //     *class_id += 1;
-    //     result
-    // }
 
     pub fn get_backing_export_struct(&self) -> Option<Arc<RefCell<Vec<Ident>>>> {
         let mut window = self.exports.borrow_mut();

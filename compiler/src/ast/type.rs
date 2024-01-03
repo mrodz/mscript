@@ -12,7 +12,7 @@ use std::{
     fmt::{Debug, Display},
     hash::Hash,
     ops::Deref,
-    path::PathBuf,
+    path::{Path, PathBuf},
     rc::Rc,
     sync::Arc,
 };
@@ -195,6 +195,10 @@ impl ModuleType {
             exported_members.iter().find(|&field| field.name() == name)
         })
         .ok()
+    }
+
+    pub fn name(&self) -> &Path {
+        self.name.as_path()
     }
 
     pub fn from_node(input: &Node) -> Result<Self> {
@@ -807,12 +811,10 @@ impl TypeLayout {
 
         let matched = match (me, other, op) {
             (Str(..), Str(..), Eq | Neq) => Bool,
-            (lhs, rhs, And | Or | Xor) => {
-                match (lhs, rhs) {
-                    (Bool, Bool) => Bool,
-                    _ => return None,
-                }
-            }
+            (lhs, rhs, And | Or | Xor) => match (lhs, rhs) {
+                (Bool, Bool) => Bool,
+                _ => return None,
+            },
             (lhs, rhs, Gt | Lt | Gte | Lte | Eq | Neq) => {
                 match (lhs, rhs) {
                     (Int, Int | BigInt | Float | Byte) => Bool,

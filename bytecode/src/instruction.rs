@@ -799,6 +799,30 @@ pub mod implementations {
         Ok(())
     }
 
+    pub(crate) fn split_lookup_store(ctx: &mut Ctx, args: &[String]) -> Result<()> {
+        let Some(top) = ctx.get_last_op_item() else {
+            bail!("`split_lookup_store` expected an item at the top of the operating stack");
+        };
+
+        match top {
+            Primitive::Module(module) => {
+                let module = module.clone(); // to please borrow checker
+                let view = module.borrow();
+
+                for name in args {
+                    let Some(bundle) = view.get(name) else {
+                        bail!("{name} does not exist on {view}");
+                    };
+
+                    ctx.register_variable_local(name.to_owned(), bundle.primitive().clone())?;
+                }
+            }
+            unknown => bail!("`split_lookup_store` cannot be used on {unknown}"),
+        }
+
+        Ok(())
+    }
+
     pub(crate) fn arg(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let Some(first) = args.first() else {
             bail!("expected one argument")
@@ -1218,8 +1242,8 @@ pub mod implementations {
             bail!("equ requires only 2 items in the local stack")
         }
 
-        let first = ctx.pop().unwrap();
-        let second = ctx.pop().unwrap();
+        let first = unsafe { ctx.pop().unwrap().move_out_of_heap_primitive() };
+        let second = unsafe { ctx.pop().unwrap().move_out_of_heap_primitive() };
 
         let result = first == second;
 
@@ -1232,8 +1256,8 @@ pub mod implementations {
             bail!("equ requires only 2 items in the local stack")
         }
 
-        let first = ctx.pop().unwrap();
-        let second = ctx.pop().unwrap();
+        let first = unsafe { ctx.pop().unwrap().move_out_of_heap_primitive() };
+        let second = unsafe { ctx.pop().unwrap().move_out_of_heap_primitive() };
 
         let result = first.equals(&second)?;
 
@@ -1246,8 +1270,8 @@ pub mod implementations {
             bail!("neq requires only 2 items in the local stack");
         }
 
-        let first = ctx.pop().unwrap();
-        let second = ctx.pop().unwrap();
+        let first = unsafe { ctx.pop().unwrap().move_out_of_heap_primitive() };
+        let second = unsafe { ctx.pop().unwrap().move_out_of_heap_primitive() };
 
         let result = !first.equals(&second)?;
 
