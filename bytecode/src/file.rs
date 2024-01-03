@@ -45,7 +45,7 @@ impl MScriptFileBuilder {
     }
 
     pub fn add_function(&mut self, name: Rc<String>, bytecode: Box<[Instruction]>) {
-        log::debug!("[BLDR ADD_FN @ {}] `{name}`", self.building.path);
+        log::trace!("[BLDR ADD_FN @ {}] `{name}`", self.building.path);
 
         let functions = &self.building.functions;
 

@@ -44,6 +44,14 @@ impl Parser {
 
         for (idx, child) in children.enumerate() {
             if idx == expected_types.len() {
+                if idx == 0 {
+                    return Err(vec![new_err(
+                        child_span,
+                        &input.user_data().get_source_file_name(),
+                        "this function specifies zero parameters, but found > 0 arguments"
+                            .to_owned(),
+                    )]);
+                }
                 break;
             }
 

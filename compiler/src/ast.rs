@@ -394,7 +394,25 @@ impl CompilationState {
         file_manager: &FileManager,
         driver: &mut impl FnMut(&File, Vec<CompiledItem>) -> Result<()>,
     ) -> Result<(), Vec<anyhow::Error>> {
+        {
+            let completed = file_manager.completed_ast.borrow();
+            log::debug!("[cc] FINAL COMPILATION LIST: {:?}", completed.keys().map(|x| x.display()).collect::<Vec<_>>());    
+
+        }
+
+
+        self.compile_recursive_interior(file_manager, driver, 1)
+    }
+
+    pub fn compile_recursive_interior(
+        &self,
+        file_manager: &FileManager,
+        driver: &mut impl FnMut(&File, Vec<CompiledItem>) -> Result<()>,
+        depth: usize,
+    ) -> Result<(), Vec<anyhow::Error>> {
         let mut view = self.compilation_queue.borrow_mut();
+
+        dbg!(&view);
 
         let mut node @ Some(..) = view.take() else {
             return Ok(());
@@ -413,11 +431,13 @@ impl CompilationState {
                 })
                 .to_err_vec()?;
 
+            log::info!("[cc] {} {}", "@".repeat(depth), file.location.display());
+
             file.compile(&state_for_file)?;
 
             driver(&file, state_for_file.take_function_buffer()).to_err_vec()?;
 
-            state_for_file.compile_recursive(file_manager, driver)?;
+            state_for_file.compile_recursive_interior(file_manager, driver, depth + 1)?;
 
             node = h.next;
         }
@@ -650,6 +670,10 @@ pub(crate) trait Dependencies {
 pub fn new_err(span: Span, file_name: &str, message: String) -> Error {
     use pest::error::ErrorVariant::CustomError;
     use pest_consume::Error as PE;
+
+    let (line, col) = span.start_pos().line_col();
+    log::error!("{file_name}:{line}:{col} > {message} > {:?}", span.as_str());
+
     let custom_error = PE::<()>::new_from_span(CustomError { message }, span).with_path(file_name);
 
     anyhow!(custom_error)

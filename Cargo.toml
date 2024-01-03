@@ -22,6 +22,7 @@ debug_runtime = ["bytecode/debug"]
 debug_compiler = ["compiler/debug"]
 debug = ["bytecode/debug", "compiler/debug"]
 skip_breakpoint = ["bytecode/skip_breakpoint"]
+output_hr = ["compiler/output_hr"]
 
 [workspace]
 members = ["bytecode", "bytecode_dev_transpiler", "compiler"]

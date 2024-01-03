@@ -225,7 +225,7 @@ impl Program {
                         log::error!("Probable circular import (caused by {request:?} ... nonrealized cache hit on {view:?})");
                         bail!("Attempting to import `{path}` gave a partially unitialized module, which is likely a sign of a circular dependency graph")
                     } else {
-                        log::debug!("runtime @import cache miss on {path}");
+                        log::info!("runtime @import cache miss on {path}");
                     }
                 }
 
@@ -263,13 +263,13 @@ impl Program {
 
         let path = &*rc_of_self.entrypoint.upgrade().unwrap();
 
-        log::debug!("Loading instructions from file...");
+        log::info!("Loading instructions from file...");
         let entrypoint = rc_of_self.get_file(path)?;
-        log::debug!("Loaded instructions from file");
+        log::info!("Loaded instructions from file");
 
-        log::debug!("Creating call stack...");
+        log::trace!("Creating call stack...");
         let stack = Rc::new(RefCell::new(Stack::new()));
-        log::debug!("Created call stack");
+        log::trace!("Created call stack");
 
         // let module_function = format!("{}#main", entrypoint.path());
 

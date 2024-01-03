@@ -55,3 +55,33 @@ fn many_types() {
     .run()
     .unwrap()
 }
+
+#[test]
+fn import_type() {
+    EvalEnvironment::entrypoint(
+        "main.ms",
+        r#"
+		import type Floof from alias
+
+		cute = Floof("Scout")
+		assert cute.name == "Scout"
+	"#,
+    )
+    .unwrap()
+    .add(
+        "alias.ms",
+        r#"
+		export class Dog {
+			constructor(self, name: str) {
+				self.name = name
+			}
+			name: str
+		}
+
+		export type Floof Dog
+	"#,
+    )
+    .unwrap()
+    .run()
+    .unwrap()
+}

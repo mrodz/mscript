@@ -260,7 +260,7 @@ impl Parser {
 
         input
             .user_data()
-            .add_type(ident.name().into(), ident.ty().unwrap().clone(), false);
+            .add_type(ident.name().into(), ident.ty().unwrap().clone());
 
         input.user_data().add_dependency(&ident);
 

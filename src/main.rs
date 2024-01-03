@@ -48,7 +48,30 @@ fn compile(
     }
 }
 
-fn transpile_command(path: &String) -> Result<Box<str>> {
+fn clean_command(path: &str) -> Result<()> {
+    let path = Path::new(path);
+
+    println!("Cleaning {}", path.display());
+
+    let paths = std::fs::read_dir(path)?;
+    
+    let mut removed = 0;
+
+    for path in paths {
+        let path = path?;
+        if Path::new(&path.file_name()).extension().is_some_and(|ext| ext == "mmm") {
+            std::fs::remove_file(path.path())?;
+            println!("clean {}", path.path().display().to_string().blue());
+            removed += 1;
+        }
+    }
+
+    println!("Removed {removed} files");
+
+    Ok(())
+}
+
+fn transpile_command(path: &str) -> Result<Box<str>> {
     if !bytecode_dev_transpiler::is_path_a_transpiled_source(path) {
         bail!("The standard extension for file transpilation sources is `.mmm.transpiled`. Please check your file extensions. (Found {path})")
     }
@@ -272,6 +295,9 @@ fn main() -> Result<()> {
 
             let output_bin = matches!(output_format, CompilationTargets::Binary);
             compile(&path, output_bin, !quick, true, false)?;
+        }
+        Commands::Clean { path } => {
+            clean_command(&path)?;
         }
     }
 

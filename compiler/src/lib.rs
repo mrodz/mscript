@@ -10,7 +10,7 @@ mod tests;
 use std::borrow::Cow;
 use std::cell::{Ref, RefCell};
 use std::collections::{HashMap, HashSet};
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 use std::fs::File;
 use std::io::{BufReader, Read, Write};
 use std::path::{Path, PathBuf};
@@ -25,10 +25,10 @@ use bytecode::Program;
 use indicatif::{MultiProgress, ProgressBar, ProgressFinish, ProgressStyle};
 
 use once_cell::sync::{Lazy, OnceCell};
-use parser::{AssocFileData, File as ASTFile, Node};
+use parser::{AssocFileData, File as ASTFile, ImportResult, Node};
 use pest::Span;
 
-use crate::ast::CompiledItem;
+use crate::ast::{CompiledItem, IntoType, TypeLayout};
 use crate::parser::{root_node_from_str, Parser};
 
 #[derive(Debug)]
@@ -189,7 +189,7 @@ impl<T, E: Into<anyhow::Error>> VecErr<T> for std::result::Result<T, E> {
 #[derive(Debug, Clone)]
 pub(crate) struct FileManager {
     comptime_preloaded: Option<Rc<RefCell<HashMap<&'static str, &'static str>>>>,
-    loaded_modules: Rc<RefCell<HashMap<Arc<PathBuf>, ModuleType>>>,
+    loaded_modules: Rc<RefCell<HashMap<Arc<PathBuf>, ImportResult>>>,
     completed_ast: Rc<RefCell<HashMap<Arc<PathBuf>, ASTFile>>>,
 }
 
@@ -275,51 +275,100 @@ impl FileManager {
             .unwrap_or_default()
     }
 
-    pub fn get_module_type(&self, path: &PathBuf) -> Option<Ref<ModuleType>> {
+    pub fn get_module_type(&self, path: &PathBuf) -> Option<Ref<ImportResult>> {
         Ref::filter_map(self.loaded_modules.borrow(), |loaded_modules| {
             loaded_modules.get(path)
         })
         .ok()
     }
 
-    pub fn register_module(&self, path: Arc<PathBuf>, module: ModuleType) -> Ref<ModuleType> {
+    pub fn get_incomplete_module(&self, path: &PathBuf) -> Option<ImportResult> {
+        let ast = self.completed_ast.borrow();
+        let file = ast.get(path)?;
+
+        let Ok(TypeLayout::Module(module_type)) = file.for_type() else {
+            unreachable!()
+        };
+
+        Some(ImportResult::new(
+            module_type,
+            false,
+            file.get_compilation_lock(),
+        ))
+
+        // Ref::filter_map(, |ast| {
+        //     let file = ast.get(path)?;
+
+        //     let Ok(TypeLayout::Module(module_type)) = file.for_type() else {
+        //         unreachable!()
+        //     };
+
+        //     todo!()
+        // }).ok()
+    }
+
+    pub fn register_module(
+        &self,
+        path: Arc<PathBuf>,
+        import: ImportResult,
+    ) -> ImportResult {
         {
             let mut view = self.loaded_modules.borrow_mut();
 
-            if let Some(prev) = view.insert(path.clone(), module) {
-                panic!("this module was already cached (prev: {prev:?})");
+            if let Some(prev) = view.insert(path.clone(), import.clone()) {
+                log::warn!("this module {} was already cached (prev: {prev:#?}), replaced with {import:#?}", path.display());
             }
         }
 
         Ref::map(self.loaded_modules.borrow(), |modules| {
             modules.get(&path).unwrap()
-        })
-
-        // RefMut::filter_map(self.loaded_modules.borrow_mut(), f)
+        }).to_owned()
     }
 
     pub fn get_ast_file(&self, path: &PathBuf) -> Option<Ref<ASTFile>> {
-        log::info!("polling compilation of `{path:?}`");
-        Ref::filter_map(self.completed_ast.borrow(), |completed_ast| {
+        let x = Ref::filter_map(self.completed_ast.borrow(), |completed_ast| {
             completed_ast.get(path)
         })
-        .ok()
+        .ok();
+        log::info!(
+            "checking validation of `{path:?}`: {}",
+            if x.is_some() {
+                "completed"
+            } else {
+                "not started"
+            }
+        );
+
+        x
     }
 
-    pub fn register_ast(&self, path: Arc<PathBuf>, file: ASTFile) -> Ref<ASTFile> {
-        log::info!("registering completion of {path:?}");
+    pub fn register_ast(&self, path: Arc<PathBuf>, file: ASTFile) -> Result<ASTFile> {
+        {
+            let existing_files = self.completed_ast.borrow();
+
+            log::debug!(
+                "registering new file {path:?} ({file:?}) -- Adding to: {:?}",
+                existing_files
+                    .keys()
+                    .map(|x| x.display())
+                    .collect::<Vec<_>>()
+            );
+        }
 
         {
             let mut view = self.completed_ast.borrow_mut();
 
             if let Some(prev) = view.insert(path.clone(), file) {
-                panic!("this ast file was already cached (prev: {prev:?})");
+                let path = prev.location.with_extension("ms").bytecode_str();
+
+                bail!("Somewhere in this project, your code imports \"{path}\" in a file previously imported by \"{path}\" itself. This is a problem for MScript because code can run at the module level. See <https://wikipedia.org/wiki/Circular_reference> for more details.");
             }
         }
 
-        Ref::map(self.completed_ast.borrow(), |completed_ast| {
+        Ok(Ref::map(self.completed_ast.borrow(), |completed_ast| {
             completed_ast.get(&path).unwrap()
         })
+        .to_owned())
     }
 }
 
@@ -442,13 +491,13 @@ pub(crate) fn root_ast_from_str(
     let input_path_str = input_path.bytecode_str();
 
     logger().wrap_in_spinner(format!("Parsing ({input_path_str}):"), || {
-        root_node_from_str(mscript_code, user_data.clone())
+        root_node_from_str(mscript_code, user_data.clone()).to_err_vec()
     })
 }
 
 pub(crate) fn ast_file_from_str(node: Node, input_path: &str) -> Result<(), Vec<anyhow::Error>> {
-    logger().wrap_in_spinner(format!("Creating AST ({input_path}):"), || {
-        Parser::file(node)
+    logger().wrap_in_spinner(format!("Validating ({input_path}):"), || {
+        Parser::file(node).map(|_| ())
     })
 }
 
@@ -477,6 +526,18 @@ pub(crate) fn compile_from_str(
         mscript_code,
         files_loaded.clone(),
     )?;
+
+    // let module_type = ModuleType::from_node(&node).to_err_vec()?;
+
+    // let path_for_preload_import = input_path.bytecode_str();
+
+    // log::info!("+ mod {path_for_preload_import:?} {module_type:?}");
+
+    // let module = files_loaded
+    //     .register_module(Arc::new(input_path.as_ref().to_path_buf()), module_type)
+    //     .to_owned();
+
+    // log::info!("+ did preload {:?}", module.name());
 
     ast_file_from_str(node, &input_path.bytecode_str())?;
 
@@ -520,6 +581,7 @@ pub(crate) fn compile_from_str_default_side_effects(
         mscript_code,
         files_loaded.clone(),
     )?;
+
     ast_file_from_str(node, &input_path.bytecode_str())?;
 
     state.queue_compilation(input_path.as_ref().into());
@@ -530,12 +592,16 @@ pub(crate) fn compile_from_str_default_side_effects(
         &files_loaded,
         &mut |src: &ASTFile, compiled_items: Vec<CompiledItem>| {
             if result.is_none() {
-                #[cfg(feature = "debug")]
-                perform_file_io_out(&src.location, &compiled_items, false)
-                    .context("The `--debug` feature flag failed to dump the HR Bytecode")?;
+                #[cfg(feature = "output_hr")]
+                perform_file_io_out(&src.location.with_extension("DEBUG_EMIT.mmm"), &compiled_items, false)
+                    .context("The `output_hr` feature flag failed to dump the HR Bytecode")?;
 
                 result = Some(compiled_items.clone());
             } else {
+                #[cfg(feature = "output_hr")]
+                perform_file_io_out(&src.location.with_extension("DEBUG_EMIT.mmm"), &compiled_items, false)
+                    .context("The `output_hr` feature flag failed to dump the HR Bytecode")?;
+
                 perform_file_io_out(&src.location, &compiled_items, true)?
             }
             Ok(())
@@ -584,6 +650,7 @@ fn perform_file_io_out(
             });
         }
 
+        log::debug!("@IO writing {} bytes to {}", bytes.len(), output_path.display());
         new_file.write_all(bytes)?;
 
         Ok(())

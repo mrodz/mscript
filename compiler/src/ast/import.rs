@@ -1,13 +1,15 @@
 use std::{
     borrow::Cow,
-    path::{Path, PathBuf},
+    path::{Path, PathBuf}, sync::Arc,
 };
 
 use anyhow::{Context, Result};
+use bytecode::compilation_bridge::id::SPLIT_LOOKUP_STORE;
 
 use crate::{
+    ast::CompiledItem,
     instruction,
-    parser::{AssocFileData, Node, Parser, Rule},
+    parser::{AssocFileData, Node, Parser, Rule, CompilationLock},
     BytecodePathStr, CompilationError, VecErr,
 };
 
@@ -18,12 +20,12 @@ pub(crate) enum Import {
     Standard {
         path: PathBuf,
         store: Ident,
-        cached: bool,
+        should_queue: CompilationLock,
     },
     Names {
         path: PathBuf,
         names: Vec<Ident>,
-        cached: bool,
+        should_queue: CompilationLock,
     },
 }
 
@@ -36,14 +38,15 @@ impl Compile for Import {
             Self::Standard {
                 path,
                 store,
-                cached,
+                should_queue,
             } => {
-                log::debug!("@IMPORT -- using cached: {cached}");
+                log::debug!("@IMPORT -- will queue: {should_queue}");
 
-                if !cached {
+                if should_queue.can_compile() {
                     log::debug!("queuing compilation of {path:?}");
 
                     state.queue_compilation(path.clone());
+                    should_queue.mark_compiled();
                 }
 
                 let module_loader =
@@ -57,29 +60,28 @@ impl Compile for Import {
             Self::Names {
                 path,
                 names,
-                cached,
+                should_queue,
             } => {
-                log::debug!("@IMPORT(names) -- using cached: {cached}");
+                log::debug!("@IMPORT(names) -- will queue: {should_queue}");
 
-                if !cached {
+                if should_queue.can_compile() {
                     log::debug!("queuing compilation of {path:?}");
 
                     state.queue_compilation(path.clone());
+                    should_queue.mark_compiled();
                 }
 
                 let module_loader =
                     format!("{}#__module__", path.with_extension("mmm").bytecode_str());
 
-                let mut names = names
-                    .iter()
-                    .map(Ident::name)
-                    .flat_map(|x| [x, " "])
-                    .collect::<String>();
-                names.pop();
+                let names = names.iter().map(Ident::name).map(String::from).collect();
 
                 Ok(vec![
                     instruction!(module_entry module_loader),
-                    instruction!(split_lookup_store names),
+                    CompiledItem::Instruction {
+                        id: SPLIT_LOOKUP_STORE,
+                        arguments: names,
+                    },
                     instruction!(pop),
                 ])
             }
@@ -153,11 +155,12 @@ impl Parser {
             )]);
         }
 
-        let (module_type, cached) = input.user_data().import(path.with_extension("ms"))?;
+        log::info!("begin @import in standard import");
+        let result = input.user_data().import(Arc::new(path.with_extension("ms")))?;
 
         let ident = Ident::new(
             file_name.into_owned(),
-            Some(Cow::Owned(TypeLayout::Module(module_type))),
+            Some(Cow::Owned(TypeLayout::Module(result.module()))),
             true,
         );
 
@@ -166,20 +169,44 @@ impl Parser {
         Ok(Import::Standard {
             path,
             store: ident,
-            cached,
+            should_queue: CompilationLock::new(),
         })
     }
 
     pub fn import_names(input: Node) -> Result<Import, Vec<anyhow::Error>> {
         let path_node = input.children().last().unwrap();
         let path = Self::import_path(path_node).to_err_vec()?;
-        let (module_type, cached) = input.user_data().import(path.with_extension("ms"))?;
+
+        log::info!("begin @import in import-names");
+        let module_import = input.user_data().import(Arc::new(path.with_extension("ms")))?;
+
+        let module_type = module_import.module();
 
         let mut names = vec![];
 
         for child in input.children() {
             match child.as_rule() {
-                Rule::ident => {
+                Rule::import_type => {
+                    let name_node = child.children().next().unwrap();
+                    let maybe_ty = name_node.as_str();
+
+                    let ty = module_type
+                        .get_type(maybe_ty)
+                        .details_lazy_message(
+                            child.as_span(),
+                            &input.user_data().get_source_file_name(),
+                            || {
+                                format!(
+                                    "`{}` has no visible type `{maybe_ty}`.\n        Please ensure that:\n            - This import is not cyclical (see <https://wikipedia.org/wiki/Circular_reference>)\n            - This item is exported using the `export` keyword\n        Hint: You can put shared code in a new file and import it from both origins to work around a cyclical dependency.",
+                                    module_type.name().bytecode_str()
+                                )
+                            },
+                        )
+                        .to_err_vec()?;
+
+                    input.user_data().add_type(maybe_ty.into(), ty.to_owned());
+                }
+                Rule::import_name => {
                     let maybe_property = child.as_str();
 
                     let property = module_type
@@ -189,7 +216,7 @@ impl Parser {
                             &input.user_data().get_source_file_name(),
                             || {
                                 format!(
-                                    "{} has no exported member `{maybe_property}`",
+                                    "`{}` has no visible member `{maybe_property}`.\n        Please ensure that:\n            - This import is not cyclical (see <https://wikipedia.org/wiki/Circular_reference>)\n            - This item is exported using the `export` keyword\n        Hint: You can put shared code in a new file and import it from both origins to work around a cyclical dependency.",
                                     module_type.name().bytecode_str()
                                 )
                             },
@@ -206,6 +233,10 @@ impl Parser {
 
                     let ident = property.to_owned();
 
+                    if ident.ty().unwrap().is_class() {
+                        input.user_data().add_type(ident.boxed_name(), ident.ty().cloned().unwrap())
+                    }
+
                     input.user_data().add_dependency(&ident);
 
                     names.push(ident);
@@ -220,7 +251,7 @@ impl Parser {
         Ok(Import::Names {
             path,
             names,
-            cached,
+            should_queue: module_import.compilation_lock()
         })
     }
 

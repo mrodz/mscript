@@ -1,0 +1,3 @@
+function __module__
+	ret_mod
+end
