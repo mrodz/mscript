@@ -65,7 +65,7 @@ impl Parser {
             let user_gave = arg_ty.get_type_recursively();
 
             let maybe_class_type = allow_self_type.map(|x| {
-                let TypeLayout::Class(class_type) = x else {
+                let TypeLayout::Class(class_type) = x.disregard_distractors(true) else {
                     unreachable!("{x}");
                 };
 

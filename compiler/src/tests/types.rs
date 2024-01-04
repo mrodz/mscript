@@ -158,3 +158,49 @@ fn forward_type_export_mismatch() {
     .run()
     .unwrap()
 }
+
+#[test]
+fn types_with_reassignment() {
+    EvalEnvironment::entrypoint(
+        "a.ms",
+        r#"
+        import type Foo, type Bar, Fizz from b
+
+        wooza: Foo = Fizz(42)
+        const num: Bar = "hello"
+
+        assert (wooza.do_math(8) - 4) * 3 == 63 
+
+        accept_string_like = fn(input: str) -> str {
+            return input + "!"
+        }
+
+        assert accept_string_like(num) == "hello!"
+        assert accept_string_like("basic") == "basic!"
+    "#,
+    )
+    .unwrap()
+    .add(
+        "b.ms", r#"
+        type NumberzAreKool int
+
+        export class Fizz {
+            state: int
+            constructor(self, init: NumberzAreKool) {
+                self.state = init
+            }
+            fn do_math(self, other: int) -> NumberzAreKool {
+                return (self.state + other) / 2
+            }
+        }
+
+        export type Foo Fizz
+
+        type Stool str
+        export type Bar Stool
+    "#,
+    )
+    .unwrap()
+    .run()
+    .unwrap()
+}
