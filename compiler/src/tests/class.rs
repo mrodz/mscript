@@ -286,3 +286,20 @@ fn chain() {
     )
     .unwrap();
 }
+
+#[test]
+#[should_panic = "this variable cannot exist on its own, because it has an associated `self` type"]
+fn dependent_variable() {
+    eval(
+        r#"
+		class A {
+			fn associated_function(self) {}
+		}
+		
+		a = A()
+		b = a.associated_function
+		b()
+	"#,
+    )
+    .unwrap()
+}

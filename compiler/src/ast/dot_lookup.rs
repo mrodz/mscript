@@ -12,7 +12,9 @@ use super::{new_err, Callable, Compile, FunctionArguments, TypeLayout};
 
 #[derive(Debug)]
 pub(crate) enum DotLookupOption {
-    Name(String),
+    Name {
+        name: String,
+    },
     FunctionCall {
         function_name: String,
         arguments: FunctionArguments,
@@ -36,7 +38,7 @@ impl Compile for DotLookupOption {
         state: &super::CompilationState,
     ) -> Result<Vec<super::CompiledItem>, anyhow::Error> {
         match self {
-            Self::Name(name) => Ok(vec![instruction!(lookup name)]),
+            Self::Name { name, .. } => Ok(vec![instruction!(lookup name)]),
             Self::FunctionCall {
                 function_name,
                 arguments,
@@ -98,12 +100,32 @@ impl Parser {
         mut lhs_ty: Cow<'a, TypeLayout>,
     ) -> Result<(DotChain, Cow<'a, TypeLayout>), Vec<anyhow::Error>> {
         let mut links = vec![];
+        let mut must_call = false;
         for dot_chain_option_node in input.children() {
+            must_call = must_call || lhs_ty.disregard_distractors(true).is_class();
             let dot_chain_option = Self::dot_chain_option(dot_chain_option_node, lhs_ty)?;
+
+            if let DotLookupOption::FunctionCall { .. } = dot_chain_option.lookup_type {
+                // reset
+                must_call = false;
+            }
+
+            if dot_chain_option.output_type.is_function().is_none() {
+                must_call = false;
+            }
 
             links.push(dot_chain_option.lookup_type);
 
             lhs_ty = dot_chain_option.output_type;
+        }
+
+        if must_call {
+            return Err(vec![new_err(
+                input.children().last().unwrap().as_span(),
+                &input.user_data().get_source_file_name(),
+                "this variable cannot exist on its own, because it has an associated `self` type"
+                    .to_owned(),
+            )]);
         }
 
         Ok((DotChain { links }, lhs_ty))
@@ -211,7 +233,7 @@ impl Parser {
                 })
             }
             Rule::dot_name_lookup => Ok(DotLookup {
-                lookup_type: DotLookupOption::Name(ident_str),
+                lookup_type: DotLookupOption::Name { name: ident_str },
                 output_type: type_of_property.clone(),
             }),
             x => unreachable!("{x:?}"),
