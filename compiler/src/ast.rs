@@ -412,8 +412,6 @@ impl CompilationState {
     ) -> Result<(), Vec<anyhow::Error>> {
         let mut view = self.compilation_queue.borrow_mut();
 
-        dbg!(&view);
-
         let mut node @ Some(..) = view.take() else {
             return Ok(());
         };

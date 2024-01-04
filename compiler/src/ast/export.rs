@@ -1,4 +1,4 @@
-use std::{borrow::Cow, cell::RefCell, sync::{Weak, Arc}, collections::HashMap, fmt::Display};
+use std::{borrow::Cow, cell::RefCell, collections::HashMap, fmt::Display, sync::Weak};
 
 use anyhow::Result;
 
@@ -14,7 +14,10 @@ pub(crate) struct Export {
 
 impl Display for Export {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let exports = self.exports.upgrade().expect("exported values were dropped");
+        let exports = self
+            .exports
+            .upgrade()
+            .expect("exported values were dropped");
         let public_types = self.public_types.upgrade().expect("types were dropped");
 
         let exports = exports.borrow();
@@ -25,13 +28,6 @@ impl Display for Export {
 }
 
 impl Export {
-    pub fn new_untied(exports: Arc<RefCell<Vec<Ident>>>, public_types: Arc<RefCell<HashMap<String, Cow<'static, TypeLayout>>>>) -> Self {
-        Self {
-            exports: Arc::downgrade(&exports),
-            public_types: Arc::downgrade(&public_types),
-        }
-    }
-
     pub fn add(&mut self, ident: Ident) {
         let exports = self
             .exports

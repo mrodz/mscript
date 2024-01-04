@@ -62,9 +62,14 @@ fn import_type() {
         "main.ms",
         r#"
 		import type Floof from alias
+		import Dog from alias
+		import alias
 
-		cute = Floof("Scout")
+		cute: Floof = Dog("Scout")
 		assert cute.name == "Scout"
+
+		dog2: Floof = alias.Dog("Muna")
+		assert dog2.to_string() == "Dog with name: Muna"
 	"#,
     )
     .unwrap()
@@ -76,12 +81,78 @@ fn import_type() {
 				self.name = name
 			}
 			name: str
+			fn to_string(self) -> str {
+				return "Dog with name: " + self.name
+			}
 		}
 
 		export type Floof Dog
 	"#,
     )
     .unwrap()
+    .run()
+    .unwrap()
+}
+
+#[test]
+fn forward_type_export() {
+    EvalEnvironment::entrypoint(
+        "main.ms",
+        r#"
+		import type Duck from duck.ms
+
+		message: Duck = "Quack Quack"
+	"#,
+    )
+    .unwrap()
+    .add(
+        "duck.ms",
+        r#"
+		import type Bugs from bugs
+
+		export type Duck Bugs
+	"#,
+    )
+    .unwrap()
+    .add(
+        "bugs.ms", r#"
+		type Bunny str
+		export type Bugs Bunny
+	"#,
+    )
+	.unwrap()
+    .run()
+    .unwrap()
+}
+
+#[test]
+#[should_panic = "hint: `Bunny` is an alias for `str`, which isn't compatible with `int` in this context"]
+fn forward_type_export_mismatch() {
+    EvalEnvironment::entrypoint(
+        "main.ms",
+        r#"
+		import type Duck from duck.ms
+
+		message: Duck = 0xFEED
+	"#,
+    )
+    .unwrap()
+    .add(
+        "duck.ms",
+        r#"
+		import type Bugs from bugs
+
+		export type Duck Bugs
+	"#,
+    )
+    .unwrap()
+    .add(
+        "bugs.ms", r#"
+		type Bunny str
+		export type Bugs Bunny
+	"#,
+    )
+	.unwrap()
     .run()
     .unwrap()
 }

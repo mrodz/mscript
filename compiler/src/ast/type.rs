@@ -1,6 +1,6 @@
 use crate::{
-    ast::{class::ClassBody, new_err, value::ValToUsize, Assignment, Export},
-    parser::{AssocFileData, Node, Parser, Rule, File},
+    ast::{class::ClassBody, new_err, value::ValToUsize, Assignment},
+    parser::{AssocFileData, Node, Parser, Rule},
     scope::{ScopeReturnStatus, SuccessTypeSearchResult, TypeSearchResult},
     CompilationError, VecErr,
 };
@@ -252,24 +252,26 @@ impl ModuleType {
 
                         let body_node = children.next().expect("no body");
 
-                        let _class_scope = input.user_data().push_class_unknown_self();
-                        let fields = ClassBody::get_members(&body_node).to_err_vec()?;
+                        let ident = {
+                            let _class_scope = input.user_data().push_class_unknown_self();
+                            let fields = ClassBody::get_members(&body_node).to_err_vec()?;
 
-                        let class_type = ClassType::new(
-                            Arc::new(name.to_owned()),
-                            fields,
-                            input.user_data().bytecode_path(),
-                        );
+                            let class_type = ClassType::new(
+                                Arc::new(name.to_owned()),
+                                fields,
+                                input.user_data().bytecode_path(),
+                            );
 
-                        let ident = Ident::new(
-                            name.to_owned(),
-                            Some(Cow::Owned(TypeLayout::Class(class_type))),
-                            true,
-                        );
+                            Ident::new(
+                                name.to_owned(),
+                                Some(Cow::Owned(TypeLayout::Class(class_type))),
+                                true,
+                            )
+                        };
 
                         input
                             .user_data()
-                            .add_type(name.into(), ident.ty().unwrap().to_owned());
+                            .add_type(name.into(), ident.ty().unwrap().clone());
 
                         log::trace!(
                             "Gen. mod {:?} -- adding class {name:?}",
@@ -295,8 +297,6 @@ impl ModuleType {
                             "Gen. mod {:?} -- adding type {ty:?}",
                             input.user_data().source_path()
                         );
-
-                        // export.add_type(alias.ident.name().to_owned(), alias.ty)
                     }
                     Rule::import => {
                         log::trace!("Gen. mod @import");
@@ -305,7 +305,10 @@ impl ModuleType {
                         let import_path = import.children().last().unwrap();
                         let path = Arc::new(Parser::import_path(import_path).to_err_vec()?);
 
-                        log::info!("++ BEGIN @import in pre-walk of {path:?} (current file: {})", input.user_data().get_source_file_name());
+                        log::info!(
+                            "++ BEGIN @import in pre-walk of {path:?} (current file: {})",
+                            input.user_data().get_source_file_name()
+                        );
 
                         // let (file, exports_to_use) =
                         //     if let Some(exports) = input.user_data().get_export_ref_for(&path) {
@@ -320,8 +323,10 @@ impl ModuleType {
 
                         let module_import = input.user_data().import(path.clone())?;
 
-                        log::info!("-- END @import in pre-walk of {path:?} (current file: {})", input.user_data().get_source_file_name());
-
+                        log::info!(
+                            "-- END @import in pre-walk of {path:?} (current file: {})",
+                            input.user_data().get_source_file_name()
+                        );
 
                         if import.as_rule() == Rule::import_names {
                             let children = import.children();
@@ -341,7 +346,7 @@ impl ModuleType {
 
                                         input
                                             .user_data()
-                                            .add_type(ty_node.as_str().into(), ty.to_owned())
+                                            .add_type(ty_node.as_str().into(), ty.clone())
                                     }
                                     Rule::import_name => continue,
                                     Rule::import_path => break,
@@ -365,7 +370,10 @@ impl ModuleType {
             }
         }
 
-        log::info!("DONE preloading module {}", input.user_data().source_path().display());
+        log::info!(
+            "DONE preloading module {}",
+            input.user_data().source_path().display()
+        );
 
         Ok(ModuleType::new_initialized(
             input.user_data().source_path(),
@@ -382,10 +390,7 @@ impl ModuleType {
 }
 
 #[derive(Debug)]
-pub(crate) struct TypeAlias {
-    ident: Ident,
-    ty: Cow<'static, TypeLayout>,
-}
+pub(crate) struct TypeAlias;
 
 impl Dependencies for TypeAlias {}
 impl Compile for TypeAlias {
@@ -616,7 +621,7 @@ impl TypeLayout {
         &'a self,
         property_name: &str,
     ) -> Option<Box<dyn Deref<Target = Cow<'static, TypeLayout>> + 'a>> {
-        match self.get_type_recursively() {
+        match self.disregard_distractors(true) {
             Self::Class(class_type) => {
                 let ident = class_type.get_property(property_name)?;
                 let property_type: &'a Cow<'static, TypeLayout> = ident.ty().ok()?;
@@ -720,17 +725,8 @@ impl TypeLayout {
     where
         T: Deref<Target = ClassType>,
     {
-        let lhs = if let TypeLayout::Alias(_, ty) = self {
-            ty.as_ref()
-        } else {
-            self
-        };
-
-        let rhs = if let TypeLayout::Alias(_, ty) = rhs {
-            ty.as_ref()
-        } else {
-            rhs
-        };
+        let lhs = self.disregard_distractors(false);
+        let rhs = rhs.disregard_distractors(false);
 
         if lhs == rhs {
             return if flags.force_rhs_to_be_unwrapped_lhs {
@@ -867,6 +863,15 @@ impl TypeLayout {
         }
     }
 
+    pub fn disregard_distractors(&self, is_optional_distractor: bool) -> &Self {
+        match self {
+            Self::Alias(_, ty) => ty.disregard_distractors(is_optional_distractor),
+            Self::CallbackVariable(x) => x.disregard_distractors(is_optional_distractor),
+            Self::Optional(Some(x)) if is_optional_distractor => x.disregard_distractors(is_optional_distractor),
+            x => x,
+        }
+    }
+
     pub fn get_owned_type_recursively(self) -> Self {
         use TypeLayout::*;
 
@@ -879,17 +884,8 @@ impl TypeLayout {
     pub fn get_output_type(&self, other: &Self, op: &Op) -> Option<TypeLayout> {
         use TypeLayout::*;
 
-        let lhs = if let Alias(_, ty) = self {
-            ty.as_ref()
-        } else {
-            self
-        };
-
-        let other = if let Alias(_, ty) = other {
-            ty.as_ref()
-        } else {
-            other
-        };
+        let lhs = self.disregard_distractors(false);
+        let other = other.disregard_distractors(false);
 
         if lhs == other && matches!(op, Eq | Neq) {
             return Some(TypeLayout::Native(NativeType::Bool));
@@ -1169,13 +1165,17 @@ impl Parser {
 
         let ty_node = children.next().unwrap();
 
-        let ident = Self::ident(ident_node)?;
+        let mut ident = Self::ident(ident_node)?;
 
-        let ty = Self::r#type(ty_node)?;
+        let real_ty = Self::r#type(ty_node)?;
 
-        log::trace!("formally aliasing `{}` = {ty}", ident.name());
+        log::trace!("formally aliasing `{}` = {real_ty}", ident.name());
 
-        let ty = TypeLayout::Alias(ident.name().to_owned(), Box::new(ty));
+        if real_ty.is_class() {
+            ident.link_force_no_inherit(input.user_data(), real_ty.clone())?;
+        }
+
+        let ty = TypeLayout::Alias(ident.name().to_owned(), Box::new(real_ty));
 
         input
             .user_data()
@@ -1188,9 +1188,6 @@ impl Parser {
                 .add_type(ident.name().to_owned(), Cow::Owned(ty.clone()));
         }
 
-        Ok(TypeAlias {
-            ident,
-            ty: Cow::Owned(ty)
-        })
+        Ok(TypeAlias)
     }
 }

@@ -202,7 +202,9 @@ impl Scopes {
     pub(crate) fn add_type(&self, name: Box<str>, ty: Cow<'static, TypeLayout>) {
         let mut x = self.0.borrow_mut();
 
-        x.last_mut().unwrap().add_type(name, ty);
+        let scope = x.last_mut().unwrap();
+
+        scope.add_type(name, ty);
     }
 
     pub(crate) fn register_function_parameters(
@@ -225,26 +227,16 @@ impl Scopes {
         use SuccessTypeSearchResult::*;
 
         match str {
-            "int" => {
-                return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(Int))))
-            }
+            "int" => return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(Int)))),
             "str" => {
-                return TypeSearchResult::Ok(Owned(
-                    Cow::Owned(TypeLayout::Native(Str(StrWrapper::unknown_size()))),
-                ))
+                return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(Str(
+                    StrWrapper::unknown_size(),
+                )))))
             }
-            "float" => {
-                return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(Float))))
-            }
-            "bool" => {
-                return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(Bool))))
-            }
-            "bigint" => {
-                return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(BigInt))))
-            }
-            "byte" => {
-                return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(Byte))))
-            }
+            "float" => return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(Float)))),
+            "bool" => return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(Bool)))),
+            "bigint" => return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(BigInt)))),
+            "byte" => return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(Byte)))),
             "Self" => return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::ClassSelf))),
             _ => (),
         }
@@ -480,7 +472,7 @@ impl Scope {
     }
 
     fn add_type(&mut self, name: Box<str>, ty: Cow<'static, TypeLayout>) {
-        log::trace!("{} // type {name} = {ty}", self.ty);
+        log::trace!("in scope {}, adding type {name} = {ty}", self.ty);
         self.types.insert(name, ty);
     }
 

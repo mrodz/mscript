@@ -204,7 +204,7 @@ impl Parser {
                         )
                         .to_err_vec()?;
 
-                    input.user_data().add_type(maybe_ty.into(), ty.to_owned());
+                    input.user_data().add_type(maybe_ty.into(), ty.clone());
                 }
                 Rule::import_name => {
                     let maybe_property = child.as_str();

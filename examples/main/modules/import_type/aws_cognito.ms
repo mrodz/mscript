@@ -1,19 +1,20 @@
-export const VERSION: str = "v0.0.1"
+print "sjjjj"
+        export const VERSION: str = "v0.0.1"
 
-export type CognitoFlags byte
+        export type CognitoFlags byte
 
-print "aws_cognito library, " + VERSION
+        print "aws_cognito library, " + VERSION
 
-export class CognitoUser {
-	name: str
-	email: str
+        export class CognitoUser {
+	        name: str
+	        email: str
 
-	constructor(self, name: str, email: str) {
-		self.name = name
-		self.email = email
-	}
-}
+	        constructor(self, name: str, email: str) {
+    	    	self.name = name
+	    	    self.email = email
+	        }
+        }
 
-import take_user from shared
+        import take_user from shared
 
-take_user(1)
+        take_user(0b101)

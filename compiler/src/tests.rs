@@ -1,3 +1,8 @@
+//! # Optimal Test Command:
+//! ```bash
+//! cargo +nightly test -Zbuild-std --target x86_64-pc-windows-msvc -Zbuild-std-features=core/debug_refcell --all -- --exact --nocapture 
+//! ```
+
 mod assertions;
 mod class;
 mod comments;

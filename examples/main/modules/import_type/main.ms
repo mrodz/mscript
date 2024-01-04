@@ -1,8 +1,9 @@
 import CognitoUser, type CognitoFlags, VERSION from aws_cognito
+        import shared
 
-user = CognitoUser("Mateo", "mateo@email.com")
+        user = CognitoUser("Mateo", "mateo@email.com")
 
-print VERSION
+        print VERSION
 
-x: CognitoFlags = 0b101
-
+        x: CognitoFlags = 0b101
+        shared.take_user(x)

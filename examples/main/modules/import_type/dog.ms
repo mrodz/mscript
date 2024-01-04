@@ -1,7 +1,13 @@
-class A {
-
+export class Dog {
+	constructor(self, name: str) {
+		self.name = name
+	}
+	name: str
+	fn to_string(self) -> str {
+		return "Dog with name " + self.name
+	}
 }
 
-x: A = A()
+x: Dog = Dog("Cool :)")
 
-print x
+export type Floof Dog

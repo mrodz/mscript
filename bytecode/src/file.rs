@@ -17,6 +17,8 @@ use crate::Primitive;
 
 use super::function::Functions;
 
+pub(crate) type ExportMap = Rc<RefCell<VariableMapping>>;
+
 /// Wrapper around a bytecode file.
 #[derive(Debug)]
 pub struct MScriptFile {
@@ -25,7 +27,7 @@ pub struct MScriptFile {
     /// The functions in the file. Even though it is an `Option`, by the time an [`MScriptFile`]
     /// is initialized, this field will be propagated.
     functions: RefCell<Option<Functions>>,
-    exports: Rc<RefCell<VariableMapping>>,
+    exports: ExportMap,
 }
 
 #[derive(Debug)]

@@ -19,7 +19,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context, Result};
-use ast::{map_err, new_err, CompilationState, ModuleType};
+use ast::{map_err, new_err, CompilationState};
 use bytecode::compilation_bridge::{Instruction, MScriptFile, MScriptFileBuilder};
 use bytecode::Program;
 use indicatif::{MultiProgress, ProgressBar, ProgressFinish, ProgressStyle};
@@ -290,39 +290,19 @@ impl FileManager {
             unreachable!()
         };
 
-        Some(ImportResult::new(
-            module_type,
-            false,
-            file.get_compilation_lock(),
-        ))
-
-        // Ref::filter_map(, |ast| {
-        //     let file = ast.get(path)?;
-
-        //     let Ok(TypeLayout::Module(module_type)) = file.for_type() else {
-        //         unreachable!()
-        //     };
-
-        //     todo!()
-        // }).ok()
+        Some(ImportResult::new(module_type, file.get_compilation_lock()))
     }
 
-    pub fn register_module(
-        &self,
-        path: Arc<PathBuf>,
-        import: ImportResult,
-    ) -> ImportResult {
+    pub fn register_module(&self, path: Arc<PathBuf>, import: ImportResult) -> ImportResult {
         {
             let mut view = self.loaded_modules.borrow_mut();
-
-            if let Some(prev) = view.insert(path.clone(), import.clone()) {
-                log::warn!("this module {} was already cached (prev: {prev:#?}), replaced with {import:#?}", path.display());
-            }
+            view.entry(path.clone()).or_insert(import);
         }
 
         Ref::map(self.loaded_modules.borrow(), |modules| {
             modules.get(&path).unwrap()
-        }).to_owned()
+        })
+        .to_owned()
     }
 
     pub fn get_ast_file(&self, path: &PathBuf) -> Option<Ref<ASTFile>> {
@@ -593,14 +573,22 @@ pub(crate) fn compile_from_str_default_side_effects(
         &mut |src: &ASTFile, compiled_items: Vec<CompiledItem>| {
             if result.is_none() {
                 #[cfg(feature = "output_hr")]
-                perform_file_io_out(&src.location.with_extension("DEBUG_EMIT.mmm"), &compiled_items, false)
-                    .context("The `output_hr` feature flag failed to dump the HR Bytecode")?;
+                perform_file_io_out(
+                    &src.location.with_extension("DEBUG_EMIT.mmm"),
+                    &compiled_items,
+                    false,
+                )
+                .context("The `output_hr` feature flag failed to dump the HR Bytecode")?;
 
                 result = Some(compiled_items.clone());
             } else {
                 #[cfg(feature = "output_hr")]
-                perform_file_io_out(&src.location.with_extension("DEBUG_EMIT.mmm"), &compiled_items, false)
-                    .context("The `output_hr` feature flag failed to dump the HR Bytecode")?;
+                perform_file_io_out(
+                    &src.location.with_extension("DEBUG_EMIT.mmm"),
+                    &compiled_items,
+                    false,
+                )
+                .context("The `output_hr` feature flag failed to dump the HR Bytecode")?;
 
                 perform_file_io_out(&src.location, &compiled_items, true)?
             }
@@ -650,7 +638,11 @@ fn perform_file_io_out(
             });
         }
 
-        log::debug!("@IO writing {} bytes to {}", bytes.len(), output_path.display());
+        log::debug!(
+            "@IO writing {} bytes to {}",
+            bytes.len(),
+            output_path.display()
+        );
         new_file.write_all(bytes)?;
 
         Ok(())
