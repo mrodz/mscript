@@ -169,14 +169,7 @@ impl Dependencies for Assignment {
 
 impl Compile for Assignment {
     fn compile(&self, state: &CompilationState) -> Result<Vec<super::CompiledItem>> {
-        // let name = self.ident.name();
         let mut value_init = self.value().compile(state)?;
-
-        // let mut value_init = if let ConstexprEvaluation::Owned(value) = maybe_constexpr_eval {
-        //     value.compile(state)?
-        // } else {
-        //     self.value().compile(state)?
-        // };
 
         if self.idents.len() == 1 {
             let name = self.idents[0].name();

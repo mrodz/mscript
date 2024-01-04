@@ -223,7 +223,6 @@ impl Function {
 }
 
 impl IntoType for Function {
-    /// unimplemented
     fn for_type(&self) -> Result<TypeLayout> {
         Ok(TypeLayout::Function(FunctionType::new(
             self.parameters.clone(),
@@ -315,8 +314,6 @@ impl Parser {
 
         let mut children = input.children();
         let parameters = children.next().unwrap();
-
-        // let parameters = Self::function_parameters(parameters)?;
 
         let next = children.next();
 

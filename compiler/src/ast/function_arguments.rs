@@ -95,7 +95,6 @@ impl Parser {
             result.push(value_for_arg)
         }
 
-        // let result_len = result.len();
         let expected_parameters_len = expected_parameters.len();
 
         if result_len != expected_parameters_len {

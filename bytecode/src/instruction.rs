@@ -175,9 +175,6 @@ pub mod implementations {
                 .context("there must be a value at the top of the stack for a `bin_op_assign`")?;
 
             let result = {
-                // let view = bundle.borrow();
-                // let view = view.deref();
-
                 let no_mut: &Primitive = value;
 
                 match op.as_str() {
@@ -603,7 +600,6 @@ pub mod implementations {
 
         let Some(arg) = args.first() else {
             let vec = ctx.get_local_operating_stack().clone();
-            // ^^ new capacity = old length
 
             ctx.clear_stack();
             ctx.push(vector!(raw vec));
@@ -702,7 +698,6 @@ pub mod implementations {
             bail!("Cannot perform an object mutation on a non-object")
         };
 
-        // this bypass of Rc protections is messy and should be refactored.
         let obj_view = o.borrow();
         let has_variable = obj_view
             .has_variable(var_name)

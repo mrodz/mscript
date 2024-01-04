@@ -367,9 +367,6 @@ impl EvalEnvironment {
         }
 
         Ok(())
-        // let compiled_items = compile_from_str(input_path, output_path.as_path(), mscript_code)?;
-
-        // seal_compiled_items(output_path.as_path(), compiled_items).to_err_vec()
     }
 
     pub fn entrypoint(file_name: &'static str, code: &'static str) -> Result<Self> {
@@ -407,8 +404,6 @@ impl EvalEnvironment {
         let file_tracker = FileManager::new();
 
         for (input_path, code) in files.iter() {
-            // let bytecode_file = compile_from_str(input_path, output_path, code, file_tracker)?;
-            // let sealed = seal_compiled_items(output_path, bytecode_file).to_err_vec()?;
             file_tracker.register_preloaded_file(input_path, code);
         }
 
@@ -506,18 +501,6 @@ pub(crate) fn compile_from_str(
         mscript_code,
         files_loaded.clone(),
     )?;
-
-    // let module_type = ModuleType::from_node(&node).to_err_vec()?;
-
-    // let path_for_preload_import = input_path.bytecode_str();
-
-    // log::info!("+ mod {path_for_preload_import:?} {module_type:?}");
-
-    // let module = files_loaded
-    //     .register_module(Arc::new(input_path.as_ref().to_path_buf()), module_type)
-    //     .to_owned();
-
-    // log::info!("+ did preload {:?}", module.name());
 
     ast_file_from_str(node, &input_path.bytecode_str())?;
 
@@ -711,9 +694,6 @@ pub fn compile(
     let start_time = Instant::now();
 
     let input_path = input_path.as_ref();
-    // .canonicalize()
-    // .context("Could not get this file's path! Does it exist?")
-    // .to_err_vec()?;
 
     let output_path = input_path.with_extension("mmm");
 

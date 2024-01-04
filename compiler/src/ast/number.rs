@@ -341,8 +341,6 @@ impl Parser {
     pub fn number(input: Node) -> Result<Number> {
         let child = input.children().next().unwrap();
 
-        // let as_str = child.as_str().to_owned();
-
         number_from_string(child.as_str(), child.as_rule())
     }
 }

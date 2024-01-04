@@ -71,7 +71,6 @@ impl Compile for Export {
             if !export.ty().expect("ident without type").is_class() {
                 result.push(instruction!(export_name(export.name())));
             } else {
-                // classes are already exported by default; no double export
                 log::trace!("Skipping export of {export} because it already exports itself");
             }
         }

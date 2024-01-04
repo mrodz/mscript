@@ -83,7 +83,6 @@ pub(crate) struct Reassignment {
 
 impl Compile for Reassignment {
     fn compile(&self, state: &CompilationState) -> Result<Vec<super::CompiledItem>, anyhow::Error> {
-        // todo!();
         let mut result = self.value.compile(state)?;
 
         let val_register = state.poll_temporary_register();
@@ -127,7 +126,6 @@ fn parse_path(
                 }
 
                 return Ok((ReassignmentPath::ReferenceToSelf(None), primary.as_span()));
-                // return Ok(ReassignmentPath::ReferenceToSelf);
             }
 
             let file_name = user_data.get_source_file_name();
@@ -148,7 +146,6 @@ fn parse_path(
             } else {
                 ident.clone()
             };
-            // let ident = Parser::ident(Node::new_with_user_data(primary, Rc::clone(&user_data))).to_err_vec()?;
 
             Ok((ReassignmentPath::Ident(cloned), primary.as_span()))
         })

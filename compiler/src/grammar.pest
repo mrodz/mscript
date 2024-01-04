@@ -124,7 +124,6 @@ list_index = { ("[" ~ value ~ "]")+ }
 value = ${ function | math_expr | ident | list }
 
 assignment_flag = { "modify" | "const" | "export" }
-// bad_assignment_flag = { &ident }
 assignment_flags = { assignment_flag ~ assignment_flag* }
 assignment_no_type = { ident ~ "=" ~ value }
 assignment_type = { ident ~ ":" ~ type ~ "=" ~ value }

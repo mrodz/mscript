@@ -127,78 +127,6 @@ pub(crate) trait Indexable {
     fn output_from_value(&self, value: &Value) -> Result<Cow<'static, TypeLayout>>;
 }
 
-#[cfg(not)]
-#[derive(Debug)]
-pub(crate) enum ValueChainType {
-    Index(Index),
-    #[allow(unused)]
-    Dot(Dot), // todo
-}
-
-#[cfg(not)]
-impl CompileTimeEvaluate for Value {
-    fn try_constexpr_eval(&self) -> Result<ConstexprEvaluation> {
-        if let Some(ref next) = self.1 {
-            let val_constexpr: ConstexprEvaluation = self.0.try_constexpr_eval()?;
-            let Some(val_constexpr) = val_constexpr.as_ref() else {
-                return Ok(ConstexprEvaluation::Impossible);
-            };
-
-            match next.as_ref() {
-                ValueChainType::Index(index) => {
-                    let Value::List(list) = val_constexpr else {
-                        unreachable!();
-                    };
-
-                    let index_constexpr = index.try_constexpr_eval()?;
-                    let Some(index_constexpr) = index_constexpr.as_ref() else {
-                        return Ok(ConstexprEvaluation::Impossible);
-                    };
-
-                    let Value::Number(number) = index_constexpr else {
-                        bail!("can only index into lists with numbers")
-                    };
-
-                    match number {
-                        Number::BigInt(idx) | Number::Integer(idx) | Number::Byte(idx) => {
-                            let numeric_idx: usize = idx.parse()?;
-
-                            let indexed =
-                                list.get_value(numeric_idx).context("index out of bounds")?;
-
-                            indexed.try_constexpr_eval()
-                        }
-                        Number::Float(_) => bail!("cannot index into a list with floats"),
-                    }
-                }
-                ValueChainType::Dot(_) => unreachable!(),
-            }
-        } else {
-            self.0.try_constexpr_eval()
-        }
-    }
-}
-
-#[cfg(not)]
-impl Dependencies for ValueChainType {
-    fn dependencies(&self) -> Vec<Dependency> {
-        match self {
-            Self::Index(index) => index.net_dependencies(),
-            Self::Dot(_) => unimplemented!(),
-        }
-    }
-}
-
-#[cfg(not)]
-impl Indexable for ValueChainType {
-    fn output_from_value(&self, value: &Value) -> Result<Cow<'static, TypeLayout>> {
-        match self {
-            Self::Index(index) => index.output_from_value(value),
-            Self::Dot(_) => unimplemented!(),
-        }
-    }
-}
-
 impl Value {
     pub fn is_callable(&self) -> Result<bool> {
         let ty = self.for_type()?;
@@ -271,10 +199,8 @@ impl Dependencies for Value {
             Self::Number(number) => number.net_dependencies(),
             Self::String(string) => string.net_dependencies(),
             Self::MathExpr(math_expr) => math_expr.net_dependencies(),
-            // Self::Callable(callable) => callable.net_dependencies(),
             Self::Boolean(boolean) => boolean.net_dependencies(),
             Self::List(list) => list.net_dependencies(),
-            // Self::Unwrap(unwrap) => unwrap.net_dependencies(),
         }
     }
 }
@@ -289,7 +215,6 @@ impl Compile for Value {
             Self::MathExpr(math_expr) => math_expr.compile(state),
             Self::Boolean(boolean) => boolean.compile(state),
             Self::List(list) => list.compile(state),
-            // Self::Unwrap(unwrap) => unwrap.compile(state),
         }
     }
 }
@@ -309,7 +234,6 @@ impl Parser {
             Rule::math_expr => Value::MathExpr(Box::new(Expr::parse(value)?)),
             Rule::list => Value::List(Self::list(value)?),
             Rule::WHITESPACE => unreachable!("{:?}", value.as_span()),
-            // Rule::unwrap_expr => Value::UnwrapExpr(Self::unwrap_expr(value)?),
             x => unreachable!("not sure how to handle `{x:?}`"),
         };
 

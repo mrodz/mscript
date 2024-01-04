@@ -784,8 +784,6 @@ fn parse_expr(
 
                         let arguments: FunctionArguments = Parser::function_arguments(function_arguments, parameters, None)?;
 
-                        // let function_type = function_type.clone();
-
                         return Ok((Expr::Callable(CallableContents::Standard { lhs_raw: lhs, function: function_type, arguments }), l_span))
                     }
                     _ => ()

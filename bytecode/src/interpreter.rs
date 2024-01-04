@@ -171,7 +171,6 @@ impl Program {
             "encountered file {path_ref}: {}",
             if added { "CREATE" } else { "cached" }
         );
-        // rc_to_ref(&rc_of_self).add_file(Rc::new(path.clone()))?;
 
         let file = self
             .get_file(path_ref)
@@ -182,24 +181,12 @@ impl Program {
 
         let return_value = file.run_function(
             &label[1..].to_owned(),
-            // &symbol.to_owned(),
             Cow::Borrowed(&request.arguments),
             Rc::clone(&request.stack),
             callback_state,
             &mut |req| self.process_jump_request(req),
         )?;
-        // let Some(function) = rc_to_ref(&file).get_function(&symbol.to_owned()) else {
-        //     bail!("could not find function (missing `{symbol}`, searching in {file:?})")
-        // };
 
-        // let return_value = function.run(
-        //     Cow::Borrowed(&request.arguments),
-        //     Rc::clone(&request.stack),
-        //     callback_state,
-        //     &mut |req| Self::process_jump_request(rc_of_self.clone(), req),
-        // )?;
-
-        // todo!()
         Ok(return_value)
     }
 

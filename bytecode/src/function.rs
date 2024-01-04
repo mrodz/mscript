@@ -468,20 +468,6 @@ impl<'a> Functions {
         self.map.insert(name, function)
     }
 
-    // /// Get all functions whose name starts with `name`
-    // pub(crate) fn get_object_functions<'b: 'a>(
-    //     &'a self,
-    //     name: &'b String,
-    // ) -> impl Iterator<Item = &Function> + 'a {
-    //     self.map.iter().filter_map(move |(key, val)| {
-    //         if key.starts_with(name) {
-    //             Some(val)
-    //         } else {
-    //             None
-    //         }
-    //     })
-    // }
-
     /// Get a reference to a function with name `signature`, if it exists.
     pub(crate) fn get(&self, signature: &String) -> Result<&Function> {
         let result = self
