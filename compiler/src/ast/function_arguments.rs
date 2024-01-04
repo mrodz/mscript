@@ -79,7 +79,9 @@ impl Parser {
                 &TypecheckFlags::use_class(maybe_class_type).lhs_unwrap(false),
             ) {
                 let argument_number = idx + 1;
-                let hint = expected_ty_at_idx.get_error_hint_between_types(user_gave).unwrap_or_default();
+                let hint = expected_ty_at_idx
+                    .get_error_hint_between_types(user_gave)
+                    .unwrap_or_default();
                 let error_message = format!("type mismatch when calling function (argument #{argument_number} was expected to be `{expected_ty_at_idx}` based on type signature, instead found `{user_gave}`){hint}", );
                 errors.push(new_err(
                     child_span,

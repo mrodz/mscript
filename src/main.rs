@@ -54,12 +54,15 @@ fn clean_command(path: &str) -> Result<()> {
     println!("Cleaning {}", path.display());
 
     let paths = std::fs::read_dir(path)?;
-    
+
     let mut removed = 0;
 
     for path in paths {
         let path = path?;
-        if Path::new(&path.file_name()).extension().is_some_and(|ext| ext == "mmm") {
+        if Path::new(&path.file_name())
+            .extension()
+            .is_some_and(|ext| ext == "mmm")
+        {
             std::fs::remove_file(path.path())?;
             println!("clean {}", path.path().display().to_string().blue());
             removed += 1;

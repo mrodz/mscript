@@ -867,7 +867,9 @@ impl TypeLayout {
         match self {
             Self::Alias(_, ty) => ty.disregard_distractors(is_optional_distractor),
             Self::CallbackVariable(x) => x.disregard_distractors(is_optional_distractor),
-            Self::Optional(Some(x)) if is_optional_distractor => x.disregard_distractors(is_optional_distractor),
+            Self::Optional(Some(x)) if is_optional_distractor => {
+                x.disregard_distractors(is_optional_distractor)
+            }
             x => x,
         }
     }

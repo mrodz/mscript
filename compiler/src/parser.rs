@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::cell::{Ref, RefCell, Cell};
+use std::cell::{Cell, Ref, RefCell};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -96,7 +96,7 @@ impl AssocFileData {
     //     let with_ext = path.with_extension("mmm");
 
     //     let root = root_ast_from_str(&*path, with_ext, &source, self.files.clone())?;
-        
+
     //     let new_file = root.user_data()
     //             .files
     //             .register_ast(path.clone(), File::new_with_location(path.clone()))
@@ -190,8 +190,13 @@ impl AssocFileData {
 
         let root = root_ast_from_str(&*path, &with_ext, &source, self.files.clone())?;
 
-        let new_file = root.user_data().files.register_ast(path.clone(), File::new_with_location(Arc::new(with_ext))).to_err_vec()?;
-        root.user_data().begin_module(new_file.get_export_ref(), new_file.get_compilation_lock());
+        let new_file = root
+            .user_data()
+            .files
+            .register_ast(path.clone(), File::new_with_location(Arc::new(with_ext)))
+            .to_err_vec()?;
+        root.user_data()
+            .begin_module(new_file.get_export_ref(), new_file.get_compilation_lock());
 
         let module_type = ModuleType::from_node(&root)?;
 
@@ -199,7 +204,10 @@ impl AssocFileData {
 
         let module = self
             .files
-            .register_module(path, ImportResult::new(module_type, new_file.get_compilation_lock()))
+            .register_module(
+                path,
+                ImportResult::new(module_type, new_file.get_compilation_lock()),
+            )
             .to_owned();
 
         assert_eq!(&root.user_data().files, &self.files);
@@ -272,7 +280,8 @@ impl AssocFileData {
         module_view.entry(self.source_path()).or_insert_with(|| {
             let exported_members = using_exports.exports.upgrade().unwrap();
             let public_types = using_exports.public_types.upgrade().unwrap();
-            let module_type = ModuleType::new_initialized(self.source_path(), exported_members, public_types);
+            let module_type =
+                ModuleType::new_initialized(self.source_path(), exported_members, public_types);
 
             ImportResult::new(module_type, compilation_lock)
         });
@@ -661,7 +670,9 @@ impl Parser {
 
         let result = File::new_with_location(input.user_data().bytecode_path());
 
-        input.user_data().begin_module(result.get_export_ref(), result.get_compilation_lock());
+        input
+            .user_data()
+            .begin_module(result.get_export_ref(), result.get_compilation_lock());
 
         input
             .user_data()
@@ -683,13 +694,16 @@ impl Parser {
         let import_self = input
             .user_data()
             .files
-            .register_module(input.user_data().source_path(), ImportResult::new(module_type, result.get_compilation_lock()))
+            .register_module(
+                input.user_data().source_path(),
+                ImportResult::new(module_type, result.get_compilation_lock()),
+            )
             .to_owned();
 
         log::info!("+ finished preload of {:?}", import_self.module().name());
 
         // if import_self.will_compile() {
-            
+
         // }
 
         populate_file(input, result)?;

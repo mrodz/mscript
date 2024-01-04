@@ -37,7 +37,9 @@ impl Parser {
                 assignment_ty.get_type_recursively(),
                 &TypecheckFlags::use_class(self_type.as_ref()).lhs_unwrap(false),
             ) {
-                let hint = ty.get_error_hint_between_types(assignment_ty).unwrap_or_default();
+                let hint = ty
+                    .get_error_hint_between_types(assignment_ty)
+                    .unwrap_or_default();
 
                 let message = if value.is_callable().to_err_vec()? {
                     format!("declaration wanted `{ty}`, but value is a function that returns `{assignment_ty}`{hint}")

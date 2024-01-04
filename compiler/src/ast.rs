@@ -396,10 +396,11 @@ impl CompilationState {
     ) -> Result<(), Vec<anyhow::Error>> {
         {
             let completed = file_manager.completed_ast.borrow();
-            log::debug!("[cc] FINAL COMPILATION LIST: {:?}", completed.keys().map(|x| x.display()).collect::<Vec<_>>());    
-
+            log::debug!(
+                "[cc] FINAL COMPILATION LIST: {:?}",
+                completed.keys().map(|x| x.display()).collect::<Vec<_>>()
+            );
         }
-
 
         self.compile_recursive_interior(file_manager, driver, 1)
     }

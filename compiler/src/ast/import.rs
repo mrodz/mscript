@@ -1,6 +1,7 @@
 use std::{
     borrow::Cow,
-    path::{Path, PathBuf}, sync::Arc,
+    path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use anyhow::{Context, Result};
@@ -9,7 +10,7 @@ use bytecode::compilation_bridge::id::SPLIT_LOOKUP_STORE;
 use crate::{
     ast::CompiledItem,
     instruction,
-    parser::{AssocFileData, Node, Parser, Rule, CompilationLock},
+    parser::{AssocFileData, CompilationLock, Node, Parser, Rule},
     BytecodePathStr, CompilationError, VecErr,
 };
 
@@ -156,7 +157,9 @@ impl Parser {
         }
 
         log::info!("begin @import in standard import");
-        let result = input.user_data().import(Arc::new(path.with_extension("ms")))?;
+        let result = input
+            .user_data()
+            .import(Arc::new(path.with_extension("ms")))?;
 
         let ident = Ident::new(
             file_name.into_owned(),
@@ -178,7 +181,9 @@ impl Parser {
         let path = Self::import_path(path_node).to_err_vec()?;
 
         log::info!("begin @import in import-names");
-        let module_import = input.user_data().import(Arc::new(path.with_extension("ms")))?;
+        let module_import = input
+            .user_data()
+            .import(Arc::new(path.with_extension("ms")))?;
 
         let module_type = module_import.module();
 
@@ -234,7 +239,9 @@ impl Parser {
                     let ident = property.to_owned();
 
                     if ident.ty().unwrap().is_class() {
-                        input.user_data().add_type(ident.boxed_name(), ident.ty().cloned().unwrap())
+                        input
+                            .user_data()
+                            .add_type(ident.boxed_name(), ident.ty().cloned().unwrap())
                     }
 
                     input.user_data().add_dependency(&ident);
@@ -251,7 +258,7 @@ impl Parser {
         Ok(Import::Names {
             path,
             names,
-            should_queue: module_import.compilation_lock()
+            should_queue: module_import.compilation_lock(),
         })
     }
 

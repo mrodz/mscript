@@ -115,12 +115,13 @@ fn forward_type_export() {
     )
     .unwrap()
     .add(
-        "bugs.ms", r#"
+        "bugs.ms",
+        r#"
 		type Bunny str
 		export type Bugs Bunny
 	"#,
     )
-	.unwrap()
+    .unwrap()
     .run()
     .unwrap()
 }
@@ -147,12 +148,13 @@ fn forward_type_export_mismatch() {
     )
     .unwrap()
     .add(
-        "bugs.ms", r#"
+        "bugs.ms",
+        r#"
 		type Bunny str
 		export type Bugs Bunny
 	"#,
     )
-	.unwrap()
+    .unwrap()
     .run()
     .unwrap()
 }
