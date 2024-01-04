@@ -89,7 +89,6 @@ impl Compile for Callable<'_> {
             self_register,
         } = &self.destination
         else {
-            // let CallableDestination::ToSelf { return_type }
             args_init.push(instruction!(call_self));
 
             return Ok(args_init);

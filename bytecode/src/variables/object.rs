@@ -43,12 +43,10 @@ impl ObjectBuilder {
 
     pub fn build(&'static mut self) -> Object {
         let name = self.name.clone().unwrap();
-        // let functions = self.functions.get(&name).expect("no functions");
 
         Object {
             name,
             object_variables: self.object_variables.clone().expect("no name"),
-            // functions,
         }
     }
 }
@@ -58,7 +56,6 @@ impl ObjectBuilder {
 pub struct Object {
     pub name: Rc<String>,
     pub object_variables: Rc<VariableMapping>,
-    // pub functions: &'static HashSet<String>,
 }
 
 impl PartialOrd for Object {
@@ -74,14 +71,9 @@ impl PartialEq for Object {
 }
 
 impl Object {
-    pub const fn new(
-        name: Rc<String>,
-        // functions: &'static HashSet<String>,
-        object_variables: Rc<VariableMapping>,
-    ) -> Self {
+    pub const fn new(name: Rc<String>, object_variables: Rc<VariableMapping>) -> Self {
         Self {
             name,
-            // functions,
             object_variables,
         }
     }
@@ -141,32 +133,6 @@ impl Object {
             None
         }
     }
-
-    // pub fn get_assoc_function_name(&self, name: &String) -> Result<&String> {
-    //     let x = self
-    //         .functions
-    //         .get(name)
-    //         .with_context(|| format!("Object {} does not have method {name}", self.name))?;
-    //     Ok(x)
-    // }
-
-    // pub fn call_fn(
-    //     &self,
-    //     function_name: &String,
-    //     arguments: Vec<Primitive>,
-    //     ctx: &mut Ctx,
-    // ) -> Result<()> {
-    //     let destination = self.get_assoc_function_name(function_name)?.clone();
-
-    //     ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
-    //         destination: crate::instruction::JumpRequestDestination::Standard(destination),
-    //         callback_state: Some(Rc::clone(&self.object_variables)),
-    //         stack: ctx.rced_call_stack(),
-    //         arguments,
-    //     }));
-
-    //     Ok(())
-    // }
 }
 
 impl Display for Object {

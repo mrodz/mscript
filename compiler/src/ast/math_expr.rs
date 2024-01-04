@@ -41,6 +41,9 @@ pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
         .op(infix!(or) | infix!(xor))
         .op(infix!(and))
         .op(infix!(lt) | infix!(lte) | infix!(gt) | infix!(gte) | infix!(eq) | infix!(neq))
+        .op(infix!(binary_or) | infix!(binary_and))
+        .op(infix!(binary_xor))
+        .op(infix!(bitwise_ls) | infix!(bitwise_rs))
         .op(Op::prefix(not))
         .op(infix!(add) | infix!(subtract))
         .op(infix!(multiply) | infix!(divide) | infix!(modulo))
@@ -78,6 +81,11 @@ pub enum Op {
     MulAssign,
     DivAssign,
     ModAssign,
+    BinaryXor,
+    BinaryOr,
+    BinaryAnd,
+    BitwiseLs,
+    BitwiseRs,
 }
 
 impl Display for Op {
@@ -109,6 +117,11 @@ impl Op {
             Op::MulAssign => "*=",
             Op::DivAssign => "/=",
             Op::ModAssign => "%=",
+            Op::BinaryXor => "xor",
+            Op::BinaryAnd => "&",
+            Op::BinaryOr => "|",
+            Op::BitwiseLs => "<<",
+            Op::BitwiseRs => ">>",
         }
     }
 
@@ -209,7 +222,7 @@ impl CompileTimeEvaluate for Expr {
 
                 let constexpr_eval = maybe_constexpr_eval.as_ref().unwrap();
 
-                if !constexpr_eval.for_type()?.supports_negate() {
+                if constexpr_eval.for_type()?.supports_negate() {
                     let val = constexpr_eval.try_negate()?;
                     if let Some(val) = val {
                         return Ok(ConstexprEvaluation::Owned(val));
@@ -234,6 +247,11 @@ impl CompileTimeEvaluate for Expr {
                     Op::Multiply => lhs * rhs,
                     Op::Divide => lhs / rhs,
                     Op::Modulo => lhs % rhs,
+                    Op::BitwiseLs => lhs << rhs,
+                    Op::BitwiseRs => lhs >> rhs,
+                    Op::BinaryAnd => lhs & rhs,
+                    Op::BinaryOr => lhs | rhs,
+                    Op::BinaryXor => lhs ^ rhs,
                     _ => return Ok(ConstexprEvaluation::Impossible),
                 };
 
@@ -693,6 +711,11 @@ fn parse_expr(
                 Rule::mul_assign => Op::MulAssign,
                 Rule::div_assign => Op::DivAssign,
                 Rule::mod_assign => Op::ModAssign,
+                Rule::binary_or => Op::BinaryOr,
+                Rule::binary_and => Op::BinaryAnd,
+                Rule::binary_xor => Op::BinaryXor,
+                Rule::bitwise_ls => Op::BitwiseLs,
+                Rule::bitwise_rs => Op::BitwiseRs,
                 rule => unreachable!("Expr::parse expected infix operation, found {:?}", rule),
             };
 
@@ -760,8 +783,6 @@ fn parse_expr(
                         let parameters = function_type.parameters();
 
                         let arguments: FunctionArguments = Parser::function_arguments(function_arguments, parameters, None)?;
-
-                        // let function_type = function_type.clone();
 
                         return Ok((Expr::Callable(CallableContents::Standard { lhs_raw: lhs, function: function_type, arguments }), l_span))
                     }

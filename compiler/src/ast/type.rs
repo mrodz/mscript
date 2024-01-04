@@ -310,17 +310,6 @@ impl ModuleType {
                             input.user_data().get_source_file_name()
                         );
 
-                        // let (file, exports_to_use) =
-                        //     if let Some(exports) = input.user_data().get_export_ref_for(&path) {
-                        //         (exports.0.to_owned(), exports.1)
-                        //     } else {
-                        //         let new_file = input.user_data().file_manager().register_ast(path.clone(), File::new_with_location(path.clone())).to_err_vec()?;
-                        //         (new_file.to_owned(), new_file.get_export_ref())
-                        //         // Export::new_untied(exports_backing, types_backing)
-                        //     };
-
-                        // input.user_data().begin_module(exports_to_use, file.get_compilation_lock());
-
                         let module_import = input.user_data().import(path.clone())?;
 
                         log::info!(
@@ -359,8 +348,6 @@ impl ModuleType {
                             "Gen. mod {:?} -- @import {module_import:?}",
                             input.user_data().source_path()
                         );
-
-                        // panic!("@{}@ {:?}", import.as_str(), import.as_rule())
                     }
                     other => log::trace!(
                         "Gen. mod {:?} -- skipping {other:?}",
@@ -791,17 +778,13 @@ impl TypeLayout {
         }
 
         match index_as_usize {
-            ValToUsize::Ok(index_as_usize) => {
-                // let index = .with_context(|| format!("List index must be an integer between {} and {:#}", usize::MIN, usize::MAX))?;
-
-                match me {
-                    Self::List(ListType::Empty) => bail!("cannot index into empty list"),
-                    Self::List(list) => {
-                        return Ok(Cow::Borrowed(list.get_type_at_known_index(index_as_usize)?));
-                    }
-                    _ => bail!("not indexable"),
+            ValToUsize::Ok(index_as_usize) => match me {
+                Self::List(ListType::Empty) => bail!("cannot index into empty list"),
+                Self::List(list) => {
+                    return Ok(Cow::Borrowed(list.get_type_at_known_index(index_as_usize)?));
                 }
-            }
+                _ => bail!("not indexable"),
+            },
             ValToUsize::NaN => bail!(
                 "List index must be an integer between {} and {:#}",
                 usize::MIN,

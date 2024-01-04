@@ -65,10 +65,7 @@ impl Compile for WhileLoop {
                 }
                 normal => condition_compiled.push(normal),
             }
-            // print!("{}", body_item.repr(true).unwrap());
         }
-
-        // condition_compiled.append(&mut body_compiled);
 
         Ok(condition_compiled)
     }

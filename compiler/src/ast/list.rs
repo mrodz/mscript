@@ -155,29 +155,6 @@ impl ListType {
         false
     }
 
-    // pub fn get_type_at_index(&self, index: ) {
-    //     let maybe_constexpr_eval = self.try_constexpr_eval()?;
-    //     let Some(constexpr_value) = maybe_constexpr_eval.as_ref() else {
-    //         bail!("an index that is not compile-time-constant cannot be used to deduce the type of the resulting element");
-    //     };
-
-    //     let Value::Number(number) = constexpr_value else {
-    //         unreachable!();
-    //     };
-
-    //     match number {
-    //         Number::BigInt(idx) | Number::Integer(idx) | Number::Byte(idx) => {
-    //             let idx: usize = idx.parse()?;
-
-    //             let Some(type_at_index) = list_type.get_type_at_index(idx) else {
-    //                 bail!("`{idx}` is not a valid index into `{list_type}`, which has a known length at compile time of {}", list_type.len())
-    //             };
-    //             Ok(Cow::Owned(type_at_index.clone()))
-    //         }
-    //         Number::Float(_) => bail!("cannot index into a list with floats"),
-    //     }
-    // }
-
     pub fn lower_bound(&self) -> ListBound {
         match self {
             Self::Empty => ListBound::NotIndexable,
@@ -388,7 +365,6 @@ impl IntoType for List {
                     if last_ty.get_type_recursively() != &this_ty && end_of_unique_values == size {
                         end_of_unique_values = idx;
                         all_are_the_same_type = false;
-                        // break 'label idx;
                     }
                 } else {
                     last_ty = Some(this_ty);
@@ -458,22 +434,6 @@ impl CompileTimeEvaluate for Index {
         } else {
             Ok(ConstexprEvaluation::Impossible)
         }
-        // if self.0.is_empty() {
-        //     unreachable!("empty index");
-        // }
-
-        // let mut values = vec![];
-
-        // for index in self.0.iter() {
-        //     let index = index.try_constexpr_eval()?;
-        //     let ConstexprEvaluation::Owned(value) = index else {
-        //         return Ok(ConstexprEvaluation::Impossible);
-        //     };
-
-        //     values.push(value);
-        // }
-
-        // Ok(ConstexprEvaluation::Owned(Value::MultiIndex(values.into_boxed_slice())))
     }
 }
 
@@ -492,7 +452,7 @@ impl Compile for Index {
 
         let mut result = vec![];
         for i in 0..registerc {
-            let lhs_register = state.poll_temporary_register(); // TemporaryRegister::reserve_many(registerc);
+            let lhs_register = state.poll_temporary_register();
             result.push(instruction!(store_fast lhs_register));
             let index_temp_register = state.poll_temporary_register();
 
@@ -511,19 +471,6 @@ impl Compile for Index {
             state.free_temporary_register(index_temp_register);
             state.free_temporary_register(lhs_register);
         }
-
-        // un-comment
-
-        //     result.append(&mut self.0.compile(function_buffer)?);
-
-        //     let index_temp_register = TemporaryRegister::new();
-
-        //     let instruction_str = format!("[{index_temp_register}]");
-
-        //    ;
-
-        //     index_temp_register.free();
-        //     vec_temp_register.free();
 
         Ok(result)
     }

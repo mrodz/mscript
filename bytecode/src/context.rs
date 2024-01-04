@@ -311,11 +311,6 @@ impl<'a> Ctx<'a> {
         self.call_stack.borrow_mut().delete_variable_local(name)
     }
 
-    // /// Mutate a variable in this function.
-    // pub(crate) fn update_variable(&self, name: String, var: Primitive) -> Result<()> {
-    //     rc_to_ref(&self.call_stack).update_variable(name, var)
-    // }
-
     /// Get the [`Primitive`] value and its associated [`VariableFlags`] from a name.
     ///
     /// Will start the search in the current function and bubble all the way up to the highest stack frame.

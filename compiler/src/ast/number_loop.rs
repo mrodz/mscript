@@ -88,7 +88,6 @@ impl Display for NumberLoopRegister<'_> {
 
 impl Compile for NumberLoop {
     fn compile(&self, state: &CompilationState) -> Result<Vec<super::CompiledItem>> {
-        // let mangled = self.name.as_ref().map(|x| x.mangle());
         let loop_identity = NumberLoopRegister::from_option(self.name.as_ref(), state);
 
         let mut result = vec![];
@@ -140,7 +139,6 @@ impl Compile for NumberLoop {
             })
         }
 
-        // step_compiled.push(instruction!(bin_op "+"));
         step_compiled.push(instruction!(bin_op_assign "+=" loop_identity));
 
         let step_compiled_len = step_compiled.len();

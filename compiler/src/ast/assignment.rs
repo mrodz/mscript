@@ -169,14 +169,7 @@ impl Dependencies for Assignment {
 
 impl Compile for Assignment {
     fn compile(&self, state: &CompilationState) -> Result<Vec<super::CompiledItem>> {
-        // let name = self.ident.name();
         let mut value_init = self.value().compile(state)?;
-
-        // let mut value_init = if let ConstexprEvaluation::Owned(value) = maybe_constexpr_eval {
-        //     value.compile(state)?
-        // } else {
-        //     self.value().compile(state)?
-        // };
 
         if self.idents.len() == 1 {
             let name = self.idents[0].name();
@@ -344,7 +337,9 @@ impl Parser {
             (None, maybe_flags_or_assignment)
         };
 
-        let value_node = assignment.children().next().unwrap().as_span();
+        let mut span_getter = assignment.children();
+        let name_span = span_getter.next().unwrap().as_span();
+        let value_span = span_getter.next().unwrap().as_span();
 
         let is_const = flags
             .as_ref()
@@ -361,13 +356,11 @@ impl Parser {
 
         if is_export && !input.user_data().is_at_module_level() {
             return Err(vec![new_err(
-                flags_span,
+                name_span,
                 &input.user_data().get_source_file_name(),
                 "exporting variables/constants must occur at the module level".to_owned(),
             )]);
         }
-
-        let assignment_span = assignment.as_span();
 
         let user_data = input.user_data();
 
@@ -378,7 +371,7 @@ impl Parser {
             Rule::assignment_no_type => {
                 if is_export {
                     return Err(vec![new_err(
-                        flags_span,
+                        name_span,
                         &input.user_data().get_source_file_name(),
                         "Exports require an explicit type".to_owned(),
                     )]);
@@ -391,7 +384,7 @@ impl Parser {
             Rule::assignment_unpack => {
                 if is_export {
                     return Err(vec![new_err(
-                        flags_span,
+                        name_span,
                         &input.user_data().get_source_file_name(),
                         "Seperate each name into its own `export NAME = ...`".to_owned(),
                     )]);
@@ -405,7 +398,7 @@ impl Parser {
             .value()
             .try_constexpr_eval()
             .details(
-                assignment_span,
+                value_span,
                 &input.user_data().get_source_file_name(),
                 "attempting to evaluate this expression at compile time resulted in an error",
             )
@@ -419,7 +412,7 @@ impl Parser {
             if let Some(list_type) = ident_ty.is_list() {
                 if list_type.must_be_const() && !is_const {
                     return Err(vec![new_err(
-                        value_node,
+                        name_span,
                         &user_data.get_source_file_name(),
                         "mixed-type arrays must be const in order to ensure type safety".to_owned(),
                     )]);
@@ -443,7 +436,7 @@ impl Parser {
 
             if requires_check && !can_modify_if_applicable {
                 return Err(vec![new_err(
-                    value_node,
+                    name_span,
                     &input.user_data().get_source_file_name(),
                     format!(
                         "cannot reassign to \"{}\", which is a const variable",

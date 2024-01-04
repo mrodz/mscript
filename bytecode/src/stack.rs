@@ -183,11 +183,8 @@ impl VariableMapping {
         // if insert returns None, that means there was no value there,
         // and this `update` is invalid.
         if let Some(pair) = self.0.get(name) {
-            // let mut pair = pair.borrow_mut();
-
             if pair.flags().can_update() {
                 pair.set_primitive(value);
-                // rc_to_ref(pair).0 = value;
             } else {
                 bail!("variable is read-only")
             }

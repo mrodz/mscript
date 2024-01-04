@@ -64,7 +64,6 @@ pub fn transpile_file(path: &str, new_path: &str) -> Result<()> {
     let path = Path::new(&path);
 
     let file = File::open(path)?;
-    // let spinner_style = ProgressStyle::with_template("{prefix:.bold.dim} {spinner} {wide_msg}")?;
     let functions = MultiProgress::new();
 
     let pb = functions.add(ProgressBar::new(file.metadata()?.len()));

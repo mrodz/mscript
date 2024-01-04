@@ -16,7 +16,6 @@ pub(crate) enum ClassFeature {
 impl Compile for ClassFeature {
     fn compile(&self, state: &CompilationState) -> Result<Vec<CompiledItem>, anyhow::Error> {
         match self {
-            // Self::Constructor(x) => x.compile(state),
             Self::Function(x) => x.compile(state),
             Self::Variable(x) => x.compile(state),
         }
@@ -38,7 +37,6 @@ impl WalkForType for ClassFeature {
 impl Dependencies for ClassFeature {
     fn dependencies(&self) -> Vec<crate::ast::Dependency> {
         match self {
-            // Self::Constructor(x) => x.net_dependencies(),
             Self::Function(x) => x.net_dependencies(),
             Self::Variable(x) => x.net_dependencies(),
         }
@@ -46,7 +44,6 @@ impl Dependencies for ClassFeature {
 
     fn supplies(&self) -> Vec<crate::ast::Dependency> {
         match self {
-            // Self::Constructor(x) => x.supplies(),
             Self::Function(x) => x.supplies(),
             Self::Variable(x) => x.supplies(),
         }

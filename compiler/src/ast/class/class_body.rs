@@ -105,8 +105,6 @@ impl Parser {
                     }
 
                     constructor = Some(Self::constructor(feature_node)?);
-
-                    // class_features.push(CF::Constructor());
                 }
                 Rule::class_bound_function => {
                     class_features.push(CF::Function(Self::class_bound_function(feature_node)?));

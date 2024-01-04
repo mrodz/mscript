@@ -31,14 +31,42 @@ math_prefix = _{ unary_minus | not | optional_unwrap }
 math_postfix = _{ dot_chain | callable | list_index | optional_or }
 
 math_atom = _{ math_prefix? ~ math_primary ~ math_postfix? }
-math_expr = { math_atom ~ (bin_op ~ math_atom)* }
+math_expr = !{ math_atom ~ (bin_op ~ math_atom)* }
 
-bin_op = _{ op_assign | add | subtract | multiply | divide | modulo | lte | gte | lt | gt | eq | neq | and | or | xor | unwrap }
+bin_op = _{ 
+    op_assign | 
+    add | 
+    subtract | 
+    multiply | 
+    divide | 
+    modulo | 
+    bitwise_ls | 
+    bitwise_rs |
+    lte | 
+    gte | 
+    lt | 
+    gt | 
+    eq | 
+    neq | 
+    and | 
+    or | 
+    xor | 
+    unwrap | 
+    binary_xor | 
+    binary_and | 
+    binary_or
+}
+
 add = { "+" }
 subtract = { "-" }
 multiply = { "*" }
 divide = { "/" }
 modulo = { "%" }
+binary_xor = { "xor" }
+binary_and = { "&" }
+binary_or = { "|" }
+bitwise_ls = { "<<" }
+bitwise_rs = { ">>" }
 
 op_assign = _{ add_assign | sub_assign | mul_assign | div_assign | mod_assign }
 
@@ -85,18 +113,17 @@ function_parameters = { ((ident ~ (":" ~ type)?))? ~ ("," ~ ((ident ~ (":" ~ typ
 function_type = { "fn" ~ "(" ~ (type ~ ("," ~ type)*)? ~ ")" ~ function_return_type?  }
 // allow braces around the return type in case it is long
 function_return_type = { "->" ~ (type | ("(" ~ type ~ ")")) }
-function = { "fn" ~ "(" ~ (function_parameters) ~ ")" ~ function_return_type? ~ block }
+function = !{ "fn" ~ "(" ~ (function_parameters) ~ ")" ~ function_return_type? ~ block }
 
-list = { "[" ~ value? ~ ("," ~ value)* ~ ","? ~ "]" }
+list = !{ "[" ~ value? ~ ("," ~ value)* ~ ","? ~ "]" }
 open_ended_type = { type ~ "..." }
 list_type = { "[" ~ type? ~ ("," ~ (type ~ !("...")))* ~ ("," ~ open_ended_type)? ~ "]" }
 list_type_open_only = { "[" ~ open_ended_type ~ "]" }
 list_index = { ("[" ~ value ~ "]")+ }
 
-value = { function | math_expr | ident | list }
+value = ${ function | math_expr | ident | list }
 
 assignment_flag = { "modify" | "const" | "export" }
-// bad_assignment_flag = { &ident }
 assignment_flags = { assignment_flag ~ assignment_flag* }
 assignment_no_type = { ident ~ "=" ~ value }
 assignment_type = { ident ~ ":" ~ type ~ "=" ~ value }

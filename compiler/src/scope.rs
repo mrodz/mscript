@@ -85,7 +85,6 @@ pub(crate) enum TypeSearchResult<'a> {
 
 #[derive(Debug)]
 pub(crate) enum SuccessTypeSearchResult<'a> {
-    // Primitive(&'static TypeLayout),
     Owned(Cow<'static, TypeLayout>),
     InScope(Ref<'a, Cow<'static, TypeLayout>>),
 }
@@ -104,7 +103,6 @@ impl TypeSearchResult<'_> {
 impl Clone for SuccessTypeSearchResult<'_> {
     fn clone(&self) -> Self {
         match self {
-            // Self::Primitive(x) => Self::Primitive(x),
             Self::Owned(x) => Self::Owned(x.clone()),
             Self::InScope(x) => Self::Owned((*x).clone()),
         }
@@ -114,7 +112,6 @@ impl Clone for SuccessTypeSearchResult<'_> {
 impl SuccessTypeSearchResult<'_> {
     pub fn into_cow(self) -> Cow<'static, TypeLayout> {
         match self {
-            // Self::Primitive(x) => Cow::Borrowed(x),
             Self::Owned(x) => x,
             Self::InScope(x) => x.clone(),
         }
@@ -288,7 +285,6 @@ impl Scopes {
             }
 
             None
-            // let second_to_last = &scopes[scopes.len() - step_n_frames];
         })
         .ok()
     }
@@ -302,7 +298,6 @@ impl Display for Scopes {
         }
 
         write!(f, "\n==")
-        // write!(f, "")
     }
 }
 

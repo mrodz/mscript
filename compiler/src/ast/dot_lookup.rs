@@ -61,21 +61,13 @@ impl Compile for DotLookupOption {
                     instruction!(breakpoint "POST store function name in lhs_register"),
                 ]);
 
-                // let load_register = if *assume_self_is_on_top {
-                //     &instance_register
-                // } else {
-                //     &lhs_register
-                // };
-
                 let callable: Callable<'_> = Callable::new(
                     arguments,
                     instruction!(load_fast lhs_register),
                     if *assume_self_is_on_top {
-                        // None
                         Some(instance_register.to_string())
                     } else {
                         None
-                        // Some(lhs_register.to_string())
                     },
                 );
 
@@ -169,11 +161,8 @@ impl Parser {
                         assume_self_is_on_top = false;
 
                         if ident_ty.is_class() {
-                            // assume_self_is_on_top = false;
                             allow_self_type = Cow::Owned(ident_ty.clone().into_owned());
                         } else {
-                            // assume_self_is_on_top = true;
-
                             let callable_ty = ident_ty
                                 .is_callable()
                                 .details(
@@ -192,7 +181,6 @@ impl Parser {
                 let arguments = Self::function_arguments(
                     arguments,
                     function_type.parameters(),
-                    // Some(allow_self_type.as_ref()),
                     if assume_self_is_on_top {
                         Some(allow_self_type.as_ref())
                     } else {
@@ -210,8 +198,6 @@ impl Parser {
                     .return_type()
                     .get_type()
                     .unwrap_or(&Cow::Owned(TypeLayout::Void));
-
-                // drop(type_of_property);
 
                 let output_type = if output_type.is_class_self() {
                     lhs_ty_cow

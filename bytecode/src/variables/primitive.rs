@@ -96,9 +96,6 @@ impl HeapPrimitive {
         match self {
             Self::Lookup(lookup) => {
                 let new_value = lookup.update_primitive(setter)?;
-                // lookup.set_primitive(setter())
-                // let mut view = RefMut::map(lookup.borrow_mut(), |(primitive, _)| primitive);
-                // *view = setter(&view)?;
                 Ok(new_value)
             }
             Self::ArrayPtr(raw_ptr) => {

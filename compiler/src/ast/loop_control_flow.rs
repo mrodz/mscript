@@ -31,7 +31,6 @@ impl Compile for Break {
 
 impl Parser {
     pub fn break_statement(input: Node) -> Result<Break> {
-        // TODO: check if is in loop
         let frames_since_loop = input.user_data().scopes_since_loop();
 
         let frames_since_loop = map_err(
@@ -45,7 +44,6 @@ impl Parser {
     }
 
     pub fn continue_statement(input: Node) -> Result<Continue> {
-        // TODO: check if is in loop
         let frames_since_loop = input.user_data().scopes_since_loop();
 
         let frames_since_loop = map_err(

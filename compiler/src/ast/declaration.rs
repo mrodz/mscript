@@ -18,7 +18,6 @@ use super::{
 pub(crate) enum Declaration {
     Assignment(Assignment),
     Reassignment(Reassignment),
-    // Expr(Expr),
     PrintStatement(PrintStatement),
     ReturnStatement(ReturnStatement),
     IfStatement(IfStatement),
@@ -102,7 +101,6 @@ impl Parser {
 
         let matched = match declaration.as_rule() {
             Rule::assignment => Declaration::Assignment(Self::assignment(declaration)?),
-            // Rule::callable => Declaration::Expr(math_expr(declaration)?),
             Rule::print_statement => {
                 let print_stmt = Self::print_statement(declaration);
                 Declaration::PrintStatement(print_stmt?)

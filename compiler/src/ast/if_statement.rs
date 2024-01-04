@@ -172,7 +172,6 @@ impl Parser {
                 let else_scope: ScopeHandle = input.user_data().push_else_typed(child_returns_type);
                 let else_statement = Self::else_statement(else_statement);
 
-                // let child_returns_type = input.user_data().pop_scope();
                 let child_returns_type = else_scope.consume();
 
                 let x = Some(else_statement?);
@@ -186,8 +185,6 @@ impl Parser {
             && (do_all_else_branches_return || can_determine_is_if_branch_truthy)
         {
             input.user_data().mark_should_return_as_completed();
-
-            // return_type.mark_should_return_as_completed().to_err_vec()?;
         }
 
         Ok(IfStatement {

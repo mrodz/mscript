@@ -84,37 +84,6 @@ impl AssocFileData {
         &self.files
     }
 
-    // pub fn get_module_type(
-    //     &self,
-    //     path: Arc<PathBuf>,
-    // ) -> Result<Ref<ModuleType>, Vec<anyhow::Error>> {
-    //     if let Some(cached) = self.files.get_module_type(&path) {
-    //         return Ok(cached);
-    //     }
-
-    //     let source = self.import_io(&path)?;
-    //     let with_ext = path.with_extension("mmm");
-
-    //     let root = root_ast_from_str(&*path, with_ext, &source, self.files.clone())?;
-
-    //     let new_file = root.user_data()
-    //             .files
-    //             .register_ast(path.clone(), File::new_with_location(path.clone()))
-    //             .details(
-    //                 root.as_span(),
-    //                 &root.user_data().get_source_file_name(),
-    //                 "Circular dependency graph detected at compile time!",
-    //             )
-    //             .to_err_vec()?
-    //             .clone();
-
-    //     root.user_data().begin_module(new_file.get_export_ref());
-
-    //     let module_type = ModuleType::from_node(&root)?;
-
-    //     Ok(self.files.register_module(path, module_type))
-    // }
-
     pub fn get_source_file_name(&self) -> String {
         self.source_name.bytecode_str()
     }
@@ -215,8 +184,6 @@ impl AssocFileData {
         populate_file(root, new_file)?;
 
         Ok(module)
-
-        // Parser::file(root)
     }
 
     pub fn is_at_module_level(&self) -> bool {
@@ -701,10 +668,6 @@ impl Parser {
             .to_owned();
 
         log::info!("+ finished preload of {:?}", import_self.module().name());
-
-        // if import_self.will_compile() {
-
-        // }
 
         populate_file(input, result)?;
 
