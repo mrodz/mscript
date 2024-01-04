@@ -78,17 +78,6 @@ This passion project is a fully-fledged programming language that supports much 
     print number # ✔️
   }
   ```
-- [ ] Plugin Language Feature Customization
-  ```tsx
-  use std::ast::html
-  
-  my_html = html @@
-    <div>
-      This is a custom parsing rule defined in <b>std::ast::html!</b>
-    </div>
-  @@
-
-  ```
 
 # How To Use
 MScript has a build suite, `mscript.exe`, that can:
