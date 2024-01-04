@@ -1,5 +1,6 @@
 use std::borrow::Cow;
-use std::cell::{Ref, RefCell};
+use std::cell::{Cell, Ref, RefCell};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -15,12 +16,14 @@ use crate::scope::{
     Scope, ScopeHandle, ScopeIter, ScopeReturnStatus, ScopeType, Scopes, TypeSearchResult,
 };
 use crate::{
-    instruction, perform_file_io_in, root_ast_from_str, BytecodePathStr, FileManager, VecErr,
+    instruction, perform_file_io_in, root_ast_from_str, BytecodePathStr, CompilationError,
+    FileManager, VecErr,
 };
 
 #[allow(unused)]
 pub(crate) type Node<'i> = pest_consume::Node<'i, Rule, Rc<AssocFileData>>;
 
+/// The AST parser for MScript. Various `impl` blocks define how each source code tree node should operate.
 #[derive(ParserDerive)]
 #[grammar = "grammar.pest"]
 pub(crate) struct Parser;
@@ -30,14 +33,35 @@ pub(crate) struct AssocFileData {
     scopes: Scopes,
     file_name: Arc<PathBuf>,
     source_name: Arc<PathBuf>,
-    // class_id_c: RwLock<usize>,
-    exports: RefCell<Option<Arc<RefCell<Vec<Ident>>>>>,
+    exports: RefCell<Option<Export>>,
     files: FileManager,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub(crate) struct ImportResult {
+    module: ModuleType,
+    compilation_lock: CompilationLock,
+}
+
+impl ImportResult {
+    #[doc(hidden)]
+    pub fn new(module: ModuleType, compilation_lock: CompilationLock) -> Self {
+        Self {
+            module,
+            compilation_lock,
+        }
+    }
+    pub fn module(&self) -> ModuleType {
+        self.module.clone()
+    }
+
+    pub fn compilation_lock(&self) -> CompilationLock {
+        self.compilation_lock.clone()
+    }
 }
 
 impl AssocFileData {
     pub fn new(destination_unknown: impl AsRef<Path>, files_loaded: FileManager) -> Self {
-        // let destination: Path = destination_name.into();
         let destination = destination_unknown.as_ref();
 
         let dst_file_ext = destination
@@ -51,11 +75,45 @@ impl AssocFileData {
             scopes: Scopes::new(),
             file_name: Arc::new(destination.to_path_buf()),
             source_name: Arc::new(destination.with_extension("ms").to_path_buf()),
-            // class_id_c: RwLock::new(0),
-            exports: RefCell::new(None),
             files: files_loaded,
+            exports: RefCell::default(),
         }
     }
+
+    pub fn file_manager(&self) -> &FileManager {
+        &self.files
+    }
+
+    // pub fn get_module_type(
+    //     &self,
+    //     path: Arc<PathBuf>,
+    // ) -> Result<Ref<ModuleType>, Vec<anyhow::Error>> {
+    //     if let Some(cached) = self.files.get_module_type(&path) {
+    //         return Ok(cached);
+    //     }
+
+    //     let source = self.import_io(&path)?;
+    //     let with_ext = path.with_extension("mmm");
+
+    //     let root = root_ast_from_str(&*path, with_ext, &source, self.files.clone())?;
+
+    //     let new_file = root.user_data()
+    //             .files
+    //             .register_ast(path.clone(), File::new_with_location(path.clone()))
+    //             .details(
+    //                 root.as_span(),
+    //                 &root.user_data().get_source_file_name(),
+    //                 "Circular dependency graph detected at compile time!",
+    //             )
+    //             .to_err_vec()?
+    //             .clone();
+
+    //     root.user_data().begin_module(new_file.get_export_ref());
+
+    //     let module_type = ModuleType::from_node(&root)?;
+
+    //     Ok(self.files.register_module(path, module_type))
+    // }
 
     pub fn get_source_file_name(&self) -> String {
         self.source_name.bytecode_str()
@@ -103,41 +161,62 @@ impl AssocFileData {
         self.files.preloaded_file_exists(&path.bytecode_str())
     }
 
-    pub fn import(&self, path: PathBuf) -> Result<(ModuleType, bool), Vec<anyhow::Error>> {
-        if let Some(module) = self.files.get_module_type(&path) {
-            return Ok((module.to_owned(), true));
+    fn import_io(&self, path: &Path) -> Result<Cow<'static, str>, Vec<anyhow::Error>> {
+        Ok(
+            if let Some(code) = self.files.get_preloaded_file(&path.bytecode_str()) {
+                Cow::Borrowed(code)
+            } else {
+                Cow::Owned(perform_file_io_in(path).to_err_vec()?)
+            },
+        )
+    }
+
+    pub fn import(&self, path: Arc<PathBuf>) -> Result<ImportResult, Vec<anyhow::Error>> {
+        if let Some(result) = self.files.get_module_type(&path) {
+            return Ok(result.to_owned());
+        }
+
+        if let Some(result) = self.files.get_incomplete_module(&path) {
+            log::info!("using incomplete module: {:?}", result.module());
+            return Ok(result);
         }
 
         log::debug!("Cache miss on {path:?}");
 
         // else, cache miss
 
-        let source = if let Some(code) = self.files.get_preloaded_file(&path.bytecode_str()) {
-            Cow::Borrowed(code)
-        } else {
-            Cow::Owned(perform_file_io_in(path.as_ref()).to_err_vec()?)
-        };
-
+        let source = self.import_io(&path)?;
         let with_ext = path.with_extension("mmm");
 
-        // let owned = path.to_owned()
+        let root = root_ast_from_str(&*path, &with_ext, &source, self.files.clone())?;
 
-        let root = root_ast_from_str(&path, with_ext, &source, self.files.clone())?;
+        let new_file = root
+            .user_data()
+            .files
+            .register_ast(path.clone(), File::new_with_location(Arc::new(with_ext)))
+            .to_err_vec()?;
+        root.user_data()
+            .begin_module(new_file.get_export_ref(), new_file.get_compilation_lock());
 
-        let module_type = ModuleType::from_node(&root).to_err_vec()?;
+        let module_type = ModuleType::from_node(&root)?;
 
         log::info!("+ mod {path:?} {module_type:?}");
 
         let module = self
             .files
-            .register_module(Arc::new(path.to_owned()), module_type)
+            .register_module(
+                path,
+                ImportResult::new(module_type, new_file.get_compilation_lock()),
+            )
             .to_owned();
 
         assert_eq!(&root.user_data().files, &self.files);
 
-        Parser::file(root)?;
+        populate_file(root, new_file)?;
 
-        Ok((module, false))
+        Ok(module)
+
+        // Parser::file(root)
     }
 
     pub fn is_at_module_level(&self) -> bool {
@@ -195,42 +274,27 @@ impl AssocFileData {
         self.scopes.get_type_of_executing_class(skip_n_frames)
     }
 
-    /// This function should **ONLY** be called when creating the AST Node for a Class Type.
-    // pub fn request_class_id(&self) -> usize {
-    //     let mut class_id = self.class_id_c.write().unwrap();
-    //     let result = *class_id;
-    //     *class_id += 1;
-    //     result
-    // }
+    pub(crate) fn begin_module(&self, using_exports: Export, compilation_lock: CompilationLock) {
+        let mut module_view = self.file_manager().loaded_modules.borrow_mut();
 
-    pub fn get_backing_export_struct(&self) -> Option<Arc<RefCell<Vec<Ident>>>> {
-        let mut window = self.exports.borrow_mut();
-        window.take()
+        module_view.entry(self.source_path()).or_insert_with(|| {
+            let exported_members = using_exports.exports.upgrade().unwrap();
+            let public_types = using_exports.public_types.upgrade().unwrap();
+            let module_type =
+                ModuleType::new_initialized(self.source_path(), exported_members, public_types);
+
+            ImportResult::new(module_type, compilation_lock)
+        });
+
+        *self.exports.borrow_mut() = Some(using_exports)
     }
 
-    pub fn get_export_ref(&self) -> Result<Export> {
-        let window = self.exports.borrow();
-
-        if let Some(window) = window.as_ref() {
-            Ok(Export {
-                exports: Arc::downgrade(window),
-            })
-        } else {
-            drop(window);
-
-            let exports = Arc::new(RefCell::new(vec![]));
-
-            let weak_ref = Arc::downgrade(&exports);
-
-            {
-                let mut window = self.exports.borrow_mut();
-                *window = Some(exports);
-            }
-
-            let export = Export { exports: weak_ref };
-
-            Ok(export)
-        }
+    pub fn get_export_ref(&self) -> Export {
+        self.exports
+            .borrow()
+            .as_ref()
+            .unwrap_or_else(|| panic!("`exports` has not been set up for {self:?}"))
+            .to_owned()
     }
 
     pub fn get_current_executing_function(
@@ -310,8 +374,8 @@ impl AssocFileData {
         self.scopes.add_variable(dependency)
     }
 
-    pub fn add_type(&self, name: Box<str>, ty: Cow<'static, TypeLayout>, is_alias: bool) {
-        self.scopes.add_type(name, ty, is_alias)
+    pub fn add_type(&self, name: Box<str>, ty: Cow<'static, TypeLayout>) {
+        self.scopes.add_type(name, ty)
     }
 
     pub fn has_name_been_mapped(&self, dependency: &str) -> bool {
@@ -450,24 +514,36 @@ pub(crate) mod util {
         <Parser as pest_consume::Parser>::parse_with_userdata(rule, input_str, user_data)
             .map_err(Box::new)
     }
+}
 
-    pub(crate) fn parse(
-        rule: Rule,
-        input_str: &str,
-    ) -> Result<Nodes<Rule, ()>, Box<pest_consume::Error<Rule>>> {
-        <Parser as pest_consume::Parser>::parse(rule, input_str).map_err(Box::new)
+pub(crate) fn root_node_from_str(input_str: &str, user_data: Rc<AssocFileData>) -> Result<Node> {
+    let x = util::parse_with_userdata_features(Rule::file, input_str, user_data);
+
+    x.and_then(|x| x.single().map_err(Box::new))
+        .map_err(|e| anyhow!(e))
+}
+
+#[derive(Debug, Default, Clone, PartialEq)]
+pub(crate) struct CompilationLock(Arc<Cell<bool>>);
+
+impl CompilationLock {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn mark_compiled(&self) {
+        self.0.set(true);
+    }
+
+    pub fn can_compile(&self) -> bool {
+        !self.0.get()
     }
 }
 
-pub(crate) fn root_node_from_str(
-    input_str: &str,
-    user_data: Rc<AssocFileData>,
-) -> Result<Node, Vec<anyhow::Error>> {
-    let x = util::parse_with_userdata_features(Rule::file, input_str, user_data);
-
-    x.map_err(|e| vec![anyhow!(e)])?
-        .single()
-        .map_err(|e| vec![anyhow!(e)])
+impl std::fmt::Display for CompilationLock {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Can Compile: {}", self.can_compile())
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -475,6 +551,8 @@ pub(crate) struct File {
     pub declarations: Arc<RefCell<Vec<Declaration>>>,
     pub location: Arc<PathBuf>,
     pub exports: Arc<RefCell<Vec<Ident>>>,
+    pub public_types: Arc<RefCell<HashMap<String, Cow<'static, TypeLayout>>>>,
+    pub compiled: CompilationLock,
 }
 
 impl File {
@@ -484,20 +562,34 @@ impl File {
             ..Default::default()
         }
     }
+
+    fn add_declaration(&mut self, declaration: Declaration) {
+        let mut view = self.declarations.borrow_mut();
+        view.push(declaration);
+    }
+
+    pub(crate) fn get_compilation_lock(&self) -> CompilationLock {
+        self.compiled.clone()
+    }
+
+    #[doc(hidden)]
+    pub(crate) fn get_export_ref(&self) -> Export {
+        Export {
+            exports: Arc::downgrade(&self.exports),
+            public_types: Arc::downgrade(&self.public_types),
+        }
+    }
 }
 
 impl IntoType for File {
     fn for_type(&self) -> Result<TypeLayout> {
-        let module_type = ModuleType::new_initialized(self.exports.clone(), self.location.clone());
+        let module_type = ModuleType::new_initialized(
+            self.location.clone(),
+            self.exports.clone(),
+            self.public_types.clone(),
+        );
 
         Ok(TypeLayout::Module(module_type))
-    }
-}
-
-impl File {
-    fn add_declaration(&mut self, declaration: Declaration) {
-        let mut view = self.declarations.borrow_mut();
-        view.push(declaration);
     }
 }
 
@@ -547,38 +639,75 @@ impl Compile<Vec<anyhow::Error>> for File {
     }
 }
 
+/// This function does not care about types, modules, side effects, and state. It assumes
+/// the environment is set up and does not perform any checks. This way, `import` statements
+/// can use their own custom environment without meddling with `file`.
+fn populate_file(input: Node, mut result: File) -> Result<(), Vec<anyhow::Error>> {
+    let mut errors = vec![];
+
+    for child in input.children() {
+        match child.as_rule() {
+            Rule::declaration => match Parser::declaration(child) {
+                Ok(d) => result.add_declaration(d),
+                Err(mut e) => errors.append(&mut e),
+            },
+            Rule::EOI => (),
+            _ => unreachable!("{child:?}"),
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
 #[pest_consume::parser]
 impl Parser {
-    pub fn file<'a>(input: Node<'a>) -> Result<(), Vec<anyhow::Error>> {
-        let mut result = File::new_with_location(input.user_data().bytecode_path());
+    pub fn file(input: Node) -> Result<ImportResult, Vec<anyhow::Error>> {
+        log::debug!("pre-walk {:?}", input.user_data().source_path());
 
-        let mut errors = vec![];
+        let result = File::new_with_location(input.user_data().bytecode_path());
 
-        for child in input.children() {
-            match child.as_rule() {
-                Rule::declaration => match Self::declaration(child) {
-                    Ok(d) => result.add_declaration(d),
-                    Err(mut e) => errors.append(&mut e),
-                },
-                Rule::EOI => (),
-                _ => unreachable!("{child:?}"),
-            }
-        }
+        input
+            .user_data()
+            .begin_module(result.get_export_ref(), result.get_compilation_lock());
 
-        if !errors.is_empty() {
-            Err(errors)
-        } else {
-            if let Some(exports) = input.user_data().get_backing_export_struct() {
-                result.exports = exports;
-            };
+        input
+            .user_data()
+            .files
+            .register_ast(input.user_data().source_path(), result.clone())
+            .details(
+                input.as_span(),
+                &input.user_data().get_source_file_name(),
+                "Circular dependency graph detected at compile time!!!",
+            )
+            .to_err_vec()?;
 
-            // panic!();
-            input
-                .user_data()
-                .files
-                .register_ast(input.user_data().source_path(), result);
+        let module_type = ModuleType::from_node(&input)?;
 
-            Ok(())
-        }
+        let path_for_preload_import = input.user_data().source_path().bytecode_str();
+
+        log::info!("+ mod {path_for_preload_import:?} {module_type:?}");
+
+        let import_self = input
+            .user_data()
+            .files
+            .register_module(
+                input.user_data().source_path(),
+                ImportResult::new(module_type, result.get_compilation_lock()),
+            )
+            .to_owned();
+
+        log::info!("+ finished preload of {:?}", import_self.module().name());
+
+        // if import_self.will_compile() {
+
+        // }
+
+        populate_file(input, result)?;
+
+        Ok(import_self)
     }
 }

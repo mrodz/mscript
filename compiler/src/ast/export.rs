@@ -1,24 +1,34 @@
-use std::{cell::RefCell, sync::Weak};
+use std::{borrow::Cow, cell::RefCell, collections::HashMap, fmt::Display, sync::Weak};
 
 use anyhow::Result;
 
 use crate::instruction;
 
-use super::{Compile, Dependencies, Ident};
+use super::{Compile, Dependencies, Ident, TypeLayout};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Export {
     pub(crate) exports: Weak<RefCell<Vec<Ident>>>,
+    pub(crate) public_types: Weak<RefCell<HashMap<String, Cow<'static, TypeLayout>>>>,
+}
+
+impl Display for Export {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let exports = self
+            .exports
+            .upgrade()
+            .expect("exported values were dropped");
+        let public_types = self.public_types.upgrade().expect("types were dropped");
+
+        let exports = exports.borrow();
+        let public_types = public_types.borrow();
+
+        write!(f, "Export -- {exports:?} & {public_types:?}")
+    }
 }
 
 impl Export {
     pub fn add(&mut self, ident: Ident) {
-        // if ident.ty().expect("ident without type").is_class() {
-        //     log::trace!("skipping export of {ident}, because it exports itself");
-        //     // every class exports itself
-        //     return;
-        // }
-
         let exports = self
             .exports
             .upgrade()
@@ -27,6 +37,17 @@ impl Export {
         let mut view = exports.borrow_mut();
 
         view.push(ident);
+    }
+
+    pub fn add_type(&mut self, name: String, ty: Cow<'static, TypeLayout>) {
+        let types = self
+            .public_types
+            .upgrade()
+            .expect("[ADD_TYPE] backing type export reference was dropped");
+
+        let mut view = types.borrow_mut();
+
+        view.insert(name, ty);
     }
 }
 

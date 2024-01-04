@@ -76,6 +76,10 @@ pub(crate) trait WalkForType {
 
 /// A register for a variable to be used throughout various compilation
 /// implementations to store intermediate values.
+///
+/// Constructing a [`TemporaryRegister`] directly is not advised, because you
+/// have to manage the allocation yourself. Instead, use the API provided via
+/// the [`CompilationState`] struct.
 #[derive(Debug)]
 pub struct TemporaryRegister {
     /// The underlying value that this register holds.
@@ -88,6 +92,7 @@ pub struct TemporaryRegister {
 }
 
 impl TemporaryRegister {
+    #[doc(hidden)]
     const fn new_rand(id: usize, in_use: bool, cleanup_pointer: Option<*mut usize>) -> Self {
         Self {
             id,
@@ -98,6 +103,7 @@ impl TemporaryRegister {
 
     /// Create a new ghost register, that is to say, a register that does not
     /// modify the underlying counter in any way.
+    #[doc(hidden)]
     unsafe fn new_ghost_register(mock_count: usize) -> Self {
         log::trace!("reg. -G--m {mock_count}");
         Self::new_rand(mock_count, false, None)
@@ -105,6 +111,8 @@ impl TemporaryRegister {
 
     /// Create a new [`TemporaryRegister`] with an id and a raw
     /// pointer to the backing counter.
+    ///
+    #[doc(hidden)]
     fn new(id: usize, cleanup_ptr: *mut usize) -> Self {
         log::trace!("reg. -n--- {id}");
         Self::new_rand(id, true, Some(cleanup_ptr))
@@ -113,6 +121,7 @@ impl TemporaryRegister {
     /// Create a new [`TemporaryRegister`] that will not run any
     /// cleanup code when it goes out of scope. It must be manually dropped
     /// using [`TemporaryRegister::free`]
+    #[doc(hidden)]
     fn new_require_explicit_drop(id: usize) -> Self {
         log::trace!("reg. -n-e- {id}");
         Self::new_rand(id, true, None)
@@ -120,6 +129,7 @@ impl TemporaryRegister {
 
     /// Manually clean up a [`TemporaryRegister`], which will cause its
     /// cleanup code to run now instead of when the variable goes out of scope.
+    #[doc(hidden)]
     fn free(mut self, current_count: usize) {
         if self.id != current_count {
             unreachable!("dropped out of order");
@@ -348,12 +358,7 @@ impl CompilationStep {
     }
 }
 
-// pub(crate) struct CompilationSettings {
-
-// }
-
 pub(crate) struct CompilationState {
-    /// We use `UnsafeCell` for performance reasons. Normal `RefCell` is 20% slower, based on quick tests.
     function_buffer: UnsafeCell<Vec<CompiledItem>>,
     function_id_c: Cell<isize>,
     loop_register_c: Cell<usize>,
@@ -389,6 +394,23 @@ impl CompilationState {
         file_manager: &FileManager,
         driver: &mut impl FnMut(&File, Vec<CompiledItem>) -> Result<()>,
     ) -> Result<(), Vec<anyhow::Error>> {
+        {
+            let completed = file_manager.completed_ast.borrow();
+            log::debug!(
+                "[cc] FINAL COMPILATION LIST: {:?}",
+                completed.keys().map(|x| x.display()).collect::<Vec<_>>()
+            );
+        }
+
+        self.compile_recursive_interior(file_manager, driver, 1)
+    }
+
+    pub fn compile_recursive_interior(
+        &self,
+        file_manager: &FileManager,
+        driver: &mut impl FnMut(&File, Vec<CompiledItem>) -> Result<()>,
+        depth: usize,
+    ) -> Result<(), Vec<anyhow::Error>> {
         let mut view = self.compilation_queue.borrow_mut();
 
         let mut node @ Some(..) = view.take() else {
@@ -408,27 +430,19 @@ impl CompilationState {
                 })
                 .to_err_vec()?;
 
+            log::info!("[cc] {} {}", "@".repeat(depth), file.location.display());
+
             file.compile(&state_for_file)?;
 
             driver(&file, state_for_file.take_function_buffer()).to_err_vec()?;
 
-            state_for_file.compile_recursive(file_manager, driver)?;
+            state_for_file.compile_recursive_interior(file_manager, driver, depth + 1)?;
 
             node = h.next;
         }
 
         Ok(())
     }
-
-    // pub fn start_compilation(&self, shared_state: &CompilationState, mut driver: impl FnMut(&File, Vec<CompiledItem>) -> Result<(), anyhow::Error>) {
-    //     let mut view = self.compilation_queue.borrow_mut();
-
-    //     let Some(x) = view.take() else {
-    //         panic!("no items have been registered in the queue");
-    //     };
-
-    //     let mut head
-    // }
 
     pub fn poll_function_id(&self) -> CompiledFunctionId {
         let id = self.function_id_c.get();
@@ -453,16 +467,6 @@ impl CompilationState {
         }
     }
 
-    // fn remove_register_internal(&self, count: usize) {
-    //     let state = self.temporary_register_c.get();
-    //     if state == count {
-    //         log::trace!("reg. F---- {state}");
-    //         self.temporary_register_c.set(state - 1);
-    //     } else if state - 1 != count {
-    //         unreachable!("dropped out of order {count} {state}")
-    //     }
-    // }
-    #[inline]
     pub fn poll_temporary_register(&self) -> TemporaryRegister {
         let c = self.temporary_register_c.get();
         let result: TemporaryRegister =
@@ -480,7 +484,6 @@ impl CompilationState {
     }
 
     /// No AutoDrop, but advances the counter. Use in conjunction with `free_many`.
-    #[inline]
     pub unsafe fn poll_temporary_register_ghost(&self) -> TemporaryRegister {
         let c = self.temporary_register_c.get();
         let result: TemporaryRegister = TemporaryRegister::new_ghost_register(c);
@@ -488,14 +491,12 @@ impl CompilationState {
         result
     }
 
-    #[inline]
     pub fn free_temporary_register(&self, reg: TemporaryRegister) {
         let c = self.temporary_register_c.get();
         self.temporary_register_c.set(c - 1);
         reg.free(c - 1);
     }
 
-    #[inline]
     pub unsafe fn free_many_temporary_registers(&self, count: usize) {
         log::trace!("reg. F--em {count}");
         self.temporary_register_c
@@ -668,6 +669,10 @@ pub(crate) trait Dependencies {
 pub fn new_err(span: Span, file_name: &str, message: String) -> Error {
     use pest::error::ErrorVariant::CustomError;
     use pest_consume::Error as PE;
+
+    let (line, col) = span.start_pos().line_col();
+    log::error!("{file_name}:{line}:{col} > {message} > {:?}", span.as_str());
+
     let custom_error = PE::<()>::new_from_span(CustomError { message }, span).with_path(file_name);
 
     anyhow!(custom_error)

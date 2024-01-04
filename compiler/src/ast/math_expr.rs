@@ -749,7 +749,6 @@ fn parse_expr(
 
                         let arguments: FunctionArguments = Parser::function_arguments(function_arguments, &parameters, None)?;
 
-
                         return Ok((Expr::Callable(CallableContents::ToSelf { return_type, arguments }), l_span))
                     }
                     Expr::ReferenceToConstructor(ref function_type) => {

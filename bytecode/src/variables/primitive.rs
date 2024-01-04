@@ -193,10 +193,13 @@ impl Primitive {
 
         use Primitive as P;
 
-        if let (P::Optional(maybe), yes) | (yes, P::Optional(maybe)) = (self, rhs) {
-            if let Some(maybe_unwrapped) = maybe {
-                return Ok(maybe_unwrapped.as_ref() == yes);
-            };
+        match (self, rhs) {
+            (P::Optional(maybe), yes) | (yes, P::Optional(maybe)) => {
+                if let Some(maybe_unwrapped) = maybe {
+                    return Ok(maybe_unwrapped.as_ref() == yes);
+                };
+            }
+            _ => (),
         }
 
         impl_eq!(Int with Float(r=f64), BigInt(r=i128), Byte(r=i32));
@@ -204,7 +207,7 @@ impl Primitive {
         impl_eq!(BigInt with Float(r=f64), Int(r=i128), Byte(r=i128));
         impl_eq!(Byte with Float(r=f64), BigInt(r=i128), Int(r=i32));
 
-        impl_eq!(each Optional, Str, Bool with itself);
+        impl_eq!(each Optional, Str, Bool, Function with itself);
     }
 
     /// Returns whether this primitive is numeric.

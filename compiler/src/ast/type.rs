@@ -2,17 +2,18 @@ use crate::{
     ast::{class::ClassBody, new_err, value::ValToUsize, Assignment},
     parser::{AssocFileData, Node, Parser, Rule},
     scope::{ScopeReturnStatus, SuccessTypeSearchResult, TypeSearchResult},
-    CompilationError,
+    CompilationError, VecErr,
 };
 use anyhow::{bail, Context, Result};
 use pest::Span;
 use std::{
     borrow::Cow,
     cell::{Ref, RefCell},
+    collections::HashMap,
     fmt::{Debug, Display},
     hash::Hash,
     ops::Deref,
-    path::PathBuf,
+    path::{Path, PathBuf},
     rc::Rc,
     sync::Arc,
 };
@@ -162,6 +163,7 @@ impl Display for NativeType {
 #[derive(Clone, Debug, Eq)]
 pub(crate) struct ModuleType {
     exported_members: Arc<RefCell<Vec<Ident>>>,
+    public_types: Arc<RefCell<HashMap<String, Cow<'static, TypeLayout>>>>,
     name: Arc<PathBuf>,
 }
 
@@ -179,13 +181,14 @@ impl Hash for ModuleType {
 
 impl ModuleType {
     pub const fn new_initialized(
-        exported_members: Arc<RefCell<Vec<Ident>>>,
         name: Arc<PathBuf>,
+        exported_members: Arc<RefCell<Vec<Ident>>>,
+        public_types: Arc<RefCell<HashMap<String, Cow<'static, TypeLayout>>>>,
     ) -> Self {
-        // very hacky.
         ModuleType {
-            exported_members,
             name,
+            exported_members,
+            public_types,
         }
     }
 
@@ -197,10 +200,25 @@ impl ModuleType {
         .ok()
     }
 
-    pub fn from_node(input: &Node) -> Result<Self> {
+    pub fn get_type<'a>(&'a self, name: &str) -> Option<Ref<'a, Cow<'static, TypeLayout>>> {
+        let view = self.public_types.borrow();
+        Ref::filter_map(view, |public_types| {
+            public_types
+                .iter()
+                .find(|(this_name, _)| this_name.as_str() == name)
+                .map(|x| x.1)
+        })
+        .ok()
+    }
+
+    pub fn name(&self) -> &Path {
+        self.name.as_path()
+    }
+
+    pub fn from_node(input: &Node) -> Result<Self, Vec<anyhow::Error>> {
         assert_eq!(input.as_rule(), Rule::file);
 
-        let mut export = input.user_data().get_export_ref()?;
+        let mut export = input.user_data().get_export_ref();
 
         for child in input.children() {
             if child.as_rule() == Rule::declaration {
@@ -224,7 +242,7 @@ impl ModuleType {
                             children.next().unwrap()
                         };
 
-                        let class_flags = Parser::class_flags(class_flags)?;
+                        let class_flags = Parser::class_flags(class_flags).to_err_vec()?;
 
                         if !class_flags.is_export() {
                             continue;
@@ -234,23 +252,29 @@ impl ModuleType {
 
                         let body_node = children.next().expect("no body");
 
-                        let _class_scope = input.user_data().push_class_unknown_self();
-                        let fields = ClassBody::get_members(&body_node)?;
+                        let ident = {
+                            let _class_scope = input.user_data().push_class_unknown_self();
+                            let fields = ClassBody::get_members(&body_node).to_err_vec()?;
 
-                        let class_type = ClassType::new(
-                            Arc::new(name.to_owned()),
-                            fields,
-                            input.user_data().bytecode_path(),
-                        );
+                            let class_type = ClassType::new(
+                                Arc::new(name.to_owned()),
+                                fields,
+                                input.user_data().bytecode_path(),
+                            );
 
-                        let ident = Ident::new(
-                            name.to_owned(),
-                            Some(Cow::Owned(TypeLayout::Class(class_type))),
-                            true,
-                        );
+                            Ident::new(
+                                name.to_owned(),
+                                Some(Cow::Owned(TypeLayout::Class(class_type))),
+                                true,
+                            )
+                        };
+
+                        input
+                            .user_data()
+                            .add_type(name.into(), ident.ty().unwrap().clone());
 
                         log::trace!(
-                            "Gen. mod {:?} -- adding class {ident:?}",
+                            "Gen. mod {:?} -- adding class {name:?}",
                             input.user_data().source_path()
                         );
 
@@ -266,6 +290,78 @@ impl ModuleType {
                             export.add(assignment)
                         }
                     }
+                    Rule::type_alias => {
+                        let ty = Parser::type_alias(child).to_err_vec()?;
+
+                        log::trace!(
+                            "Gen. mod {:?} -- adding type {ty:?}",
+                            input.user_data().source_path()
+                        );
+                    }
+                    Rule::import => {
+                        log::trace!("Gen. mod @import");
+                        let import = child.children().next().unwrap();
+
+                        let import_path = import.children().last().unwrap();
+                        let path = Arc::new(Parser::import_path(import_path).to_err_vec()?);
+
+                        log::info!(
+                            "++ BEGIN @import in pre-walk of {path:?} (current file: {})",
+                            input.user_data().get_source_file_name()
+                        );
+
+                        // let (file, exports_to_use) =
+                        //     if let Some(exports) = input.user_data().get_export_ref_for(&path) {
+                        //         (exports.0.to_owned(), exports.1)
+                        //     } else {
+                        //         let new_file = input.user_data().file_manager().register_ast(path.clone(), File::new_with_location(path.clone())).to_err_vec()?;
+                        //         (new_file.to_owned(), new_file.get_export_ref())
+                        //         // Export::new_untied(exports_backing, types_backing)
+                        //     };
+
+                        // input.user_data().begin_module(exports_to_use, file.get_compilation_lock());
+
+                        let module_import = input.user_data().import(path.clone())?;
+
+                        log::info!(
+                            "-- END @import in pre-walk of {path:?} (current file: {})",
+                            input.user_data().get_source_file_name()
+                        );
+
+                        if import.as_rule() == Rule::import_names {
+                            let children = import.children();
+                            for child in children {
+                                match child.as_rule() {
+                                    Rule::import_type => {
+                                        let ty_node = child.children().next().unwrap();
+                                        let module = module_import.module();
+                                        let ty = module
+                                            .get_type(ty_node.as_str())
+                                            .details(
+                                                ty_node.as_span(),
+                                                &child.user_data().get_source_file_name(),
+                                                "this type does not exist on this module",
+                                            )
+                                            .to_err_vec()?;
+
+                                        input
+                                            .user_data()
+                                            .add_type(ty_node.as_str().into(), ty.clone())
+                                    }
+                                    Rule::import_name => continue,
+                                    Rule::import_path => break,
+                                    other => unreachable!("{other:?}"),
+                                }
+                            }
+                        }
+
+                        log::trace!(
+                            "Gen. mod {:?} -- @import {module_import:?}",
+                            input.user_data().source_path()
+                        );
+
+                        // panic!("@{}@ {:?}", import.as_str(), import.as_rule())
+                    }
                     other => log::trace!(
                         "Gen. mod {:?} -- skipping {other:?}",
                         input.user_data().source_path()
@@ -274,12 +370,21 @@ impl ModuleType {
             }
         }
 
+        log::info!(
+            "DONE preloading module {}",
+            input.user_data().source_path().display()
+        );
+
         Ok(ModuleType::new_initialized(
+            input.user_data().source_path(),
             export
                 .exports
                 .upgrade()
                 .expect("exports backing ref was dropped"),
-            input.user_data().source_path(),
+            export
+                .public_types
+                .upgrade()
+                .expect("exports public types backing ref was dropped"),
         ))
     }
 }
@@ -402,18 +507,36 @@ impl TypeLayout {
         matches!(me, TypeLayout::Class(..))
     }
 
-    pub fn get_error_hint_between_types(&self, incompatible: &Self) -> Option<Cow<'static, str>> {
-        use Cow::*;
+    pub fn get_error_hint_between_types(&self, incompatible: &Self) -> Option<String> {
+        self.get_error_hint_between_types_recursive(incompatible, 2)
+    }
+
+    fn get_error_hint_between_types_recursive(
+        &self,
+        incompatible: &Self,
+        tab_depth: usize,
+    ) -> Option<String> {
         use NativeType::*;
         use TypeLayout::*;
+
+        let tabs = "    ".repeat(tab_depth);
+
         Some(match (self, incompatible) {
-            (Native(BigInt), Native(Int)) => Borrowed("try adding 'B' before a number to convert it to a bigint, eg. `99` -> `B99` or `0x6` -> `B0x6`"),
-            (Native(Int), Native(Float)) => Borrowed("cast this floating point value to an integer"),
-            (Native(Float), Native(Int | BigInt | Byte)) => Borrowed("cast this integer type to a floating point"),
-            (x, Optional(Some(y))) if x == y.as_ref().as_ref() => Borrowed("unwrap this optional to use its value"),
-            (Native(Str(..)), _) => Borrowed("call `.to_str()` on this item to convert it into a str"),
-            (Function(..), Function(..)) => Borrowed("check the function type that you provided"),
-            (Alias(str, ty), y) | (y, Alias(str, ty))=> Owned(format!("`{str}` is an alias for `{ty}`, which isn't compatible with `{y}` in this context")),
+            (Native(BigInt), Native(Int)) => format!("\n{tabs}+ hint: try adding 'B' before a number to convert it to a bigint, eg. `99` -> `B99` or `0x6` -> `B0x6`"),
+            (Native(Byte), Native(Int | BigInt)) => format!("\n{tabs}+ hint: try adding '0b' before a number to specify a byte literal, eg. `5` -> `0b101`"),
+            (Native(Int), Native(Float)) => format!("\n{tabs}+ hint: cast this floating point value to an integer"),
+            (Native(Float), Native(Int | BigInt | Byte)) => format!("\n{tabs}+ hint: cast this integer type to a floating point"),
+            (x, Optional(Some(y))) if x == y.as_ref().as_ref() => format!("\n{tabs}+ hint: unwrap this optional to use its value"),
+            (Native(Str(..)), _) => format!("\n{tabs}+ hint: call `.to_str()` on this item to convert it into a str"),
+            (Function(..), Function(..)) => format!("\n{tabs}+ hint: check the function type that you provided"),
+            (Alias(str, ty), y) => {
+                let maybe_extended_hint = ty.get_error_hint_between_types_recursive(y, tab_depth + 1).unwrap_or_default();
+                format!("\n{tabs}+ hint: `{str}` is an alias for `{ty}`, which isn't compatible with `{y}` in this context{maybe_extended_hint}")
+            }
+            (y, Alias(str, ty)) => {
+                let maybe_extended_hint = y.get_error_hint_between_types_recursive(ty, tab_depth + 1).unwrap_or_default();
+                format!("\n{tabs}+ hint: `{str}` is an alias for `{ty}`, which isn't compatible with `{y}` in this context{maybe_extended_hint}")
+            }
             _ => return None,
         })
     }
@@ -498,7 +621,7 @@ impl TypeLayout {
         &'a self,
         property_name: &str,
     ) -> Option<Box<dyn Deref<Target = Cow<'static, TypeLayout>> + 'a>> {
-        match self.get_type_recursively() {
+        match self.disregard_distractors(true) {
             Self::Class(class_type) => {
                 let ident = class_type.get_property(property_name)?;
                 let property_type: &'a Cow<'static, TypeLayout> = ident.ty().ok()?;
@@ -580,7 +703,13 @@ impl TypeLayout {
             Cow::Borrowed("")
         };
 
-        format!(" Available properties are: [{result}{remaining_message}]")
+        let check_export_message = if matches!(self, TypeLayout::Module(_)) {
+            "\n            + if you expected this item to be visible, make sure it is exported via the `export` keyword and that the module is not being imported cyclically"
+        } else {
+            ""
+        };
+
+        format!("\n        + available properties are: [{result}{remaining_message}]{check_export_message}")
     }
 
     pub fn can_be_used_as_list_index(&self) -> bool {
@@ -596,17 +725,8 @@ impl TypeLayout {
     where
         T: Deref<Target = ClassType>,
     {
-        let lhs = if let TypeLayout::Alias(_, ty) = self {
-            ty.as_ref()
-        } else {
-            self
-        };
-
-        let rhs = if let TypeLayout::Alias(_, ty) = rhs {
-            ty.as_ref()
-        } else {
-            rhs
-        };
+        let lhs = self.disregard_distractors(false);
+        let rhs = rhs.disregard_distractors(false);
 
         if lhs == rhs {
             return if flags.force_rhs_to_be_unwrapped_lhs {
@@ -743,6 +863,17 @@ impl TypeLayout {
         }
     }
 
+    pub fn disregard_distractors(&self, is_optional_distractor: bool) -> &Self {
+        match self {
+            Self::Alias(_, ty) => ty.disregard_distractors(is_optional_distractor),
+            Self::CallbackVariable(x) => x.disregard_distractors(is_optional_distractor),
+            Self::Optional(Some(x)) if is_optional_distractor => {
+                x.disregard_distractors(is_optional_distractor)
+            }
+            x => x,
+        }
+    }
+
     pub fn get_owned_type_recursively(self) -> Self {
         use TypeLayout::*;
 
@@ -755,17 +886,8 @@ impl TypeLayout {
     pub fn get_output_type(&self, other: &Self, op: &Op) -> Option<TypeLayout> {
         use TypeLayout::*;
 
-        let lhs = if let Alias(_, ty) = self {
-            ty.as_ref()
-        } else {
-            self
-        };
-
-        let other = if let Alias(_, ty) = other {
-            ty.as_ref()
-        } else {
-            other
-        };
+        let lhs = self.disregard_distractors(false);
+        let other = other.disregard_distractors(false);
 
         if lhs == other && matches!(op, Eq | Neq) {
             return Some(TypeLayout::Native(NativeType::Bool));
@@ -807,12 +929,10 @@ impl TypeLayout {
 
         let matched = match (me, other, op) {
             (Str(..), Str(..), Eq | Neq) => Bool,
-            (lhs, rhs, And | Or | Xor) => {
-                match (lhs, rhs) {
-                    (Bool, Bool) => Bool,
-                    _ => return None,
-                }
-            }
+            (lhs, rhs, And | Or | Xor) => match (lhs, rhs) {
+                (Bool, Bool) => Bool,
+                _ => return None,
+            },
             (lhs, rhs, Gt | Lt | Gte | Lte | Eq | Neq) => {
                 match (lhs, rhs) {
                     (Int, Int | BigInt | Float | Byte) => Bool,
@@ -1004,30 +1124,15 @@ impl Parser {
         let ty_str = ty.as_str();
 
         let x = match ty.as_rule() {
-            Rule::function_type => SuccessTypeSearchResult::Owned(
-                Cow::Owned(Function(Self::function_type(ty).details(
-                    span,
-                    &file_name,
-                    UNKNOWN_TYPE,
-                )?)),
-                false,
-            ),
-            Rule::list_type_open_only => SuccessTypeSearchResult::Owned(
-                Cow::Owned(List(Self::list_type_open_only(ty).details(
-                    span,
-                    &file_name,
-                    UNKNOWN_TYPE,
-                )?)),
-                false,
-            ),
-            Rule::list_type => SuccessTypeSearchResult::Owned(
-                Cow::Owned(List(Self::list_type(ty).details(
-                    span,
-                    &file_name,
-                    UNKNOWN_TYPE,
-                )?)),
-                false,
-            ),
+            Rule::function_type => SuccessTypeSearchResult::Owned(Cow::Owned(Function(
+                Self::function_type(ty).details(span, &file_name, UNKNOWN_TYPE)?,
+            ))),
+            Rule::list_type_open_only => SuccessTypeSearchResult::Owned(Cow::Owned(List(
+                Self::list_type_open_only(ty).details(span, &file_name, UNKNOWN_TYPE)?,
+            ))),
+            Rule::list_type => SuccessTypeSearchResult::Owned(Cow::Owned(List(
+                Self::list_type(ty).details(span, &file_name, UNKNOWN_TYPE)?,
+            ))),
             Rule::ident => {
                 let ty = input.user_data().get_type_from_str(ty_str);
 
@@ -1040,14 +1145,7 @@ impl Parser {
             x => unreachable!("{x:?} as a type hasn't been implemented"),
         };
 
-        let is_alias = x.is_alias();
         let x = x.into_cow();
-
-        let x = if is_alias {
-            Cow::Owned(TypeLayout::Alias(ty_str.into(), Box::new(x)))
-        } else {
-            x
-        };
 
         if optional_modifier.is_some() {
             Ok(Cow::Owned(TypeLayout::Optional(Some(Box::new(x)))))
@@ -1059,16 +1157,38 @@ impl Parser {
     pub fn type_alias(input: Node) -> Result<TypeAlias> {
         let mut children = input.children();
 
-        let ident_node = children.next().unwrap();
+        let maybe_ident_node = children.next().unwrap();
+
+        let (is_exported, ident_node) = if maybe_ident_node.as_rule() == Rule::ident {
+            (false, maybe_ident_node)
+        } else {
+            (true, children.next().unwrap())
+        };
+
         let ty_node = children.next().unwrap();
 
-        let ident = Self::ident(ident_node)?;
+        let mut ident = Self::ident(ident_node)?;
 
-        let ty = Self::r#type(ty_node)?;
+        let real_ty = Self::r#type(ty_node)?;
 
-        log::trace!("formally aliasing `{}` = {ty}", ident.name());
+        log::trace!("formally aliasing `{}` = {real_ty}", ident.name());
 
-        input.user_data().add_type(ident.boxed_name(), ty, true);
+        if real_ty.is_class() {
+            ident.link_force_no_inherit(input.user_data(), real_ty.clone())?;
+        }
+
+        let ty = TypeLayout::Alias(ident.name().to_owned(), Box::new(real_ty));
+
+        input
+            .user_data()
+            .add_type(ident.boxed_name(), Cow::Owned(ty.clone()));
+
+        if is_exported {
+            input
+                .user_data()
+                .get_export_ref()
+                .add_type(ident.name().to_owned(), Cow::Owned(ty.clone()));
+        }
 
         Ok(TypeAlias)
     }

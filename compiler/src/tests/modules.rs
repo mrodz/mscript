@@ -133,3 +133,163 @@ fn different_call_forms() {
     .run()
     .unwrap()
 }
+
+#[test]
+fn import_name() {
+    EvalEnvironment::entrypoint(
+        "main.ms",
+        r#"
+        import Dog from doggies
+        import Cat from kitties.ms
+
+        pup1 = Dog("Scout")
+        cat1 = Cat(999)
+
+        import doggies
+        import kitties
+
+        pup2 = doggies.Dog("Scout")
+        cat2 = kitties.Cat(999)
+
+        assert cat1.cuteness == cat2.cuteness
+        assert pup1.name == pup2.name
+
+        assert Cat == kitties.Cat
+        assert Dog == doggies.Dog
+    "#,
+    )
+    .unwrap()
+    .add(
+        "doggies.ms",
+        r#"
+        export class Dog {
+            constructor(self, name: str) {
+                self.name = name
+            }
+            name: str
+        }
+    "#,
+    )
+    .unwrap()
+    .add(
+        "kitties.ms",
+        r#"
+        export class Cat {
+            cuteness: int
+            constructor(self, cuteness: int) {
+                self.cuteness = cuteness
+            }
+        }
+    "#,
+    )
+    .unwrap()
+    .run()
+    .unwrap()
+}
+
+#[test]
+fn circular_import_workaround() {
+    EvalEnvironment::entrypoint(
+        "main.ms",
+        r#"
+        import CognitoUser, type CognitoFlags, VERSION from aws_cognito
+        import shared
+
+        user = CognitoUser("Mateo", "mateo@email.com")
+
+        print VERSION
+
+        x: CognitoFlags = 0b101
+        shared.take_user(x)
+    "#,
+    )
+    .unwrap()
+    .add(
+        "aws_cognito.ms",
+        r#"
+        print "sjjjj"
+        export const VERSION: str = "v0.0.1"
+
+        export type CognitoFlags byte
+
+        print "aws_cognito library, " + VERSION
+
+        export class CognitoUser {
+	        name: str
+	        email: str
+
+	        constructor(self, name: str, email: str) {
+    	    	self.name = name
+	    	    self.email = email
+	        }
+        }
+
+        import take_user from shared
+
+        take_user(0b101)
+    "#,
+    )
+    .unwrap()
+    .add(
+        "shared.ms",
+        r#"
+        import type CognitoFlags from aws_cognito
+
+        export take_user: fn(CognitoFlags) = fn(input: CognitoFlags) {
+	        print input
+        }
+    "#,
+    )
+    .unwrap()
+    .run()
+    .unwrap();
+}
+
+#[test]
+fn import_self() {
+    EvalEnvironment::entrypoint(
+        "main.ms",
+        r#"
+        export hello: int = 5
+
+        import main
+        assert main.hello == hello
+    "#,
+    )
+    .unwrap()
+    .run()
+    .unwrap()
+}
+
+#[test]
+fn forward_export() {
+    EvalEnvironment::entrypoint(
+        "main.ms",
+        r#"
+        import number from numbers.ms
+        import numberville
+
+        assert number == numberville.secret
+        assert number == 5
+        assert numberville.secret == 5
+    "#,
+    )
+    .unwrap()
+    .add(
+        "numbers.ms",
+        r#"
+        import secret from numberville
+        export number: int = secret
+    "#,
+    )
+    .unwrap()
+    .add(
+        "numberville.ms",
+        r#"
+        export const secret: int = 5
+    "#,
+    )
+    .unwrap()
+    .run()
+    .unwrap()
+}

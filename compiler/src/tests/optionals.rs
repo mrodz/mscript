@@ -228,7 +228,7 @@ fn abort_store_missing_type() {
 }
 
 #[test]
-#[should_panic = "[Interpreter crashed]"]
+#[should_panic = "Interpreter crashed"]
 fn abort_store() {
     eval(
         r#"
@@ -241,7 +241,7 @@ fn abort_store() {
 }
 
 #[test]
-#[should_panic = "[Interpreter crashed]"]
+#[should_panic = "Interpreter crashed"]
 fn abort_declaration() {
     eval(
         r#"

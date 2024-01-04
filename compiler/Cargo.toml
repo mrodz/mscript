@@ -19,3 +19,4 @@ rand = "0.8.5"
 
 [features]
 debug = []
+output_hr = []

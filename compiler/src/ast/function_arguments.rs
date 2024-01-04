@@ -44,6 +44,14 @@ impl Parser {
 
         for (idx, child) in children.enumerate() {
             if idx == expected_types.len() {
+                if idx == 0 {
+                    return Err(vec![new_err(
+                        child_span,
+                        &input.user_data().get_source_file_name(),
+                        "this function specifies zero parameters, but found > 0 arguments"
+                            .to_owned(),
+                    )]);
+                }
                 break;
             }
 
@@ -57,7 +65,7 @@ impl Parser {
             let user_gave = arg_ty.get_type_recursively();
 
             let maybe_class_type = allow_self_type.map(|x| {
-                let TypeLayout::Class(class_type) = x else {
+                let TypeLayout::Class(class_type) = x.disregard_distractors(true) else {
                     unreachable!("{x}");
                 };
 
@@ -71,7 +79,10 @@ impl Parser {
                 &TypecheckFlags::use_class(maybe_class_type).lhs_unwrap(false),
             ) {
                 let argument_number = idx + 1;
-                let error_message = format!("type mismatch when calling function (argument #{argument_number} was expected to be `{expected_ty_at_idx}` based on type signature, instead found `{user_gave}`)");
+                let hint = expected_ty_at_idx
+                    .get_error_hint_between_types(user_gave)
+                    .unwrap_or_default();
+                let error_message = format!("type mismatch when calling function (argument #{argument_number} was expected to be `{expected_ty_at_idx}` based on type signature, instead found `{user_gave}`){hint}", );
                 errors.push(new_err(
                     child_span,
                     &input.user_data().get_source_file_name(),

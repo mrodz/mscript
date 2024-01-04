@@ -1,14 +1,17 @@
 use std::{
     borrow::Cow,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use anyhow::{Context, Result};
+use bytecode::compilation_bridge::id::SPLIT_LOOKUP_STORE;
 
 use crate::{
+    ast::CompiledItem,
     instruction,
-    parser::{AssocFileData, Node, Parser, Rule},
-    BytecodePathStr, VecErr,
+    parser::{AssocFileData, CompilationLock, Node, Parser, Rule},
+    BytecodePathStr, CompilationError, VecErr,
 };
 
 use super::{new_err, Compile, Dependencies, Ident, TypeLayout};
@@ -18,7 +21,12 @@ pub(crate) enum Import {
     Standard {
         path: PathBuf,
         store: Ident,
-        cached: bool,
+        should_queue: CompilationLock,
+    },
+    Names {
+        path: PathBuf,
+        names: Vec<Ident>,
+        should_queue: CompilationLock,
     },
 }
 
@@ -31,21 +39,51 @@ impl Compile for Import {
             Self::Standard {
                 path,
                 store,
-                cached,
+                should_queue,
             } => {
-                log::debug!("@IMPORT -- using cached: {cached}");
+                log::debug!("@IMPORT -- will queue: {should_queue}");
 
-                if !cached {
+                if should_queue.can_compile() {
                     log::debug!("queuing compilation of {path:?}");
 
                     state.queue_compilation(path.clone());
+                    should_queue.mark_compiled();
                 }
 
                 let module_loader =
                     format!("{}#__module__", path.with_extension("mmm").bytecode_str());
+
                 Ok(vec![
                     instruction!(module_entry module_loader),
                     instruction!(store(store.name())),
+                ])
+            }
+            Self::Names {
+                path,
+                names,
+                should_queue,
+            } => {
+                log::debug!("@IMPORT(names) -- will queue: {should_queue}");
+
+                if should_queue.can_compile() {
+                    log::debug!("queuing compilation of {path:?}");
+
+                    state.queue_compilation(path.clone());
+                    should_queue.mark_compiled();
+                }
+
+                let module_loader =
+                    format!("{}#__module__", path.with_extension("mmm").bytecode_str());
+
+                let names = names.iter().map(Ident::name).map(String::from).collect();
+
+                Ok(vec![
+                    instruction!(module_entry module_loader),
+                    CompiledItem::Instruction {
+                        id: SPLIT_LOOKUP_STORE,
+                        arguments: names,
+                    },
+                    instruction!(pop),
                 ])
             }
         }
@@ -100,29 +138,127 @@ impl Parser {
 
         let path_node = children.next().unwrap();
 
+        let path_span = path_node.as_span();
+
         let path = Self::import_path(path_node).to_err_vec()?;
 
-        let (module_type, cached) = input.user_data().import(path.with_extension("ms"))?.clone();
-
         let no_extension = path.with_extension("");
-        let file_name = no_extension.file_name().expect("not a file");
+        let file_name = no_extension
+            .file_name()
+            .expect("not a file")
+            .to_string_lossy();
+
+        if input.user_data().has_name_been_mapped(&file_name) {
+            return Err(vec![new_err(
+                path_span,
+                &input.user_data().get_source_file_name(),
+                "duplicate: this name is already in use".to_owned(),
+            )]);
+        }
+
+        log::info!("begin @import in standard import");
+        let result = input
+            .user_data()
+            .import(Arc::new(path.with_extension("ms")))?;
 
         let ident = Ident::new(
-            file_name.to_string_lossy().into_owned(),
-            Some(Cow::Owned(TypeLayout::Module(module_type))),
+            file_name.into_owned(),
+            Some(Cow::Owned(TypeLayout::Module(result.module()))),
             true,
         );
 
-        // let module_type = file.for_type().details(input.as_span(), &input.user_data().get_source_file_name(), "Could not get the type of this module.").to_err_vec()?;
-
         input.user_data().add_dependency(&ident);
-        // ident.link_force_no_inherit(input.user_data(), Cow::Owned(module_type)).to_err_vec()?;
 
-        // Self::file
         Ok(Import::Standard {
             path,
             store: ident,
-            cached,
+            should_queue: CompilationLock::new(),
+        })
+    }
+
+    pub fn import_names(input: Node) -> Result<Import, Vec<anyhow::Error>> {
+        let path_node = input.children().last().unwrap();
+        let path = Self::import_path(path_node).to_err_vec()?;
+
+        log::info!("begin @import in import-names");
+        let module_import = input
+            .user_data()
+            .import(Arc::new(path.with_extension("ms")))?;
+
+        let module_type = module_import.module();
+
+        let mut names = vec![];
+
+        for child in input.children() {
+            match child.as_rule() {
+                Rule::import_type => {
+                    let name_node = child.children().next().unwrap();
+                    let maybe_ty = name_node.as_str();
+
+                    let ty = module_type
+                        .get_type(maybe_ty)
+                        .details_lazy_message(
+                            child.as_span(),
+                            &input.user_data().get_source_file_name(),
+                            || {
+                                format!(
+                                    "`{}` has no visible type `{maybe_ty}`.\n        Please ensure that:\n            - This import is not cyclical (see <https://wikipedia.org/wiki/Circular_reference>)\n            - This item is exported using the `export` keyword\n        Hint: You can put shared code in a new file and import it from both origins to work around a cyclical dependency.",
+                                    module_type.name().bytecode_str()
+                                )
+                            },
+                        )
+                        .to_err_vec()?;
+
+                    input.user_data().add_type(maybe_ty.into(), ty.clone());
+                }
+                Rule::import_name => {
+                    let maybe_property = child.as_str();
+
+                    let property = module_type
+                        .get_property(maybe_property)
+                        .details_lazy_message(
+                            child.as_span(),
+                            &input.user_data().get_source_file_name(),
+                            || {
+                                format!(
+                                    "`{}` has no visible member `{maybe_property}`.\n        Please ensure that:\n            - This import is not cyclical (see <https://wikipedia.org/wiki/Circular_reference>)\n            - This item is exported using the `export` keyword\n        Hint: You can put shared code in a new file and import it from both origins to work around a cyclical dependency.",
+                                    module_type.name().bytecode_str()
+                                )
+                            },
+                        )
+                        .to_err_vec()?;
+
+                    if input.user_data().has_name_been_mapped(maybe_property) {
+                        return Err(vec![new_err(
+                            child.as_span(),
+                            &input.user_data().get_source_file_name(),
+                            "duplicate: this name is already in use".to_owned(),
+                        )]);
+                    }
+
+                    let ident = property.to_owned();
+
+                    if ident.ty().unwrap().is_class() {
+                        input
+                            .user_data()
+                            .add_type(ident.boxed_name(), ident.ty().cloned().unwrap())
+                    }
+
+                    input.user_data().add_dependency(&ident);
+
+                    names.push(ident);
+                }
+                Rule::import_path => {
+                    break;
+                }
+                unknown => unreachable!("{unknown:?}"),
+            }
+        }
+
+        Ok(Import::Names {
+            path,
+            names,
+            should_queue: module_import.compilation_lock(),
         })
     }
 
@@ -131,6 +267,7 @@ impl Parser {
 
         match unwrapped.as_rule() {
             Rule::import_standard => Self::import_standard(unwrapped),
+            Rule::import_names => Self::import_names(unwrapped),
             x => unreachable!("{x:?}"),
         }
     }

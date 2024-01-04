@@ -1,10 +1,11 @@
-import b
+import type Foo, type Bar, Fizz from b
 
-print b
+wooza: Foo = Fizz(42)
+const num: Bar = "hello"
 
-assert b.MESSAGE == "Hello World!"
+accept_string_like = fn(input: str) -> str {
+  return input + "!"
+}
 
-print b
-print b.MESSAGE
-
-print b
+assert accept_string_like(num) == "hello!"
+assert accept_string_like("basic") == "basic!"

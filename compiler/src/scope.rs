@@ -86,8 +86,8 @@ pub(crate) enum TypeSearchResult<'a> {
 #[derive(Debug)]
 pub(crate) enum SuccessTypeSearchResult<'a> {
     // Primitive(&'static TypeLayout),
-    Owned(Cow<'static, TypeLayout>, bool),
-    InScope(Ref<'a, Cow<'static, TypeLayout>>, bool),
+    Owned(Cow<'static, TypeLayout>),
+    InScope(Ref<'a, Cow<'static, TypeLayout>>),
 }
 
 impl TypeSearchResult<'_> {
@@ -105,8 +105,8 @@ impl Clone for SuccessTypeSearchResult<'_> {
     fn clone(&self) -> Self {
         match self {
             // Self::Primitive(x) => Self::Primitive(x),
-            Self::Owned(x, a) => Self::Owned(x.clone(), *a),
-            Self::InScope(x, a) => Self::Owned((*x).clone(), *a),
+            Self::Owned(x) => Self::Owned(x.clone()),
+            Self::InScope(x) => Self::Owned((*x).clone()),
         }
     }
 }
@@ -115,13 +115,9 @@ impl SuccessTypeSearchResult<'_> {
     pub fn into_cow(self) -> Cow<'static, TypeLayout> {
         match self {
             // Self::Primitive(x) => Cow::Borrowed(x),
-            Self::Owned(x, _) => x,
-            Self::InScope(x, _) => x.clone(),
+            Self::Owned(x) => x,
+            Self::InScope(x) => x.clone(),
         }
-    }
-
-    pub fn is_alias(&self) -> bool {
-        matches!(self, Self::InScope(_, true) | Self::Owned(_, true))
     }
 }
 
@@ -139,8 +135,8 @@ impl<'a> std::ops::Deref for SuccessTypeSearchResult<'a> {
     type Target = TypeLayout;
     fn deref(&self) -> &Self::Target {
         match self {
-            Self::InScope(x, _) => x,
-            Self::Owned(x, _) => x,
+            Self::InScope(x) => x,
+            Self::Owned(x) => x,
         }
     }
 }
@@ -203,10 +199,12 @@ impl Scopes {
         x.last_mut().unwrap().add_dependency(dependency);
     }
 
-    pub(crate) fn add_type(&self, name: Box<str>, ty: Cow<'static, TypeLayout>, is_alias: bool) {
+    pub(crate) fn add_type(&self, name: Box<str>, ty: Cow<'static, TypeLayout>) {
         let mut x = self.0.borrow_mut();
 
-        x.last_mut().unwrap().add_type(name, ty, is_alias);
+        let scope = x.last_mut().unwrap();
+
+        scope.add_type(name, ty);
     }
 
     pub(crate) fn register_function_parameters(
@@ -229,28 +227,17 @@ impl Scopes {
         use SuccessTypeSearchResult::*;
 
         match str {
-            "int" => {
-                return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(Int)), false))
-            }
+            "int" => return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(Int)))),
             "str" => {
-                return TypeSearchResult::Ok(Owned(
-                    Cow::Owned(TypeLayout::Native(Str(StrWrapper::unknown_size()))),
-                    false,
-                ))
+                return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(Str(
+                    StrWrapper::unknown_size(),
+                )))))
             }
-            "float" => {
-                return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(Float)), false))
-            }
-            "bool" => {
-                return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(Bool)), false))
-            }
-            "bigint" => {
-                return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(BigInt)), false))
-            }
-            "byte" => {
-                return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(Byte)), false))
-            }
-            "Self" => return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::ClassSelf), false)),
+            "float" => return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(Float)))),
+            "bool" => return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(Bool)))),
+            "bigint" => return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(BigInt)))),
+            "byte" => return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(Byte)))),
+            "Self" => return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::ClassSelf))),
             _ => (),
         }
 
@@ -263,10 +250,8 @@ impl Scopes {
             })
             .ok();
 
-            if let Some(bundle) = maybe_ty {
-                let (ty, is_alias) = Ref::map_split(bundle, |bundle| (&bundle.0, &bundle.1));
-
-                return TypeSearchResult::Ok(InScope(ty, *is_alias));
+            if let Some(borrow) = maybe_ty {
+                return TypeSearchResult::Ok(InScope(borrow));
             }
         }
 
@@ -420,7 +405,7 @@ impl ScopeReturnStatus {
 #[derive(Debug)]
 pub(crate) struct Scope {
     variables: HashSet<Ident>,
-    types: HashMap<Box<str>, (Cow<'static, TypeLayout>, bool)>,
+    types: HashMap<Box<str>, Cow<'static, TypeLayout>>,
     ty: ScopeType,
     yields: ScopeReturnStatus,
 }
@@ -440,7 +425,7 @@ impl Display for Scope {
 impl Scope {
     const fn new(
         variables: HashSet<Ident>,
-        types: HashMap<Box<str>, (Cow<'static, TypeLayout>, bool)>,
+        types: HashMap<Box<str>, Cow<'static, TypeLayout>>,
         ty: ScopeType,
         yields: ScopeReturnStatus,
     ) -> Self {
@@ -486,11 +471,12 @@ impl Scope {
         self.variables.insert(dependency.clone());
     }
 
-    fn add_type(&mut self, name: Box<str>, ty: Cow<'static, TypeLayout>, is_alias: bool) {
-        self.types.insert(name, (ty, is_alias));
+    fn add_type(&mut self, name: Box<str>, ty: Cow<'static, TypeLayout>) {
+        log::trace!("in scope {}, adding type {name} = {ty}", self.ty);
+        self.types.insert(name, ty);
     }
 
-    fn get_type(&self, value: &str) -> Option<&(Cow<'static, TypeLayout>, bool)> {
+    fn get_type(&self, value: &str) -> Option<&Cow<'static, TypeLayout>> {
         self.types.get(value)
     }
 

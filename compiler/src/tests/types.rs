@@ -55,3 +55,152 @@ fn many_types() {
     .run()
     .unwrap()
 }
+
+#[test]
+fn import_type() {
+    EvalEnvironment::entrypoint(
+        "main.ms",
+        r#"
+		import type Floof from alias
+		import Dog from alias
+		import alias
+
+		cute: Floof = Dog("Scout")
+		assert cute.name == "Scout"
+
+		dog2: Floof = alias.Dog("Muna")
+		assert dog2.to_string() == "Dog with name: Muna"
+	"#,
+    )
+    .unwrap()
+    .add(
+        "alias.ms",
+        r#"
+		export class Dog {
+			constructor(self, name: str) {
+				self.name = name
+			}
+			name: str
+			fn to_string(self) -> str {
+				return "Dog with name: " + self.name
+			}
+		}
+
+		export type Floof Dog
+	"#,
+    )
+    .unwrap()
+    .run()
+    .unwrap()
+}
+
+#[test]
+fn forward_type_export() {
+    EvalEnvironment::entrypoint(
+        "main.ms",
+        r#"
+		import type Duck from duck.ms
+
+		message: Duck = "Quack Quack"
+	"#,
+    )
+    .unwrap()
+    .add(
+        "duck.ms",
+        r#"
+		import type Bugs from bugs
+
+		export type Duck Bugs
+	"#,
+    )
+    .unwrap()
+    .add(
+        "bugs.ms",
+        r#"
+		type Bunny str
+		export type Bugs Bunny
+	"#,
+    )
+    .unwrap()
+    .run()
+    .unwrap()
+}
+
+#[test]
+#[should_panic = "hint: `Bunny` is an alias for `str`, which isn't compatible with `int` in this context"]
+fn forward_type_export_mismatch() {
+    EvalEnvironment::entrypoint(
+        "main.ms",
+        r#"
+		import type Duck from duck.ms
+
+		message: Duck = 0xFEED
+	"#,
+    )
+    .unwrap()
+    .add(
+        "duck.ms",
+        r#"
+		import type Bugs from bugs
+
+		export type Duck Bugs
+	"#,
+    )
+    .unwrap()
+    .add(
+        "bugs.ms",
+        r#"
+		type Bunny str
+		export type Bugs Bunny
+	"#,
+    )
+    .unwrap()
+    .run()
+    .unwrap()
+}
+
+#[test]
+fn types_with_reassignment() {
+    EvalEnvironment::entrypoint(
+        "a.ms",
+        r#"
+        import type Foo, type Bar, Fizz from b
+
+        wooza: Foo = Fizz(42)
+        const num: Bar = "hello"
+
+        assert (wooza.do_math(8) - 4) * 3 == 63 
+
+        accept_string_like = fn(input: str) -> str {
+            return input + "!"
+        }
+
+        assert accept_string_like(num) == "hello!"
+        assert accept_string_like("basic") == "basic!"
+    "#,
+    )
+    .unwrap()
+    .add(
+        "b.ms", r#"
+        type NumberzAreKool int
+
+        export class Fizz {
+            state: int
+            constructor(self, init: NumberzAreKool) {
+                self.state = init
+            }
+            fn do_math(self, other: int) -> NumberzAreKool {
+                return (self.state + other) / 2
+            }
+        }
+
+        export type Foo Fizz
+
+        type Stool str
+        export type Bar Stool
+    "#,
+    )
+    .unwrap()
+    .run()
+    .unwrap()
+}

@@ -4,7 +4,7 @@
 
 use super::function::ReturnValue;
 use super::instruction::{JumpRequest, JumpRequestDestination};
-use crate::file::MScriptFile;
+use crate::file::{ExportMap, MScriptFile};
 use crate::stack::Stack;
 use crate::BytecodePrimitive;
 use anyhow::{bail, Context, Result};
@@ -21,10 +21,21 @@ pub struct Program {
     /// Keeps a record of the `.mmm` files in use.
     files_in_use: RefCell<HashMap<Rc<String>, Rc<MScriptFile>>>,
     /// Module cache
-    module_cache: RefCell<HashMap<String, Option<ReturnValue>>>,
+    module_cache: RefCell<HashMap<String, RefCell<ExportMap>>>,
 }
 
 impl Program {
+    fn init_module_cache(
+        entrypoint: Weak<String>,
+        files_in_use: RefCell<HashMap<Rc<String>, Rc<MScriptFile>>>,
+    ) -> Self {
+        Self {
+            entrypoint,
+            files_in_use,
+            module_cache: RefCell::default(),
+        }
+    }
+
     pub fn new_from_files(
         entrypoint_path: Rc<String>,
         files_in_use: HashMap<Rc<String>, Rc<MScriptFile>>,
@@ -35,21 +46,19 @@ impl Program {
             );
         }
 
-        Ok(Self {
-            entrypoint: Rc::downgrade(&entrypoint_path),
-            files_in_use: RefCell::new(files_in_use),
-            module_cache: RefCell::default(),
-        })
+        Ok(Self::init_module_cache(
+            Rc::downgrade(&entrypoint_path),
+            RefCell::new(files_in_use),
+        ))
     }
 
     pub fn new_from_file(entrypoint: Rc<MScriptFile>) -> Self {
         let file_path = entrypoint.path_shared();
 
-        Self {
-            entrypoint: Rc::downgrade(&file_path),
-            files_in_use: RefCell::new(HashMap::from([(file_path, entrypoint)])),
-            module_cache: RefCell::default(),
-        }
+        Self::init_module_cache(
+            Rc::downgrade(&file_path),
+            RefCell::new(HashMap::from([(file_path, entrypoint)])),
+        )
     }
 
     /// Create a new program given a path.
@@ -64,11 +73,10 @@ impl Program {
         let mut files_in_use = HashMap::with_capacity(1);
         files_in_use.insert(Rc::clone(&entrypoint), main_file);
 
-        Ok(Self {
-            entrypoint: Rc::downgrade(&entrypoint),
-            files_in_use: RefCell::new(files_in_use),
-            module_cache: RefCell::default(),
-        })
+        Ok(Self::init_module_cache(
+            Rc::downgrade(&entrypoint),
+            RefCell::new(files_in_use),
+        ))
     }
 
     /// Gives callers the ability to check if a file is in use by the interpreter.
@@ -85,13 +93,30 @@ impl Program {
     /// # Errors
     /// If opening a `.mmm` file fails, the error will be passed up.
     fn add_file(&self, path: Rc<String>) -> Result<bool> {
-        if self.files_in_use.borrow().contains_key(&path) {
+        if let Some(file_in_use) = self.files_in_use.borrow().get(&path) {
+            let mut view = self.module_cache.borrow_mut();
+
+            use std::borrow::Borrow;
+            if !view.contains_key::<String>(path.borrow()) {
+                log::info!("Syncing {path}'s exports");
+                view.insert(
+                    format!("{path}#__module__"),
+                    RefCell::new(file_in_use.get_exports()),
+                );
+            }
+
             return Ok(false);
         }
 
         let new_file = MScriptFile::open(Rc::clone(&path))?;
 
         {
+            let mut exports = self.module_cache.borrow_mut();
+            exports.insert(
+                format!("{path}#__module__"),
+                RefCell::new(new_file.get_exports()),
+            );
+
             let mut borrow = self.files_in_use.borrow_mut();
             borrow.insert(path, new_file);
         }
@@ -141,7 +166,11 @@ impl Program {
         let path = path.to_string().replace('\\', "/");
         let path_ref = &path;
 
-        self.add_file(Rc::new(path.clone()))?;
+        let added = self.add_file(Rc::new(path.clone()))?;
+        log::trace!(
+            "encountered file {path_ref}: {}",
+            if added { "CREATE" } else { "cached" }
+        );
         // rc_to_ref(&rc_of_self).add_file(Rc::new(path.clone()))?;
 
         let file = self
@@ -216,32 +245,39 @@ impl Program {
             JumpRequestDestination::Standard(_) => self.process_standard_jump_request(request),
             JumpRequestDestination::Module(path) => {
                 {
-                    let view = self.module_cache.borrow();
+                    let view = self.module_cache.borrow_mut();
 
                     if let Some(cached) = view.get(path) {
-                        if let Some(cached) = cached {
-                            return Ok(cached.to_owned());
-                        }
-                        log::error!("Probable circular import (caused by {request:?} ... nonrealized cache hit on {view:?})");
-                        bail!("Attempting to import `{path}` gave a partially unitialized module, which is likely a sign of a circular dependency graph")
-                    } else {
-                        log::debug!("runtime @import cache miss on {path}");
+                        let module = cached.borrow();
+                        return Ok(ReturnValue::Value(BytecodePrimitive::Module(
+                            module.clone(),
+                        )));
+                        // log::error!("Probable circular import (caused by {request:?} ... nonrealized cache hit on {view:?})");
+                        // bail!("Attempting to import `{path}` gave a partially unitialized module, which is likely a sign of a circular dependency graph")
                     }
-                }
 
-                self.module_cache.borrow_mut().insert(path.to_owned(), None);
+                    log::info!("runtime @import cache miss on {path}");
+                };
 
                 let result = self.process_standard_jump_request(request)?;
 
-                let ReturnValue::Value(BytecodePrimitive::Module(..)) = result else {
+                let ReturnValue::Value(BytecodePrimitive::Module(ref raw_module)) = result else {
                     bail!("{request:?} did not yield a module, but instead {result}");
                 };
 
-                assert!(self
+                let insertion = self
                     .module_cache
                     .borrow_mut()
-                    .insert(path.to_owned(), Some(result.clone()))
-                    .is_some());
+                    .insert(path.to_owned(), RefCell::new(raw_module.clone()));
+
+                log::trace!(
+                    "inserting into module {path}: {}",
+                    if insertion.is_some() {
+                        "override"
+                    } else {
+                        "non-override"
+                    }
+                );
 
                 Ok(result)
             }
@@ -259,23 +295,24 @@ impl Program {
     ///
     /// Any errors are propagated upwards.
     pub fn execute(self) -> Result<()> {
-        let rc_of_self = Rc::new(self);
+        let path = self.entrypoint.upgrade().unwrap();
 
-        let path = &*rc_of_self.entrypoint.upgrade().unwrap();
+        log::info!("Loading instructions from file...");
+        let entrypoint = self.get_file(&path)?;
+        log::info!("Loaded instructions from file");
 
-        log::debug!("Loading instructions from file...");
-        let entrypoint = rc_of_self.get_file(path)?;
-        log::debug!("Loaded instructions from file");
+        {
+            let mut cache_view = self.module_cache.borrow_mut();
+            cache_view.insert(
+                format!("{path}#__module__"),
+                RefCell::new(entrypoint.get_exports()),
+            );
+            log::info!("Synced module cache with the entrypoint");
+        }
 
-        log::debug!("Creating call stack...");
+        log::trace!("Creating call stack...");
         let stack = Rc::new(RefCell::new(Stack::new()));
-        log::debug!("Created call stack");
-
-        // let module_function = format!("{}#main", entrypoint.path());
-
-        // let Some(function) = rc_to_ref(&entrypoint).get_function(&"__module__".to_owned()) else {
-        //     bail!("could not find entrypoint (hint: try adding `function __module__`. Searching in {:?})", entrypoint)
-        // };
+        log::trace!("Created call stack");
 
         log::debug!("Spawning interpreter...");
 
@@ -285,7 +322,7 @@ impl Program {
                 Cow::Owned(vec![]),
                 stack.clone(),
                 None,
-                &mut |req| rc_of_self.process_jump_request(req),
+                &mut |req| self.process_jump_request(req),
             )
             .with_context(|| stack.borrow().to_string());
 

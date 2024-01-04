@@ -76,4 +76,9 @@ pub enum Commands {
         #[arg(required(true), index = 1)]
         path: String,
     },
+    /// Remove MScript's temporary files and directories.
+    Clean {
+        #[arg(default_value = ".")]
+        path: String,
+    },
 }
