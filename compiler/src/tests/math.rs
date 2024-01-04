@@ -276,3 +276,19 @@ fn bin_op_assign() {
     )
     .unwrap();
 }
+
+#[test]
+fn bit_ops() {
+    eval(
+        r#"
+		assert 0b100 | 0b001 == 5
+		assert 32 >> 2 == 8
+		assert 32 << 2 == 128
+		assert 0b10 & 0b01 == 0
+		assert 0b11 & 0b10 == 0b10
+		assert 0b01 xor 0b10 == 0b11
+		assert 0b11 xor 0b11 == 0b00
+	"#,
+    )
+    .unwrap()
+}

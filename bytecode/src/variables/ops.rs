@@ -1,6 +1,7 @@
 //! Implementation of binary operations over primitive values.
 
 mod add;
+mod bitops;
 mod div;
 mod mul;
 mod ord;
@@ -24,33 +25,44 @@ mod sub;
 #[macro_export]
 macro_rules! apply_math_bin_op_if_applicable {
     ($lhs:ident $symbol:tt $rhs:ident) => {{
-        #[allow(unused_imports)]
-        use $crate::variables::Primitive::{self, *};
+        let x = apply_math_bin_op_if_applicable!(@no_f64 $lhs $symbol $rhs);
+
+        if x.is_none() {
+            use $crate::variables::Primitive::*;
+            use $crate::*;
+
+            match ($lhs, $rhs) {
+                (Int(x), Float(y)) => Some(float!(*x as f64 $symbol y)),
+                (Float(x), Float(y)) => Some(float!(x $symbol y)),
+                (Float(x), Int(y)) => Some(float!(x $symbol *y as f64)),
+                (Float(x), BigInt(y)) => Some(float!(x $symbol *y as f64)),
+                (Float(x), Byte(y)) => Some(float!(x $symbol *y as f64)),
+                (BigInt(x), Float(y)) => Some(float!(*x as f64 $symbol y)),
+                (Byte(x), Float(y)) => Some(float!(*x as f64 $symbol *y)),
+                _ => None
+            }
+        } else {
+            x
+        }
+    }};
+    (@no_f64 $lhs:ident $symbol:tt $rhs:ident) => {{
+        use $crate::variables::Primitive::*;
         use $crate::*;
 
         match ($lhs, $rhs) {
             (Int(x), Int(y)) => Some(int!(x $symbol y)),
-            (Int(x), Float(y)) => Some(float!(*x as f64 $symbol y)),
-            (Int(x), BigInt(y)) => Some(bigint!(*x as i128 $symbol y)),
+            (Int(x), BigInt(y)) => Some(bigint!((*x as i128) $symbol y)),
             (Int(x), Byte(y)) => Some(int!(*x $symbol *y as i32)),
-
-            (Float(x), Float(y)) => Some(float!(x $symbol y)),
-            (Float(x), Int(y)) => Some(float!(x $symbol *y as f64)),
-            (Float(x), BigInt(y)) => Some(float!(x $symbol *y as f64)),
-            (Float(x), Byte(y)) => Some(float!(x $symbol *y as f64)),
-
             (BigInt(x), BigInt(y)) => Some(bigint!(x $symbol y)),
             (BigInt(x), Int(y)) => Some(bigint!(x $symbol *y as i128)),
-            (BigInt(x), Float(y)) => Some(float!(*x as f64 $symbol y)),
             (BigInt(x), Byte(y)) => Some(bigint!(x $symbol *y as i128 )),
             (Byte(x), Byte(y)) => Some(byte!(x $symbol y)),
-            (Byte(x), Int(y)) => Some(int!(*x as i32 $symbol *y)),
-            (Byte(x), BigInt(y)) => Some(bigint!(*x as i128 $symbol *y)),
-            (Byte(x), Float(y)) => Some(float!(*x as f64 $symbol *y)),
+            (Byte(x), Int(y)) => Some(int!((*x as i32) $symbol *y)),
+            (Byte(x), BigInt(y)) => Some(bigint!((*x as i128) $symbol *y)),
 
             _ => None
         }
-    }}
+    }};
 }
 
 /// Standard casts for boolean comparisons.

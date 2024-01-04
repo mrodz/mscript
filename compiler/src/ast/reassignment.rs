@@ -12,8 +12,10 @@ use crate::{
 };
 
 use super::{
-    dot_lookup::DotChain, list::Index, r#type::{IntoType, TypecheckFlags}, CompilationState, Compile, Dependencies,
-    Ident, TypeLayout, Value,
+    dot_lookup::DotChain,
+    list::Index,
+    r#type::{IntoType, TypecheckFlags},
+    CompilationState, Compile, Dependencies, Ident, TypeLayout, Value,
 };
 
 pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
@@ -240,7 +242,10 @@ impl Parser {
 
         let expected_ty = path.expected_type();
 
-        if !value_ty.eq_complex(expected_ty, &TypecheckFlags::use_class(input.user_data().get_type_of_executing_class())) {
+        if !value_ty.eq_complex(
+            expected_ty,
+            &TypecheckFlags::use_class(input.user_data().get_type_of_executing_class()),
+        ) {
             return Err(vec![new_err(
                 path_span,
                 &input.user_data().get_source_file_name(),

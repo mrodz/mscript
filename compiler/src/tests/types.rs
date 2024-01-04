@@ -181,7 +181,8 @@ fn types_with_reassignment() {
     )
     .unwrap()
     .add(
-        "b.ms", r#"
+        "b.ms",
+        r#"
         type NumberzAreKool int
 
         export class Fizz {

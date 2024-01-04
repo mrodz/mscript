@@ -121,7 +121,7 @@ pub mod implementations {
         use Primitive::*;
         let symbols = args
             .first()
-            .context("Expected an operation [+,-,*,/,%,>,>=,<,<=]")?;
+            .context("Expected an operation [+,-,*,/,%,>,>=,<,<=,=,&&,||,^,|,xor,&,<<,>>]")?;
 
         let (Some(right), Some(left)) = (ctx.pop(), ctx.pop()) else {
             bail!(
@@ -147,6 +147,11 @@ pub mod implementations {
             ("&&", Bool(x), Bool(y)) => Ok(bool!(*x && *y)),
             ("||", Bool(x), Bool(y)) => Ok(bool!(*x || *y)),
             ("^", Bool(x), Bool(y)) => Ok(bool!(*x ^ *y)),
+            ("|", ..) => left | right,
+            ("xor", ..) => std::ops::BitXor::bitxor(left, right),
+            ("&", ..) => left & right,
+            ("<<", ..) => left << right,
+            (">>", ..) => left >> right,
             _ => bail!("unknown operation: {symbols} (got &{left}, &{right})"),
         }
         .context("invalid binary operation")?;

@@ -252,8 +252,6 @@ impl Program {
                         return Ok(ReturnValue::Value(BytecodePrimitive::Module(
                             module.clone(),
                         )));
-                        // log::error!("Probable circular import (caused by {request:?} ... nonrealized cache hit on {view:?})");
-                        // bail!("Attempting to import `{path}` gave a partially unitialized module, which is likely a sign of a circular dependency graph")
                     }
 
                     log::info!("runtime @import cache miss on {path}");
