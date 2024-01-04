@@ -1,9 +1,0 @@
-function __module__
-	reserve_primitive
-	jmp_not_nil 2
-	reserve_primitive
-	unwrap ./crash.ms#1:11
-	printn *
-	void
-	ret_mod
-end

@@ -598,6 +598,7 @@ impl TypeLayout {
                 Some(FunctionType::new(
                     constructor.arced_parameters(),
                     ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Class(class_ty))),
+                    false,
                 ))
             }
             _ => None,
@@ -1033,6 +1034,7 @@ impl Parser {
         Ok(FunctionType::new(
             types,
             ScopeReturnStatus::detect_should_return(return_type),
+            false,
         ))
     }
 

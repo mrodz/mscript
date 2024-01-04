@@ -94,7 +94,7 @@ impl WalkForType for MemberFunction {
             ScopeReturnStatus::Void
         };
 
-        let function_type = FunctionType::new(Rc::new(parameters), return_type);
+        let function_type = FunctionType::new(Rc::new(parameters), return_type, true);
 
         ident.link_force_no_inherit(
             input.user_data(),
@@ -148,7 +148,7 @@ impl Parser {
         let parameters =
             Rc::new(Self::function_parameters(parameters, true, true, true).to_err_vec()?);
         let body = Self::block(body)?;
-        let function_type = FunctionType::new(parameters.clone(), return_type);
+        let function_type = FunctionType::new(parameters.clone(), return_type, true);
 
         ident.set_type_no_link(Cow::Owned(TypeLayout::Function(function_type)));
 

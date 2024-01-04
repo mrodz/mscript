@@ -121,6 +121,7 @@ impl ClassType {
             path_str,
         }
     }
+
     pub fn constructor(&self) -> FunctionType {
         let return_type = ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Class(self.clone())));
 
@@ -139,7 +140,7 @@ impl ClassType {
 
         let empty_parameters = Rc::new(FunctionParameters::TypesOnly(vec![]));
 
-        FunctionType::new(empty_parameters, return_type)
+        FunctionType::new(empty_parameters, return_type, false)
     }
 
     pub fn name(&self) -> &str {

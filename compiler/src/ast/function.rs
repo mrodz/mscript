@@ -22,17 +22,23 @@ pub(crate) struct Function {
     pub body: Block,
     pub return_type: ScopeReturnStatus,
     pub path_str: Arc<PathBuf>,
+    is_associated_fn: bool,
 }
 
 #[derive(Debug, Clone, Eq)]
 pub(crate) struct FunctionType {
     parameters: Rc<FunctionParameters>,
     return_type: Box<ScopeReturnStatus>,
+    is_associated_fn: bool,
 }
 
 impl FunctionType {
     pub fn return_type(&self) -> &ScopeReturnStatus {
         &self.return_type
+    }
+
+    pub fn is_associated_fn(&self) -> bool {
+        self.is_associated_fn
     }
 
     pub(crate) fn set_return_type(&mut self, new_status: ScopeReturnStatus) {
@@ -97,6 +103,7 @@ pub mod eq_hash_test {
                 false,
             )])),
             ScopeReturnStatus::Void,
+            false,
         );
         let rhs = FunctionType::new(
             Rc::new(FunctionParameters::Named(vec![Ident::new(
@@ -105,6 +112,7 @@ pub mod eq_hash_test {
                 false,
             )])),
             ScopeReturnStatus::Void,
+            false,
         );
 
         assert_proper_eq_hash!(lhs, rhs);
@@ -117,6 +125,7 @@ pub mod eq_hash_test {
                 TypeLayout::Native(NativeType::Int),
             )])),
             ScopeReturnStatus::Void,
+            false,
         );
         let rhs = FunctionType::new(
             Rc::new(FunctionParameters::Named(vec![Ident::new(
@@ -125,6 +134,7 @@ pub mod eq_hash_test {
                 false,
             )])),
             ScopeReturnStatus::Void,
+            false,
         );
 
         assert_proper_eq_hash!(lhs, rhs);
@@ -139,6 +149,7 @@ pub mod eq_hash_test {
                 false,
             )])),
             ScopeReturnStatus::Void,
+            false,
         );
         let rhs = FunctionType::new(
             Rc::new(FunctionParameters::Named(vec![Ident::new(
@@ -147,6 +158,7 @@ pub mod eq_hash_test {
                 false,
             )])),
             ScopeReturnStatus::Void,
+            false,
         );
 
         assert_proper_eq_hash!(lhs, rhs);
@@ -161,6 +173,7 @@ pub mod eq_hash_test {
                 false,
             )])),
             ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Native(NativeType::Bool))),
+            false,
         );
         let rhs = FunctionType::new(
             Rc::new(FunctionParameters::Named(vec![Ident::new(
@@ -169,6 +182,7 @@ pub mod eq_hash_test {
                 false,
             )])),
             ScopeReturnStatus::Did(Cow::Owned(TypeLayout::Native(NativeType::Bool))),
+            false,
         );
 
         assert_proper_eq_hash!(lhs, rhs);
@@ -176,10 +190,15 @@ pub mod eq_hash_test {
 }
 
 impl FunctionType {
-    pub fn new(parameters: Rc<FunctionParameters>, return_type: ScopeReturnStatus) -> Self {
+    pub fn new(
+        parameters: Rc<FunctionParameters>,
+        return_type: ScopeReturnStatus,
+        is_associated_fn: bool,
+    ) -> Self {
         Self {
             parameters,
             return_type: Box::new(return_type),
+            is_associated_fn,
         }
     }
 }
@@ -212,12 +231,14 @@ impl Function {
         body: Block,
         return_type: ScopeReturnStatus,
         path_str: Arc<PathBuf>,
+        is_associated_fn: bool,
     ) -> Self {
         Self {
             parameters,
             body,
             return_type,
             path_str,
+            is_associated_fn,
         }
     }
 }
@@ -227,6 +248,7 @@ impl IntoType for Function {
         Ok(TypeLayout::Function(FunctionType::new(
             self.parameters.clone(),
             self.return_type.clone(),
+            self.is_associated_fn,
         )))
     }
 }
@@ -330,6 +352,7 @@ impl Parser {
                 Block::empty_body(),
                 ScopeReturnStatus::Void,
                 path_str,
+                false,
             ));
         };
 
@@ -378,6 +401,12 @@ impl Parser {
 
         let return_type = function_scope.consume();
 
-        Ok(Function::new(parameters, body, return_type, path_str))
+        Ok(Function::new(
+            parameters,
+            body,
+            return_type,
+            path_str,
+            false,
+        ))
     }
 }

@@ -110,7 +110,11 @@ impl Parser {
                 must_call = false;
             }
 
-            if dot_chain_option.output_type.is_function().is_none() {
+            if let Some(function_type) = dot_chain_option.output_type.is_function() {
+                if !function_type.is_associated_fn() {
+                    must_call = false
+                }
+            } else {
                 must_call = false;
             }
 

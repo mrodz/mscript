@@ -1,6 +1,0 @@
-function main
-	int 5
-	int 10
-	call_lib "ffi.dll" adder
-	printn *
-end

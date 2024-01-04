@@ -1,4 +1,0 @@
-function main
-	string "Hello World"
-	printn *
-end
