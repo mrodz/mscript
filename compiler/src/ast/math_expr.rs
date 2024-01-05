@@ -19,7 +19,7 @@ use crate::{
 };
 
 use super::{
-    boolean::boolean_from_str, dot_lookup::DotChain, function::FunctionType, list::Index, map_err,
+    dot_lookup::DotChain, function::FunctionType, list::Index, map_err,
     new_err, r#type::IntoType, ClassType, CompilationState, Compile, CompileTimeEvaluate,
     CompiledItem, Dependencies, Dependency, FunctionArguments, TemporaryRegister, TypeLayout,
     Value,
@@ -619,19 +619,21 @@ fn parse_expr(
                     Rule::ident => {
                         let raw_string = primary.as_str();
 
-                        if raw_string == "self" {
-                            return Ok((Expr::ReferenceToSelf, Some(primary_pair)))
-                        }
-
-                        if raw_string == "Self" {
-                            let class = user_data
+                        match raw_string {
+                            "self" => return Ok((Expr::ReferenceToSelf, Some(primary_pair))),
+                            "Self" => {
+                                let class = user_data
                                 .get_type_of_executing_class()
                                 .details(primary_span, &user_data.get_source_file_name(), "`Self` refers to the constructor of a class, but it is only valid inside the body of said class.")
                                 .to_err_vec()?;
 
-                            let class_ty = class.clone();
+                                let class_ty = class.clone();
 
-                            return Ok((Expr::ReferenceToConstructor(class_ty), Some(primary_pair)))
+                                return Ok((Expr::ReferenceToConstructor(class_ty), Some(primary_pair)))
+                            }
+                            "true" => return Ok((Expr::Value(Value::Boolean(true)), Some(primary_pair))),
+                            "false" => return Ok((Expr::Value(Value::Boolean(false)), Some(primary_pair))),
+                            _ => ()
                         }
 
                         let file_name = user_data.get_source_file_name();
@@ -664,9 +666,6 @@ fn parse_expr(
                         Expr::Value(Value::Ident(cloned))
                     }
                     Rule::math_expr => parse_expr(primary_pair.clone().into_inner(), user_data.clone())?,
-                    Rule::boolean => {
-                        Expr::Value(Value::Boolean(boolean_from_str(primary.as_str())))
-                    }
                     rule => unreachable!("Expr::parse expected atom, found {:?}", rule),
                 };
 

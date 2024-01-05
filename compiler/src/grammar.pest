@@ -13,12 +13,11 @@ float = @{ (integer ~ "." ~ integer) | (integer ~ ("f" | "F")) }
 bigint = @{ "B" ~ (hex_int | integer) }
 
 number = { bigint | hex_int | byte | float | integer }
-boolean = @{ "true" | "false" }
 
 unary_minus = { "-" }
 not = { "!" }
 
-primitive = _{ boolean | number | string }
+primitive = _{ number | string }
 
 allow_bin_op = _{ nil | primitive | ident | function }
 
