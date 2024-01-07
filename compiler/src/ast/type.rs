@@ -1,5 +1,10 @@
 use crate::{
-    ast::{class::ClassBody, new_err, value::ValToUsize, Assignment},
+    ast::{
+        class::{ClassBody, ClassFlags},
+        new_err,
+        value::ValToUsize,
+        Assignment,
+    },
     parser::{AssocFileData, Node, Parser, Rule},
     scope::{ScopeReturnStatus, SuccessTypeSearchResult, TypeSearchResult},
     CompilationError, VecErr,
@@ -231,22 +236,28 @@ impl ModuleType {
                     Rule::class => {
                         let mut children = child.children();
 
-                        let class_flags;
+                        let mut class_flags = None;
 
                         let maybe_ident_node = children.next().unwrap();
 
                         let ident_node = if maybe_ident_node.as_rule() == Rule::ident {
-                            continue;
+                            maybe_ident_node
                         } else {
-                            class_flags = maybe_ident_node;
+                            class_flags = Some(maybe_ident_node);
                             children.next().unwrap()
                         };
 
-                        let class_flags = Parser::class_flags(class_flags).to_err_vec()?;
+                        let class_flags = if let Some(class_flags_node) = class_flags {
+                            let class_flags = Parser::class_flags(class_flags_node).to_err_vec()?;
+                            log::info!("ignoring flags: {class_flags:?}");
+                            Some(class_flags)
+                        } else {
+                            None
+                        };
 
-                        if !class_flags.is_export() {
-                            continue;
-                        }
+                        // if !class_flags.is_export() {
+                        //     continue;
+                        // }
 
                         let name = ident_node.as_str();
 
@@ -273,12 +284,14 @@ impl ModuleType {
                             .user_data()
                             .add_type(name.into(), ident.ty().unwrap().clone());
 
-                        log::trace!(
-                            "Gen. mod {:?} -- adding class {name:?}",
-                            input.user_data().source_path()
-                        );
+                        if class_flags.as_ref().is_some_and(ClassFlags::is_export) {
+                            log::trace!(
+                                "Gen. mod {:?} -- adding class {name:?}",
+                                input.user_data().source_path()
+                            );
 
-                        export.add(ident);
+                            export.add(ident);
+                        }
                     }
                     Rule::assignment => {
                         if let Ok(assignment) = Assignment::type_from_node(&child) {
@@ -291,6 +304,7 @@ impl ModuleType {
                         }
                     }
                     Rule::type_alias => {
+                        // Default behavior: always added to `AssocFileData` API
                         let ty = Parser::type_alias(child).to_err_vec()?;
 
                         log::trace!(

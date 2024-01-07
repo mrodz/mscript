@@ -221,7 +221,7 @@ impl Parser {
                             &input.user_data().get_source_file_name(),
                             || {
                                 format!(
-                                    "`{}` has no visible member `{maybe_property}`.\n        Please ensure that:\n            - This import is not cyclical (see <https://wikipedia.org/wiki/Circular_reference>)\n            - This item is exported using the `export` keyword\n        Hint: You can put shared code in a new file and import it from both origins to work around a cyclical dependency.",
+                                    "`{}` has no visible member `{maybe_property}`.\n        Please ensure that:\n            - This item is exported using the `export` keyword\n            - This import is not cyclical (see <https://wikipedia.org/wiki/Circular_reference>)\n        Hint: You can put shared code in a new file and import it from both origins to work around a cyclical dependency.",
                                     module_type.name().bytecode_str()
                                 )
                             },

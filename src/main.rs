@@ -229,7 +229,7 @@ fn main() -> Result<()> {
                 println!(
                     "{}",
                     format!(
-                        "  Exit:\n    Runner thread status: {}\n    Task status: {}\n    Program exit: {}\n",
+                        "  Exit:\n    Runner thread status: {}\n    Compilation status: {}\n    Program exit: {}\n",
                         if thread_ok { "ok" } else { "failed"},
                         if job_ok { "ok" } else { "failed" },
                         if execution_ok { "ok" } else { "failed" },
