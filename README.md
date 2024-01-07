@@ -1,6 +1,9 @@
 # MScript
 [![Rust CI](https://github.com/mrodz/mscript-lang/actions/workflows/rust.yml/badge.svg)](https://github.com/mrodz/mscript/actions/workflows/rust.yml)
-![GitHub release (latest by SemVer including pre-releases)](https://img.shields.io/github/downloads-pre/mrodz/mscript/v1.0.0-rc.1/total)
+![GitHub Latest Release](https://img.shields.io/github/v/release/mrodz/mscript?label=Stable)
+![GitHub Latest Pre-release](https://img.shields.io/github/v/release/mrodz/mscript?include_prereleases&label=Latest%20Release)
+
+
 
 This passion project is a fully-fledged programming language that supports much of what developers seek in a language.
 - [x] Classes
