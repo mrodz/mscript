@@ -313,14 +313,13 @@ impl Program {
 
         if let Err(e) = main_ret {
             stdout().lock().flush()?;
-            eprintln!("\n******* MSCRIPT INTERPRETER FATAL RUNTIME ERROR *******\nCall stack trace:\n{e:?}\n\nPlease report this at https://github.com/mrodz/mscript-lang/issues/new\n");
+            eprintln!("\n******* MSCRIPT INTERPRETER FATAL RUNTIME ERROR *******\nCall stack trace:\n{e:?}\n\nPlease report this at https://github.com/mrodz/mscript/issues/new/choose\n");
             bail!("Interpreter crashed")
         }
 
         if stack.borrow().size() != 0 {
             stdout().lock().flush()?;
-
-            eprintln!("\n******* MSCRIPT INTERPRETER STACK MISMATCH *******\nFound:\n{}\n\n... When the program should have unwinded its stack completely. This is most likely a flaw with the compiler.\n\nPlease report this at https://github.com/mrodz/mscript-lang/issues/new\n", stack.borrow());
+            eprintln!("\n******* MSCRIPT INTERPRETER STACK MISMATCH *******\nFound:\n{}\n\n... When the program should have unwinded its stack completely. This is most likely a flaw with the compiler.\n\nPlease report this at https://github.com/mrodz/mscript/issues/new/choose\n", stack.borrow());
             bail!("Program exited in a confused state, execution integrity has been compromised.")
         }
 

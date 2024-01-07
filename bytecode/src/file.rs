@@ -159,12 +159,6 @@ impl MScriptFile {
         };
 
         functions.run_function(name, args, current_frame, callback_state, jump_callback)
-
-        // let functions = self.functions.borrow_mut();
-
-        // let functions = functions.as_mut()?.get_mut(name).ok()?.run(args, current_frame, callback_state, jump_callback);
-
-        // function.ok()
     }
 
     /// Get the path of the file.

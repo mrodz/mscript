@@ -19,10 +19,9 @@ use crate::{
 };
 
 use super::{
-    dot_lookup::DotChain, function::FunctionType, list::Index, map_err,
-    new_err, r#type::IntoType, ClassType, CompilationState, Compile, CompileTimeEvaluate,
-    CompiledItem, Dependencies, Dependency, FunctionArguments, TemporaryRegister, TypeLayout,
-    Value,
+    dot_lookup::DotChain, function::FunctionType, list::Index, map_err, new_err, r#type::IntoType,
+    ClassType, CompilationState, Compile, CompileTimeEvaluate, CompiledItem, Dependencies,
+    Dependency, FunctionArguments, TemporaryRegister, TypeLayout, Value,
 };
 
 pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {

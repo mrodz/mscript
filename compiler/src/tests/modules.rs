@@ -293,3 +293,64 @@ fn forward_export() {
     .run()
     .unwrap()
 }
+
+#[test]
+fn dependent_hidden_type_exports() {
+    EvalEnvironment::entrypoint(
+        "main.ms",
+        r#"
+        # these functions cannot be called, because their inputs are hidden and cannot be constructed in main.ms
+        import take_kilometer, take_mile from other
+    "#,
+    )
+    .unwrap()
+    .add("other.ms", r#"
+        type Kilometer int
+        class Mile {}
+
+        export take_kilometer: fn(Kilometer) = fn(input: Kilometer) {
+            print input
+        }        
+
+        export take_mile: fn(Mile) = fn(input: Mile) {
+            print input
+        }
+    "#)
+    .unwrap()
+    .run()
+    .unwrap()
+}
+
+#[test]
+#[should_panic = "`other.ms` has no visible member `Mile`"]
+fn dependent_hidden_type_exports_errors_ok() {
+    EvalEnvironment::entrypoint(
+        "main.ms",
+        r#"
+        import take_kilometer from other
+
+        take_kilometer(5)
+
+        # this function cannot be called, because its inputs are hidden and cannot be constructed in main.ms
+        import take_mile, Mile from other
+        take_mile(Mile())
+    "#,
+    )
+    .unwrap()
+    .add("other.ms", r#"
+        type Kilometer int
+        class Mile {}
+
+        export take_kilometer: fn(Kilometer) = fn(input: Kilometer) {
+            assert input == 5
+        }        
+
+        export take_mile: fn(Mile) = fn(input: Mile) {
+            # should never run
+            assert false
+        }
+    "#)
+    .unwrap()
+    .run()
+    .unwrap()
+}
