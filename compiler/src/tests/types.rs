@@ -205,3 +205,48 @@ fn types_with_reassignment() {
     .run()
     .unwrap()
 }
+
+#[test]
+fn type_updates() {
+    eval(
+        r#"
+        x = "hello"
+        x = 42
+
+        take_x = fn(input: int) {
+	        assert input == 42
+        }
+
+        take_x(x)
+        "#,
+    )
+    .unwrap()
+}
+
+/// `2` is an invalid index into "hi", so this test asserts that types and values are being updated
+#[test]
+fn type_updates_index() {
+    eval(
+        r#"
+        x = "hi"
+        x = [1, 2, 3]
+    
+        assert x[2] == 3
+    "#,
+    )
+    .unwrap()
+}
+
+#[test]
+#[should_panic = "cannot index with `3` into list whose known valid safe indexes are 0..2"]
+fn invalid_index() {
+    eval(
+        r#"
+        x = "hi"
+        x = [1, 2, 3]
+    
+        x[3]
+    "#,
+    )
+    .unwrap()
+}

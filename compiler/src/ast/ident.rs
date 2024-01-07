@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::cell::Ref;
 use std::collections::HashSet;
 use std::fmt::Display;
 use std::hash::Hash;
@@ -174,43 +173,6 @@ impl Ident {
         self.ty = Some(ty);
         user_data.add_dependency(self);
         Ok(())
-    }
-
-    #[deprecated]
-    #[allow(unused)]
-    pub fn link(
-        &mut self,
-        user_data: &AssocFileData,
-        ty: Option<Cow<'static, TypeLayout>>,
-    ) -> Result<bool> {
-        let ident: Option<(Ref<Ident>, bool)> =
-            user_data.get_dependency_flags_from_name(&self.name);
-
-        let inherited: bool = if let Some((ident, is_callback)) = ident {
-            let new_ty = ident.ty.clone().map(|x| {
-                if is_callback {
-                    Cow::Owned(TypeLayout::CallbackVariable(x.into_owned().into()))
-                } else {
-                    x
-                }
-            });
-
-            self.ty = new_ty;
-
-            true
-        } else {
-            if ty.is_none() {
-                bail!("ident has not already been registered and needs a type",)
-            }
-
-            self.ty = ty;
-
-            false
-        };
-
-        user_data.add_dependency(self);
-
-        Ok(inherited)
     }
 }
 
