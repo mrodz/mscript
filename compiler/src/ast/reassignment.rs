@@ -25,7 +25,6 @@ pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
     PrattParser::new().op(Op::postfix(R::list_index) | Op::postfix(R::dot_chain))
 });
 
-#[allow(unused)]
 #[derive(Debug)]
 pub(crate) enum ReassignmentPath {
     Ident(Ident),

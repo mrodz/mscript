@@ -20,7 +20,6 @@ use crate::{
     FileManager, VecErr,
 };
 
-#[allow(unused)]
 pub(crate) type Node<'i> = pest_consume::Node<'i, Rule, Rc<AssocFileData>>;
 
 /// The AST parser for MScript. Various `impl` blocks define how each source code tree node should operate.
@@ -88,7 +87,6 @@ impl AssocFileData {
         self.source_name.bytecode_str()
     }
 
-    #[allow(unused)]
     pub fn source_path(&self) -> Arc<PathBuf> {
         self.source_name.clone()
     }
@@ -239,6 +237,10 @@ impl AssocFileData {
         skip_n_frames: usize,
     ) -> Option<Ref<ClassType>> {
         self.scopes.get_type_of_executing_class(skip_n_frames)
+    }
+
+    pub(crate) fn wipe_this_scope(&self) {
+        self.scopes.wipe_top()
     }
 
     pub(crate) fn begin_module(&self, using_exports: Export, compilation_lock: CompilationLock) {
@@ -408,7 +410,6 @@ impl AssocFileData {
     }
 }
 
-#[allow(dead_code)]
 pub(crate) mod util {
     use std::rc::Rc;
 
@@ -610,6 +611,8 @@ impl Compile<Vec<anyhow::Error>> for File {
 /// the environment is set up and does not perform any checks. This way, `import` statements
 /// can use their own custom environment without meddling with `file`.
 fn populate_file(input: Node, mut result: File) -> Result<(), Vec<anyhow::Error>> {
+    input.user_data().wipe_this_scope();
+
     let mut errors = vec![];
 
     for child in input.children() {

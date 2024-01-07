@@ -362,8 +362,6 @@ impl Stack {
     ) -> Result<()> {
         for frame in self.0.iter().rev() {
             if let Some(ref mapping) = frame.variables.get(&name) {
-                // let mut mapping = mapping.borrow_mut();
-                // let mut_mapping_ref: &mut (Primitive, VariableFlags) = rc_to_ref(mapping);
                 if mapping.flags().is_read_only() {
                     bail!("cannot reassign to read-only variable {name}");
                 }

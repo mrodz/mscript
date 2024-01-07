@@ -440,7 +440,7 @@ impl Parser {
                     &input.user_data().get_source_file_name(),
                     format!(
                         "cannot reassign to \"{}\", which is a const variable",
-                        x.idents[0].name()
+                        x.idents[0].name(),
                     ),
                 )]);
             }

@@ -1,7 +1,4 @@
-use crate::{
-    instruction,
-    parser::{Node, Parser},
-};
+use crate::instruction;
 
 use super::{r#type::IntoType, CompilationState, Compile, Dependencies};
 
@@ -16,16 +13,5 @@ impl Dependencies for bool {}
 impl IntoType for bool {
     fn for_type(&self) -> anyhow::Result<super::TypeLayout> {
         Ok(super::TypeLayout::Native(super::r#type::NativeType::Bool))
-    }
-}
-
-pub fn boolean_from_str(str: &str) -> bool {
-    str == "true"
-}
-
-impl Parser {
-    #[allow(dead_code)]
-    pub fn boolean(input: Node) -> bool {
-        boolean_from_str(input.as_str())
     }
 }

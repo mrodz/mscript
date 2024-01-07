@@ -89,17 +89,6 @@ pub(crate) enum SuccessTypeSearchResult<'a> {
     InScope(Ref<'a, Cow<'static, TypeLayout>>),
 }
 
-impl TypeSearchResult<'_> {
-    #[allow(unused)]
-    pub fn try_unwrap(&self) -> Result<&SuccessTypeSearchResult> {
-        if let Self::Ok(success) = self {
-            return Ok(success);
-        }
-
-        bail!("type not found")
-    }
-}
-
 impl Clone for SuccessTypeSearchResult<'_> {
     fn clone(&self) -> Self {
         match self {
@@ -156,6 +145,11 @@ impl Scopes {
         Ref::map(self.0.borrow(), |scopes| {
             scopes.last().expect("scopes was empty")
         })
+    }
+
+    pub(crate) fn wipe_top(&self) {
+        let mut x = self.0.borrow_mut();
+        x.last_mut().unwrap().wipe_variables()
     }
 
     pub(crate) fn mark_should_return_as_completed(&self) -> bool {
@@ -463,7 +457,17 @@ impl Scope {
     fn add_dependency(&mut self, dependency: &Ident) {
         log::trace!("+ {dependency}");
 
-        self.variables.insert(dependency.clone());
+        // #167: We must use `.replace()` because `Ident` is hashed by its name, NOT its type.
+        // This causes a reassignment to not register the updated type.
+
+        if let Some(prev) = self.variables.replace(dependency.clone()) {
+            log::debug!(
+                "++ {} used to have type {}, but now it has type {}",
+                prev.name(),
+                prev.ty().unwrap(),
+                dependency.ty().unwrap()
+            )
+        }
     }
 
     fn add_type(&mut self, name: Box<str>, ty: Cow<'static, TypeLayout>) {
@@ -481,6 +485,10 @@ impl Scope {
 
     pub fn mark_should_return_as_completed(&mut self) -> bool {
         self.yields.mark_should_return_as_completed().is_ok()
+    }
+
+    pub fn wipe_variables(&mut self) {
+        self.variables.clear()
     }
 
     /// able to be improved

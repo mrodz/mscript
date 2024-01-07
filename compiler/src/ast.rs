@@ -118,15 +118,6 @@ impl TemporaryRegister {
         Self::new_rand(id, true, Some(cleanup_ptr))
     }
 
-    /// Create a new [`TemporaryRegister`] that will not run any
-    /// cleanup code when it goes out of scope. It must be manually dropped
-    /// using [`TemporaryRegister::free`]
-    #[doc(hidden)]
-    fn new_require_explicit_drop(id: usize) -> Self {
-        log::trace!("reg. -n-e- {id}");
-        Self::new_rand(id, true, None)
-    }
-
     /// Manually clean up a [`TemporaryRegister`], which will cause its
     /// cleanup code to run now instead of when the variable goes out of scope.
     #[doc(hidden)]
@@ -471,14 +462,6 @@ impl CompilationState {
         let c = self.temporary_register_c.get();
         let result: TemporaryRegister =
             TemporaryRegister::new(c, self.temporary_register_c.as_ptr());
-        self.temporary_register_c.set(c + 1);
-        result
-    }
-
-    #[allow(unused)]
-    pub fn poll_temporary_register_explicit_drop(&self) -> TemporaryRegister {
-        let c = self.temporary_register_c.get();
-        let result: TemporaryRegister = TemporaryRegister::new_require_explicit_drop(c);
         self.temporary_register_c.set(c + 1);
         result
     }

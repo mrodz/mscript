@@ -13,9 +13,9 @@ use super::{
 };
 
 #[derive(Debug, Clone)]
-#[allow(unused)]
 pub enum AstString {
     Plain(String),
+    #[allow(unused)]
     FormattedString(),
 }
 

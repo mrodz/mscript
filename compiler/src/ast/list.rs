@@ -174,15 +174,6 @@ impl ListType {
         (self.lower_bound(), self.upper_bound())
     }
 
-    #[allow(unused)]
-    pub fn len(&self) -> Cow<'static, str> {
-        match self {
-            Self::Empty => Cow::Borrowed("0"),
-            Self::Open { .. } => Cow::Borrowed("∞"),
-            Self::Mixed(types) => Cow::Owned(types.len().to_string()),
-        }
-    }
-
     pub fn get_type_at_known_index(&self, index: usize) -> Result<&TypeLayout> {
         match self {
             Self::Empty => bail!("empty list"),
