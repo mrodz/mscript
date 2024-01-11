@@ -1,0 +1,156 @@
+function LinkedList::add
+	arg 0
+	store self
+	arg 1
+	store number
+	reserve_primitive
+	store inner
+	load_fast self
+	lookup inner
+	unwrap_into inner
+	if 29
+	load inner
+	store_fast #1
+	load_fast #1
+	lookup add
+	store_fast #2
+	breakpoint "POST store function name in lhs_register"
+	breakpoint "CALL PREINIT args"
+	load Node
+	store_fast #4
+	breakpoint "CALL PREINIT args"
+	load number
+	store_fast #5
+	reserve_primitive
+	store_fast #6
+	breakpoint "CALL POSTINIT args"
+	load_fast #5
+	load_fast #6
+	load_fast #4
+	call
+	store_fast #3
+	breakpoint "CALL POSTINIT args"
+	load_fast #3
+	ld_self #1
+	load_fast #2
+	call
+	void
+	done
+	jmp 20
+	else
+	load Node
+	store_fast #1
+	breakpoint "CALL PREINIT args"
+	load number
+	store_fast #2
+	reserve_primitive
+	store_fast #3
+	breakpoint "CALL POSTINIT args"
+	load_fast #2
+	load_fast #3
+	load_fast #1
+	call
+	store #0
+	load_fast self
+	lookup inner
+	load_fast #0
+	ptr_mut
+	done
+	void
+	ret
+end
+function LinkedList::to_string
+	arg 0
+	store self
+	string "List: "
+	store result
+	reserve_primitive
+	store next
+	load_fast self
+	lookup inner
+	unwrap_into next
+	if 7
+	load next
+	lookup value
+	bin_op_assign += result
+	void
+	done
+	jmp 5
+	else
+	string "<empty list>"
+	ret
+	done
+	load next
+	lookup next
+	unwrap_into next
+	while_loop 11
+	string ", "
+	store_fast #1
+	load next
+	lookup value
+	load_fast #1
+	fast_rev2
+	bin_op +
+	bin_op_assign += result
+	void
+	jmp_pop -13
+	load result
+	ret
+end
+function LinkedList::$constructor
+	arg 0
+	store self
+	arg 1
+	store inner
+	load inner
+	store #0
+	load_fast self
+	lookup inner
+	load_fast #0
+	ptr_mut
+	void
+	ret
+end
+function LinkedList
+	reserve_primitive
+	store_fast inner
+	reserve_primitive
+	store_fast tail
+	make_function ./linked_list.mmm#LinkedList::add Node
+	store_fast LinkedList::add
+	make_function ./linked_list.mmm#LinkedList::to_string
+	store_fast LinkedList::to_string
+	make_object
+	store_fast #1
+	make_function ./linked_list.mmm#LinkedList::$constructor
+	store_fast #0
+	load_fast #1
+	arg 0
+	load_fast #0
+	call
+	load_fast #1
+	ret
+end
+function __fn0
+	load LinkedList
+	store_fast #1
+	breakpoint "CALL PREINIT args"
+	reserve_primitive
+	store_fast #2
+	breakpoint "CALL POSTINIT args"
+	load_fast #2
+	load_fast #1
+	call
+	ret
+end
+function __module__
+	module_entry ./node.mmm#__module__
+	split_lookup_store Node
+	pop
+	make_function ./linked_list.mmm#LinkedList Node
+	export_special LinkedList LinkedList
+	make_function ./linked_list.mmm#__fn0 LinkedList
+	store new_empty
+	export_name new_empty
+	ret_mod
+end

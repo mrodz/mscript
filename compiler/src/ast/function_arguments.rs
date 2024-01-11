@@ -72,6 +72,7 @@ impl Parser {
                 class_type
             });
 
+
             result_len += 1;
 
             if !expected_ty_at_idx.eq_complex(
@@ -80,7 +81,7 @@ impl Parser {
             ) {
                 let argument_number = idx + 1;
                 let hint = expected_ty_at_idx
-                    .get_error_hint_between_types(user_gave)
+                    .get_error_hint_between_types(user_gave, maybe_class_type)
                     .unwrap_or_default();
                 let error_message = format!("type mismatch when calling function (argument #{argument_number} was expected to be `{expected_ty_at_idx}` based on type signature, instead found `{user_gave}`){hint}", );
                 errors.push(new_err(

@@ -1,0 +1,88 @@
+function Node::add
+	arg 0
+	store self
+	arg 1
+	store node
+	load_fast self
+	lookup next
+	store_fast #0
+	reserve_primitive
+	load_fast #0
+	fast_rev2
+	equ
+	if 9
+	load node
+	store #0
+	load_fast self
+	lookup next
+	load_fast #0
+	ptr_mut
+	done
+	jmp 19
+	else
+	load_fast self
+	lookup next
+	store_fast #1
+	load_fast #1
+	lookup add
+	store_fast #2
+	breakpoint "POST store function name in lhs_register"
+	breakpoint "CALL PREINIT args"
+	load node
+	store_fast #3
+	breakpoint "CALL POSTINIT args"
+	load_fast #3
+	ld_self #1
+	load_fast #2
+	call
+	void
+	done
+	void
+	ret
+end
+function Node::$constructor
+	arg 0
+	store self
+	arg 1
+	store value
+	arg 2
+	store next
+	load value
+	store #0
+	load_fast self
+	lookup value
+	load_fast #0
+	ptr_mut
+	load next
+	store #0
+	load_fast self
+	lookup next
+	load_fast #0
+	ptr_mut
+	void
+	ret
+end
+function Node
+	reserve_primitive
+	store_fast value
+	reserve_primitive
+	store_fast next
+	make_function ./node.mmm#Node::add
+	store_fast Node::add
+	make_object
+	store_fast #1
+	make_function ./node.mmm#Node::$constructor
+	store_fast #0
+	load_fast #1
+	arg 0
+	arg 1
+	load_fast #0
+	call
+	load_fast #1
+	ret
+end
+function __module__
+	make_function ./node.mmm#Node
+	export_special Node Node
+	ret_mod
+end

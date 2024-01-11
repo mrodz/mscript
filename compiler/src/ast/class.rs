@@ -8,6 +8,7 @@ use std::{borrow::Cow, fmt::Display, path::PathBuf, rc::Rc, sync::Arc};
 
 use anyhow::Result;
 
+use bytecode::compilation_bridge::id::MAKE_FUNCTION;
 pub(crate) use class_body::ClassBody;
 pub(crate) use constructor::Constructor;
 pub(crate) use member_function::MemberFunction;
@@ -60,8 +61,17 @@ impl Compile for Class {
             log::info!("{function_name} will be exported internally, but is not visible to other source files")
         }
 
+        let mut arguments = vec![function_name];
+
+        for dependency in self.net_dependencies() {
+            arguments.push(dependency.name().to_owned());
+        }
+
         Ok(vec![
-            instruction!(make_function function_name),
+            CompiledItem::Instruction {
+                id: MAKE_FUNCTION,
+                arguments: arguments.into(),
+            },
             instruction!(export_special name id),
         ])
     }

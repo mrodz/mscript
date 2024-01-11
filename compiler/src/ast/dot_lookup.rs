@@ -101,6 +101,9 @@ impl Parser {
     ) -> Result<(DotChain, Cow<'a, TypeLayout>), Vec<anyhow::Error>> {
         let mut links = vec![];
         let mut must_call = false;
+
+        // println!("@ BEGIN");
+
         for dot_chain_option_node in input.children() {
             must_call = must_call || lhs_ty.disregard_distractors(true).is_class();
             let dot_chain_option = Self::dot_chain_option(dot_chain_option_node, lhs_ty)?;
@@ -132,6 +135,8 @@ impl Parser {
             )]);
         }
 
+        // println!("@ END\n");
+
         Ok((DotChain { links }, lhs_ty))
     }
 
@@ -145,11 +150,13 @@ impl Parser {
         let ident = children.next().unwrap();
         let ident_str = ident.as_str().to_owned();
 
+        // println!("@@@ {lhs_ty_cow}.{ident_str}");
+
         let ident_span = ident.as_span();
 
         let source_name = input.user_data().get_source_file_name();
 
-        let type_of_property = lhs_ty
+        let mut type_of_property = lhs_ty
             .get_property_type(&ident_str)
             .details_lazy_message(ident_span, &source_name, || {
                 format!(
@@ -159,6 +166,13 @@ impl Parser {
             })
             .to_err_vec()?
             .clone();
+
+        if type_of_property.disregard_distractors(true).is_class_self() {
+            type_of_property = Cow::Owned(lhs_ty.to_owned());
+        }
+
+
+        // println!("@@@@@ ty:{type_of_property}");
 
         match input.as_rule() {
             Rule::dot_function_call => {

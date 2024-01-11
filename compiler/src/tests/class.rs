@@ -1,4 +1,4 @@
-use crate::eval;
+use crate::{eval, EvalEnvironment};
 
 #[test]
 fn class_grammar() {
@@ -127,6 +127,9 @@ fn factorial_pair() {
     .unwrap();
 }
 
+/// Test
+/// * `bin_op` in class
+/// * `modify` and `bin_op` with callback variable
 #[test]
 fn capture_outside_env() {
     eval(
@@ -139,7 +142,8 @@ fn capture_outside_env() {
 
 			constructor(self, name: str) {
 				self.name = name
-				modify GREETER_INSTANCES = GREETER_INSTANCES + 1
+				modify GREETER_INSTANCES = GREETER_INSTANCES + 2
+				GREETER_INSTANCES *= 9
 			}
 
 			fn greet(self) -> str {
@@ -159,7 +163,7 @@ fn capture_outside_env() {
 
 		assert hi_mateo.number_of_greeters() == hi_scout.number_of_greeters()
 		assert hi_mateo.number_of_greeters() == GREETER_INSTANCES
-		assert GREETER_INSTANCES == 2
+		assert GREETER_INSTANCES == 180
 	"#,
     )
     .unwrap();
@@ -299,6 +303,129 @@ fn dependent_variable() {
 		a = A()
 		b = a.associated_function
 		b()
+	"#,
+    )
+    .unwrap()
+}
+
+#[test]
+fn linked_list() {
+    EvalEnvironment::entrypoint(
+        "main.ms",
+        r#"
+		import new_empty from linked_list
+
+		list = new_empty()
+		list.add(5)
+		list.add(7)
+		list.add(8)
+		list.add(99)
+
+		assert list.to_string() == "List: 5, 7, 8, 99"
+	"#,
+    )
+    .unwrap()
+    .add(
+        "linked_list.ms",
+        r#"
+		import Node from node
+
+		class LinkedList {
+			inner: Node?
+			tail: Node?
+	
+			constructor(self, inner: Node?) {
+				self.inner = inner
+			}
+	
+			fn add(self, number: int) {
+				inner: Node? = nil
+				if inner ?= self.inner {
+					inner.add(Node(number, nil))
+				} else {
+					self.inner = Node(number, nil)
+				}
+			}
+	
+			fn to_string(self) -> str {
+				result = "List: "
+				
+				next: Node? = nil
+			
+				if next ?= self.inner {
+					result += next.value
+				} else {
+					return "<empty list>"
+				}
+	
+				while next ?= next.next {
+					result += ", " + next.value
+				}
+	
+				return result
+			}
+		}
+	
+		export new_empty: fn() -> LinkedList = fn() -> LinkedList {
+			return LinkedList(nil)
+		}
+	"#,
+    )
+    .unwrap()
+    .add(
+        "node.ms",
+        r#"
+		export class Node {
+			value: int
+			next: Self?
+		
+			constructor(self, value: int, next: Self?) {
+				self.value = value
+				self.next = next
+			}
+		
+			fn add(self, node: Self) {
+				if self.next == nil {
+					self.next = node
+				} else {
+					self.next.add(node)
+				}
+			}
+		}
+	"#,
+    )
+    .unwrap()
+    .run()
+    .unwrap()
+}
+
+#[test]
+fn class_field() {
+    eval(
+        r#"
+		const OUTSIDE = 5
+		class B {
+			value: int
+		}
+
+		class A {
+    		inner: B
+
+    		fn set(self) {
+        		self.inner = B()
+				self.inner.value = 10
+    		}
+
+			fn get_val(self) -> int {
+				return self.inner.value * OUTSIDE
+			}
+		}
+
+		a = A()
+
+		a.set()
+
+		assert a.get_val() == 50
 	"#,
     )
     .unwrap()

@@ -37,6 +37,11 @@ pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
     PrattParser::new()
         .op(infix!(unwrap))
         .op(Op::prefix(optional_unwrap))
+        .op(infix!(add_assign)
+            | infix!(sub_assign)
+            | infix!(mul_assign)
+            | infix!(div_assign)
+            | infix!(mod_assign))
         .op(infix!(or) | infix!(xor))
         .op(infix!(and))
         .op(infix!(lt) | infix!(lte) | infix!(gt) | infix!(gte) | infix!(eq) | infix!(neq))
@@ -51,11 +56,7 @@ pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
             | Op::postfix(list_index)
             | Op::postfix(callable)
             | Op::postfix(optional_or))
-        .op(infix!(add_assign)
-            | infix!(sub_assign)
-            | infix!(mul_assign)
-            | infix!(div_assign)
-            | infix!(mod_assign))
+
 });
 
 #[derive(Debug, Clone, PartialEq)]
@@ -388,6 +389,7 @@ impl Dependencies for Expr {
             }) => {
                 let mut lhs_deps = lhs_raw.net_dependencies();
                 lhs_deps.append(&mut arguments.net_dependencies());
+                // println!("@@@@ {:?}", lhs_deps.iter().map(|x| x.to_string()).collect::<Vec<_>>());
                 lhs_deps
             }
             E::Index { lhs_raw, index } => {

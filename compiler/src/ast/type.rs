@@ -7,7 +7,7 @@ use crate::{
     },
     parser::{AssocFileData, Node, Parser, Rule},
     scope::{ScopeReturnStatus, SuccessTypeSearchResult, TypeSearchResult},
-    CompilationError, VecErr,
+    CompilationError, VecErr, BytecodePathStr,
 };
 use anyhow::{bail, Context, Result};
 use pest::Span;
@@ -340,10 +340,10 @@ impl ModuleType {
                                         let module = module_import.module();
                                         let ty = module
                                             .get_type(ty_node.as_str())
-                                            .details(
+                                            .details_lazy_message(
                                                 ty_node.as_span(),
                                                 &child.user_data().get_source_file_name(),
-                                                "this type does not exist on this module",
+                                                || format!("`{}` has no visible type `{}`", path.bytecode_str(), ty_node.as_str()),
                                             )
                                             .to_err_vec()?;
 
@@ -351,7 +351,30 @@ impl ModuleType {
                                             .user_data()
                                             .add_type(ty_node.as_str().into(), ty.clone())
                                     }
-                                    Rule::import_name => continue,
+                                    Rule::import_name => {
+                                        let name_node = child.children().next().unwrap();
+                                        let module = module_import.module();
+
+                                        let named_export =
+                                            module.get_property(name_node.as_str()).details_lazy_message(
+                                                name_node.as_span(),
+                                                &child.user_data().get_source_file_name(),
+                                                || format!(
+                                                    "`{}` has no visible member `{}`{}",
+                                                    path.bytecode_str(),
+                                                    name_node.as_str(),
+                                                    TypeLayout::Module(module.clone())
+                                                        .get_property_hint_from_input_no_lookup()
+                                                ),
+                                            ).to_err_vec()?;
+
+                                        match named_export.ty().unwrap().disregard_distractors(false) {
+                                            TypeLayout::Class(class_type) => {
+                                                input.user_data().add_type(named_export.boxed_name(), Cow::Owned(TypeLayout::Class(class_type.clone())))
+                                            }
+                                            _ => log::trace!("skipping import {} -- it doesn't create a type", name_node.as_str())
+                                        }
+                                    }
                                     Rule::import_path => break,
                                     other => unreachable!("{other:?}"),
                                 }
@@ -508,15 +531,22 @@ impl TypeLayout {
         matches!(me, TypeLayout::Class(..))
     }
 
-    pub fn get_error_hint_between_types(&self, incompatible: &Self) -> Option<String> {
-        self.get_error_hint_between_types_recursive(incompatible, 2)
+    pub fn get_error_hint_between_types<T>(&self, incompatible: &Self, class_self: Option<T>) -> Option<String>
+    where
+        T: Deref<Target = ClassType>
+    {
+        self.get_error_hint_between_types_recursive(incompatible, class_self, 2)
     }
 
-    fn get_error_hint_between_types_recursive(
+    fn get_error_hint_between_types_recursive<T>(
         &self,
         incompatible: &Self,
+        class_self: Option<T>,
         tab_depth: usize,
-    ) -> Option<String> {
+    ) -> Option<String>
+    where
+        T: Deref<Target = ClassType>
+    {
         use NativeType::*;
         use TypeLayout::*;
 
@@ -527,15 +557,18 @@ impl TypeLayout {
             (Native(Byte), Native(Int | BigInt)) => format!("\n{tabs}+ hint: try adding '0b' before a number to specify a byte literal, eg. `5` -> `0b101`"),
             (Native(Int), Native(Float)) => format!("\n{tabs}+ hint: cast this floating point value to an integer"),
             (Native(Float), Native(Int | BigInt | Byte)) => format!("\n{tabs}+ hint: cast this integer type to a floating point"),
+            _ if self.disregard_distractors(true) == &ClassSelf || incompatible.disregard_distractors(true) == &ClassSelf => {
+                format!("\n{tabs}+ hint: `Self` in this context means `{}`", class_self.map(|x| Cow::Owned(x.name().to_owned())).unwrap_or(Cow::Borrowed("<! no Self type>")))
+            }
             (x, Optional(Some(y))) if x == y.as_ref().as_ref() => format!("\n{tabs}+ hint: unwrap this optional to use its value"),
             (Native(Str(..)), _) => format!("\n{tabs}+ hint: call `.to_str()` on this item to convert it into a str"),
             (Function(..), Function(..)) => format!("\n{tabs}+ hint: check the function type that you provided"),
             (Alias(str, ty), y) => {
-                let maybe_extended_hint = ty.get_error_hint_between_types_recursive(y, tab_depth + 1).unwrap_or_default();
+                let maybe_extended_hint = ty.get_error_hint_between_types_recursive(y, class_self, tab_depth + 1).unwrap_or_default();
                 format!("\n{tabs}+ hint: `{str}` is an alias for `{ty}`, which isn't compatible with `{y}` in this context{maybe_extended_hint}")
             }
             (y, Alias(str, ty)) => {
-                let maybe_extended_hint = y.get_error_hint_between_types_recursive(ty, tab_depth + 1).unwrap_or_default();
+                let maybe_extended_hint = y.get_error_hint_between_types_recursive(ty, class_self, tab_depth + 1).unwrap_or_default();
                 format!("\n{tabs}+ hint: `{str}` is an alias for `{ty}`, which isn't compatible with `{y}` in this context{maybe_extended_hint}")
             }
             _ => return None,
@@ -981,16 +1014,6 @@ impl TypeLayout {
             NativeType::Byte if allow_byte => true,
             NativeType::BigInt | NativeType::Int | NativeType::Float => true,
             _ => false,
-        }
-    }
-
-    pub fn get_load_instruction(&self) -> (&'static str, u8) {
-        const LOAD_CALLBACK: u8 = 0x23;
-        const LOAD: u8 = 0x19;
-
-        match self {
-            Self::CallbackVariable(..) => ("load_callback", LOAD_CALLBACK),
-            _ => ("load", LOAD),
         }
     }
 

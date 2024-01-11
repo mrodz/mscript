@@ -349,9 +349,7 @@ impl<'a> Ctx<'a> {
     pub(crate) fn load_local(&self, name: &str) -> Result<PrimitiveFlagsPair> {
         self.call_stack
             .borrow()
-            .get_frame_variables()
-            .context("cannot load variables")?
-            .get(name)
+            .find_name_in_function(name)
             .context("name not found")
     }
 

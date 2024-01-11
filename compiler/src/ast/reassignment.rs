@@ -1,4 +1,4 @@
-use std::{borrow::Cow, rc::Rc};
+use std::{borrow::Cow, rc::Rc, cell::Ref};
 
 use anyhow::{bail, Context, Result};
 use once_cell::sync::Lazy;
@@ -93,7 +93,7 @@ impl Compile for Reassignment {
         result.append(&mut vec![
             instruction!(load_fast val_register),
             instruction!(ptr_mut),
-            instruction!(delete_name_scoped val_register),
+            // instruction!(delete_name_scoped val_register),
         ]);
 
         // result.append(&mut self.path.compile(function_buffer)?);
@@ -238,14 +238,20 @@ impl Parser {
 
         let expected_ty = path.expected_type();
 
+        let maybe_class = input.user_data().get_type_of_executing_class();
+
         if !value_ty.eq_complex(
             expected_ty,
-            &TypecheckFlags::use_class(input.user_data().get_type_of_executing_class()),
+            &TypecheckFlags::use_class(maybe_class.as_ref().map(|x| Ref::clone(x))).lhs_unwrap(true),
         ) {
+            let hint = expected_ty
+                    .get_error_hint_between_types(&value_ty, maybe_class)
+                    .unwrap_or_default();
+
             return Err(vec![new_err(
                 path_span,
                 &input.user_data().get_source_file_name(),
-                format!("type mismatch: cannot assign `{value_ty:?}` to `{expected_ty:?}`"),
+                format!("type mismatch: cannot assign `{value_ty}` to `{expected_ty}`{hint}"),
             )]);
         }
 

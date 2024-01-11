@@ -191,6 +191,9 @@ impl Primitive {
         use Primitive as P;
 
         match (self, rhs) {
+            (x, P::Optional(None)) | (P::Optional(None), x) => {
+                return Ok(matches!(x, Primitive::Optional(None)))
+            }
             (P::Optional(maybe), yes) | (yes, P::Optional(maybe)) => {
                 if let Some(maybe_unwrapped) = maybe {
                     return Ok(maybe_unwrapped.as_ref() == yes);
@@ -236,15 +239,25 @@ impl Primitive {
         }
     }
 
-    pub fn lookup(&self, property: &str) -> Option<PrimitiveFlagsPair> {
+    pub fn lookup(self, property: &str) -> std::result::Result<PrimitiveFlagsPair, Self> {
         use Primitive as P;
-        match self {
-            P::Object(obj) => {
-                let property = obj.borrow().get_property(property, true)?;
-                Some(property)
+        match unsafe { self.move_out_of_heap_primitive() } {
+            ret @ P::Object(..) => {
+                let P::Object(ref obj) = ret else {
+                    unreachable!()
+                };
+
+                let property = obj.clone().borrow().get_property(property, true).ok_or(ret)?;
+                Ok(property)
             }
-            P::Module(module) => module.borrow().get(property),
-            _ => None,
+            ret @ P::Module(..) => {
+                let P::Module(ref module) = ret else {
+                    unreachable!()
+                };
+
+                module.clone().borrow().get(property).ok_or(ret)
+            },
+            ret => Err(ret),
         }
     }
 
@@ -376,7 +389,7 @@ impl Primitive {
             }
             Module(module) => {
                 if cfg!(feature = "debug") {
-                    write!(f, "{:#?}", module.borrow())
+                    write!(f, "module {:#?}", module.borrow())
                 } else {
                     write!(f, "<module @ {:#x}>", module.as_ptr() as usize)
                 }
@@ -385,7 +398,11 @@ impl Primitive {
             // something went SERIOUSLY wrong with the MScript compiler.
             HeapPrimitive(hp) => {
                 let view = unsafe { hp.borrow() };
-                write!(f, "&{view}")
+                if cfg!(feature = "debug") {
+                    write!(f, "&{view}")
+                } else {
+                    write!(f, "{view}")
+                }
             }
             Object(o) => write!(f, "{}", o.borrow()),
             Optional(Some(primitive)) => write!(f, "{primitive}"),

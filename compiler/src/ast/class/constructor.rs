@@ -103,7 +103,7 @@ impl Compile for Constructor {
         result.extend_from_slice(&[
             instruction!(load_fast constructor_register),
             instruction!(call),
-            instruction!(delete_name_scoped constructor_register),
+            // instruction!(delete_name_scoped constructor_register),
             instruction!(load_fast obj_register),
         ]);
 
@@ -139,7 +139,9 @@ impl IntoType for Constructor {
 
 impl Dependencies for Constructor {
     fn dependencies(&self) -> Vec<crate::ast::Dependency> {
-        self.body.net_dependencies()
+        let x = self.body.net_dependencies();
+        // println!("@@ {} constructor depends on {:?}", self.class_name, x.iter().map(|x| x.ident.to_string()).collect::<Vec<_>>());
+        x
     }
 
     fn supplies(&self) -> Vec<crate::ast::Dependency> {

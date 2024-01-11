@@ -524,7 +524,11 @@ pub mod implementations {
         let callback_state = if len != 1 {
             let mut arguments = HashMap::with_capacity(len - 1); // maybe len
             for var_name in &args[1..] {
-                let Some(var) = ctx.load_variable(var_name) else {
+                let var = if let Some(var) = ctx.load_variable(var_name) {
+                    var
+                } else if let Ok(var) = ctx.load_callback_variable(var_name) {
+                    var
+                } else {
                     bail!("{var_name} is not in scope")
                 };
 
@@ -862,8 +866,11 @@ pub mod implementations {
             bail!("`unwrap_into` requires a primitive at the top of the local operating stack");
         };
 
+        let primitive = unsafe { primitive.move_out_of_heap_primitive() };
+
         let status = match primitive {
             Primitive::Optional(Some(unwrapped)) => {
+
                 let var = unwrapped.as_ref().to_owned();
 
                 let var = unsafe { var.move_out_of_heap_primitive() };
@@ -1111,7 +1118,11 @@ pub mod implementations {
             bail!("load requires a name")
         };
 
-        let Some(var) = ctx.load_variable(name) else {
+        let var = if let Some(var) = ctx.load_variable(name) {
+            var
+        } else if let Ok(var) = ctx.load_callback_variable(name) {
+            var
+        } else {
             bail!("load before store (`{name}` not in scope)")
         };
 
@@ -1181,10 +1192,11 @@ pub mod implementations {
 
         let primitive = ctx.pop().unwrap();
 
-        let result: PrimitiveFlagsPair = primitive
-            .lookup(name)
-            .with_context(|| format!("`{name}` does not exist on `{primitive:?}`"))?;
-
+        let result = match primitive.lookup(name) {
+            Ok(result) => result,
+            Err(primitive) => bail!("`{name}` does not exist on `{primitive}`")
+        };
+        
         let heap_primitive = Primitive::HeapPrimitive(HeapPrimitive::new_lookup_view(result));
 
         ctx.push(heap_primitive);
