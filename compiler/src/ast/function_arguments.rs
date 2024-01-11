@@ -72,7 +72,6 @@ impl Parser {
                 class_type
             });
 
-
             result_len += 1;
 
             if !expected_ty_at_idx.eq_complex(

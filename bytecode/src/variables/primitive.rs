@@ -247,7 +247,11 @@ impl Primitive {
                     unreachable!()
                 };
 
-                let property = obj.clone().borrow().get_property(property, true).ok_or(ret)?;
+                let property = obj
+                    .clone()
+                    .borrow()
+                    .get_property(property, true)
+                    .ok_or(ret)?;
                 Ok(property)
             }
             ret @ P::Module(..) => {
@@ -256,7 +260,7 @@ impl Primitive {
                 };
 
                 module.clone().borrow().get(property).ok_or(ret)
-            },
+            }
             ret => Err(ret),
         }
     }

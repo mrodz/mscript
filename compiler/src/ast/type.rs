@@ -7,7 +7,7 @@ use crate::{
     },
     parser::{AssocFileData, Node, Parser, Rule},
     scope::{ScopeReturnStatus, SuccessTypeSearchResult, TypeSearchResult},
-    CompilationError, VecErr, BytecodePathStr,
+    BytecodePathStr, CompilationError, VecErr,
 };
 use anyhow::{bail, Context, Result};
 use pest::Span;
@@ -343,7 +343,13 @@ impl ModuleType {
                                             .details_lazy_message(
                                                 ty_node.as_span(),
                                                 &child.user_data().get_source_file_name(),
-                                                || format!("`{}` has no visible type `{}`", path.bytecode_str(), ty_node.as_str()),
+                                                || {
+                                                    format!(
+                                                        "`{}` has no visible type `{}`",
+                                                        path.bytecode_str(),
+                                                        ty_node.as_str()
+                                                    )
+                                                },
                                             )
                                             .to_err_vec()?;
 
@@ -355,24 +361,41 @@ impl ModuleType {
                                         let name_node = child.children().next().unwrap();
                                         let module = module_import.module();
 
-                                        let named_export =
-                                            module.get_property(name_node.as_str()).details_lazy_message(
+                                        let named_export = module
+                                            .get_property(name_node.as_str())
+                                            .details_lazy_message(
                                                 name_node.as_span(),
                                                 &child.user_data().get_source_file_name(),
-                                                || format!(
-                                                    "`{}` has no visible member `{}`{}",
-                                                    path.bytecode_str(),
-                                                    name_node.as_str(),
-                                                    TypeLayout::Module(module.clone())
-                                                        .get_property_hint_from_input_no_lookup()
-                                                ),
-                                            ).to_err_vec()?;
+                                                || {
+                                                    format!(
+                                                        "`{}` has no visible member `{}`{}",
+                                                        path.bytecode_str(),
+                                                        name_node.as_str(),
+                                                        TypeLayout::Module(module.clone())
+                                                            .get_property_hint_from_input_no_lookup(
+                                                            )
+                                                    )
+                                                },
+                                            )
+                                            .to_err_vec()?;
 
-                                        match named_export.ty().unwrap().disregard_distractors(false) {
+                                        match named_export
+                                            .ty()
+                                            .unwrap()
+                                            .disregard_distractors(false)
+                                        {
                                             TypeLayout::Class(class_type) => {
-                                                input.user_data().add_type(named_export.boxed_name(), Cow::Owned(TypeLayout::Class(class_type.clone())))
+                                                input.user_data().add_type(
+                                                    named_export.boxed_name(),
+                                                    Cow::Owned(TypeLayout::Class(
+                                                        class_type.clone(),
+                                                    )),
+                                                )
                                             }
-                                            _ => log::trace!("skipping import {} -- it doesn't create a type", name_node.as_str())
+                                            _ => log::trace!(
+                                                "skipping import {} -- it doesn't create a type",
+                                                name_node.as_str()
+                                            ),
                                         }
                                     }
                                     Rule::import_path => break,
@@ -531,9 +554,13 @@ impl TypeLayout {
         matches!(me, TypeLayout::Class(..))
     }
 
-    pub fn get_error_hint_between_types<T>(&self, incompatible: &Self, class_self: Option<T>) -> Option<String>
+    pub fn get_error_hint_between_types<T>(
+        &self,
+        incompatible: &Self,
+        class_self: Option<T>,
+    ) -> Option<String>
     where
-        T: Deref<Target = ClassType>
+        T: Deref<Target = ClassType>,
     {
         self.get_error_hint_between_types_recursive(incompatible, class_self, 2)
     }
@@ -545,7 +572,7 @@ impl TypeLayout {
         tab_depth: usize,
     ) -> Option<String>
     where
-        T: Deref<Target = ClassType>
+        T: Deref<Target = ClassType>,
     {
         use NativeType::*;
         use TypeLayout::*;

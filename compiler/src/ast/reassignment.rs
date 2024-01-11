@@ -1,4 +1,4 @@
-use std::{borrow::Cow, rc::Rc, cell::Ref};
+use std::{borrow::Cow, cell::Ref, rc::Rc};
 
 use anyhow::{bail, Context, Result};
 use once_cell::sync::Lazy;
@@ -245,8 +245,8 @@ impl Parser {
             &TypecheckFlags::use_class(maybe_class.as_ref().map(Ref::clone)).lhs_unwrap(true),
         ) {
             let hint = expected_ty
-                    .get_error_hint_between_types(&value_ty, maybe_class)
-                    .unwrap_or_default();
+                .get_error_hint_between_types(&value_ty, maybe_class)
+                .unwrap_or_default();
 
             return Err(vec![new_err(
                 path_span,

@@ -21,7 +21,7 @@ pub(crate) struct Ident {
 
 impl Compile for Ident {
     fn compile(&self, _: &CompilationState) -> Result<Vec<CompiledItem>> {
-        Ok(vec![instruction!(load (self.name()))])
+        Ok(vec![instruction!(load(self.name()))])
     }
 }
 

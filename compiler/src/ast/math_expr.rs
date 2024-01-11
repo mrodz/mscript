@@ -56,7 +56,6 @@ pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
             | Op::postfix(list_index)
             | Op::postfix(callable)
             | Op::postfix(optional_or))
-
 });
 
 #[derive(Debug, Clone, PartialEq)]

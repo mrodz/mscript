@@ -171,7 +171,6 @@ impl Parser {
             type_of_property = Cow::Owned(lhs_ty.to_owned());
         }
 
-
         // println!("@@@@@ ty:{type_of_property}");
 
         match input.as_rule() {

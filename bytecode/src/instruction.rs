@@ -870,7 +870,6 @@ pub mod implementations {
 
         let status = match primitive {
             Primitive::Optional(Some(unwrapped)) => {
-
                 let var = unwrapped.as_ref().to_owned();
 
                 let var = unsafe { var.move_out_of_heap_primitive() };
@@ -1194,9 +1193,9 @@ pub mod implementations {
 
         let result = match primitive.lookup(name) {
             Ok(result) => result,
-            Err(primitive) => bail!("`{name}` does not exist on `{primitive}`")
+            Err(primitive) => bail!("`{name}` does not exist on `{primitive}`"),
         };
-        
+
         let heap_primitive = Primitive::HeapPrimitive(HeapPrimitive::new_lookup_view(result));
 
         ctx.push(heap_primitive);
