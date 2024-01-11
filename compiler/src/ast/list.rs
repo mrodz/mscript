@@ -456,7 +456,7 @@ impl Compile for Index {
                 instruction!(store_fast index_temp_register),
                 instruction!(delete_name_reference_scoped lhs_register),
                 instruction!(vec_op instruction_str),
-                instruction!(delete_name_scoped index_temp_register),
+                // instruction!(delete_name_scoped index_temp_register),
             ]);
 
             state.free_temporary_register(index_temp_register);

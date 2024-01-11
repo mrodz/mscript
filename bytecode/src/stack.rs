@@ -319,6 +319,28 @@ impl Stack {
         None
     }
 
+    pub fn find_name_in_function(&self, name: &str) -> Option<PrimitiveFlagsPair> {
+        for stack_frame in self.0.iter().rev() {
+            let tuple = stack_frame.variables.get(name);
+
+            if let Some(packed) = tuple {
+                let is_exclusive = { packed.flags().is_exclusive_to_frame() };
+
+                if !is_exclusive {
+                    return Some(packed);
+                } else {
+                    continue;
+                }
+            }
+
+            if !SpecialScope::is_label_special_scope(&stack_frame.label) {
+                break;
+            }
+        }
+
+        None
+    }
+
     /// Add a `name -> variable` mapping to the current stack frame, possibly searching, with default flags.
     pub fn register_variable(&mut self, name: Cow<'static, str>, var: Primitive) -> Result<()> {
         self.register_variable_flags(name, var, VariableFlags::none())
@@ -349,7 +371,8 @@ impl Stack {
         let frame = self.0.last_mut().expect("no stack frame");
 
         frame.variables.0.remove(name).ok_or(anyhow!(
-            "{name} has not been mapped at this scope, and cannot be deleted"
+            "{name} has not been mapped at this scope, and cannot be deleted (existing: {:?})",
+            frame.variables.0
         ))
     }
 

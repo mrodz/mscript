@@ -38,7 +38,10 @@ impl Parser {
                 &TypecheckFlags::use_class(self_type.as_ref()).lhs_unwrap(false),
             ) {
                 let hint = ty
-                    .get_error_hint_between_types(assignment_ty)
+                    .get_error_hint_between_types(
+                        assignment_ty,
+                        input.user_data().get_type_of_executing_class(),
+                    )
                     .unwrap_or_default();
 
                 let message = if value.is_callable().to_err_vec()? {

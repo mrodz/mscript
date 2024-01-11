@@ -1,0 +1,86 @@
+function __module__
+	module_entry ./linked_list.mmm#__module__
+	split_lookup_store new_empty
+	pop
+	load new_empty
+	store_fast #1
+	breakpoint "CALL PREINIT args"
+	breakpoint "CALL POSTINIT args"
+	load_fast #1
+	call
+	store list
+	load list
+	store_fast #1
+	load_fast #1
+	lookup add
+	store_fast #2
+	breakpoint "POST store function name in lhs_register"
+	breakpoint "CALL PREINIT args"
+	int 5
+	store_fast #3
+	breakpoint "CALL POSTINIT args"
+	load_fast #3
+	ld_self #1
+	load_fast #2
+	call
+	void
+	load list
+	store_fast #1
+	load_fast #1
+	lookup add
+	store_fast #2
+	breakpoint "POST store function name in lhs_register"
+	breakpoint "CALL PREINIT args"
+	int 7
+	store_fast #3
+	breakpoint "CALL POSTINIT args"
+	load_fast #3
+	ld_self #1
+	load_fast #2
+	call
+	void
+	load list
+	store_fast #1
+	load_fast #1
+	lookup add
+	store_fast #2
+	breakpoint "POST store function name in lhs_register"
+	breakpoint "CALL PREINIT args"
+	int 8
+	store_fast #3
+	breakpoint "CALL POSTINIT args"
+	load_fast #3
+	ld_self #1
+	load_fast #2
+	call
+	void
+	load list
+	store_fast #1
+	load_fast #1
+	lookup add
+	store_fast #2
+	breakpoint "POST store function name in lhs_register"
+	breakpoint "CALL PREINIT args"
+	int 99
+	store_fast #3
+	breakpoint "CALL POSTINIT args"
+	load_fast #3
+	ld_self #1
+	load_fast #2
+	call
+	void
+	load list
+	store_fast #1
+	load_fast #1
+	lookup to_string
+	store_fast #2
+	breakpoint "POST store function name in lhs_register"
+	breakpoint "CALL PREINIT args"
+	breakpoint "CALL POSTINIT args"
+	ld_self #1
+	load_fast #2
+	call
+	printn *
+	void
+	ret_mod
+end

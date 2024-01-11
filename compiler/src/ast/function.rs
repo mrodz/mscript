@@ -1,4 +1,6 @@
-use std::{borrow::Cow, fmt::Display, hash::Hash, path::PathBuf, rc::Rc, sync::Arc};
+use std::{
+    borrow::Cow, collections::HashSet, fmt::Display, hash::Hash, path::PathBuf, rc::Rc, sync::Arc,
+};
 
 use anyhow::{anyhow, Result};
 use bytecode::compilation_bridge::id::{MAKE_FUNCTION, RET};
@@ -277,16 +279,16 @@ impl Function {
 
         let dependencies = self.net_dependencies();
 
-        let mut arguments = Vec::with_capacity(dependencies.len() + 1);
+        let mut dependency_list = HashSet::with_capacity(dependencies.len() + 1);
 
         let x = location.bytecode_str();
 
-        arguments.push(format!("{x}#{id}"));
-
         for dependency in dependencies {
-            arguments.push(dependency.name().to_owned());
+            dependency_list.insert(dependency.name().to_owned());
         }
 
+        let mut arguments = vec![format!("{x}#{id}")];
+        arguments.extend(dependency_list);
         let arguments = arguments.into_boxed_slice();
 
         let make_function_instruction = CompiledItem::Instruction {

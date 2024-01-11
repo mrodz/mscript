@@ -198,7 +198,7 @@ impl Compile for Assignment {
                 ])
             }
 
-            value_init.push(instruction!(delete_name_scoped indexable));
+            // value_init.push(instruction!(delete_name_scoped indexable));
         }
 
         Ok(value_init)

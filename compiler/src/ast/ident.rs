@@ -6,6 +6,7 @@ use std::hash::Hash;
 use anyhow::{bail, Context, Result};
 use once_cell::sync::Lazy;
 
+use crate::instruction;
 use crate::parser::{AssocFileData, Node, Parser, Rule};
 
 use super::r#type::TypeLayout;
@@ -20,13 +21,7 @@ pub(crate) struct Ident {
 
 impl Compile for Ident {
     fn compile(&self, _: &CompilationState) -> Result<Vec<CompiledItem>> {
-        let ty = self.ty()?;
-        let (_, id) = TypeLayout::get_load_instruction(ty);
-
-        Ok(vec![CompiledItem::Instruction {
-            id,
-            arguments: Box::new([self.name.clone()]),
-        }])
+        Ok(vec![instruction!(load(self.name()))])
     }
 }
 
