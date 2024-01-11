@@ -242,7 +242,7 @@ impl Parser {
 
         if !value_ty.eq_complex(
             expected_ty,
-            &TypecheckFlags::use_class(maybe_class.as_ref().map(|x| Ref::clone(x))).lhs_unwrap(true),
+            &TypecheckFlags::use_class(maybe_class.as_ref().map(Ref::clone)).lhs_unwrap(true),
         ) {
             let hint = expected_ty
                     .get_error_hint_between_types(&value_ty, maybe_class)
