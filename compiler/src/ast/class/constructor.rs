@@ -1,4 +1,4 @@
-use std::{borrow::Cow, path::PathBuf, rc::Rc, sync::Arc};
+use std::{borrow::Cow, collections::HashSet, path::PathBuf, rc::Rc, sync::Arc};
 
 use anyhow::Result;
 use bytecode::compilation_bridge::id::{MAKE_FUNCTION, RET};
@@ -69,16 +69,16 @@ impl Compile for Constructor {
 
         let dependencies = self.net_dependencies();
 
-        let mut arguments = Vec::with_capacity(dependencies.len() + 1);
+        let mut dependency_list = HashSet::with_capacity(dependencies.len() + 1);
 
         let x = self.path_str.bytecode_str();
 
-        arguments.push(format!("{x}#{id}"));
-
         for dependency in dependencies {
-            arguments.push(dependency.name().to_owned());
+            dependency_list.insert(dependency.name().to_owned());
         }
 
+        let mut arguments = vec![format!("{x}#{id}")];
+        arguments.extend(dependency_list);
         let arguments = arguments.into_boxed_slice();
 
         let make_function_instruction = CompiledItem::Instruction {
