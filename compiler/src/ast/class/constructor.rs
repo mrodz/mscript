@@ -140,7 +140,6 @@ impl IntoType for Constructor {
 impl Dependencies for Constructor {
     fn dependencies(&self) -> Vec<crate::ast::Dependency> {
         let x = self.body.net_dependencies();
-        // println!("@@ {} constructor depends on {:?}", self.class_name, x.iter().map(|x| x.ident.to_string()).collect::<Vec<_>>());
         x
     }
 

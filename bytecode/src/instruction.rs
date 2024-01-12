@@ -1193,6 +1193,9 @@ pub mod implementations {
 
         let result = match primitive.lookup(name) {
             Ok(result) => result,
+            Err(Primitive::Optional(None)) => {
+                bail!("LOGIC ERROR IN CODE >> nil object, looking up `{name}`")
+            }
             Err(primitive) => bail!("`{name}` does not exist on `{primitive}`"),
         };
 

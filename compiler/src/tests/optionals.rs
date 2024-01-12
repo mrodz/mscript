@@ -1,7 +1,7 @@
 use crate::eval;
 
 #[test]
-#[should_panic = "unwrap this optional to use its value"]
+#[should_panic = "unwrap this optional to use its value using the `get` keyword, or provide a fallback with the `or` keyword"]
 fn type_mismatch() {
     eval(
         r#"

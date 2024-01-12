@@ -353,8 +353,14 @@ impl IntoType for Expr {
                 let fallback = fallback.for_type()?;
                 Ok(if let (true, ty) = primary.is_optional() {
                     if let Some(ty) = ty {
-                        assert_eq!(ty.as_ref(), &fallback);
-                        ty.clone().into_owned()
+                        let ty = ty.disregard_distractors(false);
+
+                        if ty.is_optional().1.is_some() && fallback.is_optional().1.is_some() {
+                            // only check if neither of the operands is `nil`
+                            assert_eq!(ty, &fallback);
+                        }
+
+                        ty.clone()
                     } else {
                         // `lhs` is nil, use fallback to infer type
                         fallback
@@ -388,7 +394,6 @@ impl Dependencies for Expr {
             }) => {
                 let mut lhs_deps = lhs_raw.net_dependencies();
                 lhs_deps.append(&mut arguments.net_dependencies());
-                // println!("@@@@ {:?}", lhs_deps.iter().map(|x| x.to_string()).collect::<Vec<_>>());
                 lhs_deps
             }
             E::Index { lhs_raw, index } => {
@@ -844,16 +849,20 @@ fn parse_expr(
 
                 let fallback_ty = fallback.for_type().details(value_span, &user_data.get_source_file_name(), format!("this value cannot be used as a fallback for `{lhs_ty}`")).to_err_vec()?;
 
-                if !lhs_ty.get_type_recursively().eq_complex(fallback_ty.get_type_recursively(), &TypecheckFlags::use_class(user_data.get_type_of_executing_class()).force_lhs_to_be_unwrapped_lhs(true)) {
-                    return Err(vec![new_err(value_span, &user_data.get_source_file_name(), {
-                        let ty = if let (true, ty) = lhs_ty.is_optional() {
-                            ty.map(Cow::Borrowed)
-                        } else {
-                            Some(Cow::Owned(Cow::Owned(lhs_ty)))
-                        };
+                if !lhs_ty.disregard_optional().unwrap_or(&TypeLayout::Optional(None)).eq_complex(&fallback_ty, &TypecheckFlags::use_class(user_data.get_type_of_executing_class())) {
+                    let ty = if let (true, ty) = lhs_ty.is_optional() {
+                        ty.map(Cow::Borrowed)
+                    } else {
+                        Some(Cow::Owned(Cow::Owned(lhs_ty)))
+                    };
 
-                        format!("The `or` portion of this unwrap must yield `{}`, but `{}` was found", ty.map_or(Cow::Borrowed("<indeterminate !>"), |x| Cow::Owned(x.to_string())), fallback_ty)
-                    })]);
+                    if let Some(ty) = ty {
+                        return Err(vec![new_err(value_span, &user_data.get_source_file_name(), {
+                            format!("The `or` portion of this unwrap must yield `{ty}`, but `{fallback_ty}` was found")
+                        })])
+                    }
+
+                    // else, the lhs is indeterminate and the fallback will always override it
                 }
 
                 Ok((Expr::NilEval { primary: Box::new(lhs), fallback }, Some(l_span)))

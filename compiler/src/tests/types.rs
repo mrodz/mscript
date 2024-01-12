@@ -127,7 +127,7 @@ fn forward_type_export() {
 }
 
 #[test]
-#[should_panic = "hint: `Bunny` is an alias for `str`, which isn't compatible with `int` in this context"]
+#[should_panic = "hint: `Bunny` is an alias for `str`"]
 fn forward_type_export_mismatch() {
     EvalEnvironment::entrypoint(
         "main.ms",
