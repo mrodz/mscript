@@ -3,7 +3,7 @@ use std::{borrow::Cow, fmt::Display, hash::Hash};
 use anyhow::{bail, Context, Result};
 
 use crate::{
-    ast::{new_err, CompileTimeEvaluate},
+    ast::{new_err, r#type::TypecheckFlags, ClassType, CompileTimeEvaluate},
     instruction,
     parser::{Node, Parser},
     VecErr,
@@ -89,27 +89,17 @@ impl Dependencies for List {
 #[derive(Debug, Clone, Eq)]
 pub(crate) enum ListType {
     Mixed(Vec<Cow<'static, TypeLayout>>),
-    Open {
-        types: Vec<Cow<'static, TypeLayout>>,
-        spread: Box<Cow<'static, TypeLayout>>,
-        len_at_init: Option<usize>,
-    },
-    Empty,
+    Open(Box<Cow<'static, TypeLayout>>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum ListBound {
     Numeric(usize),
-    NotIndexable,
     Infinite,
 }
 
 impl ListBound {
-    pub(crate) fn val_fits_between(start: &Self, end: &Self, value: &Value) -> Result<bool> {
-        if matches!(start, Self::NotIndexable) {
-            bail!("this list is not indexable (is it empty?)")
-        }
-
+    pub(crate) fn val_fits_between(end: &Self, value: &Value) -> Result<bool> {
         match end {
             Self::Infinite => Ok(true),
             Self::Numeric(last_valid_index) => {
@@ -129,7 +119,6 @@ impl ListBound {
 
                 Ok(true)
             }
-            _ => unreachable!(),
         }
     }
 }
@@ -138,7 +127,6 @@ impl Display for ListBound {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Numeric(index) => write!(f, "{index}"),
-            Self::NotIndexable => write!(f, "!"),
             Self::Infinite => write!(f, "∞"),
         }
     }
@@ -146,46 +134,27 @@ impl Display for ListBound {
 
 impl ListType {
     pub fn must_be_const(&self) -> bool {
-        if let Self::Open { types, .. } = self {
-            if !types.is_empty() {
-                return true;
-            }
-        }
-
-        false
-    }
-
-    pub fn lower_bound(&self) -> ListBound {
-        match self {
-            Self::Empty => ListBound::NotIndexable,
-            _ => ListBound::Numeric(0),
-        }
+        matches!(self, Self::Mixed(..))
     }
 
     pub fn upper_bound(&self) -> ListBound {
         match self {
-            Self::Empty => ListBound::NotIndexable,
             Self::Open { .. } => ListBound::Infinite,
             Self::Mixed(types) => ListBound::Numeric(types.len() - 1),
         }
     }
 
-    pub fn valid_indexes(&self) -> (ListBound, ListBound) {
-        (self.lower_bound(), self.upper_bound())
+    pub fn valid_indexes(&self) -> ListBound {
+        self.upper_bound()
     }
 
     pub fn get_type_at_known_index(&self, index: usize) -> Result<&TypeLayout> {
         match self {
-            Self::Empty => bail!("empty list"),
             Self::Mixed(types) => types
                 .get(index)
                 .map(Cow::as_ref)
                 .context("there is no value at the specified index"),
-            Self::Open { types, spread, .. } => Ok(if let Some(ty) = types.get(index) {
-                ty.as_ref()
-            } else {
-                spread.as_ref()
-            }),
+            Self::Open(ty) => Ok(ty.as_ref()),
         }
     }
 }
@@ -193,27 +162,23 @@ impl ListType {
 impl Display for ListType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Empty => write!(f, "[]"),
             Self::Mixed(types) => {
-                let first = types.first().unwrap();
+                write!(f, "[")?;
 
-                write!(f, "[{first}")?;
+                if let Some(ty) = types.first() {
+                    write!(f, "{ty}")?;
+                }
 
-                for ty in &types[1..] {
-                    write!(f, ", {ty}")?;
+                if let Some(remainder) = types.get(1..) {
+                    for ty in remainder {
+                        write!(f, ", {ty}")?;
+                    }
                 }
 
                 write!(f, "]")
             }
-            Self::Open { types, spread, .. } => {
-                write!(f, "[")?;
-                if !types.is_empty() {
-                    for ty in types {
-                        write!(f, "{ty}, ")?;
-                    }
-                }
-
-                write!(f, "{spread}...]")
+            Self::Open(ty) => {
+                write!(f, "[{ty}...]")
             }
         }
     }
@@ -224,81 +189,19 @@ impl PartialEq for ListType {
         use ListType as E;
 
         match (self, other) {
-            (E::Empty, E::Empty) => true,
-            (E::Empty, _) | (_, E::Empty) => false,
             (E::Mixed(t1), E::Mixed(t2)) => t1 == t2,
-            (
-                E::Open {
-                    types,
-                    spread,
-                    len_at_init,
-                },
-                other,
-            )
-            | (
-                other,
-                E::Open {
-                    types,
-                    spread,
-                    len_at_init,
-                },
-            ) => match other {
-                E::Open {
-                    types: t2,
-                    spread: s2,
-                    len_at_init: len_at_init2,
-                } => {
-                    if let (Some(len1), Some(len2)) = (len_at_init, len_at_init2) {
-                        if len1 != len2 {
-                            return false;
-                        }
+            (E::Open(t1), E::Open(t2)) => t1 == t2,
+            (E::Mixed(t1), E::Open(t2)) | (E::Open(t2), E::Mixed(t1)) => {
+                for ty in t1 {
+                    if !ty.disregard_distractors(false).eq_complex(
+                        t2.disregard_distractors(false),
+                        &TypecheckFlags::<&ClassType>::classless(),
+                    ) {
+                        return false;
                     }
-
-                    if types == t2 && spread == s2 {
-                        return true;
-                    }
-
-                    let mut lhs_all_the_same = true;
-
-                    let lhs_ty = spread;
-
-                    for ty in types {
-                        if ty != lhs_ty.as_ref() {
-                            lhs_all_the_same = false;
-                        }
-                    }
-
-                    let mut rhs_all_the_same = true;
-
-                    let rhs_ty = s2;
-
-                    for ty in t2 {
-                        if ty != rhs_ty.as_ref() {
-                            rhs_all_the_same = false;
-                        }
-                    }
-
-                    lhs_all_the_same && rhs_all_the_same
                 }
-                E::Mixed(t2) => {
-                    if let Some(len) = len_at_init {
-                        if *len != t2.len() {
-                            return false;
-                        }
-                    }
-
-                    for (idx, ty2) in t2.iter().enumerate() {
-                        let ty1 = types.get(idx).unwrap_or(spread);
-
-                        if ty1 != ty2 {
-                            return false;
-                        }
-                    }
-
-                    true
-                }
-                _ => unreachable!(),
-            },
+                true
+            }
         }
     }
 }
@@ -308,7 +211,6 @@ impl Hash for ListType {
         use ListType::*;
 
         match self {
-            Empty => (),
             Mixed(types) => {
                 if types.windows(2).all(|w| w[0] == w[1]) {
                     types[0].hash(state);
@@ -316,17 +218,7 @@ impl Hash for ListType {
                     types.hash(state);
                 }
             }
-            Open { types, spread, .. } => {
-                if types.windows(2).all(|w| w[0] == w[1]) {
-                    types[0].hash(state);
-
-                    if spread.as_ref() != &types[0] {
-                        spread.hash(state)
-                    }
-                } else {
-                    types.hash(state);
-                }
-            }
+            Open(ty) => ty.hash(state),
         }
     }
 }
@@ -339,61 +231,22 @@ impl IntoType for Index {
 
 impl IntoType for List {
     fn for_type(&self) -> Result<TypeLayout> {
-        if self.values.is_empty() {
-            Ok(TypeLayout::List(ListType::Empty))
-        } else {
-            let size = self.values.len() - 1;
+        let mut types = self.values.iter().map(Value::for_type).collect::<Vec<_>>();
 
-            let mut last_ty: Option<TypeLayout> = None;
-
-            let mut all_are_the_same_type = true;
-
-            let mut end_of_unique_values = size;
-            for (idx, value) in self.values.iter().enumerate().rev() {
-                let this_ty = value.for_type()?.get_owned_type_recursively();
-
-                if let Some(ref mut last_ty) = last_ty {
-                    if last_ty.get_type_recursively() != &this_ty && end_of_unique_values == size {
-                        end_of_unique_values = idx;
-                        all_are_the_same_type = false;
-                    }
-                } else {
-                    last_ty = Some(this_ty);
-                }
-            }
-
-            if end_of_unique_values != size {
-                let mut ty_mixed_list = Vec::with_capacity(size + 1);
-
-                for value in &self.values {
-                    ty_mixed_list.push(Cow::Owned(value.for_type()?));
-                }
-
-                return Ok(TypeLayout::List(ListType::Mixed(ty_mixed_list)));
-            }
-
-            let last_ty: TypeLayout = self.values.last().unwrap().for_type()?;
-
-            if all_are_the_same_type {
-                return Ok(TypeLayout::List(ListType::Open {
-                    types: vec![],
-                    spread: Box::new(Cow::Owned(last_ty)),
-                    len_at_init: Some(self.values.len()),
-                }));
-            }
-
-            let mut types: Vec<Cow<'static, TypeLayout>> = Vec::with_capacity(size);
-
-            for value in &self.values[..end_of_unique_values] {
-                types.push(Cow::Owned(value.for_type()?));
-            }
-
-            Ok(TypeLayout::List(ListType::Open {
-                types,
-                spread: Box::new(Cow::Owned(last_ty)),
-                len_at_init: Some(self.values.len()),
-            }))
+        if types.len() == 1 {
+            // `swap_remove` to get ownership in O(1)
+            return Ok(TypeLayout::List(ListType::Open(Box::new(Cow::Owned(
+                types.swap_remove(0)?,
+            )))));
         }
+
+        let mut no_result = Vec::with_capacity(types.len());
+
+        for ty in types {
+            no_result.push(Cow::Owned(ty?));
+        }
+
+        Ok(TypeLayout::List(ListType::Mixed(no_result)))
     }
 }
 

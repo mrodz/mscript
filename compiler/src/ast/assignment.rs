@@ -414,7 +414,7 @@ impl Parser {
                     return Err(vec![new_err(
                         name_span,
                         &user_data.get_source_file_name(),
-                        "mixed-type arrays must be const in order to ensure type safety".to_owned(),
+                        "mixed-type arrays must be const in order to ensure type safety\n\t+ Hint: if you meant a growable or variable-sized array, use [TYPE...] instead".to_owned(),
                     )]);
                 }
             }

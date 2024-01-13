@@ -19,7 +19,7 @@ not = { "!" }
 
 primitive = _{ number | string }
 
-allow_bin_op = _{ nil | primitive | ident | function }
+allow_bin_op = _{ function | list | nil | primitive | ident }
 
 math_primary = _{ allow_bin_op | "(" ~ math_expr ~ ")" }
 
@@ -120,7 +120,7 @@ list_type = { "[" ~ type? ~ ("," ~ (type ~ !("...")))* ~ ("," ~ open_ended_type)
 list_type_open_only = { "[" ~ open_ended_type ~ "]" }
 list_index = { ("[" ~ value ~ "]")+ }
 
-value = ${ function | math_expr | ident | list }
+value = ${ math_expr | function | ident | list }
 
 assignment_flag = { "modify" | "const" | "export" }
 assignment_flags = { assignment_flag ~ assignment_flag* }

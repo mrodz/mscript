@@ -229,7 +229,7 @@ fn type_updates_index() {
     eval(
         r#"
         x = "hi"
-        x = [1, 2, 3]
+        x: [int...] = [1, 2, 3]
     
         assert x[2] == 3
     "#,

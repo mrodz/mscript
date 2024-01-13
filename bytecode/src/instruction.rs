@@ -723,24 +723,36 @@ pub mod implementations {
         let Some(first) = args.first() else {
             let last = ctx.pop();
 
-            let Some(Primitive::Function(f)) = last else {
-                bail!("missing argument, and the last item in the local stack ({last:?}, S:{:#?}) is not a function.", ctx.get_local_operating_stack())
-            };
+            match last {
+                Some(Primitive::Function(f)) => {
+                    let destination = JumpRequestDestination::Standard(f.location().to_owned());
 
-            let destination = JumpRequestDestination::Standard(f.location().to_owned());
+                    let callback_state = f.callback_state().clone();
 
-            let callback_state = f.callback_state().clone();
+                    ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
+                        destination,
+                        callback_state,
+                        stack: ctx.rced_call_stack(),
+                        arguments: ctx.get_local_operating_stack().clone(),
+                    }));
 
-            ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
-                destination,
-                callback_state,
-                stack: ctx.rced_call_stack(),
-                arguments: ctx.get_local_operating_stack().clone(),
-            }));
+                    ctx.clear_stack();
 
-            ctx.clear_stack();
+                    return Ok(());
+                }
+                Some(Primitive::BuiltInFunction(variant)) => {
+                    let primitive = variant.run(&mut ctx.ref_clear_local_operating_stack());
 
-            return Ok(());
+                    if let Some(primitive) = primitive {
+                        ctx.clear_and_set_stack(primitive);
+                    } else {
+                        ctx.clear_stack();
+                    }
+
+                    return Ok(())
+                }
+                _ => bail!("missing argument, and the last item in the local stack ({last:?}, S:{:#?}) is not a function.", ctx.get_local_operating_stack()),
+            }
         };
 
         let arguments = ctx.get_local_operating_stack().clone();

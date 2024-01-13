@@ -19,6 +19,74 @@ use super::instruction::JumpRequest;
 use super::stack::{Stack, VariableMapping};
 use super::variables::Primitive;
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum BuiltInFunction {
+    VecLen,
+    VecReverse,
+    VecInnerCapacity,
+    VecEnsureInnerCapacity,
+}
+
+impl BuiltInFunction {
+    pub fn run(&self, arguments: &mut [Primitive]) -> Option<Primitive> {
+        for argument in arguments.iter_mut() {
+            *argument = unsafe { argument.clone().move_out_of_heap_primitive() }
+        }
+
+        match self {
+            Self::VecLen => {
+                let Some(Primitive::Vector(v)) = arguments.get(0) else {
+                    unreachable!()
+                };
+                Some(Primitive::Int(
+                    v.borrow()
+                        .len()
+                        .try_into()
+                        .expect("list length does not fit into i32"),
+                ))
+            }
+            Self::VecReverse => {
+                let Some(Primitive::Vector(v)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                v.borrow_mut().reverse();
+
+                None
+            }
+            Self::VecInnerCapacity => {
+                let Some(Primitive::Vector(v)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                Some(Primitive::Int(
+                    v.borrow()
+                        .capacity()
+                        .try_into()
+                        .expect("list capacity does not fit into i32"),
+                ))
+            }
+            Self::VecEnsureInnerCapacity => {
+                let Some(Primitive::Vector(v)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                let Some(Primitive::Int(size)) = arguments.get(1) else {
+                    unreachable!()
+                };
+
+                v.borrow_mut().reserve(
+                    (*size)
+                        .try_into()
+                        .expect("capacity cannot be made into an unsigned usize"),
+                );
+
+                None
+            }
+        }
+    }
+}
+
 /// A callback/closure whose variables are mapped at runtime.
 /// This struct has no direct _functionality_; it is only meant
 /// to store relevant data that can be operated upon.

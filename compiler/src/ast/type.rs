@@ -455,7 +455,7 @@ pub(crate) enum TypeLayout {
     Optional(Option<Box<Cow<'static, TypeLayout>>>),
     Native(NativeType),
     List(ListType),
-    ValidIndexes(ListBound, ListBound),
+    ValidIndexes(ListBound),
     Class(ClassType),
     Module(ModuleType),
     ClassSelf,
@@ -475,7 +475,7 @@ impl Display for TypeLayout {
             }
             Self::Native(native) => write!(f, "{native}"),
             Self::List(list) => write!(f, "{list}"),
-            Self::ValidIndexes(lower, upper) => write!(f, "B({lower}..{upper})"),
+            Self::ValidIndexes(upper) => write!(f, "[..{upper}]"),
             Self::Class(class_type) => write!(f, "{}", class_type.name()),
             Self::ClassSelf => write!(f, "Self"),
             Self::Optional(Some(ty)) => write!(f, "{ty}?"),
@@ -500,6 +500,14 @@ impl<T> TypecheckFlags<T>
 where
     T: Deref<Target = ClassType>,
 {
+    pub const fn classless() -> Self {
+        Self {
+            executing_class: None,
+            lhs_allow_optional_unwrap: false,
+            force_rhs_to_be_unwrapped_lhs: false,
+        }
+    }
+
     pub const fn use_class(class_type: Option<T>) -> Self {
         Self {
             executing_class: class_type,
@@ -518,6 +526,27 @@ where
         self.force_rhs_to_be_unwrapped_lhs = predicate;
         self
     }
+}
+
+macro_rules! new_assoc_function {
+    ($types:expr, $return_value:expr) => {
+        Box::new(Box::new(Cow::Owned(TypeLayout::Function(
+            FunctionType::new(
+                Rc::new(FunctionParameters::TypesOnly($types)),
+                $return_value,
+                true,
+            ),
+        ))))
+    };
+    ($types:expr, @int) => {
+        new_assoc_function!(
+            $types,
+            ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Native(NativeType::Int)))
+        )
+    };
+    ($types:expr, @void) => {
+        new_assoc_function!($types, ScopeReturnStatus::Void)
+    };
 }
 
 impl TypeLayout {
@@ -712,6 +741,21 @@ impl TypeLayout {
 
                 Some(Box::new(property_type))
             }
+            Self::List(_list_type) => {
+                match property_name {
+                    "len" => return Some(new_assoc_function!(vec![], @int)),
+                    "reverse" => return Some(new_assoc_function!(vec![], @void)),
+                    "inner_capacity" => return Some(new_assoc_function!(vec![], @int)),
+                    "ensure_inner_capacity" => {
+                        return Some(
+                            new_assoc_function!(vec![Cow::Owned(TypeLayout::Native(NativeType::Int))], @void),
+                        )
+                    }
+                    _ => (),
+                }
+
+                None
+            }
             _ => None,
         }
     }
@@ -741,6 +785,14 @@ impl TypeLayout {
                 }
 
                 result
+            }
+            Self::List(_list_type) => {
+                vec![
+                    "len()".to_owned(),
+                    "reverse()".to_owned(),
+                    "inner_capacity()".to_owned(),
+                    "ensure_inner_capacity(int)".to_owned(),
+                ]
             }
             _ => vec![],
         }
@@ -822,6 +874,9 @@ impl TypeLayout {
             | (TypeLayout::Class(other), Self::ClassSelf, Some(executing_class)) => {
                 executing_class.deref().eq(other)
             }
+            (Self::List(ListType::Open(..)), Self::List(ListType::Mixed(maybe_empty)), _) => {
+                maybe_empty.is_empty()
+            }
             (Self::Optional(None), ..) if flags.force_rhs_to_be_unwrapped_lhs => true,
             (Self::Optional(None), Self::Optional(Some(_)), _)
             | (Self::Optional(Some(_)), Self::Optional(None), _)
@@ -842,7 +897,11 @@ impl TypeLayout {
     }
 
     pub fn get_output_type_from_index(&self, index: &Value) -> Result<Cow<TypeLayout>> {
-        let me = self.get_type_recursively();
+        let me = self.disregard_distractors(false);
+
+        if me.is_optional().0 {
+            bail!("cannot index into an optional: unwrap this `{me}` first")
+        }
 
         let index_ty = index.for_type().context("could not get type of index")?;
 
@@ -874,7 +933,6 @@ impl TypeLayout {
 
         match index_as_usize {
             ValToUsize::Ok(index_as_usize) => match me {
-                Self::List(ListType::Empty) => bail!("cannot index into empty list"),
                 Self::List(list) => {
                     return Ok(Cow::Borrowed(list.get_type_at_known_index(index_as_usize)?));
                 }
@@ -885,18 +943,12 @@ impl TypeLayout {
                 usize::MIN,
                 usize::MAX
             ),
-            ValToUsize::NotConstexpr => (),
+            ValToUsize::NotConstexpr => match me {
+                TypeLayout::List(ListType::Open(ty)) => return Ok(Cow::Borrowed(ty.as_ref())),
+                TypeLayout::List(ListType::Mixed(ty)) => bail!("Indexing into a mixed type list ({:?}) requires that the index be evaluable at compile time", ty.iter().map(|x| x.to_string()).collect::<Vec<_>>()),
+                _ => todo!()
+            },
         }
-
-        if let Self::List(ListType::Open { types, spread, .. }) = me {
-            if !types.is_empty() {
-                bail!("indexing into spread-type lists with fixed-type parts requires that the index be a compile-time-constant expression")
-            }
-
-            return Ok(Cow::Owned(spread.clone().into_owned()));
-        }
-
-        bail!("cannot index")
     }
 
     pub fn supports_index(&self) -> Option<SupportedTypesWrapper> {
@@ -908,9 +960,9 @@ impl TypeLayout {
                 Cow::Owned(TypeLayout::Native(NativeType::BigInt)),
             ]),
             Self::List(x) => {
-                let (lower, upper) = x.valid_indexes();
+                let upper = x.valid_indexes();
 
-                Box::new([Cow::Owned(TypeLayout::ValidIndexes(lower, upper))])
+                Box::new([Cow::Owned(TypeLayout::ValidIndexes(upper))])
             }
             _ => return None,
         }))
@@ -1066,7 +1118,7 @@ impl TypeLayout {
 
     pub(crate) fn eq_for_indexing(&self, value: &Value) -> Result<bool> {
         match self {
-            Self::ValidIndexes(start, end) => ListBound::val_fits_between(start, end, value),
+            Self::ValidIndexes(end) => ListBound::val_fits_between(end, value),
             other => Ok(&value.for_type()? == other),
         }
     }
@@ -1139,46 +1191,22 @@ impl Parser {
 
         let ty = Self::r#type(ty_node)?;
 
-        Ok(ListType::Open {
-            types: vec![],
-            spread: Box::new(ty),
-            len_at_init: None,
-        })
+        Ok(ListType::Open(Box::new(ty)))
     }
 
     pub fn list_type(input: Node) -> Result<ListType> {
         let children = input.children();
 
         let mut type_vec: Vec<Cow<'static, TypeLayout>> = vec![];
-        let mut open_ended_type: Option<Cow<'static, TypeLayout>> = None;
 
         for child in children {
             match child.as_rule() {
                 Rule::r#type => {
                     let ty = Self::r#type(child)?;
-
                     type_vec.push(ty);
-                }
-                Rule::open_ended_type if open_ended_type.is_none() => {
-                    let ty_node = child.children().single().unwrap();
-                    let ty = Self::r#type(ty_node)?;
-
-                    open_ended_type = Some(ty);
                 }
                 other_rule => unreachable!("{other_rule:?}"),
             }
-        }
-
-        if type_vec.is_empty() && open_ended_type.is_none() {
-            return Ok(ListType::Empty);
-        }
-
-        if let Some(open_ended_type) = open_ended_type {
-            return Ok(ListType::Open {
-                types: type_vec,
-                spread: Box::new(open_ended_type),
-                len_at_init: None,
-            });
         }
 
         Ok(ListType::Mixed(type_vec))

@@ -2,8 +2,10 @@
 //! Every "value" in the interpreter is a primitive.
 
 use crate::{
-    bigint, bool, byte, float, int,
-    stack::{PrimitiveFlagsPair, VariableMapping},
+    bigint, bool, byte, float,
+    function::BuiltInFunction,
+    int,
+    stack::{PrimitiveFlagsPair, VariableMapping, PRIMITIVE_MODULE},
     string,
 };
 use anyhow::{bail, Result};
@@ -139,6 +141,7 @@ primitive! {
     Byte(u8),
     // We don't need reference counting because cloning a primitive function is cheap
     Function(crate::function::PrimitiveFunction),
+    BuiltInFunction(BuiltInFunction),
     Vector(Rc<RefCell<Vec<crate::variables::Primitive>>>),
     HeapPrimitive(HeapPrimitive),
     Object(Rc<RefCell<crate::variables::Object>>),
@@ -194,6 +197,7 @@ impl Primitive {
             (x, P::Optional(None)) | (P::Optional(None), x) => {
                 return Ok(matches!(x, Primitive::Optional(None)))
             }
+            (P::Vector(v1), P::Vector(v2)) => return Ok(v1.borrow().eq(v2.borrow().as_slice())),
             (P::Optional(maybe), yes) | (yes, P::Optional(maybe)) => {
                 if let Some(maybe_unwrapped) = maybe {
                     return Ok(maybe_unwrapped.as_ref() == yes);
@@ -261,6 +265,13 @@ impl Primitive {
 
                 module.clone().borrow().get(property).ok_or(ret)
             }
+            ret @ P::Vector(..) => match property {
+                "len" => Ok(PRIMITIVE_MODULE.vector_len()),
+                "reverse" => Ok(PRIMITIVE_MODULE.vector_reverse()),
+                "inner_capacity" => Ok(PRIMITIVE_MODULE.vector_inner_capacity()),
+                "ensure_inner_capacity" => Ok(PRIMITIVE_MODULE.vector_ensure_inner_capacity()),
+                _ => Err(ret),
+            },
             ret => Err(ret),
         }
     }
@@ -373,6 +384,7 @@ impl Primitive {
             Float(n) => write!(f, "{n}"),
             Byte(b) => write!(f, "0b{:b}", *b),
             Function(fun) => write!(f, "{fun}"),
+            BuiltInFunction(name) => write!(f, "<static {name:?}>"),
             Vector(l) => {
                 write!(f, "[")?;
                 let borrow = l.borrow();

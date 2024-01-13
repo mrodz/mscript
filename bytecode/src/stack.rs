@@ -1,13 +1,18 @@
 //! Program call stack
 
 use anyhow::{anyhow, bail, Context, Result};
+use once_cell::sync::Lazy;
 use std::borrow::Cow;
 use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use crate::context::SpecialScope;
+use crate::function::BuiltInFunction;
+
+use self::flag_constants::READ_ONLY;
 
 use super::variables::Primitive;
 
@@ -20,6 +25,58 @@ pub(crate) mod flag_constants {
 
 #[derive(Clone)]
 pub struct PrimitiveFlagsPair(Rc<UnsafeCell<(Primitive, VariableFlags)>>);
+
+pub struct PrimitiveModule {
+    vector_len: Arc<Mutex<PrimitiveFlagsPair>>,
+    vector_reverse: Arc<Mutex<PrimitiveFlagsPair>>,
+    vector_inner_capacity: Arc<Mutex<PrimitiveFlagsPair>>,
+    vector_ensure_inner_capacity: Arc<Mutex<PrimitiveFlagsPair>>,
+}
+
+unsafe impl Send for PrimitiveModule {}
+unsafe impl Sync for PrimitiveModule {}
+
+static PRIMITIVE_MODULE_MEMBER_FLAGS: VariableFlags = VariableFlags(READ_ONLY);
+
+macro_rules! make_compiler_builtin {
+    ($ident:expr) => {
+        Arc::new(Mutex::new(PrimitiveFlagsPair(Rc::new(UnsafeCell::new((
+            Primitive::BuiltInFunction($ident),
+            PRIMITIVE_MODULE_MEMBER_FLAGS,
+        ))))))
+    };
+}
+
+impl PrimitiveModule {
+    pub fn vector_len(&self) -> PrimitiveFlagsPair {
+        self.vector_len.lock().unwrap().clone()
+    }
+
+    pub fn vector_reverse(&self) -> PrimitiveFlagsPair {
+        self.vector_reverse.lock().unwrap().clone()
+    }
+
+    pub fn vector_inner_capacity(&self) -> PrimitiveFlagsPair {
+        self.vector_inner_capacity.lock().unwrap().clone()
+    }
+
+    pub fn vector_ensure_inner_capacity(&self) -> PrimitiveFlagsPair {
+        return self.vector_ensure_inner_capacity.lock().unwrap().clone();
+    }
+
+    pub fn new() -> Self {
+        Self {
+            vector_len: make_compiler_builtin!(BuiltInFunction::VecLen),
+            vector_reverse: make_compiler_builtin!(BuiltInFunction::VecReverse),
+            vector_inner_capacity: make_compiler_builtin!(BuiltInFunction::VecInnerCapacity),
+            vector_ensure_inner_capacity: make_compiler_builtin!(
+                BuiltInFunction::VecEnsureInnerCapacity
+            ),
+        }
+    }
+}
+
+pub static PRIMITIVE_MODULE: Lazy<PrimitiveModule> = Lazy::new(PrimitiveModule::new);
 
 impl PrimitiveFlagsPair {
     pub fn new(primitive: Primitive, flags: VariableFlags) -> Self {
@@ -71,7 +128,7 @@ impl Debug for PrimitiveFlagsPair {
     }
 }
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Copy)]
 pub struct VariableFlags(pub(crate) u8);
 
 impl VariableFlags {
