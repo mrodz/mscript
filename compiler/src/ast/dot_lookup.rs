@@ -226,7 +226,9 @@ impl Parser {
                 };
 
                 let output_type = function_type
-                    .return_type()
+                    .return_type();
+
+                let output_type  = output_type
                     .get_type()
                     .unwrap_or(&Cow::Owned(TypeLayout::Void));
 

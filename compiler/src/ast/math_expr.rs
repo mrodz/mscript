@@ -319,7 +319,9 @@ impl IntoType for Expr {
             Expr::UnaryMinus(val) | Expr::UnaryNot(val) => val.for_type(),
             Expr::Callable(CallableContents::Standard { function, .. }) => {
                 let return_type = function
-                    .return_type()
+                    .return_type();
+
+                let return_type = return_type
                     .get_type()
                     .context("function returns void")?;
 

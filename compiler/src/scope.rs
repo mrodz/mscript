@@ -164,6 +164,34 @@ impl Scopes {
 
         assert!(last.is_class());
 
+        for field in new_class_type.fields() {
+            let ty = field.ty().unwrap();
+            if let Some(function) = ty.is_function() {
+                let (is_return_type_class_self, is_return_type_optional) = {
+                    // scoped because `try_set_return_type` borrows mutably
+                    let return_type = function.return_type();
+                    let Some(ty) = return_type.get_type() else {
+                        continue;
+                    };
+                    (ty.disregard_distractors(true).is_class_self(), ty.disregard_distractors(false).is_optional().0)
+                };
+
+                if is_return_type_class_self {
+                    let mut return_type = Cow::Owned(TypeLayout::Class(
+                        new_class_type.clone(),
+                    ));
+
+                    if is_return_type_optional {
+                        return_type = Cow::Owned(TypeLayout::Optional(Some(Box::new(return_type))))
+                    }
+
+                    let new_return_status = ScopeReturnStatus::Did(return_type);
+
+                    function.try_set_return_type(new_return_status)
+                }
+            }
+        }
+
         let ScopeType::Class(ref mut class_type) = last.ty else {
             unreachable!()
         };
