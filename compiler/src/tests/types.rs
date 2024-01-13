@@ -261,8 +261,12 @@ fn class_self_aliases() {
             constructor(self) {
                 INSTANCE_COUNTER += 1
                 
-                # the object should never be made in the fallback of `or`
-                assert INSTANCE_COUNTER <= 2
+                ###
+                this object should never be made in any of the `or` 
+                statement fallbacks, because they aren't nil
+                ###
+
+                assert INSTANCE_COUNTER <= 3
             }
     
             fn assoc(self) -> Self? {
@@ -286,6 +290,7 @@ fn class_self_aliases() {
         take_a(a)
         take_a(b or A())
         take_a((a.assoc()) or A())
+        take_a((A()) or get a.assoc())
     "#).unwrap()
 }
 

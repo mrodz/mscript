@@ -27,4 +27,16 @@ print a
 print a.assoc()
 take_a(a)
 take_a(b or A())
-take_a((a.assoc()) or A()) 
+take_a((a.assoc()) or A())
+
+class X {
+	x: Self
+	constructor(self) {
+		self.x = self
+	}
+}
+
+x = X()
+
+print x
+print x.x.x.x.x

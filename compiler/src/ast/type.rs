@@ -486,6 +486,7 @@ impl Display for TypeLayout {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct TypecheckFlags<T>
 where
     T: Deref<Target = ClassType>,
@@ -799,14 +800,19 @@ impl TypeLayout {
     /// - `rhs` is the supplied type
     pub fn eq_complex<T>(&self, rhs: &Self, flags: impl Deref<Target = TypecheckFlags<T>>) -> bool
     where
-        T: Deref<Target = ClassType>,
+        T: Deref<Target = ClassType> + Debug,
     {
         let lhs = self.disregard_distractors(false);
         let rhs = rhs.disregard_distractors(false);
 
+        log::debug!("lhs:{lhs:?} rhs:{rhs:?} f:{:?}", flags.deref());
+
         if lhs == rhs {
             return if flags.force_rhs_to_be_unwrapped_lhs {
-                !rhs.is_optional().0
+
+                let x= !rhs.is_optional().0;
+                log::debug!("x:{x}");
+                x
             } else {
                 true
             };
@@ -825,6 +831,7 @@ impl TypeLayout {
                 true
             }
             (Self::Optional(Some(x)), y, _) if flags.force_rhs_to_be_unwrapped_lhs => {
+                log::debug!("match(x:{x} y:{y})");
                 x.get_type_recursively() == y.get_type_recursively()
             }
             (Self::Optional(Some(x)), y, _) => x.eq_complex(y, flags),

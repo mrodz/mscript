@@ -177,8 +177,10 @@ impl Scopes {
                 };
 
                 if is_return_type_class_self {
+                    let new_class_type = new_class_type.clone();
+
                     let mut return_type = Cow::Owned(TypeLayout::Class(
-                        new_class_type.clone(),
+                        new_class_type,
                     ));
 
                     if is_return_type_optional {
