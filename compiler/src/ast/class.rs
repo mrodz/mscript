@@ -6,12 +6,11 @@ mod member_variable;
 
 use std::{
     borrow::Cow,
-    cell::Cell,
     fmt::{Debug, Display},
     hash::Hash,
     path::PathBuf,
     rc::Rc,
-    sync::Arc,
+    sync::{Arc, RwLock},
 };
 
 use anyhow::Result;
@@ -85,8 +84,7 @@ impl Compile for Class {
     }
 }
 
-#[derive(Clone, Eq)]
-struct DebugPrintableLock(Cell<bool>);
+struct DebugPrintableLock(RwLock<bool>);
 
 impl PartialEq for DebugPrintableLock {
     /// no-impl makes this field invisible
@@ -95,36 +93,38 @@ impl PartialEq for DebugPrintableLock {
     }
 }
 
+impl Eq for DebugPrintableLock {}
+
 impl Hash for DebugPrintableLock {
     /// no-impl makes this field invisible
-    fn hash<H: std::hash::Hasher>(&self, _state: &mut H) {
-        ()
-    }
+    fn hash<H: std::hash::Hasher>(&self, _state: &mut H) {}
 }
 
 impl DebugPrintableLock {
     pub fn new() -> Self {
-        Self(Cell::new(true))
+        Self(RwLock::new(true))
     }
 
     pub fn can_write(&self) -> bool {
-        self.0.get()
+        *self.0.read().unwrap()
     }
 
     pub fn lock(&self) {
-        unsafe {
-            let ptr = self.0.as_ptr();
-            assert!(*ptr, "DebugPrintableAlreadyLockedError");
-            *ptr = false;
+        {
+            let data = self.0.read().unwrap();
+            assert!(*data, "DebugPrintableAlreadyLockedError");
         }
+        let mut x = self.0.write().unwrap();
+        *x = false;
     }
 
     pub fn release(&self) {
-        unsafe {
-            let ptr = self.0.as_ptr();
-            assert!(!*ptr, "DebugPrintableAlreadyReleasedError");
-            *ptr = true;
+        {
+            let data = self.0.read().unwrap();
+            assert!(!*data, "DebugPrintableAlreadyLockedError");
         }
+        let mut x = self.0.write().unwrap();
+        *x = true;
     }
 }
 

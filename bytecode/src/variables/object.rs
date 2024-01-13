@@ -49,7 +49,7 @@ impl ObjectBuilder {
         Object {
             name: Some(name),
             object_variables: self.object_variables.clone().expect("no name"),
-            debug_lock: Rc::new(DebugPrintableLock::new())
+            debug_lock: Rc::new(DebugPrintableLock::new()),
         }
     }
 }
@@ -66,9 +66,7 @@ impl PartialEq for DebugPrintableLock {
 
 impl Hash for DebugPrintableLock {
     /// no-impl makes this field invisible
-    fn hash<H: std::hash::Hasher>(&self, _state: &mut H) {
-        ()
-    }
+    fn hash<H: std::hash::Hasher>(&self, _state: &mut H) {}
 }
 
 impl DebugPrintableLock {
@@ -109,7 +107,8 @@ impl Debug for Object {
         if self.debug_lock.can_write() {
             self.debug_lock.lock();
 
-            let result = f.debug_struct("Object")
+            let result = f
+                .debug_struct("Object")
                 .field("name", &self.name)
                 .field("object_variables", &self.object_variables)
                 .finish();
@@ -142,7 +141,7 @@ impl Object {
         Self {
             name: Some(name),
             object_variables,
-            debug_lock: Rc::new(DebugPrintableLock::new())
+            debug_lock: Rc::new(DebugPrintableLock::new()),
         }
     }
 
@@ -157,7 +156,9 @@ impl Object {
             return maybe_property;
         }
 
-        let include_class_name = if let (true, Some(name)) = (include_functions, self.name.as_ref().map(|x| x.as_str())) {
+        let include_class_name = if let (true, Some(name)) =
+            (include_functions, self.name.as_ref().map(|x| x.as_str()))
+        {
             Some(name)
         } else {
             None
@@ -206,15 +207,10 @@ impl Object {
 impl Display for Object {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(ref name) = self.name {
-            write!(
-                f,
-                "<class {} @ {:#x}>",
-                name, self as *const Self as usize,
-            )?;
+            write!(f, "<class {} @ {:#x}>", name, self as *const Self as usize,)?;
         } else {
             write!(f, "object@{:#x}", self as *const Self as usize)?;
         }
-        
 
         if cfg!(feature = "debug") {
             write!(f, " (--debug {:?})", self.object_variables)?;

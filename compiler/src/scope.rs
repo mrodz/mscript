@@ -173,15 +173,16 @@ impl Scopes {
                     let Some(ty) = return_type.get_type() else {
                         continue;
                     };
-                    (ty.disregard_distractors(true).is_class_self(), ty.disregard_distractors(false).is_optional().0)
+                    (
+                        ty.disregard_distractors(true).is_class_self(),
+                        ty.disregard_distractors(false).is_optional().0,
+                    )
                 };
 
                 if is_return_type_class_self {
                     let new_class_type = new_class_type.clone();
 
-                    let mut return_type = Cow::Owned(TypeLayout::Class(
-                        new_class_type,
-                    ));
+                    let mut return_type = Cow::Owned(TypeLayout::Class(new_class_type));
 
                     if is_return_type_optional {
                         return_type = Cow::Owned(TypeLayout::Optional(Some(Box::new(return_type))))

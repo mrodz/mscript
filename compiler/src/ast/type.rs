@@ -666,7 +666,7 @@ impl TypeLayout {
     //     };
 
     //     Some(f)
-    // } 
+    // }
 
     pub fn is_function(&self) -> Option<&FunctionType> {
         let me = self.get_type_recursively();
@@ -809,8 +809,7 @@ impl TypeLayout {
 
         if lhs == rhs {
             return if flags.force_rhs_to_be_unwrapped_lhs {
-
-                let x= !rhs.is_optional().0;
+                let x = !rhs.is_optional().0;
                 log::debug!("x:{x}");
                 x
             } else {

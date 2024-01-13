@@ -254,7 +254,8 @@ fn invalid_index() {
 /// No assertions, just type checking for this test
 #[test]
 fn class_self_aliases() {
-    eval(r#"
+    eval(
+        r#"
         INSTANCE_COUNTER = 0
 
         class A {
@@ -291,13 +292,16 @@ fn class_self_aliases() {
         take_a(b or A())
         take_a((a.assoc()) or A())
         take_a((A()) or get a.assoc())
-    "#).unwrap()
+    "#,
+    )
+    .unwrap()
 }
 
 #[test]
 #[should_panic = "type mismatch when calling function (argument #1 was expected to be `C` based on type signature, instead found `A?`)"]
 fn class_self_aliases_forget_unwrap() {
-    eval(r#"
+    eval(
+        r#"
         class A {
             fn assoc(self) -> Self? {
                 return self
@@ -320,5 +324,7 @@ fn class_self_aliases_forget_unwrap() {
         take_a(a)
         take_a(b)
         take_a(a.assoc())
-    "#).unwrap()
+    "#,
+    )
+    .unwrap()
 }

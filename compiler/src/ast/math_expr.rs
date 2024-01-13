@@ -318,12 +318,9 @@ impl IntoType for Expr {
             }
             Expr::UnaryMinus(val) | Expr::UnaryNot(val) => val.for_type(),
             Expr::Callable(CallableContents::Standard { function, .. }) => {
-                let return_type = function
-                    .return_type();
+                let return_type = function.return_type();
 
-                let return_type = return_type
-                    .get_type()
-                    .context("function returns void")?;
+                let return_type = return_type.get_type().context("function returns void")?;
 
                 Ok(return_type.clone().into_owned())
             }
@@ -368,7 +365,10 @@ impl IntoType for Expr {
                         fallback
                     }
                 } else {
-                    assert_eq!(primary.disregard_distractors(false), fallback.disregard_distractors(false));
+                    assert_eq!(
+                        primary.disregard_distractors(false),
+                        fallback.disregard_distractors(false)
+                    );
                     primary
                 })
             }

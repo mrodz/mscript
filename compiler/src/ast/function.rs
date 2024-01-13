@@ -1,5 +1,12 @@
 use std::{
-    borrow::Cow, collections::HashSet, fmt::Display, hash::Hash, path::PathBuf, rc::Rc, sync::Arc, cell::{RefCell, Ref},
+    borrow::Cow,
+    cell::{Ref, RefCell},
+    collections::HashSet,
+    fmt::Display,
+    hash::Hash,
+    path::PathBuf,
+    rc::Rc,
+    sync::Arc,
 };
 
 use anyhow::{anyhow, Result};
