@@ -1,6 +1,8 @@
 use crate::stack::{PrimitiveFlagsPair, VariableMapping};
+use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
+use std::hash::Hash;
 use std::rc::Rc;
 
 pub struct MappedObject<'a> {
@@ -45,17 +47,81 @@ impl ObjectBuilder {
         let name = self.name.clone().unwrap();
 
         Object {
-            name,
+            name: Some(name),
             object_variables: self.object_variables.clone().expect("no name"),
+            debug_lock: Rc::new(DebugPrintableLock::new()),
         }
     }
 }
 
-#[doc(alias = "Class")]
-#[derive(Debug)]
+#[derive(Clone, Eq)]
+struct DebugPrintableLock(Cell<bool>);
+
+impl PartialEq for DebugPrintableLock {
+    /// no-impl makes this field invisible
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
+
+impl Hash for DebugPrintableLock {
+    /// no-impl makes this field invisible
+    fn hash<H: std::hash::Hasher>(&self, _state: &mut H) {}
+}
+
+impl DebugPrintableLock {
+    pub fn new() -> Self {
+        Self(Cell::new(true))
+    }
+
+    pub fn can_write(&self) -> bool {
+        self.0.get()
+    }
+
+    pub fn lock(&self) {
+        unsafe {
+            let ptr = self.0.as_ptr();
+            assert!(*ptr, "DebugPrintableAlreadyLockedError");
+            *ptr = false;
+        }
+    }
+
+    pub fn release(&self) {
+        unsafe {
+            let ptr = self.0.as_ptr();
+            assert!(!*ptr, "DebugPrintableAlreadyReleasedError");
+            *ptr = true;
+        }
+    }
+}
+
 pub struct Object {
-    pub name: Rc<String>,
+    pub name: Option<Rc<String>>,
     pub object_variables: Rc<VariableMapping>,
+    #[doc(hidden)]
+    debug_lock: Rc<DebugPrintableLock>,
+}
+
+impl Debug for Object {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.debug_lock.can_write() {
+            self.debug_lock.lock();
+
+            let result = f
+                .debug_struct("Object")
+                .field("name", &self.name)
+                .field("object_variables", &self.object_variables)
+                .finish();
+
+            self.debug_lock.release();
+
+            result
+        } else if let Some(ref name) = self.name {
+            write!(f, "<self-reference to {}>", name)
+        } else {
+            write!(f, "...")
+        }
+    }
 }
 
 impl PartialOrd for Object {
@@ -71,10 +137,11 @@ impl PartialEq for Object {
 }
 
 impl Object {
-    pub const fn new(name: Rc<String>, object_variables: Rc<VariableMapping>) -> Self {
+    pub fn new(name: Rc<String>, object_variables: Rc<VariableMapping>) -> Self {
         Self {
-            name,
+            name: Some(name),
             object_variables,
+            debug_lock: Rc::new(DebugPrintableLock::new()),
         }
     }
 
@@ -89,8 +156,10 @@ impl Object {
             return maybe_property;
         }
 
-        let include_class_name = if include_functions {
-            Some(self.name.as_str())
+        let include_class_name = if let (true, Some(name)) =
+            (include_functions, self.name.as_ref().map(|x| x.as_str()))
+        {
+            Some(name)
         } else {
             None
         };
@@ -137,11 +206,11 @@ impl Object {
 
 impl Display for Object {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "<object {} @ {:#x}>",
-            self.name, self as *const Self as usize,
-        )?;
+        if let Some(ref name) = self.name {
+            write!(f, "<class {} @ {:#x}>", name, self as *const Self as usize,)?;
+        } else {
+            write!(f, "object@{:#x}", self as *const Self as usize)?;
+        }
 
         if cfg!(feature = "debug") {
             write!(f, " (--debug {:?})", self.object_variables)?;

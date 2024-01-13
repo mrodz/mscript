@@ -4,7 +4,14 @@ mod constructor;
 mod member_function;
 mod member_variable;
 
-use std::{borrow::Cow, fmt::Display, path::PathBuf, rc::Rc, sync::Arc};
+use std::{
+    borrow::Cow,
+    fmt::{Debug, Display},
+    hash::Hash,
+    path::PathBuf,
+    rc::Rc,
+    sync::{Arc, RwLock},
+};
 
 use anyhow::Result;
 
@@ -77,11 +84,78 @@ impl Compile for Class {
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+struct DebugPrintableLock(RwLock<bool>);
+
+impl PartialEq for DebugPrintableLock {
+    /// no-impl makes this field invisible
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
+
+impl Eq for DebugPrintableLock {}
+
+impl Hash for DebugPrintableLock {
+    /// no-impl makes this field invisible
+    fn hash<H: std::hash::Hasher>(&self, _state: &mut H) {}
+}
+
+impl DebugPrintableLock {
+    pub fn new() -> Self {
+        Self(RwLock::new(true))
+    }
+
+    pub fn can_write(&self) -> bool {
+        *self.0.read().unwrap()
+    }
+
+    pub fn lock(&self) {
+        {
+            let data = self.0.read().unwrap();
+            assert!(*data, "DebugPrintableAlreadyLockedError");
+        }
+        let mut x = self.0.write().unwrap();
+        *x = false;
+    }
+
+    pub fn release(&self) {
+        {
+            let data = self.0.read().unwrap();
+            assert!(!*data, "DebugPrintableAlreadyLockedError");
+        }
+        let mut x = self.0.write().unwrap();
+        *x = true;
+    }
+}
+
+#[derive(Clone, Hash, PartialEq, Eq)]
 pub(crate) struct ClassType {
     name: Arc<String>,
     fields: Arc<[Ident]>,
     path_str: Arc<PathBuf>,
+    /// If adding more fields, you MUST update the `PartialEq`!
+    /// This field is used to prevent a stack overflow on calls to `to_string`,
+    /// and means nothing to the class.
+    #[doc(hidden)]
+    debug_lock: Arc<DebugPrintableLock>,
+}
+
+impl Debug for ClassType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.debug_lock.can_write() {
+            self.debug_lock.lock();
+            let result = f
+                .debug_struct("ClassType")
+                .field("name", &self.name)
+                .field("path_str", &self.path_str)
+                .field("fields", &self.fields)
+                .finish();
+            self.debug_lock.release();
+            result
+        } else {
+            write!(f, "<self referential class {}>", self.name())
+        }
+    }
 }
 
 #[derive(Default, Debug, Clone)]
@@ -129,6 +203,7 @@ impl ClassType {
             name,
             fields,
             path_str,
+            debug_lock: Arc::new(DebugPrintableLock::new()),
         }
     }
 

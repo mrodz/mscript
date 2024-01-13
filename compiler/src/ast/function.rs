@@ -1,5 +1,12 @@
 use std::{
-    borrow::Cow, collections::HashSet, fmt::Display, hash::Hash, path::PathBuf, rc::Rc, sync::Arc,
+    borrow::Cow,
+    cell::{Ref, RefCell},
+    collections::HashSet,
+    fmt::Display,
+    hash::Hash,
+    path::PathBuf,
+    rc::Rc,
+    sync::Arc,
 };
 
 use anyhow::{anyhow, Result};
@@ -30,13 +37,13 @@ pub(crate) struct Function {
 #[derive(Debug, Clone, Eq)]
 pub(crate) struct FunctionType {
     parameters: Rc<FunctionParameters>,
-    return_type: Box<ScopeReturnStatus>,
+    return_type: Box<RefCell<ScopeReturnStatus>>,
     is_associated_fn: bool,
 }
 
 impl FunctionType {
-    pub fn return_type(&self) -> &ScopeReturnStatus {
-        &self.return_type
+    pub fn return_type(&self) -> Ref<ScopeReturnStatus> {
+        self.return_type.borrow()
     }
 
     pub fn is_associated_fn(&self) -> bool {
@@ -44,7 +51,11 @@ impl FunctionType {
     }
 
     pub(crate) fn set_return_type(&mut self, new_status: ScopeReturnStatus) {
-        *self.return_type = new_status;
+        *self.return_type.get_mut() = new_status;
+    }
+
+    pub(crate) fn try_set_return_type(&self, new_status: ScopeReturnStatus) {
+        *self.return_type.borrow_mut() = new_status;
     }
 
     pub fn parameters(&self) -> &FunctionParameters {
@@ -64,7 +75,8 @@ impl PartialEq for FunctionType {
 
         let return_types = self
             .return_type
-            .eq_for_signature_checking(&other.return_type);
+            .borrow()
+            .eq_for_signature_checking(&other.return_type.borrow());
 
         if let Ok(false) | Err(..) = return_types {
             return false;
@@ -81,7 +93,7 @@ impl Hash for FunctionType {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.parameters.to_types().hash(state);
 
-        if let Some(return_type) = self.return_type.get_type() {
+        if let Some(return_type) = self.return_type.borrow().get_type() {
             return_type.hash(state);
         };
     }
@@ -199,7 +211,7 @@ impl FunctionType {
     ) -> Self {
         Self {
             parameters,
-            return_type: Box::new(return_type),
+            return_type: Box::new(RefCell::new(return_type)),
             is_associated_fn,
         }
     }
@@ -209,7 +221,7 @@ impl Display for FunctionType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let return_type: Cow<'static, str> = if let ScopeReturnStatus::Should(return_type)
         | ScopeReturnStatus::Did(return_type) =
-            &self.return_type.as_ref()
+            &*self.return_type.borrow()
         {
             let actual_type = match return_type.as_ref() {
                 TypeLayout::Function(..) => {

@@ -486,6 +486,7 @@ impl Display for TypeLayout {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct TypecheckFlags<T>
 where
     T: Deref<Target = ClassType>,
@@ -585,20 +586,19 @@ impl TypeLayout {
             (Native(Byte), Native(Int | BigInt)) => format!("\n{tabs}+ hint: try adding '0b' before a number to specify a byte literal, eg. `5` -> `0b101`"),
             (Native(Int), Native(Float)) => format!("\n{tabs}+ hint: cast this floating point value to an integer"),
             (Native(Float), Native(Int | BigInt | Byte)) => format!("\n{tabs}+ hint: cast this integer type to a floating point"),
-            _ if self.disregard_distractors(true) == &ClassSelf || incompatible.disregard_distractors(true) == &ClassSelf => {
-                format!("\n{tabs}+ hint: `Self` in this context means `{}`", class_self.map(|x| Cow::Owned(x.name().to_owned())).unwrap_or(Cow::Borrowed("<! no Self type>")))
-            }
-            (x, Optional(Some(y))) | (Optional(Some(y)), x) if x.disregard_distractors(false) == y.disregard_distractors(false) => {
+            (x, Optional(Some(y))) | (Optional(Some(y)), x) if x.disregard_distractors(false).eq_include_class_self(y.disregard_distractors(false)) => {
                 let maybe_extended_hint = x.get_error_hint_between_types_recursive(y, class_self, tab_depth + 1).unwrap_or_default();
-
                 format!("\n{tabs}+ hint: unwrap this optional to use its value using the `get` keyword, or provide a fallback with the `or` keyword{maybe_extended_hint}")
             }
-            (Native(Str(..)), _) => format!("\n{tabs}+ hint: call `.to_str()` on this item to convert it into a str"),
-            (Function(..), Function(..)) => format!("\n{tabs}+ hint: check the function type that you provided"),
             (Alias(str, ty), y) => {
                 let maybe_extended_hint = ty.get_error_hint_between_types_recursive(y, class_self, tab_depth + 1).unwrap_or_default();
                 format!("\n{tabs}+ hint: `{str}` is an alias for `{ty}`{maybe_extended_hint}")
             }
+            _ if self.disregard_distractors(true) == &ClassSelf || incompatible.disregard_distractors(true) == &ClassSelf => {
+                format!("\n{tabs}+ hint: `Self` in this context means {}", class_self.map(|x| Cow::Owned(format!("`{}`", x.name()))).unwrap_or(Cow::Borrowed("a function's associated class")))
+            }
+            (Native(Str(..)), _) => format!("\n{tabs}+ hint: call `.to_str()` on this item to convert it into a str"),
+            (Function(..), Function(..)) => format!("\n{tabs}+ hint: check the function type that you provided"),
             (y, Alias(str, ty)) => {
                 let maybe_extended_hint = y.get_error_hint_between_types_recursive(ty, class_self, tab_depth + 1).unwrap_or_default();
                 format!("\n{tabs}+ hint: `{str}` is an alias for `{ty}`{maybe_extended_hint}")
@@ -657,6 +657,16 @@ impl TypeLayout {
             _ => None,
         }
     }
+
+    // pub fn is_function_mut(&mut self) -> Option<&mut FunctionType> {
+    //     let me = self.get_type_recursively_mut();
+
+    //     let TypeLayout::Function(f) = me else {
+    //         return None;
+    //     };
+
+    //     Some(f)
+    // }
 
     pub fn is_function(&self) -> Option<&FunctionType> {
         let me = self.get_type_recursively();
@@ -790,14 +800,18 @@ impl TypeLayout {
     /// - `rhs` is the supplied type
     pub fn eq_complex<T>(&self, rhs: &Self, flags: impl Deref<Target = TypecheckFlags<T>>) -> bool
     where
-        T: Deref<Target = ClassType>,
+        T: Deref<Target = ClassType> + Debug,
     {
         let lhs = self.disregard_distractors(false);
         let rhs = rhs.disregard_distractors(false);
 
+        log::debug!("lhs:{lhs:?} rhs:{rhs:?} f:{:?}", flags.deref());
+
         if lhs == rhs {
             return if flags.force_rhs_to_be_unwrapped_lhs {
-                !rhs.is_optional().0
+                let x = !rhs.is_optional().0;
+                log::debug!("x:{x}");
+                x
             } else {
                 true
             };
@@ -816,6 +830,7 @@ impl TypeLayout {
                 true
             }
             (Self::Optional(Some(x)), y, _) if flags.force_rhs_to_be_unwrapped_lhs => {
+                log::debug!("match(x:{x} y:{y})");
                 x.get_type_recursively() == y.get_type_recursively()
             }
             (Self::Optional(Some(x)), y, _) => x.eq_complex(y, flags),
@@ -1053,6 +1068,14 @@ impl TypeLayout {
         match self {
             Self::ValidIndexes(start, end) => ListBound::val_fits_between(start, end, value),
             other => Ok(&value.for_type()? == other),
+        }
+    }
+
+    pub(crate) fn eq_include_class_self(&self, value: &Self) -> bool {
+        match (self, value) {
+            (TypeLayout::Class(..), TypeLayout::ClassSelf) => true,
+            (TypeLayout::ClassSelf, TypeLayout::Class(..)) => true,
+            (x, y) => x == y,
         }
     }
 }

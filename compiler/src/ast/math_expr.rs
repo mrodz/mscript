@@ -318,10 +318,9 @@ impl IntoType for Expr {
             }
             Expr::UnaryMinus(val) | Expr::UnaryNot(val) => val.for_type(),
             Expr::Callable(CallableContents::Standard { function, .. }) => {
-                let return_type = function
-                    .return_type()
-                    .get_type()
-                    .context("function returns void")?;
+                let return_type = function.return_type();
+
+                let return_type = return_type.get_type().context("function returns void")?;
 
                 Ok(return_type.clone().into_owned())
             }
@@ -366,7 +365,10 @@ impl IntoType for Expr {
                         fallback
                     }
                 } else {
-                    assert_eq!(primary, fallback);
+                    assert_eq!(
+                        primary.disregard_distractors(false),
+                        fallback.disregard_distractors(false)
+                    );
                     primary
                 })
             }
@@ -849,7 +851,11 @@ fn parse_expr(
 
                 let fallback_ty = fallback.for_type().details(value_span, &user_data.get_source_file_name(), format!("this value cannot be used as a fallback for `{lhs_ty}`")).to_err_vec()?;
 
-                if !lhs_ty.disregard_optional().unwrap_or(&TypeLayout::Optional(None)).eq_complex(&fallback_ty, &TypecheckFlags::use_class(user_data.get_type_of_executing_class())) {
+                let lhs_ty_for_comp = lhs_ty.disregard_optional().unwrap_or(&TypeLayout::Optional(None));
+
+                log::debug!("`or` stmt: fallback:{fallback_ty:?} value:{lhs_ty_for_comp:?}");
+
+                if !lhs_ty_for_comp.eq_complex(&fallback_ty, &TypecheckFlags::use_class(user_data.get_type_of_executing_class())) {
                     let ty = if let (true, ty) = lhs_ty.is_optional() {
                         ty.map(Cow::Borrowed)
                     } else {
@@ -857,8 +863,9 @@ fn parse_expr(
                     };
 
                     if let Some(ty) = ty {
+                        let maybe_error_hint = ty.get_error_hint_between_types(&fallback_ty, user_data.get_type_of_executing_class()).unwrap_or_default();
                         return Err(vec![new_err(value_span, &user_data.get_source_file_name(), {
-                            format!("The `or` portion of this unwrap must yield `{ty}`, but `{fallback_ty}` was found")
+                            format!("The `or` portion of this unwrap must yield `{ty}`, but `{fallback_ty}` was found{maybe_error_hint}")
                         })])
                     }
 

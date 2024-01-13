@@ -250,3 +250,81 @@ fn invalid_index() {
     )
     .unwrap()
 }
+
+/// No assertions, just type checking for this test
+#[test]
+fn class_self_aliases() {
+    eval(
+        r#"
+        INSTANCE_COUNTER = 0
+
+        class A {
+            constructor(self) {
+                INSTANCE_COUNTER += 1
+                
+                ###
+                this object should never be made in any of the `or` 
+                statement fallbacks, because they aren't nil
+                ###
+
+                assert INSTANCE_COUNTER <= 3
+            }
+    
+            fn assoc(self) -> Self? {
+                return self
+            }
+        }
+    
+        a = A()
+        
+        type B A
+        type C B
+    
+        take_a = fn(in: C) {
+            print in
+        }
+
+        b: B = A()
+    
+        print a
+        print a.assoc()
+        take_a(a)
+        take_a(b or A())
+        take_a((a.assoc()) or A())
+        take_a((A()) or get a.assoc())
+    "#,
+    )
+    .unwrap()
+}
+
+#[test]
+#[should_panic = "type mismatch when calling function (argument #1 was expected to be `C` based on type signature, instead found `A?`)"]
+fn class_self_aliases_forget_unwrap() {
+    eval(
+        r#"
+        class A {
+            fn assoc(self) -> Self? {
+                return self
+            }
+        }
+    
+        a = A()
+        
+        type B A
+        type C B
+    
+        take_a = fn(in: C) {
+            print in
+        }
+
+        b: B = A()
+    
+        print a
+        print a.assoc()
+        take_a(a)
+        take_a(b)
+        take_a(a.assoc())
+    "#,
+    )
+    .unwrap()
+}

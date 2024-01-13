@@ -225,8 +225,9 @@ impl Parser {
                     assume_self_is_on_top,
                 };
 
-                let output_type = function_type
-                    .return_type()
+                let output_type = function_type.return_type();
+
+                let output_type = output_type
                     .get_type()
                     .unwrap_or(&Cow::Owned(TypeLayout::Void));
 
