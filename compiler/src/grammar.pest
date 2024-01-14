@@ -16,6 +16,7 @@ number = { bigint | hex_int | byte | float | integer }
 
 unary_minus = { "-" }
 not = { "!" }
+typeof = ${ "typeof" ~ WHITESPACE }
 
 primitive = _{ number | string }
 
@@ -26,7 +27,7 @@ math_primary = _{ allow_bin_op | "(" ~ math_expr ~ ")" }
 optional_unwrap = ${ "get" ~ WHITESPACE }
 optional_or = ${ "or" ~ WHITESPACE ~ value }
 
-math_prefix = _{ unary_minus | not | optional_unwrap }
+math_prefix = _{ unary_minus | not | optional_unwrap | typeof }
 math_postfix = _{ dot_chain | callable | list_index | optional_or }
 
 math_atom = _{ math_prefix? ~ math_primary ~ math_postfix? }
@@ -197,7 +198,7 @@ class = { class_flags? ~ "class" ~ ident ~ class_body }
 type_export = { "export" }
 type_alias = ${ (type_export ~ WHITESPACE)? ~ "type" ~ WHITESPACE ~ ident ~ WHITESPACE ~ type }
 
-declaration = { import | class | reassignment | assignment | type_alias | print_statement | assertion | return_statement | continue_statement | break_statement | if_statement | while_loop | number_loop | value }
+declaration = { import | class | reassignment | assignment | type_alias | print_statement | assertion | return_statement | continue_statement | break_statement | if_statement | while_loop | number_loop | typeof | value }
 
 file = {
     SOI ~

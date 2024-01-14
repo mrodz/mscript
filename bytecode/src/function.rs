@@ -4,7 +4,7 @@
 
 use anyhow::{bail, Context, Result};
 use std::borrow::Cow;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::path::Path;
@@ -13,7 +13,7 @@ use std::rc::{Rc, Weak};
 use crate::compilation_bridge::raw_byte_instruction_to_string_representation;
 use crate::context::{Ctx, SpecialScope};
 use crate::file::MScriptFile;
-use crate::instruction::{run_instruction, Instruction};
+use crate::instruction::{run_instruction, Instruction, JumpRequestDestination};
 
 use super::instruction::JumpRequest;
 use super::stack::{Stack, VariableMapping};
@@ -25,10 +25,23 @@ pub enum BuiltInFunction {
     VecReverse,
     VecInnerCapacity,
     VecEnsureInnerCapacity,
+    VecMap,
+    VecFilter,
+    VecRemove,
+    VecPush,
+    VecJoin,
+    VecIndexOf,
 }
 
+type BuiltInFunctionReturnBundle = (
+    Option<Primitive>,
+    Option<Box<dyn RuntimeExecutionBridgeNotifier>>,
+);
+
 impl BuiltInFunction {
-    pub fn run(&self, arguments: &mut [Primitive]) -> Option<Primitive> {
+    pub fn run(&self, ctx: &mut Ctx) -> Result<BuiltInFunctionReturnBundle> {
+        let mut arguments = ctx.ref_clear_local_operating_stack();
+
         for argument in arguments.iter_mut() {
             *argument = unsafe { argument.clone().move_out_of_heap_primitive() }
         }
@@ -38,12 +51,8 @@ impl BuiltInFunction {
                 let Some(Primitive::Vector(v)) = arguments.get(0) else {
                     unreachable!()
                 };
-                Some(Primitive::Int(
-                    v.borrow()
-                        .len()
-                        .try_into()
-                        .expect("list length does not fit into i32"),
-                ))
+
+                Ok((Some(Primitive::Int(v.borrow().len().try_into()?)), None))
             }
             Self::VecReverse => {
                 let Some(Primitive::Vector(v)) = arguments.get(0) else {
@@ -52,18 +61,16 @@ impl BuiltInFunction {
 
                 v.borrow_mut().reverse();
 
-                None
+                Ok((None, None))
             }
             Self::VecInnerCapacity => {
                 let Some(Primitive::Vector(v)) = arguments.get(0) else {
                     unreachable!()
                 };
 
-                Some(Primitive::Int(
-                    v.borrow()
-                        .capacity()
-                        .try_into()
-                        .expect("list capacity does not fit into i32"),
+                Ok((
+                    Some(Primitive::Int(v.borrow().capacity().try_into()?)),
+                    None,
                 ))
             }
             Self::VecEnsureInnerCapacity => {
@@ -75,13 +82,236 @@ impl BuiltInFunction {
                     unreachable!()
                 };
 
-                v.borrow_mut().reserve(
-                    (*size)
-                        .try_into()
-                        .expect("capacity cannot be made into an unsigned usize"),
-                );
+                v.borrow_mut().reserve((*size).try_into()?);
 
-                None
+                Ok((None, None))
+            }
+            Self::VecMap => {
+                let Primitive::Function(callback_fn) = arguments.remove(1) else {
+                    unreachable!()
+                };
+
+                let Some(Primitive::Vector(v)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                #[derive(Debug)]
+                struct MapOp {
+                    callback_path: String,
+                    callback_state: Option<Rc<VariableMapping>>,
+                    underlying: Rc<RefCell<Vec<Primitive>>>,
+                    call_stack: Rc<RefCell<Stack>>,
+                    map_result: Rc<RefCell<Vec<Primitive>>>,
+                    index: Cell<i32>,
+                }
+
+                impl MapOp {
+                    fn new(
+                        callback_fn: PrimitiveFunction,
+                        underlying: Rc<RefCell<Vec<Primitive>>>,
+                        call_stack: Rc<RefCell<Stack>>,
+                    ) -> Self {
+                        let underlying_len = { underlying.borrow().len() };
+                        Self {
+                            callback_path: callback_fn.location,
+                            callback_state: callback_fn.callback_state,
+                            call_stack,
+                            map_result: Rc::new(RefCell::new(Vec::with_capacity(underlying_len))),
+                            underlying,
+                            index: Cell::new(0),
+                        }
+                    }
+                }
+
+                impl RuntimeExecutionBridgeNotifier for MapOp {
+                    fn wait_for(&self) -> Result<JumpRequest> {
+                        let this_index = self.index.get();
+                        self.index.set(this_index + 1);
+                        let underlying = self.underlying.borrow();
+                        let this_value: Primitive = underlying[this_index as usize].clone();
+
+                        Ok(JumpRequest {
+                            destination: JumpRequestDestination::Standard(
+                                self.callback_path.clone(),
+                            ),
+                            arguments: vec![this_value],
+                            callback_state: self.callback_state.clone(),
+                            stack: self.call_stack.clone(),
+                        })
+                    }
+
+                    fn then(&self, return_value: ReturnValue) -> Result<bool> {
+                        let mut result = self.map_result.borrow_mut();
+
+                        if let ReturnValue::Value(value) = return_value {
+                            result.push(value);
+                        }
+
+                        Ok((self.index.get() as usize) < self.underlying.borrow().len())
+                    }
+
+                    fn finish(&self) -> Result<Option<Primitive>> {
+                        Ok(Some(Primitive::Vector(self.map_result.clone())))
+                    }
+                }
+
+                Ok((
+                    None,
+                    Some(Box::new(MapOp::new(
+                        callback_fn,
+                        v.clone(),
+                        ctx.rced_call_stack(),
+                    ))),
+                ))
+            }
+            Self::VecFilter => {
+                let Primitive::Function(callback_fn) = arguments.remove(1) else {
+                    unreachable!()
+                };
+
+                let Some(Primitive::Vector(v)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                #[derive(Debug)]
+                struct FilterOp {
+                    callback_path: String,
+                    callback_state: Option<Rc<VariableMapping>>,
+                    underlying: Rc<RefCell<Vec<Primitive>>>,
+                    call_stack: Rc<RefCell<Stack>>,
+                    filter_result: Rc<RefCell<Vec<Primitive>>>,
+                    index: Cell<i32>,
+                }
+
+                impl FilterOp {
+                    fn new(
+                        callback_fn: PrimitiveFunction,
+                        underlying: Rc<RefCell<Vec<Primitive>>>,
+                        call_stack: Rc<RefCell<Stack>>,
+                    ) -> Self {
+                        Self {
+                            callback_path: callback_fn.location,
+                            callback_state: callback_fn.callback_state,
+                            call_stack,
+                            filter_result: Rc::new(RefCell::new(vec![])),
+                            underlying,
+                            index: Cell::new(0),
+                        }
+                    }
+                }
+
+                impl RuntimeExecutionBridgeNotifier for FilterOp {
+                    fn wait_for(&self) -> Result<JumpRequest> {
+                        let this_index = self.index.get();
+                        self.index.set(this_index + 1);
+                        let underlying = self.underlying.borrow();
+                        let this_value: Primitive = underlying[this_index as usize].clone();
+
+                        Ok(JumpRequest {
+                            destination: JumpRequestDestination::Standard(
+                                self.callback_path.clone(),
+                            ),
+                            arguments: vec![this_value],
+                            callback_state: self.callback_state.clone(),
+                            stack: self.call_stack.clone(),
+                        })
+                    }
+
+                    fn then(&self, return_value: ReturnValue) -> Result<bool> {
+                        let mut result = self.filter_result.borrow_mut();
+
+                        if let ReturnValue::Value(Primitive::Bool(true)) = return_value {
+                            let underlying = self.underlying.borrow();
+                            let this_index = self.index.get() - 1;
+                            result.push(underlying[this_index as usize].clone());
+                        }
+
+                        Ok((self.index.get() as usize) < self.underlying.borrow().len())
+                    }
+
+                    fn finish(&self) -> Result<Option<Primitive>> {
+                        Ok(Some(Primitive::Vector(self.filter_result.clone())))
+                    }
+                }
+
+                Ok((
+                    None,
+                    Some(Box::new(FilterOp::new(
+                        callback_fn,
+                        v.clone(),
+                        ctx.rced_call_stack(),
+                    ))),
+                ))
+            }
+            Self::VecRemove => {
+                let Some(Primitive::Vector(v)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                let Some(Primitive::Int(size)) = arguments.get(1) else {
+                    unreachable!()
+                };
+
+                let removed = v.borrow_mut().remove((*size).try_into()?);
+
+                Ok((Some(removed), None))
+            }
+            Self::VecPush => {
+                let Some(Primitive::Vector(v)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                let Some(primitive) = arguments.get(1) else {
+                    unreachable!()
+                };
+
+                v.borrow_mut().push(primitive.clone());
+
+                Ok((None, None))
+            }
+            Self::VecJoin => {
+                let Some(Primitive::Vector(v_original_shared)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                let Some(Primitive::Vector(v_add)) = arguments.get(1) else {
+                    unreachable!()
+                };
+
+                {
+                    let mut v_original = v_original_shared.borrow_mut();
+                    let mut v_add = v_add.borrow_mut();
+
+                    v_original.append(v_add.as_mut());
+                }
+
+                Ok((Some(Primitive::Vector(v_original_shared.clone())), None))
+            }
+            Self::VecIndexOf => {
+                let Some(Primitive::Vector(v)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                let Some(primitive) = arguments.get(1) else {
+                    unreachable!()
+                };
+
+                let view = v.borrow();
+                let result = view.iter().enumerate().find(|(_, x)| {
+                    x.equals(primitive)
+                        .expect("the compiler allowed an illegal type comparison")
+                });
+
+                if let Some((result, _)) = result {
+                    Ok((
+                        Some(Primitive::Optional(Some(Box::new(Primitive::Int(
+                            result.try_into()?,
+                        ))))),
+                        None,
+                    ))
+                } else {
+                    Ok((Some(Primitive::Optional(None)), None))
+                }
             }
         }
     }
@@ -262,6 +492,13 @@ pub enum InstructionExitState {
     /// This is the standard exit state. The interpreter will move on to the next instruction
     /// if it encounters this variant.
     NoExit,
+    BeginNotificationBridge(Box<dyn RuntimeExecutionBridgeNotifier>),
+}
+
+pub trait RuntimeExecutionBridgeNotifier: Debug {
+    fn wait_for(&self) -> Result<JumpRequest>;
+    fn then(&self, return_value: ReturnValue) -> Result<bool>;
+    fn finish(&self) -> Result<Option<Primitive>>;
 }
 
 /// This is MScript's main unit of executing instructions.
@@ -461,6 +698,18 @@ impl Function {
                     if let Some(x) = special_scopes.pop() {
                         log::trace!("PopScope `{x:?}` at {instruction_ptr}");
                         context.pop_frame();
+                    }
+                }
+                InstructionExitState::BeginNotificationBridge(bridge) => {
+                    loop {
+                        let to_call = bridge.wait_for()?;
+                        let return_value = jump_callback(&to_call)?;
+                        if !bridge.then(return_value)? {
+                            break;
+                        }
+                    }
+                    if let Some(final_exit_state) = bridge.finish()? {
+                        context.push(final_exit_state);
                     }
                 }
                 InstructionExitState::NoExit => (),

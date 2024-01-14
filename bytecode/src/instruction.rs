@@ -741,12 +741,19 @@ pub mod implementations {
                     return Ok(());
                 }
                 Some(Primitive::BuiltInFunction(variant)) => {
-                    let primitive = variant.run(&mut ctx.ref_clear_local_operating_stack());
-
-                    if let Some(primitive) = primitive {
-                        ctx.clear_and_set_stack(primitive);
-                    } else {
-                        ctx.clear_stack();
+                    match variant.run(ctx)? {
+                        (Some(primitive), None) => {
+                            ctx.clear_and_set_stack(primitive);
+                        }
+                        (None, Some(bridge)) => {
+                            ctx.signal(InstructionExitState::BeginNotificationBridge(bridge));
+                        }
+                        (None, None) => {
+                            ctx.clear_stack();
+                        }
+                        (Some(primitive), Some(bridge)) => {
+                            unimplemented!("primitive and bridge combined is not supported: ({primitive:?}, {bridge:?})")
+                        }
                     }
 
                     return Ok(())
@@ -1240,10 +1247,9 @@ pub mod implementations {
         let result = item.equals(&bool!(true))?;
 
         if !result {
-            let start = &args[0];
-            let end = &args[1];
+            let span = &args[0];
 
-            bail!("An explicit assertion (start: Pos {start}, end: Pos {end}) failed in this program.");
+            bail!("An explicit assertion failed in this program ({span})");
         }
 
         Ok(())

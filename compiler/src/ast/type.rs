@@ -20,7 +20,7 @@ use std::{
     ops::Deref,
     path::{Path, PathBuf},
     rc::Rc,
-    sync::Arc,
+    sync::{Arc, RwLock},
 };
 
 use super::{
@@ -74,9 +74,12 @@ impl SupportedTypesWrapper {
 pub struct StrWrapper(pub(in crate::ast) Option<usize>);
 
 impl StrWrapper {
-    #[inline]
     pub const fn unknown_size() -> Self {
         Self(None)
+    }
+
+    pub const fn sized(len: usize) -> Self {
+        Self(Some(len))
     }
 }
 
@@ -446,6 +449,85 @@ impl Compile for TypeAlias {
     }
 }
 
+static GENERIC_ID: RwLock<usize> = RwLock::new(0);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct GenericType {
+    unique_id: usize,
+    stands_for: Rc<RefCell<Option<Cow<'static, TypeLayout>>>>,
+}
+
+impl Display for GenericType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(stands_for) = self.try_get_lock() {
+            if cfg!(feature = "debug") {
+                write!(f, "any.{}=", self.id())?;
+            }
+            write!(f, "{stands_for}")
+        } else {
+            write!(f, "any.{}", self.id())
+        }
+    }
+}
+
+impl Hash for GenericType {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.unique_id.hash(state);
+        if let Some(stands_for) = self.stands_for.borrow().as_ref() {
+            Some(stands_for).hash(state);
+        } else {
+            Option::<()>::None.hash(state)
+        }
+    }
+}
+
+impl GenericType {
+    pub fn new() -> Self {
+        let ret = Self {
+            unique_id: *GENERIC_ID.read().unwrap(),
+            stands_for: Rc::new(RefCell::new(None)),
+        };
+        *GENERIC_ID.write().unwrap() += 1;
+        ret
+    }
+
+    pub fn is_compatible<T>(&self, other: &TypeLayout, flags: &TypecheckFlags<T>) -> bool
+    where
+        T: Deref<Target = ClassType> + Debug,
+    {
+        let ret = if let Some(x) = self.try_get_lock() {
+            x.eq_complex(other, flags)
+        } else {
+            self.lock_type(Cow::Owned(other.to_owned()));
+            true
+        };
+        ret
+    }
+
+    pub const fn id(&self) -> usize {
+        self.unique_id
+    }
+
+    pub fn lock_type(&self, ty: Cow<'static, TypeLayout>) {
+        {
+            let mut view = self.stands_for.borrow_mut();
+            let ret = view.replace(ty);
+
+            if let Some(existing) = ret {
+                panic!(
+                    "{existing} was already set as the type of generic #{}",
+                    self.id()
+                )
+            }
+        }
+    }
+
+    pub fn try_get_lock(&self) -> Option<Ref<Cow<'static, TypeLayout>>> {
+        // let view = self.stands_for.borrow();
+        Ref::filter_map(self.stands_for.borrow(), Option::as_ref).ok()
+    }
+}
+
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub(crate) enum TypeLayout {
     Function(FunctionType),
@@ -459,6 +541,7 @@ pub(crate) enum TypeLayout {
     Class(ClassType),
     Module(ModuleType),
     ClassSelf,
+    Generic(GenericType),
     Void,
 }
 
@@ -481,6 +564,7 @@ impl Display for TypeLayout {
             Self::Optional(Some(ty)) => write!(f, "{ty}?"),
             Self::Optional(None) => write!(f, "!"),
             Self::Void => write!(f, "void"),
+            Self::Generic(generic) => write!(f, "{generic}"),
             Self::Module(module) => write!(f, "<module {:?}>", module.name.as_os_str()),
         }
     }
@@ -611,6 +695,13 @@ impl TypeLayout {
         let tabs = "    ".repeat(tab_depth);
 
         Some(match (self, incompatible) {
+            (Generic(x), y) | (y, Generic(x)) => {
+                let Some(x_underlying) = x.try_get_lock() else {
+                    unreachable!("a generic that has not been assigned a type should never fail a type comparison: got {x} (?), {y} (non-?)")
+                };
+                let maybe_extended_hint = x_underlying.get_error_hint_between_types_recursive(y, class_self, tab_depth + 1).unwrap_or_default();
+                format!("\n{tabs}+ hint: this generic (unique id: {}) stands in place of {x_underlying}{maybe_extended_hint}", x.id())
+            }
             (Native(BigInt), Native(Int)) => format!("\n{tabs}+ hint: try adding 'B' before a number to convert it to a bigint, eg. `99` -> `B99` or `0x6` -> `B0x6`"),
             (Native(Byte), Native(Int | BigInt)) => format!("\n{tabs}+ hint: try adding '0b' before a number to specify a byte literal, eg. `5` -> `0b101`"),
             (Native(Int), Native(Float)) => format!("\n{tabs}+ hint: cast this floating point value to an integer"),
@@ -687,16 +778,6 @@ impl TypeLayout {
         }
     }
 
-    // pub fn is_function_mut(&mut self) -> Option<&mut FunctionType> {
-    //     let me = self.get_type_recursively_mut();
-
-    //     let TypeLayout::Function(f) = me else {
-    //         return None;
-    //     };
-
-    //     Some(f)
-    // }
-
     pub fn is_function(&self) -> Option<&FunctionType> {
         let me = self.get_type_recursively();
 
@@ -741,7 +822,7 @@ impl TypeLayout {
 
                 Some(Box::new(property_type))
             }
-            Self::List(_list_type) => {
+            Self::List(list_type) => {
                 match property_name {
                     "len" => return Some(new_assoc_function!(vec![], @int)),
                     "reverse" => return Some(new_assoc_function!(vec![], @void)),
@@ -752,6 +833,84 @@ impl TypeLayout {
                         )
                     }
                     _ => (),
+                }
+
+                if let Ok(open_list_type) = list_type.try_coerce_to_open() {
+                    let ListType::Open(list_type) = open_list_type.as_ref() else {
+                        unreachable!();
+                    };
+
+                    let list_type: Cow<'static, TypeLayout> = *list_type.clone();
+
+                    match property_name {
+                        "remove" => {
+                            return Some(new_assoc_function!(
+                                vec![Cow::Owned(TypeLayout::Native(NativeType::Int))],
+                                ScopeReturnStatus::Should(list_type)
+                            ))
+                        }
+                        "push" => return Some(new_assoc_function!(vec![list_type], @void)),
+                        "map" => {
+                            let generic_constraint = GenericType::new();
+
+                            let callback_function_parameters =
+                                FunctionParameters::TypesOnly(vec![list_type]);
+                            let callback_return_type = ScopeReturnStatus::Should(Cow::Owned(
+                                TypeLayout::Generic(generic_constraint.clone()),
+                            ));
+                            let callback_type = TypeLayout::Function(FunctionType::new(
+                                Rc::new(callback_function_parameters),
+                                callback_return_type,
+                                true,
+                            ));
+
+                            let resulting_list = TypeLayout::List(ListType::Open(Box::new(
+                                Cow::Owned(TypeLayout::Generic(generic_constraint)),
+                            )));
+
+                            return Some(new_assoc_function!(
+                                vec![Cow::Owned(callback_type)],
+                                ScopeReturnStatus::Should(Cow::Owned(resulting_list))
+                            ));
+                        }
+                        "filter" => {
+                            let callback_function_parameters =
+                                FunctionParameters::TypesOnly(vec![list_type]);
+                            let callback_return_type = ScopeReturnStatus::Should(Cow::Owned(
+                                TypeLayout::Native(NativeType::Bool),
+                            ));
+                            let callback_type = TypeLayout::Function(FunctionType::new(
+                                Rc::new(callback_function_parameters),
+                                callback_return_type,
+                                true,
+                            ));
+
+                            let resulting_list = TypeLayout::List(open_list_type.into_owned());
+
+                            return Some(new_assoc_function!(
+                                vec![Cow::Owned(callback_type)],
+                                ScopeReturnStatus::Should(Cow::Owned(resulting_list))
+                            ));
+                        }
+                        "join" => {
+                            let list_param = TypeLayout::List(open_list_type.into_owned());
+
+                            return Some(new_assoc_function!(
+                                vec![Cow::Owned(list_param.clone())],
+                                ScopeReturnStatus::Should(Cow::Owned(list_param))
+                            ));
+                        }
+                        "index_of" => {
+                            let return_type = TypeLayout::Optional(Some(Box::new(Cow::Owned(
+                                TypeLayout::Native(NativeType::Int),
+                            ))));
+                            return Some(new_assoc_function!(
+                                vec![list_type],
+                                ScopeReturnStatus::Should(Cow::Owned(return_type))
+                            ));
+                        }
+                        _ => (),
+                    }
                 }
 
                 None
@@ -786,13 +945,33 @@ impl TypeLayout {
 
                 result
             }
-            Self::List(_list_type) => {
-                vec![
-                    "len()".to_owned(),
-                    "reverse()".to_owned(),
-                    "inner_capacity()".to_owned(),
-                    "ensure_inner_capacity(int)".to_owned(),
-                ]
+            Self::List(list_type) => {
+                let items = [
+                    "fn len() -> int",
+                    "fn inner_capacity() -> int",
+                    "fn ensure_inner_capacity(int)",
+                ];
+
+                let additional =
+                    if let Ok(ListType::Open(ty)) = list_type.try_coerce_to_open().as_deref() {
+                        Some(vec![
+                            "fn reverse()".to_owned(),
+                            format!("fn remove(int) -> {ty}"),
+                            format!("fn push({ty})"),
+                            format!("fn join([{ty}...])"),
+                            format!("fn map(fn({ty}) -> K) -> [K...]"),
+                            format!("fn filter(fn({ty}) -> bool) -> [{ty}...]"),
+                            format!("fn index_of({ty})"),
+                        ])
+                    } else {
+                        None
+                    };
+
+                items
+                    .iter()
+                    .map(|x| x.to_string())
+                    .chain(additional.unwrap_or_default())
+                    .collect::<Vec<_>>()
             }
             _ => vec![],
         }
@@ -870,6 +1049,9 @@ impl TypeLayout {
         }
 
         match (lhs, rhs, &flags.executing_class) {
+            (Self::Generic(generic), other, _) | (other, Self::Generic(generic), _) => {
+                generic.is_compatible(other, &flags)
+            }
             (Self::ClassSelf, TypeLayout::Class(other), Some(executing_class))
             | (TypeLayout::Class(other), Self::ClassSelf, Some(executing_class)) => {
                 executing_class.deref().eq(other)
@@ -890,7 +1072,7 @@ impl TypeLayout {
             }
             (Self::Optional(Some(x)), y, _) => x.eq_complex(y, flags),
             (y, Self::Optional(Some(x)), _) if flags.lhs_allow_optional_unwrap => {
-                x.as_ref().as_ref() == y
+                x.eq_complex(y, flags)
             }
             _ => false,
         }
@@ -1018,6 +1200,19 @@ impl TypeLayout {
 
         let lhs = self.disregard_distractors(false);
         let other = other.disregard_distractors(false);
+
+        match (lhs, other) {
+            (TypeLayout::Generic(g1), TypeLayout::Generic(g2)) => {
+                let t1 = g1.try_get_lock()?;
+                let t2 = g2.try_get_lock()?;
+                return t1.get_output_type(&t2, op);
+            }
+            (TypeLayout::Generic(g), y) | (y, TypeLayout::Generic(g)) => {
+                let x = g.try_get_lock()?;
+                return x.get_output_type(y, op);
+            }
+            _ => (),
+        }
 
         if lhs == other && matches!(op, Eq | Neq) {
             return Some(TypeLayout::Native(NativeType::Bool));

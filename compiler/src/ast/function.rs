@@ -21,7 +21,8 @@ use crate::{
 };
 
 use super::{
-    r#type::IntoType, Block, CompilationState, Compile, CompiledItem, Dependencies, Dependency,
+    r#type::{IntoType, TypecheckFlags},
+    Block, ClassType, CompilationState, Compile, CompiledItem, Dependencies, Dependency,
     FunctionParameters, TypeLayout,
 };
 
@@ -85,7 +86,13 @@ impl PartialEq for FunctionType {
         let t1 = self.parameters.to_types();
         let t2 = other.parameters.to_types();
 
-        t1 == t2
+        if t1.len() != t2.len() {
+            return false;
+        }
+
+        t1.iter()
+            .zip(t2.iter())
+            .all(|(x, y)| x.eq_complex(y, &TypecheckFlags::<&ClassType>::classless()))
     }
 }
 

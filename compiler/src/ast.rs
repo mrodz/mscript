@@ -47,7 +47,7 @@ pub(crate) use number::Number;
 pub(crate) use number_loop::NumberLoop;
 pub(crate) use print_statement::PrintStatement;
 pub(crate) use r#return::ReturnStatement;
-pub(crate) use r#type::{IntoType, ModuleType, NativeType, StrWrapper, TypeLayout};
+pub(crate) use r#type::{IntoType, ModuleType, NativeType, StrWrapper, TypeLayout, TypecheckFlags};
 pub(crate) use reassignment::Reassignment;
 pub(crate) use value::{CompileTimeEvaluate, ConstexprEvaluation, Value};
 pub(crate) use while_loop::WhileLoop;

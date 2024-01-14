@@ -144,6 +144,23 @@ impl ListType {
         }
     }
 
+    pub fn try_coerce_to_open(&self) -> Result<Cow<Self>> {
+        match self {
+            ret @ Self::Open(..) => Ok(Cow::Borrowed(ret)),
+            Self::Mixed(types) => {
+                if types.iter().as_ref().windows(2).all(|x| x[0] == x[1]) {
+                    if let Some(ty) = types.get(0) {
+                        Ok(Cow::Owned(ListType::Open(Box::new(ty.clone()))))
+                    } else {
+                        bail!("cannot know the type of this list, for it is empty")
+                    }
+                } else {
+                    bail!("this is a mixed-type list")
+                }
+            }
+        }
+    }
+
     pub fn valid_indexes(&self) -> ListBound {
         self.upper_bound()
     }
@@ -188,9 +205,14 @@ impl PartialEq for ListType {
     fn eq(&self, other: &Self) -> bool {
         use ListType as E;
 
+        let typecheck_flags: TypecheckFlags<&ClassType> = TypecheckFlags::classless();
+
         match (self, other) {
-            (E::Mixed(t1), E::Mixed(t2)) => t1 == t2,
-            (E::Open(t1), E::Open(t2)) => t1 == t2,
+            (E::Mixed(t1), E::Mixed(t2)) => t1
+                .iter()
+                .zip(t2.iter())
+                .all(|(x, y)| x.eq_complex(y, &typecheck_flags)),
+            (E::Open(t1), E::Open(t2)) => t1.eq_complex(t2, &typecheck_flags),
             (E::Mixed(t1), E::Open(t2)) | (E::Open(t2), E::Mixed(t1)) => {
                 for ty in t1 {
                     if !ty.disregard_distractors(false).eq_complex(

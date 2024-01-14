@@ -26,16 +26,6 @@ pub(crate) mod flag_constants {
 #[derive(Clone)]
 pub struct PrimitiveFlagsPair(Rc<UnsafeCell<(Primitive, VariableFlags)>>);
 
-pub struct PrimitiveModule {
-    vector_len: Arc<Mutex<PrimitiveFlagsPair>>,
-    vector_reverse: Arc<Mutex<PrimitiveFlagsPair>>,
-    vector_inner_capacity: Arc<Mutex<PrimitiveFlagsPair>>,
-    vector_ensure_inner_capacity: Arc<Mutex<PrimitiveFlagsPair>>,
-}
-
-unsafe impl Send for PrimitiveModule {}
-unsafe impl Sync for PrimitiveModule {}
-
 static PRIMITIVE_MODULE_MEMBER_FLAGS: VariableFlags = VariableFlags(READ_ONLY);
 
 macro_rules! make_compiler_builtin {
@@ -47,36 +37,57 @@ macro_rules! make_compiler_builtin {
     };
 }
 
-impl PrimitiveModule {
-    pub fn vector_len(&self) -> PrimitiveFlagsPair {
-        self.vector_len.lock().unwrap().clone()
-    }
+pub static PRIMITIVE_MODULE: Lazy<PrimitiveModule> = Lazy::new(PrimitiveModule::new);
 
-    pub fn vector_reverse(&self) -> PrimitiveFlagsPair {
-        self.vector_reverse.lock().unwrap().clone()
-    }
-
-    pub fn vector_inner_capacity(&self) -> PrimitiveFlagsPair {
-        self.vector_inner_capacity.lock().unwrap().clone()
-    }
-
-    pub fn vector_ensure_inner_capacity(&self) -> PrimitiveFlagsPair {
-        return self.vector_ensure_inner_capacity.lock().unwrap().clone();
-    }
-
-    pub fn new() -> Self {
-        Self {
-            vector_len: make_compiler_builtin!(BuiltInFunction::VecLen),
-            vector_reverse: make_compiler_builtin!(BuiltInFunction::VecReverse),
-            vector_inner_capacity: make_compiler_builtin!(BuiltInFunction::VecInnerCapacity),
-            vector_ensure_inner_capacity: make_compiler_builtin!(
-                BuiltInFunction::VecEnsureInnerCapacity
-            ),
+macro_rules! static_module_generator {
+    ($($variant:ident($type:expr)),+ $(,)?) => {
+        pub struct PrimitiveModule {
+            $(
+                $variant: Arc<Mutex<PrimitiveFlagsPair>>,
+            )*
         }
-    }
+
+        /*
+         * Safe because:
+         * 1. `PrimitiveModule` will never be written to outside of
+         *    the `Lazy::new()` generator -- no race conditions
+         * 2. While `Primitive` is not Send or Sync, the only variant that this
+         *    module will ever create is `Primitive::BuiltinFunction`, which **is**
+         *    Send + Sync. The compiler doesn't know this, though.
+         */
+        unsafe impl Send for PrimitiveModule {}
+        unsafe impl Sync for PrimitiveModule {}
+
+        impl PrimitiveModule {
+            $(
+                pub fn $variant(&self) -> PrimitiveFlagsPair {
+                    return self.$variant.lock().unwrap().clone()
+                }
+            )*
+
+            pub fn new() -> Self {
+                Self {
+                    $(
+                        $variant: make_compiler_builtin!($type),
+                    )*
+                }
+            }
+        }
+    };
 }
 
-pub static PRIMITIVE_MODULE: Lazy<PrimitiveModule> = Lazy::new(PrimitiveModule::new);
+static_module_generator! {
+    vector_len(BuiltInFunction::VecLen),
+    vector_reverse(BuiltInFunction::VecReverse),
+    vector_inner_capacity(BuiltInFunction::VecInnerCapacity),
+    vector_ensure_inner_capacity(BuiltInFunction::VecEnsureInnerCapacity),
+    vector_map(BuiltInFunction::VecMap),
+    vector_filter(BuiltInFunction::VecFilter),
+    vector_remove(BuiltInFunction::VecRemove),
+    vector_push(BuiltInFunction::VecPush),
+    vector_join(BuiltInFunction::VecJoin),
+    vector_index_of(BuiltInFunction::VecIndexOf),
+}
 
 impl PrimitiveFlagsPair {
     pub fn new(primitive: Primitive, flags: VariableFlags) -> Self {

@@ -20,8 +20,9 @@ use crate::{
 
 use super::{
     dot_lookup::DotChain, function::FunctionType, list::Index, map_err, new_err, r#type::IntoType,
-    ClassType, CompilationState, Compile, CompileTimeEvaluate, CompiledItem, Dependencies,
-    Dependency, FunctionArguments, TemporaryRegister, TypeLayout, Value,
+    string::AstString, ClassType, CompilationState, Compile, CompileTimeEvaluate, CompiledItem,
+    Dependencies, Dependency, FunctionArguments, NativeType, StrWrapper, TemporaryRegister,
+    TypeLayout, Value,
 };
 
 pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
@@ -48,10 +49,9 @@ pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
         .op(infix!(binary_or) | infix!(binary_and))
         .op(infix!(binary_xor))
         .op(infix!(bitwise_ls) | infix!(bitwise_rs))
-        .op(Op::prefix(not))
         .op(infix!(add) | infix!(subtract))
         .op(infix!(multiply) | infix!(divide) | infix!(modulo))
-        .op(Op::prefix(unary_minus))
+        .op(Op::prefix(not) | Op::prefix(unary_minus) | Op::prefix(r#typeof))
         .op(Op::postfix(dot_chain)
             | Op::postfix(list_index)
             | Op::postfix(callable)
@@ -157,6 +157,7 @@ pub(crate) enum Expr {
     ReferenceToConstructor(ClassType),
     UnaryMinus(Box<Expr>),
     UnaryNot(Box<Expr>),
+    Typeof(Box<Expr>, String),
     UnaryUnwrap {
         value: Box<Expr>,
         span: Box<dyn UnwrapSpanDisplayable>,
@@ -284,9 +285,14 @@ impl CompileTimeEvaluate for Expr {
                     Ok(ConstexprEvaluation::Owned(value))
                 }
             }
+            Self::Typeof(_, repr) => Ok(ConstexprEvaluation::Owned(Value::String(
+                AstString::Plain(repr.clone()),
+            ))),
         }
     }
 }
+
+static VOID_ERROR_MESSAGE: &str = "function returns void";
 
 impl IntoType for Expr {
     fn for_type(&self) -> Result<super::TypeLayout> {
@@ -320,13 +326,13 @@ impl IntoType for Expr {
             Expr::Callable(CallableContents::Standard { function, .. }) => {
                 let return_type = function.return_type();
 
-                let return_type = return_type.get_type().context("function returns void")?;
+                let return_type = return_type.get_type().context(VOID_ERROR_MESSAGE)?;
 
                 Ok(return_type.clone().into_owned())
             }
             Expr::Callable(CallableContents::ToSelf { return_type, .. }) => {
                 let Some(return_type) = return_type else {
-                    bail!("function returns void")
+                    bail!(VOID_ERROR_MESSAGE)
                 };
 
                 Ok(return_type.clone().into_owned())
@@ -372,6 +378,9 @@ impl IntoType for Expr {
                     primary
                 })
             }
+            Expr::Typeof(_, repr) => Ok(TypeLayout::Native(NativeType::Str(StrWrapper::sized(
+                repr.len(),
+            )))),
         }
     }
 }
@@ -413,6 +422,7 @@ impl Dependencies for Expr {
                 primary.append(&mut fallback.net_dependencies());
                 primary
             }
+            E::Typeof(val, _) => val.net_dependencies(),
         }
     }
 }
@@ -591,6 +601,7 @@ fn compile_depth(
 
             Ok(value_compiled)
         }
+        Expr::Typeof(_, name) => Ok(vec![instruction!(string name)]),
     }
 }
 
@@ -649,10 +660,11 @@ fn parse_expr(
                             .get_dependency_flags_from_name(raw_string)
                             .with_context(|| {
                                 let hint = match primary.as_str() {
-                                    "print" => "\n    + hint: printing in MScript v1 uses the `print` keyword, like\n    +\n    +   print \"Hello World\"\n    +",
+                                    "print" => "\n        + hint: printing in MScript v1 uses the `print` keyword, like\n        |\n        |   print \"Hello World\"\n        |",
                                     "null" => " (hint: an empty optional in MScript is represented by the `nil` keyword)",
                                     "True" => " (hint: a truthy boolean value in MScript is represented by the `true` keyword)",
                                     "False" => " (hint: a falsey boolean value in MScript is represented by the `false` keyword)",
+                                    "or" => "\n        + hint: MScript uses whitespaces as a delimiter for expressions, so if you're trying to use `or` after a function call, wrap it in parentheses:\n        |\n        |   # bad: a.b() or 5\n        |   (a.b()) or 5\n        |",
                                     _ => ""
                                 };
 
@@ -754,8 +766,21 @@ fn parse_expr(
                         let (line, col) = pair.as_ref().unwrap().line_col();
                         Ok((Expr::UnaryUnwrap {
                             value: Box::new(expr),
-                            span: Box::new(format!("{}#{line}:{col}", user_data.get_source_file_name())),
+                            span: Box::new(format!("{}:{line}:{col}", user_data.get_source_file_name())),
                         }, pair))
+                    }
+                    Rule::r#typeof => {
+                        match expr.for_type() {
+                            Ok(ty) => Ok((Expr::Typeof(Box::new(expr), ty.to_string()), pair)),
+                            Err(e) => {
+                                // hacky but works
+                                if e.chain().next().unwrap().to_string() == VOID_ERROR_MESSAGE {
+                                    Err(vec![new_err(pair.as_ref().map(Pair::as_span).unwrap(), &user_data.get_source_file_name(), "the `typeof` operator cannot evaluate a type: this function call returns void".to_string())])
+                                } else {
+                                    Err(vec![e])
+                                }
+                            }
+                        }
                     }
                     _ => unreachable!(),
                 }

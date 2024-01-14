@@ -13,18 +13,14 @@ use super::{
 #[derive(Debug)]
 pub struct Assertion {
     value: Value,
-    start: usize,
-    end: usize,
+    span: String,
 }
 
 impl Compile for Assertion {
     fn compile(&self, state: &CompilationState) -> Result<Vec<CompiledItem>, anyhow::Error> {
         let mut result = self.value.compile(state)?;
 
-        let start = self.start;
-        let end = self.end;
-
-        result.push(instruction!(assert start end));
+        result.push(instruction!(assert(self.span)));
         Ok(result)
     }
 }
@@ -52,10 +48,11 @@ impl Parser {
 
         let input_span = input.as_span();
 
+        let (line, col) = input_span.start_pos().line_col();
+
         Ok(Assertion {
             value,
-            start: input_span.start(),
-            end: input_span.end(),
+            span: format!("{}:{line}:{col}", input.user_data().get_source_file_name()),
         })
     }
 }
