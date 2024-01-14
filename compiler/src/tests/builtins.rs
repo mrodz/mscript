@@ -123,3 +123,31 @@ fn index_of() {
     )
     .unwrap();
 }
+
+#[test]
+fn fn_is_closure() {
+    eval(
+        r#"
+		outside = 5
+
+		assert !fn() {
+			print 5
+		}.is_closure()
+
+		assert fn() {
+			print outside
+		}.is_closure()
+
+		a = fn() {
+			outside
+		}
+
+		b = a
+
+		assert a.is_closure() == b.is_closure() == true
+		assert a.to_str() == b.to_str()
+
+	"#,
+    )
+    .unwrap()
+}

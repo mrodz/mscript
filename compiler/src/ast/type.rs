@@ -631,6 +631,9 @@ macro_rules! new_assoc_function {
     ($types:expr, @void) => {
         new_assoc_function!($types, ScopeReturnStatus::Void)
     };
+    (@to_str) => {
+        new_assoc_function!(vec![], ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Native(NativeType::Str(StrWrapper::unknown_size())))))
+    };
 }
 
 impl TypeLayout {
@@ -822,6 +825,7 @@ impl TypeLayout {
 
                 Some(Box::new(property_type))
             }
+            _ if property_name == "to_str" => return Some(new_assoc_function!(@to_str)),
             Self::List(list_type) => {
                 match property_name {
                     "len" => return Some(new_assoc_function!(vec![], @int)),
@@ -844,12 +848,12 @@ impl TypeLayout {
 
                     match property_name {
                         "remove" => {
-                            return Some(new_assoc_function!(
+                            Some(new_assoc_function!(
                                 vec![Cow::Owned(TypeLayout::Native(NativeType::Int))],
                                 ScopeReturnStatus::Should(list_type)
                             ))
                         }
-                        "push" => return Some(new_assoc_function!(vec![list_type], @void)),
+                        "push" => Some(new_assoc_function!(vec![list_type], @void)),
                         "map" => {
                             let generic_constraint = GenericType::new();
 
@@ -868,10 +872,10 @@ impl TypeLayout {
                                 Cow::Owned(TypeLayout::Generic(generic_constraint)),
                             )));
 
-                            return Some(new_assoc_function!(
+                            Some(new_assoc_function!(
                                 vec![Cow::Owned(callback_type)],
                                 ScopeReturnStatus::Should(Cow::Owned(resulting_list))
-                            ));
+                            ))
                         }
                         "filter" => {
                             let callback_function_parameters =
@@ -887,33 +891,42 @@ impl TypeLayout {
 
                             let resulting_list = TypeLayout::List(open_list_type.into_owned());
 
-                            return Some(new_assoc_function!(
+                            Some(new_assoc_function!(
                                 vec![Cow::Owned(callback_type)],
                                 ScopeReturnStatus::Should(Cow::Owned(resulting_list))
-                            ));
+                            ))
                         }
                         "join" => {
                             let list_param = TypeLayout::List(open_list_type.into_owned());
 
-                            return Some(new_assoc_function!(
+                            Some(new_assoc_function!(
                                 vec![Cow::Owned(list_param.clone())],
                                 ScopeReturnStatus::Should(Cow::Owned(list_param))
-                            ));
+                            ))
                         }
                         "index_of" => {
                             let return_type = TypeLayout::Optional(Some(Box::new(Cow::Owned(
                                 TypeLayout::Native(NativeType::Int),
                             ))));
-                            return Some(new_assoc_function!(
+                            Some(new_assoc_function!(
                                 vec![list_type],
                                 ScopeReturnStatus::Should(Cow::Owned(return_type))
-                            ));
+                            ))
                         }
-                        _ => (),
+                        _ => None,
                     }
+                } else {
+                    None
                 }
-
-                None
+            }
+            Self::Function(..) => {
+                match property_name {
+                    "is_closure" => Some(new_assoc_function!(
+                        vec![],
+                        ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Native(NativeType::Bool)))
+                    )),
+                    _ => None
+                }
             }
             _ => None,
         }
@@ -972,6 +985,9 @@ impl TypeLayout {
                     .map(|x| x.to_string())
                     .chain(additional.unwrap_or_default())
                     .collect::<Vec<_>>()
+            }
+            Self::Function(..) => {
+                vec!["fn is_closure() -> bool".to_owned()]
             }
             _ => vec![],
         }

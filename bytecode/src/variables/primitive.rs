@@ -265,6 +265,7 @@ impl Primitive {
 
                 module.clone().borrow().get(property).ok_or(ret)
             }
+            _ if property == "to_str" => Ok(PRIMITIVE_MODULE.generic_to_str()),
             ret @ P::Vector(..) => match property {
                 "len" => Ok(PRIMITIVE_MODULE.vector_len()),
                 "reverse" => Ok(PRIMITIVE_MODULE.vector_reverse()),
@@ -278,6 +279,10 @@ impl Primitive {
                 "index_of" => Ok(PRIMITIVE_MODULE.vector_index_of()),
                 _ => Err(ret),
             },
+            ret @ P::Function(..) => match property {
+                "is_closure" => Ok(PRIMITIVE_MODULE.fn_is_closure()),
+                _ => Err(ret),
+            }
             ret => Err(ret),
         }
     }

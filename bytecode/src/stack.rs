@@ -87,6 +87,8 @@ static_module_generator! {
     vector_push(BuiltInFunction::VecPush),
     vector_join(BuiltInFunction::VecJoin),
     vector_index_of(BuiltInFunction::VecIndexOf),
+    fn_is_closure(BuiltInFunction::FnIsClosure),
+    generic_to_str(BuiltInFunction::GenericToStr),
 }
 
 impl PrimitiveFlagsPair {

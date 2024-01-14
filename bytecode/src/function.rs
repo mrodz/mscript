@@ -31,6 +31,8 @@ pub enum BuiltInFunction {
     VecPush,
     VecJoin,
     VecIndexOf,
+    FnIsClosure,
+    GenericToStr,
 }
 
 type BuiltInFunctionReturnBundle = (
@@ -47,6 +49,13 @@ impl BuiltInFunction {
         }
 
         match self {
+            Self::GenericToStr => {
+                let Some(primitive) = arguments.get(0) else {
+                    unreachable!();
+                };
+
+                Ok((Some(Primitive::Str(primitive.to_string())), None))
+            }
             Self::VecLen => {
                 let Some(Primitive::Vector(v)) = arguments.get(0) else {
                     unreachable!()
@@ -311,6 +320,13 @@ impl BuiltInFunction {
                     ))
                 } else {
                     Ok((Some(Primitive::Optional(None)), None))
+                }
+            }
+            Self::FnIsClosure => {
+                match arguments.get(0) {
+                    Some(Primitive::Function(f)) => Ok((Some(Primitive::Bool(f.callback_state.is_some())), None)),
+                    Some(Primitive::BuiltInFunction(..)) => Ok((Some(Primitive::Bool(false)), None)),
+                    _ => unreachable!()
                 }
             }
         }
