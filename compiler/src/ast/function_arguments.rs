@@ -64,12 +64,12 @@ impl Parser {
 
             let user_gave = arg_ty.get_type_recursively();
 
-            let maybe_class_type = allow_self_type.map(|x| {
+            let maybe_class_type = allow_self_type.and_then(|x| {
                 let TypeLayout::Class(class_type) = x.disregard_distractors(true) else {
-                    unreachable!("{x}");
+                    return None;
                 };
 
-                class_type
+                Some(class_type)
             });
 
             result_len += 1;

@@ -20,7 +20,7 @@ use std::{
     ops::Deref,
     path::{Path, PathBuf},
     rc::Rc,
-    sync::Arc,
+    sync::{Arc, RwLock},
 };
 
 use super::{
@@ -74,9 +74,12 @@ impl SupportedTypesWrapper {
 pub struct StrWrapper(pub(in crate::ast) Option<usize>);
 
 impl StrWrapper {
-    #[inline]
     pub const fn unknown_size() -> Self {
         Self(None)
+    }
+
+    pub const fn sized(len: usize) -> Self {
+        Self(Some(len))
     }
 }
 
@@ -446,6 +449,85 @@ impl Compile for TypeAlias {
     }
 }
 
+static GENERIC_ID: RwLock<usize> = RwLock::new(0);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct GenericType {
+    unique_id: usize,
+    stands_for: Rc<RefCell<Option<Cow<'static, TypeLayout>>>>,
+}
+
+impl Display for GenericType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(stands_for) = self.try_get_lock() {
+            if cfg!(feature = "debug") {
+                write!(f, "any.{}=", self.id())?;
+            }
+            write!(f, "{stands_for}")
+        } else {
+            write!(f, "any.{}", self.id())
+        }
+    }
+}
+
+impl Hash for GenericType {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.unique_id.hash(state);
+        if let Some(stands_for) = self.stands_for.borrow().as_ref() {
+            Some(stands_for).hash(state);
+        } else {
+            Option::<()>::None.hash(state)
+        }
+    }
+}
+
+impl GenericType {
+    pub fn new() -> Self {
+        let ret = Self {
+            unique_id: *GENERIC_ID.read().unwrap(),
+            stands_for: Rc::new(RefCell::new(None)),
+        };
+        *GENERIC_ID.write().unwrap() += 1;
+        ret
+    }
+
+    pub fn is_compatible<T>(&self, other: &TypeLayout, flags: &TypecheckFlags<T>) -> bool
+    where
+        T: Deref<Target = ClassType> + Debug,
+    {
+        let ret = if let Some(x) = self.try_get_lock() {
+            x.eq_complex(other, flags)
+        } else {
+            self.lock_type(Cow::Owned(other.to_owned()));
+            true
+        };
+        ret
+    }
+
+    pub const fn id(&self) -> usize {
+        self.unique_id
+    }
+
+    pub fn lock_type(&self, ty: Cow<'static, TypeLayout>) {
+        {
+            let mut view = self.stands_for.borrow_mut();
+            let ret = view.replace(ty);
+
+            if let Some(existing) = ret {
+                panic!(
+                    "{existing} was already set as the type of generic #{}",
+                    self.id()
+                )
+            }
+        }
+    }
+
+    pub fn try_get_lock(&self) -> Option<Ref<Cow<'static, TypeLayout>>> {
+        // let view = self.stands_for.borrow();
+        Ref::filter_map(self.stands_for.borrow(), Option::as_ref).ok()
+    }
+}
+
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub(crate) enum TypeLayout {
     Function(FunctionType),
@@ -455,10 +537,11 @@ pub(crate) enum TypeLayout {
     Optional(Option<Box<Cow<'static, TypeLayout>>>),
     Native(NativeType),
     List(ListType),
-    ValidIndexes(ListBound, ListBound),
+    ValidIndexes(ListBound),
     Class(ClassType),
     Module(ModuleType),
     ClassSelf,
+    Generic(GenericType),
     Void,
 }
 
@@ -475,12 +558,13 @@ impl Display for TypeLayout {
             }
             Self::Native(native) => write!(f, "{native}"),
             Self::List(list) => write!(f, "{list}"),
-            Self::ValidIndexes(lower, upper) => write!(f, "B({lower}..{upper})"),
+            Self::ValidIndexes(upper) => write!(f, "[..{upper}]"),
             Self::Class(class_type) => write!(f, "{}", class_type.name()),
             Self::ClassSelf => write!(f, "Self"),
             Self::Optional(Some(ty)) => write!(f, "{ty}?"),
             Self::Optional(None) => write!(f, "!"),
             Self::Void => write!(f, "void"),
+            Self::Generic(generic) => write!(f, "{generic}"),
             Self::Module(module) => write!(f, "<module {:?}>", module.name.as_os_str()),
         }
     }
@@ -500,6 +584,14 @@ impl<T> TypecheckFlags<T>
 where
     T: Deref<Target = ClassType>,
 {
+    pub const fn classless() -> Self {
+        Self {
+            executing_class: None,
+            lhs_allow_optional_unwrap: false,
+            force_rhs_to_be_unwrapped_lhs: false,
+        }
+    }
+
     pub const fn use_class(class_type: Option<T>) -> Self {
         Self {
             executing_class: class_type,
@@ -518,6 +610,51 @@ where
         self.force_rhs_to_be_unwrapped_lhs = predicate;
         self
     }
+}
+
+macro_rules! new_assoc_function {
+    ($types:expr, $return_value:expr) => {
+        Box::new(Box::new(Cow::Owned(TypeLayout::Function(
+            FunctionType::new(
+                Rc::new(FunctionParameters::TypesOnly($types)),
+                $return_value,
+                true,
+            ),
+        ))))
+    };
+    ($types:expr, @int) => {
+        new_assoc_function!(
+            $types,
+            ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Native(NativeType::Int)))
+        )
+    };
+    ($types:expr, @bigint) => {
+        new_assoc_function!(
+            $types,
+            ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Native(NativeType::BigInt)))
+        )
+    };
+    ($types:expr, @byte) => {
+        new_assoc_function!(
+            $types,
+            ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Native(NativeType::Byte)))
+        )
+    };
+    ($types:expr, @void) => {
+        new_assoc_function!($types, ScopeReturnStatus::Void)
+    };
+    ($types:expr, @str) => {
+        new_assoc_function!($types, ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Native(NativeType::Str(StrWrapper::unknown_size())))))
+    };
+    ($types:expr, @float) => {
+        new_assoc_function!(
+            $types,
+            ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Native(NativeType::Float)))
+        )
+    };
+    (@to_str) => {
+        new_assoc_function!(vec![], @str)
+    };
 }
 
 impl TypeLayout {
@@ -582,6 +719,13 @@ impl TypeLayout {
         let tabs = "    ".repeat(tab_depth);
 
         Some(match (self, incompatible) {
+            (Generic(x), y) | (y, Generic(x)) => {
+                let Some(x_underlying) = x.try_get_lock() else {
+                    unreachable!("a generic that has not been assigned a type should never fail a type comparison: got {x} (?), {y} (non-?)")
+                };
+                let maybe_extended_hint = x_underlying.get_error_hint_between_types_recursive(y, class_self, tab_depth + 1).unwrap_or_default();
+                format!("\n{tabs}+ hint: this generic (unique id: {}) stands in place of {x_underlying}{maybe_extended_hint}", x.id())
+            }
             (Native(BigInt), Native(Int)) => format!("\n{tabs}+ hint: try adding 'B' before a number to convert it to a bigint, eg. `99` -> `B99` or `0x6` -> `B0x6`"),
             (Native(Byte), Native(Int | BigInt)) => format!("\n{tabs}+ hint: try adding '0b' before a number to specify a byte literal, eg. `5` -> `0b101`"),
             (Native(Int), Native(Float)) => format!("\n{tabs}+ hint: cast this floating point value to an integer"),
@@ -658,16 +802,6 @@ impl TypeLayout {
         }
     }
 
-    // pub fn is_function_mut(&mut self) -> Option<&mut FunctionType> {
-    //     let me = self.get_type_recursively_mut();
-
-    //     let TypeLayout::Function(f) = me else {
-    //         return None;
-    //     };
-
-    //     Some(f)
-    // }
-
     pub fn is_function(&self) -> Option<&FunctionType> {
         let me = self.get_type_recursively();
 
@@ -712,6 +846,272 @@ impl TypeLayout {
 
                 Some(Box::new(property_type))
             }
+            _ if property_name == "to_str" => Some(new_assoc_function!(@to_str)),
+            Self::List(list_type) => {
+                match property_name {
+                    "len" => return Some(new_assoc_function!(vec![], @int)),
+                    "reverse" => return Some(new_assoc_function!(vec![], @void)),
+                    "inner_capacity" => return Some(new_assoc_function!(vec![], @int)),
+                    "ensure_inner_capacity" => {
+                        return Some(
+                            new_assoc_function!(vec![Cow::Owned(TypeLayout::Native(NativeType::Int))], @void),
+                        )
+                    }
+                    _ => (),
+                }
+
+                if let Ok(open_list_type) = list_type.try_coerce_to_open() {
+                    let ListType::Open(list_type) = open_list_type.as_ref() else {
+                        unreachable!();
+                    };
+
+                    let list_type: Cow<'static, TypeLayout> = *list_type.clone();
+
+                    match property_name {
+                        "remove" => Some(new_assoc_function!(
+                            vec![Cow::Owned(TypeLayout::Native(NativeType::Int))],
+                            ScopeReturnStatus::Should(list_type)
+                        )),
+                        "push" => Some(new_assoc_function!(vec![list_type], @void)),
+                        "map" => {
+                            let generic_constraint = GenericType::new();
+
+                            let callback_function_parameters =
+                                FunctionParameters::TypesOnly(vec![list_type]);
+                            let callback_return_type = ScopeReturnStatus::Should(Cow::Owned(
+                                TypeLayout::Generic(generic_constraint.clone()),
+                            ));
+                            let callback_type = TypeLayout::Function(FunctionType::new(
+                                Rc::new(callback_function_parameters),
+                                callback_return_type,
+                                true,
+                            ));
+
+                            let resulting_list = TypeLayout::List(ListType::Open(Box::new(
+                                Cow::Owned(TypeLayout::Generic(generic_constraint)),
+                            )));
+
+                            Some(new_assoc_function!(
+                                vec![Cow::Owned(callback_type)],
+                                ScopeReturnStatus::Should(Cow::Owned(resulting_list))
+                            ))
+                        }
+                        "filter" => {
+                            let callback_function_parameters =
+                                FunctionParameters::TypesOnly(vec![list_type]);
+                            let callback_return_type = ScopeReturnStatus::Should(Cow::Owned(
+                                TypeLayout::Native(NativeType::Bool),
+                            ));
+                            let callback_type = TypeLayout::Function(FunctionType::new(
+                                Rc::new(callback_function_parameters),
+                                callback_return_type,
+                                true,
+                            ));
+
+                            let resulting_list = TypeLayout::List(open_list_type.into_owned());
+
+                            Some(new_assoc_function!(
+                                vec![Cow::Owned(callback_type)],
+                                ScopeReturnStatus::Should(Cow::Owned(resulting_list))
+                            ))
+                        }
+                        "join" => {
+                            let list_param = TypeLayout::List(open_list_type.into_owned());
+
+                            Some(new_assoc_function!(
+                                vec![Cow::Owned(list_param.clone())],
+                                ScopeReturnStatus::Should(Cow::Owned(list_param))
+                            ))
+                        }
+                        "index_of" => {
+                            let return_type = TypeLayout::Optional(Some(Box::new(Cow::Owned(
+                                TypeLayout::Native(NativeType::Int),
+                            ))));
+                            Some(new_assoc_function!(
+                                vec![list_type],
+                                ScopeReturnStatus::Should(Cow::Owned(return_type))
+                            ))
+                        }
+                        _ => None,
+                    }
+                } else {
+                    None
+                }
+            }
+            Self::Native(NativeType::Str(..)) => match property_name {
+                "len" => Some(new_assoc_function!(vec![], @int)),
+                "substring" | "delete" => {
+                    let int_type = TypeLayout::Native(NativeType::Int);
+                    let str_type = Cow::Owned(TypeLayout::Native(NativeType::Str(
+                        StrWrapper::unknown_size(),
+                    )));
+                    Some(new_assoc_function!(
+                        vec![Cow::Owned(int_type.clone()), Cow::Owned(int_type)],
+                        ScopeReturnStatus::Should(str_type)
+                    ))
+                }
+                "contains" => {
+                    let str_type = Cow::Owned(TypeLayout::Native(NativeType::Str(
+                        StrWrapper::unknown_size(),
+                    )));
+                    Some(new_assoc_function!(
+                        vec![str_type],
+                        ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Native(NativeType::Bool)))
+                    ))
+                }
+                "index_of" => {
+                    let str_type = Cow::Owned(TypeLayout::Native(NativeType::Str(
+                        StrWrapper::unknown_size(),
+                    )));
+
+                    let return_type = TypeLayout::Optional(Some(Box::new(Cow::Owned(
+                        TypeLayout::Native(NativeType::Int),
+                    ))));
+
+                    Some(new_assoc_function!(
+                        vec![str_type],
+                        ScopeReturnStatus::Should(Cow::Owned(return_type))
+                    ))
+                }
+                "inner_capacity" => Some(new_assoc_function!(vec![], @int)),
+                "reverse" => Some(new_assoc_function!(vec![], @str)),
+                "insert" => {
+                    let int_type = TypeLayout::Native(NativeType::Int);
+                    let str_type = TypeLayout::Native(NativeType::Str(StrWrapper::unknown_size()));
+                    Some(
+                        new_assoc_function!(vec![Cow::Owned(str_type.clone()), Cow::Owned(int_type)], @str),
+                    )
+                }
+                "replace" => {
+                    let str_type = TypeLayout::Native(NativeType::Str(StrWrapper::unknown_size()));
+                    Some(
+                        new_assoc_function!(vec![Cow::Owned(str_type.clone()), Cow::Owned(str_type)], @str),
+                    )
+                }
+
+                "parse_int" => {
+                    let return_type = TypeLayout::Optional(Some(Box::new(Cow::Owned(
+                        TypeLayout::Native(NativeType::Int),
+                    ))));
+
+                    Some(new_assoc_function!(
+                        vec![],
+                        ScopeReturnStatus::Should(Cow::Owned(return_type))
+                    ))
+                }
+                "parse_int_radix" => {
+                    let return_type = TypeLayout::Optional(Some(Box::new(Cow::Owned(
+                        TypeLayout::Native(NativeType::Int),
+                    ))));
+
+                    Some(new_assoc_function!(
+                        vec![Cow::Owned(TypeLayout::Native(NativeType::Int))],
+                        ScopeReturnStatus::Should(Cow::Owned(return_type))
+                    ))
+                }
+
+                "parse_bigint" => {
+                    let return_type = TypeLayout::Optional(Some(Box::new(Cow::Owned(
+                        TypeLayout::Native(NativeType::BigInt),
+                    ))));
+
+                    Some(new_assoc_function!(
+                        vec![],
+                        ScopeReturnStatus::Should(Cow::Owned(return_type))
+                    ))
+                }
+                "parse_bigint_radix" => {
+                    let return_type = TypeLayout::Optional(Some(Box::new(Cow::Owned(
+                        TypeLayout::Native(NativeType::BigInt),
+                    ))));
+
+                    Some(new_assoc_function!(
+                        vec![Cow::Owned(TypeLayout::Native(NativeType::Int))],
+                        ScopeReturnStatus::Should(Cow::Owned(return_type))
+                    ))
+                }
+                "parse_bool" => {
+                    let return_type = TypeLayout::Optional(Some(Box::new(Cow::Owned(
+                        TypeLayout::Native(NativeType::Bool),
+                    ))));
+
+                    Some(new_assoc_function!(
+                        vec![],
+                        ScopeReturnStatus::Should(Cow::Owned(return_type))
+                    ))
+                }
+                "parse_float" => {
+                    let return_type = TypeLayout::Optional(Some(Box::new(Cow::Owned(
+                        TypeLayout::Native(NativeType::Float),
+                    ))));
+
+                    Some(new_assoc_function!(
+                        vec![],
+                        ScopeReturnStatus::Should(Cow::Owned(return_type))
+                    ))
+                }
+                "parse_byte" => {
+                    let return_type = TypeLayout::Optional(Some(Box::new(Cow::Owned(
+                        TypeLayout::Native(NativeType::Byte),
+                    ))));
+
+                    Some(new_assoc_function!(
+                        vec![],
+                        ScopeReturnStatus::Should(Cow::Owned(return_type))
+                    ))
+                }
+                "split" => {
+                    let str_type = TypeLayout::Native(NativeType::Str(StrWrapper::unknown_size()));
+                    let return_array = TypeLayout::List(ListType::Mixed(vec![
+                        Cow::Owned(str_type.clone()),
+                        Cow::Owned(str_type),
+                    ]));
+                    Some(new_assoc_function!(
+                        vec![Cow::Owned(TypeLayout::Native(NativeType::Int))],
+                        ScopeReturnStatus::Should(Cow::Owned(return_array))
+                    ))
+                }
+                _ => None,
+            },
+            whole_type @ Self::Native(
+                variant @ (NativeType::Int
+                | NativeType::BigInt
+                | NativeType::Byte
+                | NativeType::Float),
+            ) => match (property_name, variant) {
+                ("pow", NativeType::Float) => Some(
+                    new_assoc_function!(vec![Cow::Owned(TypeLayout::Native(NativeType::Int))], @float),
+                ),
+                ("pow", ..) => Some(
+                    new_assoc_function!(vec![Cow::Owned(TypeLayout::Native(NativeType::Int))], @bigint),
+                ),
+                ("powf", ..) => Some(
+                    new_assoc_function!(vec![Cow::Owned(TypeLayout::Native(NativeType::Float))], @float),
+                ),
+                ("sqrt", ..) => Some(new_assoc_function!(vec![], @float)),
+                ("to_int", ..) => Some(new_assoc_function!(vec![], @int)),
+                ("to_bigint", ..) => Some(new_assoc_function!(vec![], @bigint)),
+                ("to_byte", ..) => Some(new_assoc_function!(vec![], @byte)),
+                ("to_float", ..) => Some(new_assoc_function!(vec![], @float)),
+                ("abs", ..) => Some(new_assoc_function!(
+                    vec![],
+                    ScopeReturnStatus::Should(Cow::Owned(whole_type.to_owned()))
+                )),
+                ("to_ascii", NativeType::Byte) => Some(new_assoc_function!(vec![], @str)),
+                ("fpart", NativeType::Float) => Some(new_assoc_function!(vec![], @float)),
+                ("ipart", NativeType::Float) => Some(new_assoc_function!(vec![], @float)),
+                ("round", NativeType::Float) => Some(new_assoc_function!(vec![], @float)),
+                ("floor", NativeType::Float) => Some(new_assoc_function!(vec![], @float)),
+                ("ceil", NativeType::Float) => Some(new_assoc_function!(vec![], @float)),
+                _ => None,
+            },
+            Self::Function(..) => match property_name {
+                "is_closure" => Some(new_assoc_function!(
+                    vec![],
+                    ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Native(NativeType::Bool)))
+                )),
+                _ => None,
+            },
             _ => None,
         }
     }
@@ -741,6 +1141,100 @@ impl TypeLayout {
                 }
 
                 result
+            }
+            Self::List(list_type) => {
+                let items = [
+                    "fn len() -> int",
+                    "fn inner_capacity() -> int",
+                    "fn ensure_inner_capacity(int)",
+                    "fn to_str() -> str",
+                ];
+
+                let additional =
+                    if let Ok(ListType::Open(ty)) = list_type.try_coerce_to_open().as_deref() {
+                        Some(vec![
+                            "fn reverse()".to_owned(),
+                            format!("fn remove(int) -> {ty}"),
+                            format!("fn push({ty})"),
+                            format!("fn join([{ty}...])"),
+                            format!("fn map(fn({ty}) -> K) -> [K...]"),
+                            format!("fn filter(fn({ty}) -> bool) -> [{ty}...]"),
+                            format!("fn index_of({ty})"),
+                        ])
+                    } else {
+                        None
+                    };
+
+                items
+                    .iter()
+                    .map(|x| x.to_string())
+                    .chain(additional.unwrap_or_default())
+                    .collect::<Vec<_>>()
+            }
+            Self::Function(..) => {
+                vec![
+                    "fn is_closure() -> bool".to_owned(),
+                    "fn to_str() -> str".to_owned(),
+                ]
+            }
+            Self::Native(NativeType::Bool) => vec!["fn to_str() -> str".to_owned()],
+            Self::Native(NativeType::Str(..)) => [
+                "fn len() -> int",
+                "fn substring(int, int) -> str",
+                "fn contains(str) -> bool",
+                "fn index_of(str) -> int?",
+                "fn inner_capacity() -> int",
+                "fn reverse() -> str",
+                "fn insert(str, int) -> str",
+                "fn replace(str, str) -> str",
+                "fn delete(int, int) -> str",
+                "fn parse_int() -> int?",
+                "fn parse_int_radix(int) -> int?",
+                "fn parse_bigint() -> bigint?",
+                "fn parse_bigint_radix(int) -> bigint?",
+                "fn parse_bool() -> bool?",
+                "fn parse_float() -> float?",
+                "fn parse_byte() -> byte?",
+                "fn split(int) -> [str, str]",
+                "fn to_str() -> str",
+            ]
+            .iter()
+            .map(<&str>::to_string)
+            .collect(),
+            Self::Native(
+                variant @ (NativeType::BigInt
+                | NativeType::Int
+                | NativeType::Float
+                | NativeType::Byte),
+            ) => {
+                let mut shared = vec![
+                    "fn powf(float) -> float",
+                    "fn to_int() -> int",
+                    "fn to_bigint() -> bigint",
+                    "fn to_float() -> float",
+                    "fn to_byte() -> byte",
+                    "fn sqrt() -> float",
+                    "fn abs() -> Self",
+                    "fn to_str() -> str",
+                ];
+
+                match variant {
+                    NativeType::Byte => {
+                        shared.push("fn to_ascii() -> str");
+                        shared.push("fn pow(int) -> bigint");
+                    }
+                    NativeType::Float => shared.extend_from_slice(&[
+                        "fn pow(int) -> float",
+                        "fn fpart() -> float",
+                        "fn ipart() -> float",
+                        "fn round() -> float",
+                        "fn floor() -> float",
+                        "fn ceil() -> float",
+                    ]),
+                    _ => shared.push("fn pow(int) -> bigint"),
+                }
+
+                shared.iter().map(<&str>::to_string).collect()
             }
             _ => vec![],
         }
@@ -818,9 +1312,15 @@ impl TypeLayout {
         }
 
         match (lhs, rhs, &flags.executing_class) {
+            (Self::Generic(generic), other, _) | (other, Self::Generic(generic), _) => {
+                generic.is_compatible(other, &flags)
+            }
             (Self::ClassSelf, TypeLayout::Class(other), Some(executing_class))
             | (TypeLayout::Class(other), Self::ClassSelf, Some(executing_class)) => {
                 executing_class.deref().eq(other)
+            }
+            (Self::List(ListType::Open(..)), Self::List(ListType::Mixed(maybe_empty)), _) => {
+                maybe_empty.is_empty()
             }
             (Self::Optional(None), ..) if flags.force_rhs_to_be_unwrapped_lhs => true,
             (Self::Optional(None), Self::Optional(Some(_)), _)
@@ -835,14 +1335,18 @@ impl TypeLayout {
             }
             (Self::Optional(Some(x)), y, _) => x.eq_complex(y, flags),
             (y, Self::Optional(Some(x)), _) if flags.lhs_allow_optional_unwrap => {
-                x.as_ref().as_ref() == y
+                x.eq_complex(y, flags)
             }
             _ => false,
         }
     }
 
     pub fn get_output_type_from_index(&self, index: &Value) -> Result<Cow<TypeLayout>> {
-        let me = self.get_type_recursively();
+        let me = self.disregard_distractors(false);
+
+        if me.is_optional().0 {
+            bail!("cannot index into an optional: unwrap this `{me}` first")
+        }
 
         let index_ty = index.for_type().context("could not get type of index")?;
 
@@ -874,7 +1378,6 @@ impl TypeLayout {
 
         match index_as_usize {
             ValToUsize::Ok(index_as_usize) => match me {
-                Self::List(ListType::Empty) => bail!("cannot index into empty list"),
                 Self::List(list) => {
                     return Ok(Cow::Borrowed(list.get_type_at_known_index(index_as_usize)?));
                 }
@@ -885,18 +1388,12 @@ impl TypeLayout {
                 usize::MIN,
                 usize::MAX
             ),
-            ValToUsize::NotConstexpr => (),
+            ValToUsize::NotConstexpr => match me {
+                TypeLayout::List(ListType::Open(ty)) => return Ok(Cow::Borrowed(ty.as_ref())),
+                TypeLayout::List(ListType::Mixed(ty)) => bail!("Indexing into a mixed type list ({:?}) requires that the index be evaluable at compile time", ty.iter().map(|x| x.to_string()).collect::<Vec<_>>()),
+                _ => todo!()
+            },
         }
-
-        if let Self::List(ListType::Open { types, spread, .. }) = me {
-            if !types.is_empty() {
-                bail!("indexing into spread-type lists with fixed-type parts requires that the index be a compile-time-constant expression")
-            }
-
-            return Ok(Cow::Owned(spread.clone().into_owned()));
-        }
-
-        bail!("cannot index")
     }
 
     pub fn supports_index(&self) -> Option<SupportedTypesWrapper> {
@@ -908,9 +1405,9 @@ impl TypeLayout {
                 Cow::Owned(TypeLayout::Native(NativeType::BigInt)),
             ]),
             Self::List(x) => {
-                let (lower, upper) = x.valid_indexes();
+                let upper = x.valid_indexes();
 
-                Box::new([Cow::Owned(TypeLayout::ValidIndexes(lower, upper))])
+                Box::new([Cow::Owned(TypeLayout::ValidIndexes(upper))])
             }
             _ => return None,
         }))
@@ -919,7 +1416,7 @@ impl TypeLayout {
     pub fn supports_negate(&self) -> bool {
         let me = self.get_type_recursively();
         match me {
-            Self::Native(NativeType::Str(_)) => false,
+            Self::Native(NativeType::Str(_) | NativeType::Byte) => false,
             Self::Native(_) => true,
             _ => false,
         }
@@ -966,6 +1463,19 @@ impl TypeLayout {
 
         let lhs = self.disregard_distractors(false);
         let other = other.disregard_distractors(false);
+
+        match (lhs, other) {
+            (TypeLayout::Generic(g1), TypeLayout::Generic(g2)) => {
+                let t1 = g1.try_get_lock()?;
+                let t2 = g2.try_get_lock()?;
+                return t1.get_output_type(&t2, op);
+            }
+            (TypeLayout::Generic(g), y) | (y, TypeLayout::Generic(g)) => {
+                let x = g.try_get_lock()?;
+                return x.get_output_type(y, op);
+            }
+            _ => (),
+        }
 
         if lhs == other && matches!(op, Eq | Neq) {
             return Some(TypeLayout::Native(NativeType::Bool));
@@ -1066,7 +1576,7 @@ impl TypeLayout {
 
     pub(crate) fn eq_for_indexing(&self, value: &Value) -> Result<bool> {
         match self {
-            Self::ValidIndexes(start, end) => ListBound::val_fits_between(start, end, value),
+            Self::ValidIndexes(end) => ListBound::val_fits_between(end, value),
             other => Ok(&value.for_type()? == other),
         }
     }
@@ -1139,46 +1649,22 @@ impl Parser {
 
         let ty = Self::r#type(ty_node)?;
 
-        Ok(ListType::Open {
-            types: vec![],
-            spread: Box::new(ty),
-            len_at_init: None,
-        })
+        Ok(ListType::Open(Box::new(ty)))
     }
 
     pub fn list_type(input: Node) -> Result<ListType> {
         let children = input.children();
 
         let mut type_vec: Vec<Cow<'static, TypeLayout>> = vec![];
-        let mut open_ended_type: Option<Cow<'static, TypeLayout>> = None;
 
         for child in children {
             match child.as_rule() {
                 Rule::r#type => {
                     let ty = Self::r#type(child)?;
-
                     type_vec.push(ty);
-                }
-                Rule::open_ended_type if open_ended_type.is_none() => {
-                    let ty_node = child.children().single().unwrap();
-                    let ty = Self::r#type(ty_node)?;
-
-                    open_ended_type = Some(ty);
                 }
                 other_rule => unreachable!("{other_rule:?}"),
             }
-        }
-
-        if type_vec.is_empty() && open_ended_type.is_none() {
-            return Ok(ListType::Empty);
-        }
-
-        if let Some(open_ended_type) = open_ended_type {
-            return Ok(ListType::Open {
-                types: type_vec,
-                spread: Box::new(open_ended_type),
-                len_at_init: None,
-            });
         }
 
         Ok(ListType::Mixed(type_vec))

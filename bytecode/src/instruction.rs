@@ -723,24 +723,45 @@ pub mod implementations {
         let Some(first) = args.first() else {
             let last = ctx.pop();
 
-            let Some(Primitive::Function(f)) = last else {
-                bail!("missing argument, and the last item in the local stack ({last:?}, S:{:#?}) is not a function.", ctx.get_local_operating_stack())
-            };
+            match last {
+                Some(Primitive::Function(f)) => {
+                    let destination = JumpRequestDestination::Standard(f.location().to_owned());
 
-            let destination = JumpRequestDestination::Standard(f.location().to_owned());
+                    let callback_state = f.callback_state().clone();
 
-            let callback_state = f.callback_state().clone();
+                    ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
+                        destination,
+                        callback_state,
+                        stack: ctx.rced_call_stack(),
+                        arguments: ctx.get_local_operating_stack().clone(),
+                    }));
 
-            ctx.signal(InstructionExitState::JumpRequest(JumpRequest {
-                destination,
-                callback_state,
-                stack: ctx.rced_call_stack(),
-                arguments: ctx.get_local_operating_stack().clone(),
-            }));
+                    ctx.clear_stack();
 
-            ctx.clear_stack();
+                    return Ok(());
+                }
+                Some(Primitive::BuiltInFunction(variant)) => {
+                    ctx.add_frame(format!("<native code>#{variant:?}"));
+                    match variant.run(ctx).with_context(|| format!("built-in function raised an exception: {variant:?}()"))? {
+                        (Some(primitive), None) => {
+                            ctx.clear_and_set_stack(primitive);
+                        }
+                        (None, Some(bridge)) => {
+                            ctx.signal(InstructionExitState::BeginNotificationBridge(bridge));
+                        }
+                        (None, None) => {
+                            ctx.clear_stack();
+                        }
+                        (Some(primitive), Some(bridge)) => {
+                            unimplemented!("primitive and bridge combined is not supported: ({primitive:?}, {bridge:?})")
+                        }
+                    }
+                    ctx.pop_frame();
 
-            return Ok(());
+                    return Ok(())
+                }
+                _ => bail!("missing argument, and the last item in the local stack ({last:?}, S:{:#?}) is not a function.", ctx.get_local_operating_stack()),
+            }
         };
 
         let arguments = ctx.get_local_operating_stack().clone();
@@ -1228,10 +1249,9 @@ pub mod implementations {
         let result = item.equals(&bool!(true))?;
 
         if !result {
-            let start = &args[0];
-            let end = &args[1];
+            let span = &args[0];
 
-            bail!("An explicit assertion (start: Pos {start}, end: Pos {end}) failed in this program.");
+            bail!("An explicit assertion failed in this program ({span})");
         }
 
         Ok(())

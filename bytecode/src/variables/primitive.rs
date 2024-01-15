@@ -2,8 +2,10 @@
 //! Every "value" in the interpreter is a primitive.
 
 use crate::{
-    bigint, bool, byte, float, int,
-    stack::{PrimitiveFlagsPair, VariableMapping},
+    bigint, bool, byte, float,
+    function::BuiltInFunction,
+    int,
+    stack::{PrimitiveFlagsPair, VariableMapping, PRIMITIVE_MODULE},
     string,
 };
 use anyhow::{bail, Result};
@@ -139,6 +141,7 @@ primitive! {
     Byte(u8),
     // We don't need reference counting because cloning a primitive function is cheap
     Function(crate::function::PrimitiveFunction),
+    BuiltInFunction(BuiltInFunction),
     Vector(Rc<RefCell<Vec<crate::variables::Primitive>>>),
     HeapPrimitive(HeapPrimitive),
     Object(Rc<RefCell<crate::variables::Object>>),
@@ -194,9 +197,10 @@ impl Primitive {
             (x, P::Optional(None)) | (P::Optional(None), x) => {
                 return Ok(matches!(x, Primitive::Optional(None)))
             }
+            (P::Vector(v1), P::Vector(v2)) => return Ok(v1.borrow().eq(v2.borrow().as_slice())),
             (P::Optional(maybe), yes) | (yes, P::Optional(maybe)) => {
                 if let Some(maybe_unwrapped) = maybe {
-                    return Ok(maybe_unwrapped.as_ref() == yes);
+                    return maybe_unwrapped.as_ref().equals(yes);
                 };
             }
             _ => (),
@@ -261,6 +265,61 @@ impl Primitive {
 
                 module.clone().borrow().get(property).ok_or(ret)
             }
+            _ if property == "to_str" => Ok(PRIMITIVE_MODULE.generic_to_str()),
+            ret @ P::Vector(..) => match property {
+                "len" => Ok(PRIMITIVE_MODULE.vector_len()),
+                "reverse" => Ok(PRIMITIVE_MODULE.vector_reverse()),
+                "inner_capacity" => Ok(PRIMITIVE_MODULE.vector_inner_capacity()),
+                "ensure_inner_capacity" => Ok(PRIMITIVE_MODULE.vector_ensure_inner_capacity()),
+                "map" => Ok(PRIMITIVE_MODULE.vector_map()),
+                "filter" => Ok(PRIMITIVE_MODULE.vector_filter()),
+                "remove" => Ok(PRIMITIVE_MODULE.vector_remove()),
+                "push" => Ok(PRIMITIVE_MODULE.vector_push()),
+                "join" => Ok(PRIMITIVE_MODULE.vector_join()),
+                "index_of" => Ok(PRIMITIVE_MODULE.vector_index_of()),
+                _ => Err(ret),
+            },
+            ret @ P::Str(..) => match property {
+                "len" => Ok(PRIMITIVE_MODULE.str_len()),
+                "substring" => Ok(PRIMITIVE_MODULE.str_substring()),
+                "contains" => Ok(PRIMITIVE_MODULE.str_contains()),
+                "index_of" => Ok(PRIMITIVE_MODULE.str_index_of()),
+                "inner_capacity" => Ok(PRIMITIVE_MODULE.str_inner_capacity()),
+                "reverse" => Ok(PRIMITIVE_MODULE.str_reverse()),
+                "insert" => Ok(PRIMITIVE_MODULE.str_insert()),
+                "replace" => Ok(PRIMITIVE_MODULE.str_replace()),
+                "delete" => Ok(PRIMITIVE_MODULE.str_delete()),
+                "parse_int" => Ok(PRIMITIVE_MODULE.str_parse_int()),
+                "parse_int_radix" => Ok(PRIMITIVE_MODULE.str_parse_int_radix()),
+                "parse_bigint" => Ok(PRIMITIVE_MODULE.str_parse_bigint()),
+                "parse_bigint_radix" => Ok(PRIMITIVE_MODULE.str_parse_bigint_radix()),
+                "parse_bool" => Ok(PRIMITIVE_MODULE.str_parse_bool()),
+                "parse_float" => Ok(PRIMITIVE_MODULE.str_parse_float()),
+                "parse_byte" => Ok(PRIMITIVE_MODULE.str_parse_byte()),
+                "split" => Ok(PRIMITIVE_MODULE.str_split()),
+                _ => Err(ret),
+            },
+            ret @ (P::Int(..) | P::BigInt(..) | P::Float(..) | P::Byte(..)) => match property {
+                "pow" => Ok(PRIMITIVE_MODULE.generic_num_pow()),
+                "powf" => Ok(PRIMITIVE_MODULE.generic_num_powf()),
+                "sqrt" => Ok(PRIMITIVE_MODULE.generic_num_sqrt()),
+                "to_int" => Ok(PRIMITIVE_MODULE.generic_num_to_int()),
+                "to_bigint" => Ok(PRIMITIVE_MODULE.generic_num_to_bigint()),
+                "to_byte" => Ok(PRIMITIVE_MODULE.generic_num_to_byte()),
+                "to_float" => Ok(PRIMITIVE_MODULE.generic_num_to_float()),
+                "abs" => Ok(PRIMITIVE_MODULE.generic_num_abs()),
+                "to_ascii" => Ok(PRIMITIVE_MODULE.byte_to_ascii()),
+                "fpart" => Ok(PRIMITIVE_MODULE.float_fpart()),
+                "ipart" => Ok(PRIMITIVE_MODULE.float_ipart()),
+                "round" => Ok(PRIMITIVE_MODULE.float_round()),
+                "floor" => Ok(PRIMITIVE_MODULE.float_floor()),
+                "ceil" => Ok(PRIMITIVE_MODULE.float_ceil()),
+                _ => Err(ret),
+            },
+            ret @ P::Function(..) => match property {
+                "is_closure" => Ok(PRIMITIVE_MODULE.fn_is_closure()),
+                _ => Err(ret),
+            },
             ret => Err(ret),
         }
     }
@@ -373,6 +432,7 @@ impl Primitive {
             Float(n) => write!(f, "{n}"),
             Byte(b) => write!(f, "0b{:b}", *b),
             Function(fun) => write!(f, "{fun}"),
+            BuiltInFunction(name) => write!(f, "<static {name:?}>"),
             Vector(l) => {
                 write!(f, "[")?;
                 let borrow = l.borrow();

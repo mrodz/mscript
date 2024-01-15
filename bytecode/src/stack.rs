@@ -1,13 +1,18 @@
 //! Program call stack
 
 use anyhow::{anyhow, bail, Context, Result};
+use once_cell::sync::Lazy;
 use std::borrow::Cow;
 use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use crate::context::SpecialScope;
+use crate::function::BuiltInFunction;
+
+use self::flag_constants::READ_ONLY;
 
 use super::variables::Primitive;
 
@@ -20,6 +25,103 @@ pub(crate) mod flag_constants {
 
 #[derive(Clone)]
 pub struct PrimitiveFlagsPair(Rc<UnsafeCell<(Primitive, VariableFlags)>>);
+
+static PRIMITIVE_MODULE_MEMBER_FLAGS: VariableFlags = VariableFlags(READ_ONLY);
+
+macro_rules! make_compiler_builtin {
+    ($ident:expr) => {
+        Arc::new(Mutex::new(PrimitiveFlagsPair(Rc::new(UnsafeCell::new((
+            Primitive::BuiltInFunction($ident),
+            PRIMITIVE_MODULE_MEMBER_FLAGS,
+        ))))))
+    };
+}
+
+pub static PRIMITIVE_MODULE: Lazy<PrimitiveModule> = Lazy::new(PrimitiveModule::new);
+
+macro_rules! static_module_generator {
+    ($($variant:ident($type:expr)),+ $(,)?) => {
+        pub struct PrimitiveModule {
+            $(
+                $variant: Arc<Mutex<PrimitiveFlagsPair>>,
+            )*
+        }
+
+        /*
+         * Safe because:
+         * 1. `PrimitiveModule` will never be written to outside of
+         *    the `Lazy::new()` generator -- no race conditions
+         * 2. While `Primitive` is not Send or Sync, the only variant that this
+         *    module will ever create is `Primitive::BuiltinFunction`, which **is**
+         *    Send + Sync. The compiler doesn't know this, though.
+         */
+        unsafe impl Send for PrimitiveModule {}
+        unsafe impl Sync for PrimitiveModule {}
+
+        impl PrimitiveModule {
+            $(
+                pub fn $variant(&self) -> PrimitiveFlagsPair {
+                    return self.$variant.lock().unwrap().clone()
+                }
+            )*
+
+            pub fn new() -> Self {
+                Self {
+                    $(
+                        $variant: make_compiler_builtin!($type),
+                    )*
+                }
+            }
+        }
+    };
+}
+
+static_module_generator! {
+    vector_len(BuiltInFunction::VecLen),
+    vector_reverse(BuiltInFunction::VecReverse),
+    vector_inner_capacity(BuiltInFunction::VecInnerCapacity),
+    vector_ensure_inner_capacity(BuiltInFunction::VecEnsureInnerCapacity),
+    vector_map(BuiltInFunction::VecMap),
+    vector_filter(BuiltInFunction::VecFilter),
+    vector_remove(BuiltInFunction::VecRemove),
+    vector_push(BuiltInFunction::VecPush),
+    vector_join(BuiltInFunction::VecJoin),
+    vector_index_of(BuiltInFunction::VecIndexOf),
+    fn_is_closure(BuiltInFunction::FnIsClosure),
+    generic_to_str(BuiltInFunction::GenericToStr),
+    str_len(BuiltInFunction::StrLen),
+    str_substring(BuiltInFunction::StrSubstring),
+    str_contains(BuiltInFunction::StrContains),
+    str_index_of(BuiltInFunction::StrIndexOf),
+    str_inner_capacity(BuiltInFunction::StrInnerCapacity),
+    str_reverse(BuiltInFunction::StrReverse),
+    str_insert(BuiltInFunction::StrInsert),
+    str_replace(BuiltInFunction::StrReplace),
+    str_delete(BuiltInFunction::StrDelete),
+    str_parse_int(BuiltInFunction::StrParseInt),
+    str_parse_bigint(BuiltInFunction::StrParseBigint),
+    str_parse_int_radix(BuiltInFunction::StrParseIntRadix),
+    str_parse_bigint_radix(BuiltInFunction::StrParseBigintRadix),
+    str_parse_bool(BuiltInFunction::StrParseBool),
+    str_parse_float(BuiltInFunction::StrParseFloat),
+    str_parse_byte(BuiltInFunction::StrParseByte),
+    str_split(BuiltInFunction::StrSplit),
+    generic_num_pow(BuiltInFunction::GenericPow),
+    generic_num_powf(BuiltInFunction::GenericPowf),
+    generic_num_sqrt(BuiltInFunction::GenericSqrt),
+    generic_num_to_int(BuiltInFunction::GenericToInt),
+    generic_num_to_bigint(BuiltInFunction::GenericToBigint),
+    generic_num_to_byte(BuiltInFunction::GenericToByte),
+    generic_num_to_float(BuiltInFunction::GenericToFloat),
+    generic_num_abs(BuiltInFunction::GenericAbs),
+    byte_to_ascii(BuiltInFunction::ByteToAscii),
+    float_fpart(BuiltInFunction::FloatFPart),
+    float_ipart(BuiltInFunction::FloatIPart),
+    float_round(BuiltInFunction::FloatRound),
+    float_floor(BuiltInFunction::FloatFloor),
+    float_ceil(BuiltInFunction::FloatCeil),
+
+}
 
 impl PrimitiveFlagsPair {
     pub fn new(primitive: Primitive, flags: VariableFlags) -> Self {
@@ -71,7 +173,7 @@ impl Debug for PrimitiveFlagsPair {
     }
 }
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Copy)]
 pub struct VariableFlags(pub(crate) u8);
 
 impl VariableFlags {

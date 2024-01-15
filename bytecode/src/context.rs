@@ -204,9 +204,14 @@ impl<'a> Ctx<'a> {
         self.call_stack.borrow().to_string()
     }
 
-    /// Creates a **COPY** of the local operating stack.
     pub fn get_local_operating_stack(&self) -> &Vec<Primitive> {
         &self.stack
+    }
+
+    pub fn ref_clear_local_operating_stack(&mut self) -> Vec<Primitive> {
+        let mut new = Vec::with_capacity(self.stack.len());
+        new.append(&mut self.stack);
+        new
     }
 
     pub fn ref_local_operating_stack(&self) -> &[Primitive] {

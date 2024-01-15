@@ -394,7 +394,8 @@ impl ScopeReturnStatus {
             bail!("not applicable")
         };
 
-        Ok(lhs == rhs)
+        use crate::ast::TypecheckFlags;
+        Ok(lhs.eq_complex(rhs, &TypecheckFlags::<&ClassType>::classless()))
     }
 
     pub fn detect_should_return(val: Option<Cow<'static, TypeLayout>>) -> Self {
