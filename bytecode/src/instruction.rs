@@ -130,8 +130,8 @@ pub mod implementations {
             )
         };
 
-        let left = unsafe { left.move_out_of_heap_primitive() };
-        let right = unsafe { right.move_out_of_heap_primitive() };
+        let left = left.move_out_of_heap_primitive();
+        let right = right.move_out_of_heap_primitive();
 
         let result = match (symbols.as_str(), &left, &right) {
             ("+", ..) => left + right,
@@ -202,8 +202,7 @@ pub mod implementations {
                 bail!("`bin_op_assign` tried to modify a pointer, but {maybe_ptr} is not a HeapPrimitive");
             };
 
-            let result = unsafe {
-                ptr.update(|current| {
+            let result = ptr.update(|current| {
                     Ok(match op.as_str() {
                         "+=" => (current + &value)?,
                         "-=" => (current - &value)?,
@@ -212,10 +211,9 @@ pub mod implementations {
                         "%=" => (current % &value)?,
                         _ => bail!("unknown assignment operation: {op}"),
                     })
-                })?
-            };
+                })?.to_owned();
 
-            *maybe_ptr = result.to_owned();
+            *maybe_ptr = result;
         };
 
         Ok(())
@@ -236,9 +234,7 @@ pub mod implementations {
             bail!("expected a mutable heap primitive, found {maybe_vec}");
         };
 
-        unsafe {
-            vec_ptr.set(new_val);
-        }
+        vec_ptr.set(new_val);
 
         Ok(())
     }
@@ -290,16 +286,15 @@ pub mod implementations {
             };
 
             match indexable {
-                Primitive::Vector(vector) => {
-                    let mut vector = vector.borrow_mut();
-                    let vec_len = vector.len();
-
-                    let ptr = vector
-                        .get_mut(idx)
-                        .with_context(|| format!("index {idx} out of bounds (len {vec_len})"))?
-                        as *mut _;
-
-                    let heap_primitive = HeapPrimitive::new_array_view(ptr);
+                Primitive::Vector(vector_shared) => {
+                    {
+                        let len = vector_shared.borrow().len();
+                        if idx >= len {
+                            bail!("index {idx} out of bounds (len {len})")
+                        }
+                    }
+                    
+                    let heap_primitive = HeapPrimitive::new_array_view(vector_shared, idx);
 
                     ctx.push(Primitive::HeapPrimitive(heap_primitive));
                 }
@@ -887,25 +882,25 @@ pub mod implementations {
             bail!("`unwrap_into` requires a primitive at the top of the local operating stack");
         };
 
-        let primitive = unsafe { primitive.move_out_of_heap_primitive() };
+        let primitive = primitive.move_out_of_heap_primitive();
 
         let status = match primitive {
             Primitive::Optional(Some(unwrapped)) => {
                 let var = unwrapped.as_ref().to_owned();
 
-                let var = unsafe { var.move_out_of_heap_primitive() };
+                let var = var.move_out_of_heap_primitive();
 
                 ctx.register_variable_local(name.to_owned(), var)?;
                 true
             }
             primitive @ Primitive::Optional(None) => {
-                let primitive = unsafe { primitive.move_out_of_heap_primitive() };
+                let primitive = primitive.move_out_of_heap_primitive();
 
                 ctx.register_variable_local(name.to_owned(), primitive)?;
                 false
             }
             other_primitive => {
-                let other_primitive = unsafe { other_primitive.move_out_of_heap_primitive() };
+                let other_primitive = other_primitive.move_out_of_heap_primitive();
 
                 ctx.register_variable_local(name.to_owned(), other_primitive)?;
                 true
@@ -973,7 +968,7 @@ pub mod implementations {
 
         let arg = ctx.pop().unwrap();
 
-        let arg = unsafe { arg.move_out_of_heap_primitive() };
+        let arg = arg.move_out_of_heap_primitive();
 
         ctx.register_variable(Cow::Owned(name.to_owned()), arg)?;
 
@@ -1027,7 +1022,7 @@ pub mod implementations {
 
         let arg = ctx.pop().unwrap();
 
-        let arg = unsafe { arg.move_out_of_heap_primitive() };
+        let arg = arg.move_out_of_heap_primitive();
 
         let variable = PrimitiveFlagsPair::new(arg, VariableFlags(READ_ONLY));
 
@@ -1047,7 +1042,7 @@ pub mod implementations {
 
         let arg = ctx.pop().unwrap();
 
-        let arg = unsafe { arg.move_out_of_heap_primitive() };
+        let arg = arg.move_out_of_heap_primitive();
 
         ctx.register_variable_local(name.clone(), arg)?;
 
@@ -1064,7 +1059,7 @@ pub mod implementations {
 
         let arg = ctx.pop().unwrap();
 
-        let arg = unsafe { arg.move_out_of_heap_primitive() };
+        let arg = arg.move_out_of_heap_primitive();
 
         ctx.update_callback_variable(name, arg)?;
 
@@ -1112,7 +1107,7 @@ pub mod implementations {
 
         let arg = ctx.pop().unwrap();
 
-        let arg = unsafe { arg.move_out_of_heap_primitive() };
+        let arg = arg.move_out_of_heap_primitive();
         ctx.register_variable_local(name.clone(), arg)?;
 
         Ok(())
@@ -1276,8 +1271,8 @@ pub mod implementations {
             bail!("equ requires only 2 items in the local stack")
         }
 
-        let first = unsafe { ctx.pop().unwrap().move_out_of_heap_primitive() };
-        let second = unsafe { ctx.pop().unwrap().move_out_of_heap_primitive() };
+        let first = ctx.pop().unwrap().move_out_of_heap_primitive();
+        let second = ctx.pop().unwrap().move_out_of_heap_primitive();
 
         let result = first == second;
 
@@ -1290,8 +1285,8 @@ pub mod implementations {
             bail!("equ requires only 2 items in the local stack")
         }
 
-        let first = unsafe { ctx.pop().unwrap().move_out_of_heap_primitive() };
-        let second = unsafe { ctx.pop().unwrap().move_out_of_heap_primitive() };
+        let first = ctx.pop().unwrap().move_out_of_heap_primitive();
+        let second = ctx.pop().unwrap().move_out_of_heap_primitive();
 
         let result = first.equals(&second)?;
 
@@ -1304,8 +1299,8 @@ pub mod implementations {
             bail!("neq requires only 2 items in the local stack");
         }
 
-        let first = unsafe { ctx.pop().unwrap().move_out_of_heap_primitive() };
-        let second = unsafe { ctx.pop().unwrap().move_out_of_heap_primitive() };
+        let first = ctx.pop().unwrap().move_out_of_heap_primitive();
+        let second = ctx.pop().unwrap().move_out_of_heap_primitive();
 
         let result = !first.equals(&second)?;
 

@@ -564,6 +564,8 @@ impl IntoType for File {
 impl Dependencies for File {
     fn dependencies(&self) -> Vec<crate::ast::Dependency> {
         let mut result = vec![];
+
+        // safe because declarations will not change size after this function call, so the pointer will be valid.
         let view = unsafe { &*self.declarations.as_ptr() };
 
         for declaration in view.iter() {

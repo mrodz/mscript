@@ -189,8 +189,12 @@ impl<'a> Ctx<'a> {
     }
 
     /// Returns a reference to the last item on the local operating stack of the function that owns this [`Ctx`]
-    pub fn get_last_op_item(&mut self) -> Option<&Primitive> {
+    pub fn get_last_op_item(&self) -> Option<&Primitive> {
         self.stack.get(self.stack_size() - 1)
+    }
+
+    pub fn set_last_op_item(&mut self, item: Primitive) {
+        *self.stack.last_mut().unwrap() = item;
     }
 
     /// Returns a mutable reference to the last item on the local operating stack of the function that owns this [`Ctx`]

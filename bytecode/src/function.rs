@@ -76,7 +76,7 @@ impl BuiltInFunction {
         let mut arguments = ctx.ref_clear_local_operating_stack();
 
         for argument in arguments.iter_mut() {
-            *argument = unsafe { argument.clone().move_out_of_heap_primitive() }
+            *argument = argument.clone().move_out_of_heap_primitive();
         }
 
         match self {
