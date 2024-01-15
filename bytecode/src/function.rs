@@ -81,14 +81,14 @@ impl BuiltInFunction {
 
         match self {
             Self::GenericToStr => {
-                let Some(primitive) = arguments.get(0) else {
+                let Some(primitive) = arguments.first() else {
                     unreachable!();
                 };
 
                 Ok((Some(Primitive::Str(primitive.to_string())), None))
             }
             Self::VecLen => {
-                let Some(Primitive::Vector(v)) = arguments.get(0) else {
+                let Some(Primitive::Vector(v)) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -102,7 +102,7 @@ impl BuiltInFunction {
                 ))
             }
             Self::VecReverse => {
-                let Some(Primitive::Vector(v)) = arguments.get(0) else {
+                let Some(Primitive::Vector(v)) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -111,7 +111,7 @@ impl BuiltInFunction {
                 Ok((None, None))
             }
             Self::VecInnerCapacity => {
-                let Some(Primitive::Vector(v)) = arguments.get(0) else {
+                let Some(Primitive::Vector(v)) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -125,7 +125,7 @@ impl BuiltInFunction {
                 ))
             }
             Self::VecEnsureInnerCapacity => {
-                let Some(Primitive::Vector(v)) = arguments.get(0) else {
+                let Some(Primitive::Vector(v)) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -144,7 +144,7 @@ impl BuiltInFunction {
                     unreachable!()
                 };
 
-                let Some(Primitive::Vector(v)) = arguments.get(0) else {
+                let Some(Primitive::Vector(v)) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -222,7 +222,7 @@ impl BuiltInFunction {
                     unreachable!()
                 };
 
-                let Some(Primitive::Vector(v)) = arguments.get(0) else {
+                let Some(Primitive::Vector(v)) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -298,7 +298,7 @@ impl BuiltInFunction {
                 ))
             }
             Self::VecRemove => {
-                let Some(Primitive::Vector(v)) = arguments.get(0) else {
+                let Some(Primitive::Vector(v)) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -313,7 +313,7 @@ impl BuiltInFunction {
                 Ok((Some(removed), None))
             }
             Self::VecPush => {
-                let Some(Primitive::Vector(v)) = arguments.get(0) else {
+                let Some(Primitive::Vector(v)) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -326,7 +326,7 @@ impl BuiltInFunction {
                 Ok((None, None))
             }
             Self::VecJoin => {
-                let Some(Primitive::Vector(v_original_shared)) = arguments.get(0) else {
+                let Some(Primitive::Vector(v_original_shared)) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -344,7 +344,7 @@ impl BuiltInFunction {
                 Ok((Some(Primitive::Vector(v_original_shared.clone())), None))
             }
             Self::VecIndexOf => {
-                let Some(Primitive::Vector(v)) = arguments.get(0) else {
+                let Some(Primitive::Vector(v)) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -369,7 +369,7 @@ impl BuiltInFunction {
                     Ok((Some(Primitive::Optional(None)), None))
                 }
             }
-            Self::FnIsClosure => match arguments.get(0) {
+            Self::FnIsClosure => match arguments.first() {
                 Some(Primitive::Function(f)) => {
                     Ok((Some(Primitive::Bool(f.callback_state.is_some())), None))
                 }
@@ -377,7 +377,7 @@ impl BuiltInFunction {
                 _ => unreachable!(),
             },
             Self::StrLen => {
-                let Some(Primitive::Str(v)) = arguments.get(0) else {
+                let Some(Primitive::Str(v)) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -391,7 +391,7 @@ impl BuiltInFunction {
                 ))
             }
             Self::StrSubstring => {
-                let Some(Primitive::Str(s)) = arguments.get(0) else {
+                let Some(Primitive::Str(s)) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -413,7 +413,7 @@ impl BuiltInFunction {
                 Ok((Some(Primitive::Str(s[bottom..top].to_owned())), None))
             }
             Self::StrContains => {
-                let Some(Primitive::Str(s)) = arguments.get(0) else {
+                let Some(Primitive::Str(s)) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -424,7 +424,7 @@ impl BuiltInFunction {
                 Ok((Some(Primitive::Bool(s.contains(o))), None))
             }
             Self::StrIndexOf => {
-                let Some(Primitive::Str(s)) = arguments.get(0) else {
+                let Some(Primitive::Str(s)) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -444,7 +444,7 @@ impl BuiltInFunction {
                 }
             }
             Self::StrInnerCapacity => {
-                let Some(Primitive::Str(v)) = arguments.get(0) else {
+                let Some(Primitive::Str(v)) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -461,14 +461,14 @@ impl BuiltInFunction {
                 ))
             }
             Self::StrReverse => {
-                let Some(Primitive::Str(v)) = arguments.get(0) else {
+                let Some(Primitive::Str(v)) = arguments.first() else {
                     unreachable!()
                 };
 
                 Ok((Some(Primitive::Str(v.chars().rev().collect())), None))
             }
             Self::StrInsert => {
-                let Some(Primitive::Str(original)) = arguments.get(0) else {
+                let Some(Primitive::Str(original)) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -493,7 +493,7 @@ impl BuiltInFunction {
                 Ok((Some(Primitive::Str(result)), None))
             }
             Self::StrReplace => {
-                let Some(Primitive::Str(original)) = arguments.get(0) else {
+                let Some(Primitive::Str(original)) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -511,7 +511,7 @@ impl BuiltInFunction {
                 ))
             }
             Self::StrDelete => {
-                let Some(Primitive::Str(s)) = arguments.get(0) else {
+                let Some(Primitive::Str(s)) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -540,7 +540,7 @@ impl BuiltInFunction {
                 Ok((Some(Primitive::Str(result)), None))
             }
             Self::StrParseInt => {
-                let Some(Primitive::Str(s)) = arguments.get(0) else {
+                let Some(Primitive::Str(s)) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -560,7 +560,7 @@ impl BuiltInFunction {
                 }
             }
             Self::StrParseBigint => {
-                let Some(Primitive::Str(s)) = arguments.get(0) else {
+                let Some(Primitive::Str(s)) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -580,7 +580,7 @@ impl BuiltInFunction {
                 }
             }
             Self::StrParseIntRadix => {
-                let Some(Primitive::Str(s)) = arguments.get(0) else {
+                let Some(Primitive::Str(s)) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -609,7 +609,7 @@ impl BuiltInFunction {
                 }
             }
             Self::StrParseBigintRadix => {
-                let Some(Primitive::Str(s)) = arguments.get(0) else {
+                let Some(Primitive::Str(s)) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -638,7 +638,7 @@ impl BuiltInFunction {
                 }
             }
             Self::StrParseBool => {
-                let Some(Primitive::Str(s)) = arguments.get(0) else {
+                let Some(Primitive::Str(s)) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -652,7 +652,7 @@ impl BuiltInFunction {
                 }
             }
             Self::StrParseFloat => {
-                let Some(Primitive::Str(s)) = arguments.get(0) else {
+                let Some(Primitive::Str(s)) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -666,7 +666,7 @@ impl BuiltInFunction {
                 }
             }
             Self::StrParseByte => {
-                let Some(Primitive::Str(s)) = arguments.get(0) else {
+                let Some(Primitive::Str(s)) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -686,7 +686,7 @@ impl BuiltInFunction {
                 }
             }
             Self::StrSplit => {
-                let Some(Primitive::Str(s)) = arguments.get(0) else {
+                let Some(Primitive::Str(s)) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -733,7 +733,7 @@ impl BuiltInFunction {
                 ))
             }
             Self::GenericPow => {
-                let Some(this) = arguments.get(0) else {
+                let Some(this) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -759,7 +759,7 @@ impl BuiltInFunction {
                 Ok((Some(result), None))
             }
             Self::GenericPowf => {
-                let Some(this) = arguments.get(0) else {
+                let Some(this) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -768,16 +768,10 @@ impl BuiltInFunction {
                 };
 
                 let result: Primitive = match this {
-                    Primitive::Int(i32) => Primitive::Float(
-                        f64::try_from(*i32)
-                            .with_context(|| format!("`{i32}` cannot be made into a float"))?
-                            .powf(*power),
-                    ),
-                    Primitive::BigInt(i128) => Primitive::Float(
-                        f64::try_from(*i128 as i32)
-                            .with_context(|| format!("`{i128}` cannot be made into a float"))?
-                            .powf(*power),
-                    ),
+                    Primitive::Int(i32) => Primitive::Float(f64::from(*i32).powf(*power)),
+                    Primitive::BigInt(i128) => {
+                        Primitive::Float(f64::from(*i128 as i32).powf(*power))
+                    }
                     Primitive::Byte(u8) => Primitive::Float((*u8 as f64).powf(*power)),
                     Primitive::Float(f64) => Primitive::Float(f64.powf(*power)),
                     bad => unreachable!("{bad}"),
@@ -786,21 +780,13 @@ impl BuiltInFunction {
                 Ok((Some(result), None))
             }
             Self::GenericSqrt => {
-                let Some(this) = arguments.get(0) else {
+                let Some(this) = arguments.first() else {
                     unreachable!()
                 };
 
                 let result: Primitive = match this {
-                    Primitive::Int(i32) => Primitive::Float(
-                        f64::try_from(*i32)
-                            .with_context(|| format!("`{i32}` cannot be made into a float"))?
-                            .sqrt(),
-                    ),
-                    Primitive::BigInt(i128) => Primitive::Float(
-                        f64::try_from(*i128 as i32)
-                            .with_context(|| format!("`{i128}` cannot be made into a float"))?
-                            .sqrt(),
-                    ),
+                    Primitive::Int(i32) => Primitive::Float(f64::from(*i32).sqrt()),
+                    Primitive::BigInt(i128) => Primitive::Float(f64::from(*i128 as i32).sqrt()),
                     Primitive::Byte(u8) => Primitive::Float((*u8 as f64).sqrt()),
                     Primitive::Float(f64) => Primitive::Float(f64.sqrt()),
                     bad => unreachable!("{bad}"),
@@ -809,7 +795,7 @@ impl BuiltInFunction {
                 Ok((Some(result), None))
             }
             Self::GenericToInt => {
-                let Some(this) = arguments.get(0) else {
+                let Some(this) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -831,7 +817,7 @@ impl BuiltInFunction {
                 Ok((Some(result), None))
             }
             Self::GenericToBigint => {
-                let Some(this) = arguments.get(0) else {
+                let Some(this) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -839,18 +825,14 @@ impl BuiltInFunction {
                     Primitive::Int(i32) => Primitive::BigInt(*i32 as i128),
                     Primitive::BigInt(i128) => Primitive::BigInt(*i128),
                     Primitive::Byte(u8) => Primitive::BigInt(*u8 as i128),
-                    Primitive::Float(f64) => Primitive::BigInt(
-                        (*f64 as i64)
-                            .try_into()
-                            .with_context(|| format!("`{f64}` cannot be made into a bigint"))?,
-                    ),
+                    Primitive::Float(f64) => Primitive::BigInt((*f64 as i64).into()),
                     bad => unreachable!("{bad}"),
                 };
 
                 Ok((Some(result), None))
             }
             Self::GenericToByte => {
-                let Some(this) = arguments.get(0) else {
+                let Some(this) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -875,24 +857,16 @@ impl BuiltInFunction {
                 Ok((Some(result), None))
             }
             Self::GenericToFloat => {
-                let Some(this) = arguments.get(0) else {
+                let Some(this) = arguments.first() else {
                     unreachable!()
                 };
 
                 let result: Primitive = match this {
-                    Primitive::Int(i32) => Primitive::Float(
-                        (*i32)
-                            .try_into()
-                            .with_context(|| format!("`{i32}` cannot be made into a float"))?,
-                    ),
-                    Primitive::BigInt(i128) => Primitive::Float(
-                        (i32::try_from(*i128)
-                            .with_context(|| {
-                                format!("`{i128}` is too large for cast i128 -> HERE i32 -> f64")
-                            })?
-                            .try_into())
-                        .with_context(|| format!("`{i128}` cannot be made into a float"))?,
-                    ),
+                    Primitive::Int(i32) => Primitive::Float((*i32).into()),
+                    Primitive::BigInt(i128) => Primitive::Float(f64::from(
+                        i32::try_from(*i128)
+                            .with_context(|| format!("`{i128}` cannot be made into a float"))?,
+                    )),
                     Primitive::Byte(u8) => Primitive::Float(*u8 as f64),
                     Primitive::Float(f64) => Primitive::Float(*f64),
                     bad => unreachable!("{bad}"),
@@ -901,7 +875,7 @@ impl BuiltInFunction {
                 Ok((Some(result), None))
             }
             Self::GenericAbs => {
-                let Some(this) = arguments.get(0) else {
+                let Some(this) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -916,7 +890,7 @@ impl BuiltInFunction {
                 Ok((Some(result), None))
             }
             Self::ByteToAscii => {
-                let Some(Primitive::Byte(byte)) = arguments.get(0) else {
+                let Some(Primitive::Byte(byte)) = arguments.first() else {
                     unreachable!()
                 };
 
@@ -928,35 +902,35 @@ impl BuiltInFunction {
                 ))
             }
             Self::FloatFPart => {
-                let Some(Primitive::Float(float)) = arguments.get(0) else {
+                let Some(Primitive::Float(float)) = arguments.first() else {
                     unreachable!()
                 };
 
                 Ok((Some(Primitive::Float(float.fract())), None))
             }
             Self::FloatIPart => {
-                let Some(Primitive::Float(float)) = arguments.get(0) else {
+                let Some(Primitive::Float(float)) = arguments.first() else {
                     unreachable!()
                 };
 
                 Ok((Some(Primitive::Float(float.trunc())), None))
             }
             Self::FloatRound => {
-                let Some(Primitive::Float(float)) = arguments.get(0) else {
+                let Some(Primitive::Float(float)) = arguments.first() else {
                     unreachable!()
                 };
 
                 Ok((Some(Primitive::Float(float.round())), None))
             }
             Self::FloatFloor => {
-                let Some(Primitive::Float(float)) = arguments.get(0) else {
+                let Some(Primitive::Float(float)) = arguments.first() else {
                     unreachable!()
                 };
 
                 Ok((Some(Primitive::Float(float.floor())), None))
             }
             Self::FloatCeil => {
-                let Some(Primitive::Float(float)) = arguments.get(0) else {
+                let Some(Primitive::Float(float)) = arguments.first() else {
                     unreachable!()
                 };
 

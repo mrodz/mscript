@@ -149,7 +149,7 @@ impl ListType {
             ret @ Self::Open(..) => Ok(Cow::Borrowed(ret)),
             Self::Mixed(types) => {
                 if types.iter().as_ref().windows(2).all(|x| x[0] == x[1]) {
-                    if let Some(ty) = types.get(0) {
+                    if let Some(ty) = types.first() {
                         Ok(Cow::Owned(ListType::Open(Box::new(ty.clone()))))
                     } else {
                         bail!("cannot know the type of this list, for it is empty")
