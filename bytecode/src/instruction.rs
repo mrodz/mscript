@@ -741,7 +741,8 @@ pub mod implementations {
                     return Ok(());
                 }
                 Some(Primitive::BuiltInFunction(variant)) => {
-                    match variant.run(ctx)? {
+                    ctx.add_frame(format!("<native code>#{variant:?}"));
+                    match variant.run(ctx).with_context(|| format!("built-in function raised an exception: {variant:?}()"))? {
                         (Some(primitive), None) => {
                             ctx.clear_and_set_stack(primitive);
                         }
@@ -755,6 +756,7 @@ pub mod implementations {
                             unimplemented!("primitive and bridge combined is not supported: ({primitive:?}, {bridge:?})")
                         }
                     }
+                    ctx.pop_frame();
 
                     return Ok(())
                 }

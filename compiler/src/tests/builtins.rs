@@ -151,3 +151,85 @@ fn fn_is_closure() {
     )
     .unwrap()
 }
+
+#[test]
+fn string_properties() {
+    eval(
+        r#"
+        const MESSAGE = "hello world"
+
+        assert MESSAGE[6] == "w"
+        assert MESSAGE.len() == 11
+        assert MESSAGE.substring(6, MESSAGE.len()) == "world"
+        assert MESSAGE.contains("lo w")
+        assert !MESSAGE.contains("a")
+        assert MESSAGE.index_of("wo") == 6
+        assert MESSAGE.index_of("ow") == nil
+        assert typeof MESSAGE.index_of("ow") == "int?"
+        assert MESSAGE.inner_capacity() >= 11
+        assert MESSAGE.reverse() == "dlrow olleh"
+        assert MESSAGE.insert(", you are my", 5) == "hello, you are my world"
+        assert MESSAGE.replace(" world", "!") == "hello!"
+        assert MESSAGE.delete(5, 7) == "helloorld"
+        assert "25".parse_int() == 25
+        assert "-25".parse_int() == -25
+        assert "25.0".parse_int() == nil
+        assert "twenty five".parse_int() == nil
+        assert typeof "".parse_int() == "int?"
+        assert "25".parse_int_radix(16) == 0x25
+		assert "25".parse_int_radix(16) != 25
+        assert "25".parse_int_radix(10) == 25
+        assert "25".parse_bigint() == B25
+        assert "-25".parse_bigint() == -B25
+        assert "25.0".parse_bigint() == nil
+        assert typeof "".parse_bigint() == "bigint?"
+        assert "twenty five".parse_bigint() == nil
+        assert "25".parse_bigint_radix(16) == 0x25
+        assert "25".parse_bigint_radix(10) == B25
+        assert get "true".parse_bool()
+        assert !(get "false".parse_bool())
+        assert "yes".parse_bool() == nil
+        assert "3.14159".parse_float() == 3.14159
+        assert "xyz".parse_float() == nil
+        assert typeof "".parse_float() == "float?"
+        assert "3".parse_byte() == 0b11
+        assert "0b101".parse_byte() == 5
+        assert "goodwill".split(4).to_str() == "[\"good\", \"will\"]"
+        assert "goodwill".split(100).to_str() == "[\"goodwill\", \"\"]"
+        assert "goodwill".split(-1).to_str() == "[\"goodwill\", \"\"]"
+    "#,
+    )
+    .unwrap();
+}
+
+#[test]
+fn number_properties() {
+    eval(
+        r#"
+        assert 5.pow(2) == 25
+        assert typeof 5.pow(2) == "bigint"
+        assert typeof 5f.pow(2) == "float"
+        assert 0b101.pow(2) == 25
+        assert 5.pow(0) == 1
+        assert 5.pow(-0.001.to_int()) == 1
+        assert 25.powf(0.5) == 5
+        assert 0x51.powf(1/2f) == 9
+        assert 90.to_byte().to_ascii() == "Z"
+        assert 3.1415.ipart() == 3
+        assert (-5).abs() == (5).abs()
+        assert (-2.718281828).abs() == (2.718281828).abs()
+        assert (-0xFFFF).abs() == (-B65535).abs()
+        assert 49.sqrt() == 49.powf(1f/2)
+        assert 3.5.round() == 4
+        assert 3.49999.round() == 3
+        assert 3.5.ceil() == 4
+        assert 3.5.floor() == 3
+
+        type Numberz float
+        const PI: Numberz = 3.14159265359
+
+		assert PI.round() == 3
+    "#,
+    )
+    .unwrap();
+}

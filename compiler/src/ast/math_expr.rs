@@ -762,7 +762,7 @@ fn parse_expr(
                 match op.as_rule() {
                     Rule::unary_minus => {
                         let ty = expr.for_type().to_err_vec()?;
-                        if !ty.disregard_distractors(false).is_numeric(true) {
+                        if !ty.disregard_distractors(false).supports_negate() {
                             return Err(vec![new_err(pair.unwrap().as_span(), &user_data.get_source_file_name(), format!("{ty} cannot be negated"))])
                         }
                         Ok((Expr::UnaryMinus(Box::new(expr)), pair))

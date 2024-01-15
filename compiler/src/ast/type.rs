@@ -628,11 +628,29 @@ macro_rules! new_assoc_function {
             ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Native(NativeType::Int)))
         )
     };
+    ($types:expr, @bigint) => {
+        new_assoc_function!(
+            $types,
+            ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Native(NativeType::BigInt)))
+        )
+    };
+    ($types:expr, @byte) => {
+        new_assoc_function!(
+            $types,
+            ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Native(NativeType::Byte)))
+        )
+    };
     ($types:expr, @void) => {
         new_assoc_function!($types, ScopeReturnStatus::Void)
     };
     ($types:expr, @str) => {
         new_assoc_function!($types, ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Native(NativeType::Str(StrWrapper::unknown_size())))))
+    };
+    ($types:expr, @float) => {
+        new_assoc_function!(
+            $types,
+            ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Native(NativeType::Float)))
+        )
     };
     (@to_str) => {
         new_assoc_function!(vec![], @str)
@@ -1055,6 +1073,38 @@ impl TypeLayout {
                 }
                 _ => None,
             },
+            whole_type @ Self::Native(
+                variant @ (NativeType::Int
+                | NativeType::BigInt
+                | NativeType::Byte
+                | NativeType::Float),
+            ) => match (property_name, variant) {
+                ("pow", NativeType::Float) => Some(
+                    new_assoc_function!(vec![Cow::Owned(TypeLayout::Native(NativeType::Int))], @float),
+                ),
+                ("pow", ..) => Some(
+                    new_assoc_function!(vec![Cow::Owned(TypeLayout::Native(NativeType::Int))], @bigint),
+                ),
+                ("powf", ..) => Some(
+                    new_assoc_function!(vec![Cow::Owned(TypeLayout::Native(NativeType::Float))], @float),
+                ),
+                ("sqrt", ..) => Some(new_assoc_function!(vec![], @float)),
+                ("to_int", ..) => Some(new_assoc_function!(vec![], @int)),
+                ("to_bigint", ..) => Some(new_assoc_function!(vec![], @bigint)),
+                ("to_byte", ..) => Some(new_assoc_function!(vec![], @byte)),
+                ("to_float", ..) => Some(new_assoc_function!(vec![], @float)),
+                ("abs", ..) => Some(new_assoc_function!(
+                    vec![],
+                    ScopeReturnStatus::Should(Cow::Owned(whole_type.to_owned()))
+                )),
+                ("to_ascii", NativeType::Byte) => Some(new_assoc_function!(vec![], @str)),
+                ("fpart", NativeType::Float) => Some(new_assoc_function!(vec![], @float)),
+                ("ipart", NativeType::Float) => Some(new_assoc_function!(vec![], @float)),
+                ("round", NativeType::Float) => Some(new_assoc_function!(vec![], @float)),
+                ("floor", NativeType::Float) => Some(new_assoc_function!(vec![], @float)),
+                ("ceil", NativeType::Float) => Some(new_assoc_function!(vec![], @float)),
+                _ => None,
+            },
             Self::Function(..) => match property_name {
                 "is_closure" => Some(new_assoc_function!(
                     vec![],
@@ -1129,27 +1179,63 @@ impl TypeLayout {
             }
             Self::Native(NativeType::Bool) => vec!["fn to_str() -> str".to_owned()],
             Self::Native(NativeType::Str(..)) => [
-                "len() -> int",
-                "substring(int, int) -> str",
-                "contains(str) -> bool",
-                "index_of(str) -> int?",
-                "inner_capacity() -> int",
-                "reverse() -> str",
-                "insert(str, int) -> str",
-                "replace(str, str) -> str",
-                "delete(int, int) -> str",
-                "parse_int() -> int?",
-                "parse_int_radix(int) -> int?",
-                "parse_bigint() -> bigint?",
-                "parse_bigint_radix(int) -> bigint?",
-                "parse_bool() -> bool?",
-                "parse_float() -> float?",
-                "parse_byte() -> byte?",
-                "split(int) -> [str, str]",
+                "fn len() -> int",
+                "fn substring(int, int) -> str",
+                "fn contains(str) -> bool",
+                "fn index_of(str) -> int?",
+                "fn inner_capacity() -> int",
+                "fn reverse() -> str",
+                "fn insert(str, int) -> str",
+                "fn replace(str, str) -> str",
+                "fn delete(int, int) -> str",
+                "fn parse_int() -> int?",
+                "fn parse_int_radix(int) -> int?",
+                "fn parse_bigint() -> bigint?",
+                "fn parse_bigint_radix(int) -> bigint?",
+                "fn parse_bool() -> bool?",
+                "fn parse_float() -> float?",
+                "fn parse_byte() -> byte?",
+                "fn split(int) -> [str, str]",
+                "fn to_str() -> str",
             ]
             .iter()
             .map(<&str>::to_string)
             .collect(),
+            Self::Native(
+                variant @ (NativeType::BigInt
+                | NativeType::Int
+                | NativeType::Float
+                | NativeType::Byte),
+            ) => {
+                let mut shared = vec![
+                    "fn powf(float) -> float",
+                    "fn to_int() -> int",
+                    "fn to_bigint() -> bigint",
+                    "fn to_float() -> float",
+                    "fn to_byte() -> byte",
+                    "fn sqrt() -> float",
+                    "fn abs() -> Self",
+                    "fn to_str() -> str",
+                ];
+
+                match variant {
+                    NativeType::Byte => {
+                        shared.push("fn to_ascii() -> str");
+                        shared.push("fn pow(int) -> bigint");
+                    }
+                    NativeType::Float => shared.extend_from_slice(&[
+                        "fn pow(int) -> float",
+                        "fn fpart() -> float",
+                        "fn ipart() -> float",
+                        "fn round() -> float",
+                        "fn floor() -> float",
+                        "fn ceil() -> float",
+                    ]),
+                    _ => shared.push("fn pow(int) -> bigint"),
+                }
+
+                shared.iter().map(<&str>::to_string).collect()
+            }
             _ => vec![],
         }
     }
@@ -1330,7 +1416,7 @@ impl TypeLayout {
     pub fn supports_negate(&self) -> bool {
         let me = self.get_type_recursively();
         match me {
-            Self::Native(NativeType::Str(_)) => false,
+            Self::Native(NativeType::Str(_) | NativeType::Byte) => false,
             Self::Native(_) => true,
             _ => false,
         }

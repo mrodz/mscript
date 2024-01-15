@@ -105,7 +105,22 @@ static_module_generator! {
     str_parse_bool(BuiltInFunction::StrParseBool),
     str_parse_float(BuiltInFunction::StrParseFloat),
     str_parse_byte(BuiltInFunction::StrParseByte),
-    str_split(BuiltInFunction::StrSplit)
+    str_split(BuiltInFunction::StrSplit),
+    generic_num_pow(BuiltInFunction::GenericPow),
+    generic_num_powf(BuiltInFunction::GenericPowf),
+    generic_num_sqrt(BuiltInFunction::GenericSqrt),
+    generic_num_to_int(BuiltInFunction::GenericToInt),
+    generic_num_to_bigint(BuiltInFunction::GenericToBigint),
+    generic_num_to_byte(BuiltInFunction::GenericToByte),
+    generic_num_to_float(BuiltInFunction::GenericToFloat),
+    generic_num_abs(BuiltInFunction::GenericAbs),
+    byte_to_ascii(BuiltInFunction::ByteToAscii),
+    float_fpart(BuiltInFunction::FloatFPart),
+    float_ipart(BuiltInFunction::FloatIPart),
+    float_round(BuiltInFunction::FloatRound),
+    float_floor(BuiltInFunction::FloatFloor),
+    float_ceil(BuiltInFunction::FloatCeil),
+
 }
 
 impl PrimitiveFlagsPair {

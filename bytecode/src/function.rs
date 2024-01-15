@@ -50,6 +50,20 @@ pub enum BuiltInFunction {
     StrParseFloat,
     StrParseByte,
     StrSplit,
+    GenericPow,
+    GenericPowf,
+    GenericSqrt,
+    GenericToInt,
+    GenericToBigint,
+    GenericToByte,
+    GenericToFloat,
+    GenericAbs,
+    ByteToAscii,
+    FloatFPart,
+    FloatIPart,
+    FloatRound,
+    FloatFloor,
+    FloatCeil,
 }
 
 type BuiltInFunctionReturnBundle = (
@@ -78,7 +92,14 @@ impl BuiltInFunction {
                     unreachable!()
                 };
 
-                Ok((Some(Primitive::Int(v.borrow().len().try_into()?)), None))
+                let len = v.borrow().len();
+
+                Ok((
+                    Some(Primitive::Int(len.try_into().with_context(|| {
+                        format!("vector len `{len}` could not fit in an int (i32)")
+                    })?)),
+                    None,
+                ))
             }
             Self::VecReverse => {
                 let Some(Primitive::Vector(v)) = arguments.get(0) else {
@@ -94,8 +115,12 @@ impl BuiltInFunction {
                     unreachable!()
                 };
 
+                let cap = v.borrow().capacity();
+
                 Ok((
-                    Some(Primitive::Int(v.borrow().capacity().try_into()?)),
+                    Some(Primitive::Int(cap.try_into().with_context(|| {
+                        format!("vector capacity `{cap}` could not fit in an int (i32)")
+                    })?)),
                     None,
                 ))
             }
@@ -108,7 +133,9 @@ impl BuiltInFunction {
                     unreachable!()
                 };
 
-                v.borrow_mut().reserve((*size).try_into()?);
+                v.borrow_mut().reserve((*size).try_into().with_context(|| {
+                    format!("additional vector capacity `{size}` could not fit in an int (i32)")
+                })?);
 
                 Ok((None, None))
             }
@@ -275,11 +302,13 @@ impl BuiltInFunction {
                     unreachable!()
                 };
 
-                let Some(Primitive::Int(size)) = arguments.get(1) else {
+                let Some(Primitive::Int(i)) = arguments.get(1) else {
                     unreachable!()
                 };
 
-                let removed = v.borrow_mut().remove((*size).try_into()?);
+                let removed = v.borrow_mut().remove((*i).try_into().with_context(|| {
+                    format!("vector index `{i}` could not fit in an int (i32)")
+                })?);
 
                 Ok((Some(removed), None))
             }
@@ -332,7 +361,7 @@ impl BuiltInFunction {
                 if let Some((result, _)) = result {
                     Ok((
                         Some(Primitive::Optional(Some(Box::new(Primitive::Int(
-                            result.try_into()?,
+                            result.try_into().with_context(|| format!("vector index of element `{result}` could not fit in an int (i32)"))?,
                         ))))),
                         None,
                     ))
@@ -352,7 +381,14 @@ impl BuiltInFunction {
                     unreachable!()
                 };
 
-                Ok((Some(Primitive::Int(v.len().try_into()?)), None))
+                let len = v.len();
+
+                Ok((
+                    Some(Primitive::Int(len.try_into().with_context(|| {
+                        format!("string length `{len}` could not fit in an int (i32)")
+                    })?)),
+                    None,
+                ))
             }
             Self::StrSubstring => {
                 let Some(Primitive::Str(s)) = arguments.get(0) else {
@@ -367,12 +403,14 @@ impl BuiltInFunction {
                     unreachable!()
                 };
 
-                Ok((
-                    Some(Primitive::Str(
-                        s[(*bottom).try_into()?..(*top).try_into()?].to_owned(),
-                    )),
-                    None,
-                ))
+                let bottom: usize = (*bottom).try_into().with_context(|| {
+                    format!("bottom vector index `{bottom}` could not be used to index (usize)")
+                })?;
+                let top: usize = (*top).try_into().with_context(|| {
+                    format!("top vector index `{top}` could not be used to index (usize)")
+                })?;
+
+                Ok((Some(Primitive::Str(s[bottom..top].to_owned())), None))
             }
             Self::StrContains => {
                 let Some(Primitive::Str(s)) = arguments.get(0) else {
@@ -397,7 +435,7 @@ impl BuiltInFunction {
                 if let Some(start) = s.find(o) {
                     Ok((
                         Some(Primitive::Optional(Some(Box::new(Primitive::Int(
-                            start.try_into()?,
+                            start.try_into().with_context(|| format!("index of found string pattern `{start}` could not fit in an int (i32)"))?,
                         ))))),
                         None,
                     ))
@@ -410,7 +448,17 @@ impl BuiltInFunction {
                     unreachable!()
                 };
 
-                Ok((Some(Primitive::Int(v.capacity().try_into()?)), None))
+                Ok((
+                    Some(Primitive::Int(v.capacity().try_into().with_context(
+                        || {
+                            format!(
+                                "string capacity `{}` could not fit in an int (i32)",
+                                v.capacity()
+                            )
+                        },
+                    )?)),
+                    None,
+                ))
             }
             Self::StrReverse => {
                 let Some(Primitive::Str(v)) = arguments.get(0) else {
@@ -434,7 +482,14 @@ impl BuiltInFunction {
 
                 let mut result = original.clone();
 
-                result.insert_str((*bottom).try_into()?, new);
+                result.insert_str(
+                    (*bottom).try_into().with_context(|| {
+                        format!(
+                            "string insertion index `{bottom}` could not be used to index (usize)"
+                        )
+                    })?,
+                    new,
+                );
                 Ok((Some(Primitive::Str(result)), None))
             }
             Self::StrReplace => {
@@ -468,12 +523,19 @@ impl BuiltInFunction {
                     unreachable!()
                 };
 
-                let mut result = String::with_capacity(
-                    s.len() - <i32 as TryInto<usize>>::try_into(top - bottom + 1)?,
-                );
+                let bottom: usize = (*bottom).try_into().with_context(|| {
+                    format!("string bottom index `{bottom}` could not be used to index (usize)")
+                })?;
+                let top: usize = (*top).try_into().with_context(|| {
+                    format!("string bottom index `{top}` could not be used to index (usize)")
+                })?;
 
-                result.push_str(&s[..(*bottom).try_into()?]);
-                result.push_str(&s[(*top).try_into()?..]);
+                let start = top - bottom + 1;
+
+                let mut result = String::with_capacity(s.len() - start);
+
+                result.push_str(&s[..bottom]);
+                result.push_str(&s[top..]);
 
                 Ok((Some(Primitive::Str(result)), None))
             }
@@ -532,7 +594,12 @@ impl BuiltInFunction {
                     s
                 };
 
-                if let Ok(num) = i32::from_str_radix(s, (*radix).try_into()?) {
+                if let Ok(num) = i32::from_str_radix(
+                    s,
+                    (*radix)
+                        .try_into()
+                        .with_context(|| format!("`{radix}` is an invalid radix"))?,
+                ) {
                     Ok((
                         Some(Primitive::Optional(Some(Box::new(Primitive::Int(num))))),
                         None,
@@ -556,7 +623,12 @@ impl BuiltInFunction {
                     s
                 };
 
-                if let Ok(num) = i128::from_str_radix(s, (*radix).try_into()?) {
+                if let Ok(num) = i128::from_str_radix(
+                    s,
+                    (*radix)
+                        .try_into()
+                        .with_context(|| format!("`{radix}` is an invalid radix"))?,
+                ) {
                     Ok((
                         Some(Primitive::Optional(Some(Box::new(Primitive::BigInt(num))))),
                         None,
@@ -632,7 +704,11 @@ impl BuiltInFunction {
                     ));
                 }
 
-                if *mid >= s.len().try_into()? {
+                if *mid
+                    >= s.len()
+                        .try_into()
+                        .context("len (usize) does not fit in an int")?
+                {
                     return Ok((
                         Some(Primitive::Vector(Rc::new(RefCell::new(vec![
                             Primitive::Str(s.to_owned()),
@@ -642,7 +718,11 @@ impl BuiltInFunction {
                     ));
                 }
 
-                let (lhs, rhs) = s.split_at((*mid).try_into()?);
+                let (lhs, rhs) = s.split_at(
+                    (*mid)
+                        .try_into()
+                        .with_context(|| format!("`{mid}` is an invalid index (usize)"))?,
+                );
 
                 Ok((
                     Some(Primitive::Vector(Rc::new(RefCell::new(vec![
@@ -651,6 +731,236 @@ impl BuiltInFunction {
                     ])))),
                     None,
                 ))
+            }
+            Self::GenericPow => {
+                let Some(this) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                let Some(Primitive::Int(power)) = arguments.get(1) else {
+                    unreachable!();
+                };
+
+                if let Primitive::Float(f64) = this {
+                    return Ok((Some(Primitive::Float(f64.powi(*power))), None));
+                }
+
+                let power_non_fp: u32 = (*power).try_into().with_context(|| {
+                    format!("`{power}` is an invalid power for int bases (valid >= 0)")
+                })?;
+
+                let result: Primitive = match this {
+                    Primitive::Int(i32) => Primitive::BigInt(i32.pow(power_non_fp) as i128),
+                    Primitive::BigInt(i128) => Primitive::BigInt(i128.pow(power_non_fp)),
+                    Primitive::Byte(u8) => Primitive::BigInt(u8.pow(power_non_fp) as i128),
+                    bad => unreachable!("{bad}"),
+                };
+
+                Ok((Some(result), None))
+            }
+            Self::GenericPowf => {
+                let Some(this) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                let Some(Primitive::Float(power)) = arguments.get(1) else {
+                    unreachable!();
+                };
+
+                let result: Primitive = match this {
+                    Primitive::Int(i32) => Primitive::Float(
+                        f64::try_from(*i32)
+                            .with_context(|| format!("`{i32}` cannot be made into a float"))?
+                            .powf(*power),
+                    ),
+                    Primitive::BigInt(i128) => Primitive::Float(
+                        f64::try_from(*i128 as i32)
+                            .with_context(|| format!("`{i128}` cannot be made into a float"))?
+                            .powf(*power),
+                    ),
+                    Primitive::Byte(u8) => Primitive::Float((*u8 as f64).powf(*power)),
+                    Primitive::Float(f64) => Primitive::Float(f64.powf(*power)),
+                    bad => unreachable!("{bad}"),
+                };
+
+                Ok((Some(result), None))
+            }
+            Self::GenericSqrt => {
+                let Some(this) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                let result: Primitive = match this {
+                    Primitive::Int(i32) => Primitive::Float(
+                        f64::try_from(*i32)
+                            .with_context(|| format!("`{i32}` cannot be made into a float"))?
+                            .sqrt(),
+                    ),
+                    Primitive::BigInt(i128) => Primitive::Float(
+                        f64::try_from(*i128 as i32)
+                            .with_context(|| format!("`{i128}` cannot be made into a float"))?
+                            .sqrt(),
+                    ),
+                    Primitive::Byte(u8) => Primitive::Float((*u8 as f64).sqrt()),
+                    Primitive::Float(f64) => Primitive::Float(f64.sqrt()),
+                    bad => unreachable!("{bad}"),
+                };
+
+                Ok((Some(result), None))
+            }
+            Self::GenericToInt => {
+                let Some(this) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                let result: Primitive = match this {
+                    Primitive::Int(i32) => Primitive::Int(*i32),
+                    Primitive::BigInt(i128) => Primitive::Int(
+                        i32::try_from(*i128)
+                            .with_context(|| format!("`{i128}` cannot be made into a int"))?,
+                    ),
+                    Primitive::Byte(u8) => Primitive::Int(*u8 as i32),
+                    Primitive::Float(f64) => Primitive::Int(
+                        (*f64 as i64)
+                            .try_into()
+                            .with_context(|| format!("`{f64}` cannot be made into a int"))?,
+                    ),
+                    bad => unreachable!("{bad}"),
+                };
+
+                Ok((Some(result), None))
+            }
+            Self::GenericToBigint => {
+                let Some(this) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                let result: Primitive = match this {
+                    Primitive::Int(i32) => Primitive::BigInt(*i32 as i128),
+                    Primitive::BigInt(i128) => Primitive::BigInt(*i128),
+                    Primitive::Byte(u8) => Primitive::BigInt(*u8 as i128),
+                    Primitive::Float(f64) => Primitive::BigInt(
+                        (*f64 as i64)
+                            .try_into()
+                            .with_context(|| format!("`{f64}` cannot be made into a bigint"))?,
+                    ),
+                    bad => unreachable!("{bad}"),
+                };
+
+                Ok((Some(result), None))
+            }
+            Self::GenericToByte => {
+                let Some(this) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                let result: Primitive = match this {
+                    Primitive::Int(i32) => Primitive::Byte(
+                        u8::try_from(*i32)
+                            .with_context(|| format!("`{i32}` cannot be made into a byte"))?,
+                    ),
+                    Primitive::BigInt(i128) => Primitive::Byte(
+                        u8::try_from(*i128)
+                            .with_context(|| format!("`{i128}` cannot be made into a byte"))?,
+                    ),
+                    Primitive::Byte(u8) => Primitive::Byte(*u8),
+                    Primitive::Float(f64) => Primitive::Byte(
+                        (*f64 as i64)
+                            .try_into()
+                            .with_context(|| format!("`{f64}` cannot be made into a byte"))?,
+                    ),
+                    bad => unreachable!("{bad}"),
+                };
+
+                Ok((Some(result), None))
+            }
+            Self::GenericToFloat => {
+                let Some(this) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                let result: Primitive = match this {
+                    Primitive::Int(i32) => Primitive::Float(
+                        (*i32)
+                            .try_into()
+                            .with_context(|| format!("`{i32}` cannot be made into a float"))?,
+                    ),
+                    Primitive::BigInt(i128) => Primitive::Float(
+                        (i32::try_from(*i128)
+                            .with_context(|| {
+                                format!("`{i128}` is too large for cast i128 -> HERE i32 -> f64")
+                            })?
+                            .try_into())
+                        .with_context(|| format!("`{i128}` cannot be made into a float"))?,
+                    ),
+                    Primitive::Byte(u8) => Primitive::Float(*u8 as f64),
+                    Primitive::Float(f64) => Primitive::Float(*f64),
+                    bad => unreachable!("{bad}"),
+                };
+
+                Ok((Some(result), None))
+            }
+            Self::GenericAbs => {
+                let Some(this) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                let result: Primitive = match this {
+                    Primitive::Int(i32) => Primitive::Int(i32.abs()),
+                    Primitive::BigInt(i128) => Primitive::BigInt(i128.abs()),
+                    Primitive::Byte(u8) => Primitive::Byte(*u8),
+                    Primitive::Float(f64) => Primitive::Float(f64.abs()),
+                    bad => unreachable!("{bad}"),
+                };
+
+                Ok((Some(result), None))
+            }
+            Self::ByteToAscii => {
+                let Some(Primitive::Byte(byte)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                Ok((
+                    Some(Primitive::Str(
+                        String::from_utf8_lossy(&[*byte]).into_owned(),
+                    )),
+                    None,
+                ))
+            }
+            Self::FloatFPart => {
+                let Some(Primitive::Float(float)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                Ok((Some(Primitive::Float(float.fract())), None))
+            }
+            Self::FloatIPart => {
+                let Some(Primitive::Float(float)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                Ok((Some(Primitive::Float(float.trunc())), None))
+            }
+            Self::FloatRound => {
+                let Some(Primitive::Float(float)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                Ok((Some(Primitive::Float(float.round())), None))
+            }
+            Self::FloatFloor => {
+                let Some(Primitive::Float(float)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                Ok((Some(Primitive::Float(float.floor())), None))
+            }
+            Self::FloatCeil => {
+                let Some(Primitive::Float(float)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                Ok((Some(Primitive::Float(float.ceil())), None))
             }
         }
     }
