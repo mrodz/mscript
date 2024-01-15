@@ -631,8 +631,11 @@ macro_rules! new_assoc_function {
     ($types:expr, @void) => {
         new_assoc_function!($types, ScopeReturnStatus::Void)
     };
+    ($types:expr, @str) => {
+        new_assoc_function!($types, ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Native(NativeType::Str(StrWrapper::unknown_size())))))
+    };
     (@to_str) => {
-        new_assoc_function!(vec![], ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Native(NativeType::Str(StrWrapper::unknown_size())))))
+        new_assoc_function!(vec![], @str)
     };
 }
 
@@ -825,7 +828,7 @@ impl TypeLayout {
 
                 Some(Box::new(property_type))
             }
-            _ if property_name == "to_str" => return Some(new_assoc_function!(@to_str)),
+            _ if property_name == "to_str" => Some(new_assoc_function!(@to_str)),
             Self::List(list_type) => {
                 match property_name {
                     "len" => return Some(new_assoc_function!(vec![], @int)),
@@ -847,12 +850,10 @@ impl TypeLayout {
                     let list_type: Cow<'static, TypeLayout> = *list_type.clone();
 
                     match property_name {
-                        "remove" => {
-                            Some(new_assoc_function!(
-                                vec![Cow::Owned(TypeLayout::Native(NativeType::Int))],
-                                ScopeReturnStatus::Should(list_type)
-                            ))
-                        }
+                        "remove" => Some(new_assoc_function!(
+                            vec![Cow::Owned(TypeLayout::Native(NativeType::Int))],
+                            ScopeReturnStatus::Should(list_type)
+                        )),
                         "push" => Some(new_assoc_function!(vec![list_type], @void)),
                         "map" => {
                             let generic_constraint = GenericType::new();
@@ -919,15 +920,148 @@ impl TypeLayout {
                     None
                 }
             }
-            Self::Function(..) => {
-                match property_name {
-                    "is_closure" => Some(new_assoc_function!(
-                        vec![],
-                        ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Native(NativeType::Bool)))
-                    )),
-                    _ => None
+            Self::Native(NativeType::Str(..)) => match property_name {
+                "len" => Some(new_assoc_function!(vec![], @int)),
+                "substring" | "delete" => {
+                    let int_type = TypeLayout::Native(NativeType::Int);
+                    let str_type = Cow::Owned(TypeLayout::Native(NativeType::Str(
+                        StrWrapper::unknown_size(),
+                    )));
+                    Some(new_assoc_function!(
+                        vec![Cow::Owned(int_type.clone()), Cow::Owned(int_type)],
+                        ScopeReturnStatus::Should(str_type)
+                    ))
                 }
-            }
+                "contains" => {
+                    let str_type = Cow::Owned(TypeLayout::Native(NativeType::Str(
+                        StrWrapper::unknown_size(),
+                    )));
+                    Some(new_assoc_function!(
+                        vec![str_type],
+                        ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Native(NativeType::Bool)))
+                    ))
+                }
+                "index_of" => {
+                    let str_type = Cow::Owned(TypeLayout::Native(NativeType::Str(
+                        StrWrapper::unknown_size(),
+                    )));
+
+                    let return_type = TypeLayout::Optional(Some(Box::new(Cow::Owned(
+                        TypeLayout::Native(NativeType::Int),
+                    ))));
+
+                    Some(new_assoc_function!(
+                        vec![str_type],
+                        ScopeReturnStatus::Should(Cow::Owned(return_type))
+                    ))
+                }
+                "inner_capacity" => Some(new_assoc_function!(vec![], @int)),
+                "reverse" => Some(new_assoc_function!(vec![], @str)),
+                "insert" => {
+                    let int_type = TypeLayout::Native(NativeType::Int);
+                    let str_type = TypeLayout::Native(NativeType::Str(StrWrapper::unknown_size()));
+                    Some(
+                        new_assoc_function!(vec![Cow::Owned(str_type.clone()), Cow::Owned(int_type)], @str),
+                    )
+                }
+                "replace" => {
+                    let str_type = TypeLayout::Native(NativeType::Str(StrWrapper::unknown_size()));
+                    Some(
+                        new_assoc_function!(vec![Cow::Owned(str_type.clone()), Cow::Owned(str_type)], @str),
+                    )
+                }
+
+                "parse_int" => {
+                    let return_type = TypeLayout::Optional(Some(Box::new(Cow::Owned(
+                        TypeLayout::Native(NativeType::Int),
+                    ))));
+
+                    Some(new_assoc_function!(
+                        vec![],
+                        ScopeReturnStatus::Should(Cow::Owned(return_type))
+                    ))
+                }
+                "parse_int_radix" => {
+                    let return_type = TypeLayout::Optional(Some(Box::new(Cow::Owned(
+                        TypeLayout::Native(NativeType::Int),
+                    ))));
+
+                    Some(new_assoc_function!(
+                        vec![Cow::Owned(TypeLayout::Native(NativeType::Int))],
+                        ScopeReturnStatus::Should(Cow::Owned(return_type))
+                    ))
+                }
+
+                "parse_bigint" => {
+                    let return_type = TypeLayout::Optional(Some(Box::new(Cow::Owned(
+                        TypeLayout::Native(NativeType::BigInt),
+                    ))));
+
+                    Some(new_assoc_function!(
+                        vec![],
+                        ScopeReturnStatus::Should(Cow::Owned(return_type))
+                    ))
+                }
+                "parse_bigint_radix" => {
+                    let return_type = TypeLayout::Optional(Some(Box::new(Cow::Owned(
+                        TypeLayout::Native(NativeType::BigInt),
+                    ))));
+
+                    Some(new_assoc_function!(
+                        vec![Cow::Owned(TypeLayout::Native(NativeType::Int))],
+                        ScopeReturnStatus::Should(Cow::Owned(return_type))
+                    ))
+                }
+                "parse_bool" => {
+                    let return_type = TypeLayout::Optional(Some(Box::new(Cow::Owned(
+                        TypeLayout::Native(NativeType::Bool),
+                    ))));
+
+                    Some(new_assoc_function!(
+                        vec![],
+                        ScopeReturnStatus::Should(Cow::Owned(return_type))
+                    ))
+                }
+                "parse_float" => {
+                    let return_type = TypeLayout::Optional(Some(Box::new(Cow::Owned(
+                        TypeLayout::Native(NativeType::Float),
+                    ))));
+
+                    Some(new_assoc_function!(
+                        vec![],
+                        ScopeReturnStatus::Should(Cow::Owned(return_type))
+                    ))
+                }
+                "parse_byte" => {
+                    let return_type = TypeLayout::Optional(Some(Box::new(Cow::Owned(
+                        TypeLayout::Native(NativeType::Byte),
+                    ))));
+
+                    Some(new_assoc_function!(
+                        vec![],
+                        ScopeReturnStatus::Should(Cow::Owned(return_type))
+                    ))
+                }
+                "split" => {
+                    let str_type = TypeLayout::Native(NativeType::Str(StrWrapper::unknown_size()));
+                    let return_array = TypeLayout::List(ListType::Mixed(vec![
+                        Cow::Owned(str_type.clone()),
+                        Cow::Owned(str_type),
+                    ]));
+                    Some(new_assoc_function!(
+                        vec![Cow::Owned(TypeLayout::Native(NativeType::Int))],
+                        ScopeReturnStatus::Should(Cow::Owned(return_array))
+                    ))
+                }
+                _ => None,
+            },
+            Self::Function(..) => match property_name {
+                "is_closure" => Some(new_assoc_function!(
+                    vec![],
+                    ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Native(NativeType::Bool)))
+                )),
+                _ => None,
+            },
             _ => None,
         }
     }
@@ -963,6 +1097,7 @@ impl TypeLayout {
                     "fn len() -> int",
                     "fn inner_capacity() -> int",
                     "fn ensure_inner_capacity(int)",
+                    "fn to_str() -> str",
                 ];
 
                 let additional =
@@ -987,8 +1122,34 @@ impl TypeLayout {
                     .collect::<Vec<_>>()
             }
             Self::Function(..) => {
-                vec!["fn is_closure() -> bool".to_owned()]
+                vec![
+                    "fn is_closure() -> bool".to_owned(),
+                    "fn to_str() -> str".to_owned(),
+                ]
             }
+            Self::Native(NativeType::Bool) => vec!["fn to_str() -> str".to_owned()],
+            Self::Native(NativeType::Str(..)) => [
+                "len() -> int",
+                "substring(int, int) -> str",
+                "contains(str) -> bool",
+                "index_of(str) -> int?",
+                "inner_capacity() -> int",
+                "reverse() -> str",
+                "insert(str, int) -> str",
+                "replace(str, str) -> str",
+                "delete(int, int) -> str",
+                "parse_int() -> int?",
+                "parse_int_radix(int) -> int?",
+                "parse_bigint() -> bigint?",
+                "parse_bigint_radix(int) -> bigint?",
+                "parse_bool() -> bool?",
+                "parse_float() -> float?",
+                "parse_byte() -> byte?",
+                "split(int) -> [str, str]",
+            ]
+            .iter()
+            .map(<&str>::to_string)
+            .collect(),
             _ => vec![],
         }
     }

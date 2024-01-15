@@ -200,7 +200,7 @@ impl Primitive {
             (P::Vector(v1), P::Vector(v2)) => return Ok(v1.borrow().eq(v2.borrow().as_slice())),
             (P::Optional(maybe), yes) | (yes, P::Optional(maybe)) => {
                 if let Some(maybe_unwrapped) = maybe {
-                    return Ok(maybe_unwrapped.as_ref() == yes);
+                    return maybe_unwrapped.as_ref().equals(yes);
                 };
             }
             _ => (),
@@ -279,10 +279,30 @@ impl Primitive {
                 "index_of" => Ok(PRIMITIVE_MODULE.vector_index_of()),
                 _ => Err(ret),
             },
+            ret @ P::Str(..) => match property {
+                "len" => Ok(PRIMITIVE_MODULE.str_len()),
+                "substring" => Ok(PRIMITIVE_MODULE.str_substring()),
+                "contains" => Ok(PRIMITIVE_MODULE.str_contains()),
+                "index_of" => Ok(PRIMITIVE_MODULE.str_index_of()),
+                "inner_capacity" => Ok(PRIMITIVE_MODULE.str_inner_capacity()),
+                "reverse" => Ok(PRIMITIVE_MODULE.str_reverse()),
+                "insert" => Ok(PRIMITIVE_MODULE.str_insert()),
+                "replace" => Ok(PRIMITIVE_MODULE.str_replace()),
+                "delete" => Ok(PRIMITIVE_MODULE.str_delete()),
+                "parse_int" => Ok(PRIMITIVE_MODULE.str_parse_int()),
+                "parse_int_radix" => Ok(PRIMITIVE_MODULE.str_parse_int_radix()),
+                "parse_bigint" => Ok(PRIMITIVE_MODULE.str_parse_bigint()),
+                "parse_bigint_radix" => Ok(PRIMITIVE_MODULE.str_parse_bigint_radix()),
+                "parse_bool" => Ok(PRIMITIVE_MODULE.str_parse_bool()),
+                "parse_float" => Ok(PRIMITIVE_MODULE.str_parse_float()),
+                "parse_byte" => Ok(PRIMITIVE_MODULE.str_parse_byte()),
+                "split" => Ok(PRIMITIVE_MODULE.str_split()),
+                _ => Err(ret),
+            },
             ret @ P::Function(..) => match property {
                 "is_closure" => Ok(PRIMITIVE_MODULE.fn_is_closure()),
                 _ => Err(ret),
-            }
+            },
             ret => Err(ret),
         }
     }

@@ -89,6 +89,23 @@ static_module_generator! {
     vector_index_of(BuiltInFunction::VecIndexOf),
     fn_is_closure(BuiltInFunction::FnIsClosure),
     generic_to_str(BuiltInFunction::GenericToStr),
+    str_len(BuiltInFunction::StrLen),
+    str_substring(BuiltInFunction::StrSubstring),
+    str_contains(BuiltInFunction::StrContains),
+    str_index_of(BuiltInFunction::StrIndexOf),
+    str_inner_capacity(BuiltInFunction::StrInnerCapacity),
+    str_reverse(BuiltInFunction::StrReverse),
+    str_insert(BuiltInFunction::StrInsert),
+    str_replace(BuiltInFunction::StrReplace),
+    str_delete(BuiltInFunction::StrDelete),
+    str_parse_int(BuiltInFunction::StrParseInt),
+    str_parse_bigint(BuiltInFunction::StrParseBigint),
+    str_parse_int_radix(BuiltInFunction::StrParseIntRadix),
+    str_parse_bigint_radix(BuiltInFunction::StrParseBigintRadix),
+    str_parse_bool(BuiltInFunction::StrParseBool),
+    str_parse_float(BuiltInFunction::StrParseFloat),
+    str_parse_byte(BuiltInFunction::StrParseByte),
+    str_split(BuiltInFunction::StrSplit)
 }
 
 impl PrimitiveFlagsPair {

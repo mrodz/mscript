@@ -33,6 +33,23 @@ pub enum BuiltInFunction {
     VecIndexOf,
     FnIsClosure,
     GenericToStr,
+    StrLen,
+    StrSubstring,
+    StrContains,
+    StrIndexOf,
+    StrInnerCapacity,
+    StrReverse,
+    StrInsert,
+    StrReplace,
+    StrDelete,
+    StrParseInt,
+    StrParseIntRadix,
+    StrParseBigint,
+    StrParseBigintRadix,
+    StrParseBool,
+    StrParseFloat,
+    StrParseByte,
+    StrSplit,
 }
 
 type BuiltInFunctionReturnBundle = (
@@ -231,11 +248,12 @@ impl BuiltInFunction {
 
                         if let ReturnValue::Value(Primitive::Bool(true)) = return_value {
                             let underlying = self.underlying.borrow();
-                            let this_index = self.index.get() - 1;
-                            result.push(underlying[this_index as usize].clone());
+                            let this_index: usize = (self.index.get() - 1).try_into()?;
+                            result.push(underlying[this_index].clone());
                         }
 
-                        Ok((self.index.get() as usize) < self.underlying.borrow().len())
+                        Ok(<i32 as TryInto<usize>>::try_into(self.index.get())?
+                            < self.underlying.borrow().len())
                     }
 
                     fn finish(&self) -> Result<Option<Primitive>> {
@@ -322,12 +340,317 @@ impl BuiltInFunction {
                     Ok((Some(Primitive::Optional(None)), None))
                 }
             }
-            Self::FnIsClosure => {
-                match arguments.get(0) {
-                    Some(Primitive::Function(f)) => Ok((Some(Primitive::Bool(f.callback_state.is_some())), None)),
-                    Some(Primitive::BuiltInFunction(..)) => Ok((Some(Primitive::Bool(false)), None)),
-                    _ => unreachable!()
+            Self::FnIsClosure => match arguments.get(0) {
+                Some(Primitive::Function(f)) => {
+                    Ok((Some(Primitive::Bool(f.callback_state.is_some())), None))
                 }
+                Some(Primitive::BuiltInFunction(..)) => Ok((Some(Primitive::Bool(false)), None)),
+                _ => unreachable!(),
+            },
+            Self::StrLen => {
+                let Some(Primitive::Str(v)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                Ok((Some(Primitive::Int(v.len().try_into()?)), None))
+            }
+            Self::StrSubstring => {
+                let Some(Primitive::Str(s)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                let Some(Primitive::Int(bottom)) = arguments.get(1) else {
+                    unreachable!()
+                };
+
+                let Some(Primitive::Int(top)) = arguments.get(2) else {
+                    unreachable!()
+                };
+
+                Ok((
+                    Some(Primitive::Str(
+                        s[(*bottom).try_into()?..(*top).try_into()?].to_owned(),
+                    )),
+                    None,
+                ))
+            }
+            Self::StrContains => {
+                let Some(Primitive::Str(s)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                let Some(Primitive::Str(o)) = arguments.get(1) else {
+                    unreachable!()
+                };
+
+                Ok((Some(Primitive::Bool(s.contains(o))), None))
+            }
+            Self::StrIndexOf => {
+                let Some(Primitive::Str(s)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                let Some(Primitive::Str(o)) = arguments.get(1) else {
+                    unreachable!()
+                };
+
+                if let Some(start) = s.find(o) {
+                    Ok((
+                        Some(Primitive::Optional(Some(Box::new(Primitive::Int(
+                            start.try_into()?,
+                        ))))),
+                        None,
+                    ))
+                } else {
+                    Ok((Some(Primitive::Optional(None)), None))
+                }
+            }
+            Self::StrInnerCapacity => {
+                let Some(Primitive::Str(v)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                Ok((Some(Primitive::Int(v.capacity().try_into()?)), None))
+            }
+            Self::StrReverse => {
+                let Some(Primitive::Str(v)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                Ok((Some(Primitive::Str(v.chars().rev().collect())), None))
+            }
+            Self::StrInsert => {
+                let Some(Primitive::Str(original)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                let Some(Primitive::Str(new)) = arguments.get(1) else {
+                    unreachable!()
+                };
+
+                let Some(Primitive::Int(bottom)) = arguments.get(2) else {
+                    unreachable!()
+                };
+
+                let mut result = original.clone();
+
+                result.insert_str((*bottom).try_into()?, new);
+                Ok((Some(Primitive::Str(result)), None))
+            }
+            Self::StrReplace => {
+                let Some(Primitive::Str(original)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                let Some(Primitive::Str(pattern)) = arguments.get(1) else {
+                    unreachable!()
+                };
+
+                let Some(Primitive::Str(replacement)) = arguments.get(2) else {
+                    unreachable!()
+                };
+
+                Ok((
+                    Some(Primitive::Str(original.replace(pattern, replacement))),
+                    None,
+                ))
+            }
+            Self::StrDelete => {
+                let Some(Primitive::Str(s)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                let Some(Primitive::Int(bottom)) = arguments.get(1) else {
+                    unreachable!()
+                };
+
+                let Some(Primitive::Int(top)) = arguments.get(2) else {
+                    unreachable!()
+                };
+
+                let mut result = String::with_capacity(
+                    s.len() - <i32 as TryInto<usize>>::try_into(top - bottom + 1)?,
+                );
+
+                result.push_str(&s[..(*bottom).try_into()?]);
+                result.push_str(&s[(*top).try_into()?..]);
+
+                Ok((Some(Primitive::Str(result)), None))
+            }
+            Self::StrParseInt => {
+                let Some(Primitive::Str(s)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                let s = if s.starts_with("0x") {
+                    s.get(2..).unwrap_or_default()
+                } else {
+                    s
+                };
+
+                if let Ok(num) = s.parse::<i32>() {
+                    Ok((
+                        Some(Primitive::Optional(Some(Box::new(Primitive::Int(num))))),
+                        None,
+                    ))
+                } else {
+                    Ok((Some(Primitive::Optional(None)), None))
+                }
+            }
+            Self::StrParseBigint => {
+                let Some(Primitive::Str(s)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                let s = if s.starts_with("0x") {
+                    s.get(2..).unwrap_or_default()
+                } else {
+                    s
+                };
+
+                if let Ok(num) = s.parse::<i128>() {
+                    Ok((
+                        Some(Primitive::Optional(Some(Box::new(Primitive::BigInt(num))))),
+                        None,
+                    ))
+                } else {
+                    Ok((Some(Primitive::Optional(None)), None))
+                }
+            }
+            Self::StrParseIntRadix => {
+                let Some(Primitive::Str(s)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                let Some(Primitive::Int(radix)) = arguments.get(1) else {
+                    unreachable!()
+                };
+
+                let s = if s.starts_with("0x") {
+                    s.get(2..).unwrap_or_default()
+                } else {
+                    s
+                };
+
+                if let Ok(num) = i32::from_str_radix(s, (*radix).try_into()?) {
+                    Ok((
+                        Some(Primitive::Optional(Some(Box::new(Primitive::Int(num))))),
+                        None,
+                    ))
+                } else {
+                    Ok((Some(Primitive::Optional(None)), None))
+                }
+            }
+            Self::StrParseBigintRadix => {
+                let Some(Primitive::Str(s)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                let Some(Primitive::Int(radix)) = arguments.get(1) else {
+                    unreachable!()
+                };
+
+                let s = if s.starts_with("0x") {
+                    s.get(2..).unwrap_or_default()
+                } else {
+                    s
+                };
+
+                if let Ok(num) = i128::from_str_radix(s, (*radix).try_into()?) {
+                    Ok((
+                        Some(Primitive::Optional(Some(Box::new(Primitive::BigInt(num))))),
+                        None,
+                    ))
+                } else {
+                    Ok((Some(Primitive::Optional(None)), None))
+                }
+            }
+            Self::StrParseBool => {
+                let Some(Primitive::Str(s)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                if let Ok(b) = s.parse::<bool>() {
+                    Ok((
+                        Some(Primitive::Optional(Some(Box::new(Primitive::Bool(b))))),
+                        None,
+                    ))
+                } else {
+                    Ok((Some(Primitive::Optional(None)), None))
+                }
+            }
+            Self::StrParseFloat => {
+                let Some(Primitive::Str(s)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                if let Ok(num) = s.parse::<f64>() {
+                    Ok((
+                        Some(Primitive::Optional(Some(Box::new(Primitive::Float(num))))),
+                        None,
+                    ))
+                } else {
+                    Ok((Some(Primitive::Optional(None)), None))
+                }
+            }
+            Self::StrParseByte => {
+                let Some(Primitive::Str(s)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                let (s, radix) = if s.starts_with("0b") {
+                    (s.get(2..).unwrap_or_default(), 2)
+                } else {
+                    (s.as_str(), 10)
+                };
+
+                if let Ok(num) = u8::from_str_radix(s, radix) {
+                    Ok((
+                        Some(Primitive::Optional(Some(Box::new(Primitive::Byte(num))))),
+                        None,
+                    ))
+                } else {
+                    Ok((Some(Primitive::Optional(None)), None))
+                }
+            }
+            Self::StrSplit => {
+                let Some(Primitive::Str(s)) = arguments.get(0) else {
+                    unreachable!()
+                };
+
+                let Some(Primitive::Int(mid)) = arguments.get(1) else {
+                    unreachable!()
+                };
+
+                if *mid < 0 {
+                    return Ok((
+                        Some(Primitive::Vector(Rc::new(RefCell::new(vec![
+                            Primitive::Str(s.to_owned()),
+                            Primitive::Str("".to_owned()),
+                        ])))),
+                        None,
+                    ));
+                }
+
+                if *mid >= s.len().try_into()? {
+                    return Ok((
+                        Some(Primitive::Vector(Rc::new(RefCell::new(vec![
+                            Primitive::Str(s.to_owned()),
+                            Primitive::Str("".to_owned()),
+                        ])))),
+                        None,
+                    ));
+                }
+
+                let (lhs, rhs) = s.split_at((*mid).try_into()?);
+
+                Ok((
+                    Some(Primitive::Vector(Rc::new(RefCell::new(vec![
+                        Primitive::Str(lhs.to_owned()),
+                        Primitive::Str(rhs.to_owned()),
+                    ])))),
+                    None,
+                ))
             }
         }
     }

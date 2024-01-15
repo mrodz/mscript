@@ -42,7 +42,7 @@ impl Parser {
             return Err(vec![new_err(
                 value_span,
                 &input.user_data().get_file_name(),
-                format!("assert expects boolean, but `{value_ty}` was supplied"),
+                format!("assert expects a `bool` value, but `{value_ty}` was supplied"),
             )]);
         }
 
