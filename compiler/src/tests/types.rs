@@ -328,3 +328,142 @@ fn class_self_aliases_forget_unwrap() {
     )
     .unwrap()
 }
+
+#[test]
+fn list_with_optionals() {
+    eval(
+        r#"
+        type numberz int
+
+        xxx: numberz = 99
+
+        type unicorn numberz?
+
+        yyy: unicorn? = 100
+
+        assert typeof yyy == "unicorn?"
+
+        a: [int?...] = [5, xxx, nil, -1]
+
+        result: [str...] = []
+
+        from 0 to a.len(), i {
+            result.push((a[i]).to_str() + ": " + typeof a[i])
+        }
+
+        assert result == ["5: int?", "99: int?", "nil: int?", "-1: int?"]
+    "#,
+    )
+    .unwrap()
+}
+
+/// The expected message provided is very deep in the error hint, so if it is encountered,
+/// it is likely to be correct.
+///
+/// ## Expected Hint
+/// <pre>
+/// $__EVAL_ENV__.ms:12:12
+///    |
+/// 12 |         a: [int?...] = [5, xxx, nil, yyy]
+///    |            ^--------^
+///    |
+///    = declaration wanted `[int?...]`, but value is `[int, numberz, nil, unicorn?]`
+///         + hint: value at index 3 has type `unicorn?`, which is not compatible with `int?`
+///             + hint: these optionals have differing underlying types: `unicorn` is not compatible with `int`
+///                 + hint: `unicorn` is an alias for `numberz?`
+///                     + hint: unwrap this optional to use its value using the `get` keyword, or provide a fallback with the `or` keyword
+///                         + hint: `numberz` is an alias for `int` << HERE IS WHAT WE'RE TESTING FOR
+/// </pre>
+#[test]
+#[should_panic = "+ hint: `numberz` is an alias for `int`"]
+fn list_with_optionals_type_mismatch() {
+    eval(
+        r#"
+        type numberz int
+
+        xxx: numberz = 99
+
+        type unicorn numberz?
+
+        yyy: unicorn? = 100
+
+        print typeof yyy
+
+        a: [int?...] = [5, xxx, nil, yyy]
+
+        from 0 to a.len(), i {
+            print (a[i]).to_str() + ": " + typeof a[i]
+        }
+    "#,
+    )
+    .unwrap()
+}
+
+#[test]
+fn list_with_optional_class() {
+    eval(
+        r#"
+        class Dog {
+            name: str
+            constructor(self, name: str) {
+                self.name = name
+            }
+            fn to_str(self) -> str {
+                return "Dog named " + self.name
+            }
+        }
+        
+        class Cat {
+            name: str
+            breed: str
+            constructor(self, name: str, breed: str) {
+                self.name = name
+                self.breed = breed
+            }
+            fn to_str(self) -> str {
+                return "Cat named " + self.name + " is a " + self.breed
+            }
+        }
+        
+        dogs: [Dog...] = [Dog("Old Yeller"), Dog("Air Bud"), Dog("Odie")]
+        
+        dogs.push(Dog("Scout"))
+        dogs.push(Dog("Muna"))
+        
+        assert dogs.len() == 5
+        assert (dogs[3]).name == "Scout"
+        
+        dogs_str: [str...] = []
+        from 0 to dogs.len(), i {
+            dogs_str.push((dogs[i]).to_str() + ": " + typeof dogs[i])
+        }
+        
+        assert dogs_str == ["Dog named Old Yeller: Dog", "Dog named Air Bud: Dog", "Dog named Odie: Dog", "Dog named Scout: Dog", "Dog named Muna: Dog"]
+        
+        dogs.reverse()
+        
+        maybe_dogs = dogs.map(fn(x: Dog) -> Dog? { return x })
+        
+        assert typeof maybe_dogs == "[Dog?...]"
+        assert dogs == maybe_dogs
+        
+        maybe_dogs_str: [str...] = []
+        
+        from 0 to maybe_dogs.len(), i {
+            maybe_dogs_str.push((maybe_dogs[i]).to_str() + ": " + typeof maybe_dogs[i])
+        }
+        
+        assert maybe_dogs_str == ["Dog named Muna: Dog?", "Dog named Scout: Dog?", "Dog named Odie: Dog?", "Dog named Air Bud: Dog?", "Dog named Old Yeller: Dog?"]
+        
+        cats = maybe_dogs.map(fn(x: Dog?) -> Cat { return Cat((get x).name, "tabby") })
+        
+        cats_str: [str...] = []
+        from 0 to cats.len(), i {
+            cats_str.push((cats[i]).to_str() + ": " + typeof cats[i])
+        }
+        
+        assert cats_str == ["Cat named Muna is a tabby: Cat", "Cat named Scout is a tabby: Cat", "Cat named Odie is a tabby: Cat", "Cat named Air Bud is a tabby: Cat", "Cat named Old Yeller is a tabby: Cat"]
+    "#,
+    )
+    .unwrap();
+}

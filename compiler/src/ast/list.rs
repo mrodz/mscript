@@ -215,10 +215,7 @@ impl PartialEq for ListType {
             (E::Open(t1), E::Open(t2)) => t1.eq_complex(t2, &typecheck_flags),
             (E::Mixed(t1), E::Open(t2)) | (E::Open(t2), E::Mixed(t1)) => {
                 for ty in t1 {
-                    if !ty.disregard_distractors(false).eq_complex(
-                        t2.disregard_distractors(false),
-                        &TypecheckFlags::<&ClassType>::classless(),
-                    ) {
+                    if !t2.eq_complex(ty, &TypecheckFlags::<&ClassType>::classless()) {
                         return false;
                     }
                 }

@@ -10,9 +10,10 @@ use crate::{
 };
 use anyhow::{bail, Result};
 use std::{
-    cell::{RefCell, RefMut, Ref},
+    cell::{Ref, RefCell, RefMut},
     fmt::{Debug, Display},
-    rc::Rc, ops::Deref,
+    ops::Deref,
+    rc::Rc,
 };
 
 /// This macro allows easy recursion over variants.
@@ -101,9 +102,7 @@ impl HeapPrimitive {
                 Ok(Box::new(new_value))
             }
             Self::ArrayPtr(array, index) => {
-                let new_val = {
-                    setter(array.borrow().get(*index).unwrap())?
-                };
+                let new_val = { setter(array.borrow().get(*index).unwrap())? };
 
                 let view = array.borrow_mut();
 
@@ -113,7 +112,6 @@ impl HeapPrimitive {
                     view
                 });
 
-                
                 Ok(Box::new(result))
             }
         }
@@ -121,9 +119,7 @@ impl HeapPrimitive {
 
     fn borrow(&self) -> Box<dyn Deref<Target = Primitive> + '_> {
         match self {
-            Self::Lookup(lookup) => {
-                Box::new(lookup.primitive())
-            }
+            Self::Lookup(lookup) => Box::new(lookup.primitive()),
             Self::ArrayPtr(array, index) => {
                 let view = array.borrow();
 
@@ -132,7 +128,6 @@ impl HeapPrimitive {
                     view
                 });
 
-                
                 Box::new(result)
             }
         }
@@ -142,7 +137,9 @@ impl HeapPrimitive {
 impl PartialEq for HeapPrimitive {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::ArrayPtr(a1, i1), Self::ArrayPtr(a2, i2)) => a1.borrow().eq(&a2.borrow()[..]) && i1 == i2,
+            (Self::ArrayPtr(a1, i1), Self::ArrayPtr(a2, i2)) => {
+                a1.borrow().eq(&a2.borrow()[..]) && i1 == i2
+            }
             (Self::Lookup(lhs), Self::Lookup(rhs)) => lhs == rhs,
             _ => unimplemented!("not comparable"),
         }

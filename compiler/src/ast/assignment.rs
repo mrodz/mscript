@@ -14,7 +14,7 @@ use crate::{
 
 use super::{
     map_err, new_err, value::Value, CompilationState, Compile, CompileTimeEvaluate,
-    ConstexprEvaluation, Dependencies, Dependency, Ident, WalkForType,
+    ConstexprEvaluation, Dependencies, Dependency, Ident, IntoType, TypeLayout, WalkForType,
 };
 
 #[derive(Debug)]
@@ -393,6 +393,17 @@ impl Parser {
             }
             rule => unreachable!("{rule:?}"),
         };
+
+        if matches!(
+            x.value.for_type().unwrap().disregard_distractors(true),
+            TypeLayout::Void
+        ) {
+            return Err(vec![new_err(
+                value_span,
+                &input.user_data().get_source_file_name(),
+                "cannot store void".to_owned(),
+            )]);
+        }
 
         if let ConstexprEvaluation::Owned(data) = x
             .value()

@@ -202,7 +202,8 @@ pub mod implementations {
                 bail!("`bin_op_assign` tried to modify a pointer, but {maybe_ptr} is not a HeapPrimitive");
             };
 
-            let result = ptr.update(|current| {
+            let result = ptr
+                .update(|current| {
                     Ok(match op.as_str() {
                         "+=" => (current + &value)?,
                         "-=" => (current - &value)?,
@@ -211,7 +212,8 @@ pub mod implementations {
                         "%=" => (current % &value)?,
                         _ => bail!("unknown assignment operation: {op}"),
                     })
-                })?.to_owned();
+                })?
+                .to_owned();
 
             *maybe_ptr = result;
         };
@@ -293,7 +295,7 @@ pub mod implementations {
                             bail!("index {idx} out of bounds (len {len})")
                         }
                     }
-                    
+
                     let heap_primitive = HeapPrimitive::new_array_view(vector_shared, idx);
 
                     ctx.push(Primitive::HeapPrimitive(heap_primitive));

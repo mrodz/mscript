@@ -562,7 +562,7 @@ impl Display for TypeLayout {
             Self::Class(class_type) => write!(f, "{}", class_type.name()),
             Self::ClassSelf => write!(f, "Self"),
             Self::Optional(Some(ty)) => write!(f, "{ty}?"),
-            Self::Optional(None) => write!(f, "!"),
+            Self::Optional(None) => write!(f, "nil"),
             Self::Void => write!(f, "void"),
             Self::Generic(generic) => write!(f, "{generic}"),
             Self::Module(module) => write!(f, "<module {:?}>", module.name.as_os_str()),
@@ -578,6 +578,7 @@ where
     executing_class: Option<T>,
     lhs_allow_optional_unwrap: bool,
     force_rhs_to_be_unwrapped_lhs: bool,
+    signature_check: bool,
 }
 
 impl<T> TypecheckFlags<T>
@@ -589,6 +590,16 @@ where
             executing_class: None,
             lhs_allow_optional_unwrap: false,
             force_rhs_to_be_unwrapped_lhs: false,
+            signature_check: false,
+        }
+    }
+
+    pub const fn signature_check() -> Self {
+        Self {
+            executing_class: None,
+            lhs_allow_optional_unwrap: false,
+            force_rhs_to_be_unwrapped_lhs: false,
+            signature_check: true,
         }
     }
 
@@ -597,6 +608,7 @@ where
             executing_class: class_type,
             lhs_allow_optional_unwrap: false,
             force_rhs_to_be_unwrapped_lhs: false,
+            signature_check: false,
         }
     }
 
@@ -606,7 +618,7 @@ where
     }
 
     #[allow(unused)]
-    pub const fn force_lhs_to_be_unwrapped_lhs(mut self, predicate: bool) -> Self {
+    pub const fn force_rhs_to_be_unwrapped_lhs(mut self, predicate: bool) -> Self {
         self.force_rhs_to_be_unwrapped_lhs = predicate;
         self
     }
@@ -726,27 +738,61 @@ impl TypeLayout {
                 let maybe_extended_hint = x_underlying.get_error_hint_between_types_recursive(y, class_self, tab_depth + 1).unwrap_or_default();
                 format!("\n{tabs}+ hint: this generic (unique id: {}) stands in place of {x_underlying}{maybe_extended_hint}", x.id())
             }
-            (Native(BigInt), Native(Int)) => format!("\n{tabs}+ hint: try adding 'B' before a number to convert it to a bigint, eg. `99` -> `B99` or `0x6` -> `B0x6`"),
-            (Native(Byte), Native(Int | BigInt)) => format!("\n{tabs}+ hint: try adding '0b' before a number to specify a byte literal, eg. `5` -> `0b101`"),
-            (Native(Int), Native(Float)) => format!("\n{tabs}+ hint: cast this floating point value to an integer"),
+            (Native(BigInt), Native(Int)) | (Native(Int), Native(BigInt)) => format!("\n{tabs}+ hint: try adding 'B' before a number to convert it to a bigint, eg. `99` -> `B99` or `0x6` -> `B0x6`"),
+            (Native(Byte), Native(Int | BigInt)) | (Native(Int | BigInt), Native(Byte)) => format!("\n{tabs}+ hint: try adding '0b' before a number to specify a byte literal, eg. `5` -> `0b101`"),
+            (Native(Int | BigInt | Byte), Native(Float)) => format!("\n{tabs}+ hint: cast this floating point value to an integer"),
             (Native(Float), Native(Int | BigInt | Byte)) => format!("\n{tabs}+ hint: cast this integer type to a floating point"),
+            (Alias(str, ty), y) | (y, Alias(str, ty)) => {
+                let maybe_extended_hint = ty.get_error_hint_between_types_recursive(y, class_self, tab_depth + 1).unwrap_or_default();
+                format!("\n{tabs}+ hint: `{str}` is an alias for `{ty}`{maybe_extended_hint}")
+            }
+            (Optional(Some(x)), Optional(Some(y))) => {
+                let maybe_extended_hint = x.get_error_hint_between_types_recursive(y, class_self, tab_depth + 1).unwrap_or_default();
+                format!("\n{tabs}+ hint: these optionals have differing underlying types: `{x}` is not compatible with `{y}`{maybe_extended_hint}")
+            }
             (x, Optional(Some(y))) | (Optional(Some(y)), x) if x.disregard_distractors(false).eq_include_class_self(y.disregard_distractors(false)) => {
                 let maybe_extended_hint = x.get_error_hint_between_types_recursive(y, class_self, tab_depth + 1).unwrap_or_default();
                 format!("\n{tabs}+ hint: unwrap this optional to use its value using the `get` keyword, or provide a fallback with the `or` keyword{maybe_extended_hint}")
             }
-            (Alias(str, ty), y) => {
-                let maybe_extended_hint = ty.get_error_hint_between_types_recursive(y, class_self, tab_depth + 1).unwrap_or_default();
-                format!("\n{tabs}+ hint: `{str}` is an alias for `{ty}`{maybe_extended_hint}")
-            }
             _ if self.disregard_distractors(true) == &ClassSelf || incompatible.disregard_distractors(true) == &ClassSelf => {
                 format!("\n{tabs}+ hint: `Self` in this context means {}", class_self.map(|x| Cow::Owned(format!("`{}`", x.name()))).unwrap_or(Cow::Borrowed("a function's associated class")))
             }
+            (List(l1), List(l2)) => {
+                match (l1, l2) {
+                    (ListType::Open(t1), ListType::Open(t2)) => {
+                        let maybe_extended_hint = t1.get_error_hint_between_types_recursive(t2, class_self, tab_depth + 1).unwrap_or_default();
+                        format!("\n{tabs}+ hint: these growable lists do not share the same root type: `{t1}` is not compatible with `{t2}`{maybe_extended_hint}")
+                    }
+                    (ListType::Mixed(types), ListType::Open(ty)) | (ListType::Open(ty), ListType::Mixed(types)) => {
+                        for (i, t) in types.iter().enumerate() {
+                            if !ty.eq_complex(t, &TypecheckFlags::<&ClassType>::classless()) {
+                                let maybe_extended_hint = t.get_error_hint_between_types_recursive(ty, class_self, tab_depth + 1).unwrap_or_default();
+
+                                return Some(format!("\n{tabs}+ hint: value at index {i} has type `{t}`, which is not compatible with `{ty}`{maybe_extended_hint}"));
+                            }
+                        }
+                        return None;
+                    }
+                    (ListType::Mixed(m1), ListType::Mixed(m2)) => {
+                        if m1.len() != m2.len() {
+                            return Some(format!("\n{tabs}+ hint: these two lists have different lengths: {} and {}", m1.len(), m2.len()));
+                        }
+
+                        for (i, (x, y)) in m1.iter().zip(m2.iter()).enumerate() {
+                            if !x.eq_complex(y, &TypecheckFlags::<&ClassType>::classless()) {
+                                let maybe_extended_hint = x.get_error_hint_between_types_recursive(y, class_self, tab_depth + 1).unwrap_or_default();
+
+                                return Some(format!("\n{tabs}+ hint: type mismatch at index `{i}`: types `{x}` and `{y}` are not compatible{maybe_extended_hint}"));
+                            }
+                        }
+
+                        return None;
+                    }
+                }
+            }
             (Native(Str(..)), _) => format!("\n{tabs}+ hint: call `.to_str()` on this item to convert it into a str"),
             (Function(..), Function(..)) => format!("\n{tabs}+ hint: check the function type that you provided"),
-            (y, Alias(str, ty)) => {
-                let maybe_extended_hint = y.get_error_hint_between_types_recursive(ty, class_self, tab_depth + 1).unwrap_or_default();
-                format!("\n{tabs}+ hint: `{str}` is an alias for `{ty}`{maybe_extended_hint}")
-            }
+            // (List(ListType::Mixed(types)), List(ListType::Open(..))) 
             _ => return None,
         })
     }
@@ -846,11 +892,19 @@ impl TypeLayout {
 
                 Some(Box::new(property_type))
             }
+            Self::Generic(generic) => {
+                if let Some(ty) = generic.try_get_lock() {
+                    let property = ty.get_property_type(property_name)?;
+                    let property = property.as_ref().deref().clone();
+                    Some(Box::new(Box::new(property)))
+                } else {
+                    None
+                }
+            }
             _ if property_name == "to_str" => Some(new_assoc_function!(@to_str)),
             Self::List(list_type) => {
                 match property_name {
                     "len" => return Some(new_assoc_function!(vec![], @int)),
-                    "reverse" => return Some(new_assoc_function!(vec![], @void)),
                     "inner_capacity" => return Some(new_assoc_function!(vec![], @int)),
                     "ensure_inner_capacity" => {
                         return Some(
@@ -872,6 +926,7 @@ impl TypeLayout {
                             vec![Cow::Owned(TypeLayout::Native(NativeType::Int))],
                             ScopeReturnStatus::Should(list_type)
                         )),
+                        "reverse" => Some(new_assoc_function!(vec![], @void)),
                         "push" => Some(new_assoc_function!(vec![list_type], @void)),
                         "map" => {
                             let generic_constraint = GenericType::new();
@@ -1009,7 +1064,6 @@ impl TypeLayout {
                         ScopeReturnStatus::Should(Cow::Owned(return_type))
                     ))
                 }
-
                 "parse_bigint" => {
                     let return_type = TypeLayout::Optional(Some(Box::new(Cow::Owned(
                         TypeLayout::Native(NativeType::BigInt),
@@ -1329,11 +1383,16 @@ impl TypeLayout {
             {
                 true
             }
-            (Self::Optional(Some(x)), y, _) if flags.force_rhs_to_be_unwrapped_lhs => {
-                log::debug!("match(x:{x} y:{y})");
-                x.get_type_recursively() == y.get_type_recursively()
+            (Self::Optional(Some(x)), Self::Optional(Some(y)), _) => {
+                x.eq_complex(y.as_ref(), flags)
             }
-            (Self::Optional(Some(x)), y, _) => x.eq_complex(y, flags),
+            (Self::Optional(Some(x)), y, _)
+                if flags.force_rhs_to_be_unwrapped_lhs && !flags.signature_check =>
+            {
+                log::debug!("match(x:{x} y:{y})");
+                x.eq_complex(y, flags)
+            }
+            (Self::Optional(Some(x)), y, _) if !flags.signature_check => x.eq_complex(y, flags),
             (y, Self::Optional(Some(x)), _) if flags.lhs_allow_optional_unwrap => {
                 x.eq_complex(y, flags)
             }
@@ -1585,7 +1644,7 @@ impl TypeLayout {
         match (self, value) {
             (TypeLayout::Class(..), TypeLayout::ClassSelf) => true,
             (TypeLayout::ClassSelf, TypeLayout::Class(..)) => true,
-            (x, y) => x == y,
+            (x, y) => x.eq_complex(y, &TypecheckFlags::<&ClassType>::classless()),
         }
     }
 }

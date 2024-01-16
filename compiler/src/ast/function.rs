@@ -92,7 +92,7 @@ impl PartialEq for FunctionType {
 
         t1.iter()
             .zip(t2.iter())
-            .all(|(x, y)| x.eq_complex(y, &TypecheckFlags::<&ClassType>::classless()))
+            .all(|(x, y)| x.eq_complex(y, &TypecheckFlags::<&ClassType>::signature_check()))
     }
 }
 
