@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use anyhow::Result;
+use anyhow::{Result, Context};
 
 use crate::{
     instruction,
@@ -194,7 +194,7 @@ impl Parser {
                         if ident_ty.is_class() {
                             allow_self_type = Cow::Owned(ident_ty.clone().into_owned());
                         } else {
-                            let callable_ty = ident_ty
+                            let callable_ty = dbg!(ident_ty)
                                 .is_callable()
                                 .details(
                                     input.as_span(),
@@ -228,9 +228,8 @@ impl Parser {
                 let output_type = function_type.return_type();
 
                 let output_type = output_type
-                    .get_type()
-                    .unwrap_or(&Cow::Owned(TypeLayout::Void));
-
+                    .get_type().context("this scope does not return a value, not even `void`").to_err_vec()?;
+                
                 let output_type = if output_type.is_class_self() {
                     lhs_ty_cow
                 } else {

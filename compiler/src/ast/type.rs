@@ -13,7 +13,7 @@ use anyhow::{bail, Context, Result};
 use pest::Span;
 use std::{
     borrow::Cow,
-    cell::{Ref, RefCell},
+    cell::{Ref, RefCell, RefMut},
     collections::HashMap,
     fmt::{Debug, Display},
     hash::Hash,
@@ -526,6 +526,11 @@ impl GenericType {
         // let view = self.stands_for.borrow();
         Ref::filter_map(self.stands_for.borrow(), Option::as_ref).ok()
     }
+
+    pub fn try_get_lock_mut(&self) -> Option<RefMut<Cow<'static, TypeLayout>>> {
+        // let view = self.stands_for.borrow();
+        RefMut::filter_map(self.stands_for.borrow_mut(), Option::as_mut).ok()
+    }
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -539,6 +544,7 @@ pub(crate) enum TypeLayout {
     List(ListType),
     ValidIndexes(ListBound),
     Class(ClassType),
+    ClassConstructor(ClassType),
     Module(ModuleType),
     ClassSelf,
     Generic(GenericType),
@@ -560,6 +566,7 @@ impl Display for TypeLayout {
             Self::List(list) => write!(f, "{list}"),
             Self::ValidIndexes(upper) => write!(f, "[..{upper}]"),
             Self::Class(class_type) => write!(f, "{}", class_type.name()),
+            Self::ClassConstructor(class_type) => write!(f, "{}$constructor", class_type.name()),
             Self::ClassSelf => write!(f, "Self"),
             Self::Optional(Some(ty)) => write!(f, "{ty}?"),
             Self::Optional(None) => write!(f, "nil"),
@@ -705,6 +712,19 @@ impl TypeLayout {
         matches!(me, TypeLayout::Class(..))
     }
 
+    pub fn supports_equ(&self) -> bool {
+        let me = self.get_type_recursively();
+
+        match me {
+            TypeLayout::Class(..) => false,
+            TypeLayout::Function(..) => false,
+            TypeLayout::Module(..) => false,
+            TypeLayout::ValidIndexes(..) => unreachable!(),
+            TypeLayout::Void => false,
+            _ => true
+        }
+    }
+
     pub fn get_error_hint_between_types<T>(
         &self,
         incompatible: &Self,
@@ -838,11 +858,85 @@ impl TypeLayout {
         }
     }
 
+    pub fn update_all_references_to_class_self(&self, class_type: ClassType) -> TypeLayout {
+        match self {
+            Self::Alias(name, ty) => Self::Alias(
+                name.to_owned(),
+                Box::new(Cow::Owned(
+                    ty.update_all_references_to_class_self(class_type),
+                )),
+            ),
+            Self::CallbackVariable(cb) => {
+                Self::CallbackVariable(Box::new(cb.update_all_references_to_class_self(class_type)))
+            }
+            Self::Function(function) => {
+                let (is_return_type_class_self, is_return_type_optional) = {
+                    // scoped because `try_set_return_type` borrows mutably
+                    let return_type = function.return_type();
+
+                    if let Some(ty) = return_type.get_type() {
+                        (
+                            ty.disregard_distractors(true).is_class_self(),
+                            ty.disregard_distractors(false).is_optional().0,
+                        )
+                    } else {
+                        (false, false)
+                    }
+                };
+
+                if is_return_type_class_self {
+                    let mut return_type = Cow::Owned(TypeLayout::Class(class_type));
+
+                    if is_return_type_optional {
+                        return_type = Cow::Owned(TypeLayout::Optional(Some(Box::new(return_type))))
+                    }
+
+                    let new_return_status = ScopeReturnStatus::Did(return_type);
+
+                    function.try_set_return_type(new_return_status);
+                }
+
+                TypeLayout::Function(function.clone())
+            }
+            Self::Generic(generic) => {
+                if let Some(mut ty) = generic.try_get_lock_mut() {
+                    let result = ty.update_all_references_to_class_self(class_type);
+                    *ty = Cow::Owned(result);
+                }
+
+                return TypeLayout::Generic(generic.clone());
+            }
+            Self::List(ListType::Mixed(types)) => {
+                let mut result = Vec::with_capacity(types.len());
+                for ty in types {
+                    result.push(Cow::Owned(
+                        ty.update_all_references_to_class_self(class_type.clone()),
+                    ));
+                }
+                Self::List(ListType::Mixed(result))
+            }
+            Self::List(ListType::Open(ty)) => Self::List(ListType::Open(Box::new(Cow::Owned(
+                ty.update_all_references_to_class_self(class_type),
+            )))),
+            Self::Optional(Some(o)) => Self::Optional(Some(Box::new(Cow::Owned(
+                o.update_all_references_to_class_self(class_type),
+            )))),
+            Self::ClassSelf => TypeLayout::Class(class_type),
+            ret @ (Self::Class(..)
+            | Self::ClassConstructor(..)
+            | Self::Optional(None)
+            | Self::Module(..)
+            | Self::Native(..)
+            | Self::Void
+            | Self::ValidIndexes(..)) => ret.clone(),
+        }
+    }
+
     pub fn is_callable(&self) -> Option<Cow<FunctionType>> {
         let me = self.get_type_recursively();
 
         match me {
-            Self::Class(class_type) => Some(Cow::Owned(class_type.constructor())),
+            Self::ClassConstructor(class_type) /*if class_type.is_callable()*/ => Some(Cow::Owned(class_type.constructor())),
             Self::Function(f) => Some(Cow::Borrowed(f)),
             _ => None,
         }
@@ -1369,12 +1463,29 @@ impl TypeLayout {
             (Self::Generic(generic), other, _) | (other, Self::Generic(generic), _) => {
                 generic.is_compatible(other, &flags)
             }
-            (Self::ClassSelf, TypeLayout::Class(other), Some(executing_class))
-            | (TypeLayout::Class(other), Self::ClassSelf, Some(executing_class)) => {
-                executing_class.deref().eq(other)
+            (Self::ClassSelf, other, Some(executing_class))
+            | (other, Self::ClassSelf, Some(executing_class)) => {
+                TypeLayout::Class(executing_class.deref().to_owned()).eq_complex(&other, flags)
             }
-            (Self::List(ListType::Open(..)), Self::List(ListType::Mixed(maybe_empty)), _) => {
-                maybe_empty.is_empty()
+            (Self::List(ListType::Mixed(t1)), Self::List(ListType::Mixed(t2)), _) => {
+                let flags = Box::new(flags.deref());
+                t1.iter()
+                    .zip(t2.iter())
+                    .all(|(x, y)| x.eq_complex(y, *flags))
+            }
+            (Self::List(ListType::Open(t1)), Self::List(ListType::Open(t2)), _) => {
+                t1.eq_complex(t2, flags)
+            }
+            (Self::List(ListType::Mixed(t1)), Self::List(ListType::Open(t2)), _)
+            | (Self::List(ListType::Open(t2)), Self::List(ListType::Mixed(t1)), _) => {
+                let flags = Box::new(flags.deref());
+
+                for ty in t1 {
+                    if !t2.eq_complex(ty, *flags) {
+                        return false;
+                    }
+                }
+                true
             }
             (Self::Optional(None), ..) if flags.force_rhs_to_be_unwrapped_lhs => true,
             (Self::Optional(None), Self::Optional(Some(_)), _)
@@ -1536,7 +1647,7 @@ impl TypeLayout {
             _ => (),
         }
 
-        if lhs == other && matches!(op, Eq | Neq) {
+        if matches!(op, Eq | Neq) && lhs == other && lhs.supports_equ() {
             return Some(TypeLayout::Native(NativeType::Bool));
         }
 

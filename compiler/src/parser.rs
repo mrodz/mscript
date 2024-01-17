@@ -220,7 +220,7 @@ impl AssocFileData {
         self.push_scope_typed(ScopeType::Class(None), ScopeReturnStatus::No)
     }
 
-    pub fn set_self_type_of_class(&self, new_class_type: ClassType) {
+    pub fn set_self_type_of_class(&self, new_class_type: ClassType) -> ClassType {
         self.scopes.set_self_type_of_class(new_class_type)
     }
 

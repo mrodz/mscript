@@ -207,6 +207,20 @@ impl ClassType {
         }
     }
 
+    pub fn new_callable(name: Arc<String>, fields: Arc<[Ident]>, path_str: Arc<PathBuf>) -> Self {
+        Self {
+            name,
+            fields,
+            path_str,
+            debug_lock: Arc::new(DebugPrintableLock::new()),
+        }
+    }
+
+    pub fn with_new_fields(mut self, fields: Arc<[Ident]>) -> Self {
+        self.fields = fields;
+        self
+    }
+
     pub fn constructor(&self) -> FunctionType {
         let return_type = ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Class(self.clone())));
 
@@ -324,22 +338,22 @@ impl Parser {
 
             let fields = ClassBody::get_members(&body_node).to_err_vec()?;
 
-            let class_type = ClassType::new(
+            let class_type = ClassType::new_callable(
                 Arc::new(ident.name().to_owned()),
                 fields,
                 input.user_data().bytecode_path(),
             );
 
+            let class_type = input.user_data().set_self_type_of_class(class_type);
+
             ident
                 .link_force_no_inherit(
                     input.user_data(),
-                    Cow::Owned(TypeLayout::Class(class_type.clone())),
+                    Cow::Owned(TypeLayout::ClassConstructor(class_type.clone())),
                 )
                 .to_err_vec()?;
 
             log::trace!("class {} {{ ... }}", ident.name());
-
-            input.user_data().set_self_type_of_class(class_type);
 
             Self::class_body(body_node)?
         };

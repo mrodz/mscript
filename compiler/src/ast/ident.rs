@@ -64,6 +64,23 @@ pub static KEYWORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
     ])
 });
 
+impl Display for Ident {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: ", self.name)?;
+        if let Some(ref ty) = self.ty {
+            write!(f, "{ty}")
+        } else {
+            write!(f, "!!!")
+        }
+    }
+}
+
+impl Dependencies for Ident {
+    fn dependencies(&self) -> Vec<Dependency> {
+        vec![Dependency::new(Cow::Borrowed(self))]
+    }
+}
+
 impl Ident {
     pub const fn new(name: String, ty: Option<Cow<'static, TypeLayout>>, read_only: bool) -> Self {
         Self {
@@ -72,6 +89,7 @@ impl Ident {
             read_only,
         }
     }
+
     pub fn mark_const(&mut self) {
         self.read_only = true;
     }
@@ -94,6 +112,14 @@ impl Ident {
         )));
 
         Ok(self)
+    }
+
+    pub(crate) fn clone_with_type(&self, ty: Cow<'static, TypeLayout>) -> Self {
+        Self {
+            name: self.name.clone(),
+            read_only: self.read_only,
+            ty: Some(ty),
+        }
     }
 
     pub fn name(&self) -> &str {
@@ -119,26 +145,7 @@ impl Ident {
             bail!("trying to get the type of an identifier that is typeless")
         }
     }
-}
 
-impl Display for Ident {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: ", self.name)?;
-        if let Some(ref ty) = self.ty {
-            write!(f, "{ty}")
-        } else {
-            write!(f, "!!!")
-        }
-    }
-}
-
-impl Dependencies for Ident {
-    fn dependencies(&self) -> Vec<Dependency> {
-        vec![Dependency::new(Cow::Borrowed(self))]
-    }
-}
-
-impl Ident {
     pub fn set_type_no_link(&mut self, ty: Cow<'static, TypeLayout>) {
         self.ty = Some(ty);
     }
