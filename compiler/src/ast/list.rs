@@ -144,11 +144,19 @@ impl ListType {
         }
     }
 
-    pub fn try_coerce_to_open(&self) -> Result<Cow<Self>> {
+    pub fn try_coerce_to_open(
+        &self,
+        comparison_flags: &TypecheckFlags<&ClassType>,
+    ) -> Result<Cow<Self>> {
         match self {
             ret @ Self::Open(..) => Ok(Cow::Borrowed(ret)),
             Self::Mixed(types) => {
-                if types.iter().as_ref().windows(2).all(|x| x[0] == x[1]) {
+                if types
+                    .iter()
+                    .as_ref()
+                    .windows(2)
+                    .all(|x| x[0].eq_complex(&x[1], comparison_flags))
+                {
                     if let Some(ty) = types.first() {
                         Ok(Cow::Owned(ListType::Open(Box::new(ty.clone()))))
                     } else {

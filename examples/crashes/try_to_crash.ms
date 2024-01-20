@@ -1,60 +1,26 @@
-class Dog {
-	name: str
-	constructor(self, name: str) {
-		self.name = name
+class A {
+	field: [Self?...]?
+
+	fn set_field(self, field: [Self...]) {
+		self.field = field
 	}
+
 	fn to_str(self) -> str {
-		return "Dog named " + self.name
+		return "A { field: " + self.field.to_str() + " }"
+	}
+
+	fn equ(self, rhs: Self) -> bool {
+		return self.field == rhs.field
 	}
 }
 
-class Cat {
-	name: str
-	breed: str
-	constructor(self, name: str, breed: str) {
-		self.name = name
-		self.breed = breed
-	}
-	fn to_str(self) -> str {
-		return "Cat named " + self.name + " is a " + self.breed
-	}
-}
+a = A()
 
-dogs: [Dog...] = [Dog("Old Yeller"), Dog("Air Bud"), Dog("Odie")]
+type B A
+b = A()
 
-dogs.push(Dog("Scout"))
-dogs.push(Dog("Muna"))
+a.set_field([a, b, A()])
 
-assert dogs.len() == 5
-assert (dogs[3]).name == "Scout"
-
-dogs_str: [str...] = []
-from 0 to dogs.len(), i {
-	dogs_str.push((dogs[i]).to_str() + ": " + typeof dogs[i])
-}
-
-assert dogs_str == ["Dog named Old Yeller: Dog", "Dog named Air Bud: Dog", "Dog named Odie: Dog", "Dog named Scout: Dog", "Dog named Muna: Dog"]
-
-dogs.reverse()
-
-maybe_dogs = dogs.map(fn(x: Dog) -> Dog? { return x })
-
-assert typeof maybe_dogs == "[Dog?...]"
-assert dogs == maybe_dogs
-
-maybe_dogs_str: [str...] = []
-
-from 0 to maybe_dogs.len(), i {
-	maybe_dogs_str.push((maybe_dogs[i]).to_str() + ": " + typeof maybe_dogs[i])
-}
-
-assert maybe_dogs_str == ["Dog named Muna: Dog?", "Dog named Scout: Dog?", "Dog named Odie: Dog?", "Dog named Air Bud: Dog?", "Dog named Old Yeller: Dog?"]
-
-cats = maybe_dogs.map(fn(x: Dog?) -> Cat { return Cat((get x).name, "tabby") })
-
-cats_str: [str...] = []
-from 0 to cats.len(), i {
-	cats_str.push((cats[i]).to_str() + ": " + typeof cats[i])
-}
-
-assert cats_str == ["Cat named Muna is a tabby: Cat", "Cat named Scout is a tabby: Cat", "Cat named Odie is a tabby: Cat", "Cat named Air Bud is a tabby: Cat", "Cat named Old Yeller is a tabby: Cat"]
+print a.equ(get (get a.field)[0])
+print a is (get a.field)[0]
+print a is get (get a.field)[0]

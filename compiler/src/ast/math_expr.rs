@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    cell::Cell,
     fmt::{Debug, Display},
     rc::Rc,
 };
@@ -36,6 +37,7 @@ pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
     }
 
     PrattParser::new()
+        .op(infix!(is))
         .op(infix!(unwrap))
         .op(Op::prefix(optional_unwrap))
         .op(infix!(add_assign)
@@ -85,6 +87,7 @@ pub enum Op {
     BinaryAnd,
     BitwiseLs,
     BitwiseRs,
+    Is,
 }
 
 impl Display for Op {
@@ -121,6 +124,7 @@ impl Op {
             Op::BinaryOr => "|",
             Op::BitwiseLs => "<<",
             Op::BitwiseRs => ">>",
+            Op::Is => "is",
         }
     }
 
@@ -153,7 +157,9 @@ impl<T> UnwrapSpanDisplayable for T where T: Debug + Display {}
 pub(crate) enum Expr {
     Nil,
     Value(Value),
-    ReferenceToSelf,
+    ReferenceToSelf {
+        is_valid: Cell<bool>,
+    },
     ReferenceToConstructor(ClassType),
     UnaryMinus(Box<Expr>),
     UnaryNot(Box<Expr>),
@@ -188,6 +194,10 @@ impl Expr {
         self.for_type().map(|_| self)
     }
 
+    pub(crate) fn validate_owned(self) -> Result<Self> {
+        self.for_type().map(|_| self)
+    }
+
     pub(crate) fn parse(input: Node) -> Result<Expr, Vec<anyhow::Error>> {
         let children_as_pairs = input.children().into_pairs();
         parse_expr(children_as_pairs, input.user_data().clone())
@@ -196,7 +206,7 @@ impl Expr {
 
 impl CompileTimeEvaluate for Expr {
     fn try_constexpr_eval(&self) -> Result<ConstexprEvaluation> {
-        self.validate()?;
+        // self.validate()?;
 
         match self {
             Self::Value(val) => val.try_constexpr_eval(),
@@ -257,7 +267,7 @@ impl CompileTimeEvaluate for Expr {
 
                 Ok(ConstexprEvaluation::Owned(Value::Number(bin_op_applied?)))
             }
-            Self::ReferenceToSelf => Ok(ConstexprEvaluation::Impossible),
+            Self::ReferenceToSelf { .. } => Ok(ConstexprEvaluation::Impossible),
             Self::ReferenceToConstructor(..) => Ok(ConstexprEvaluation::Impossible),
             Self::Nil => Ok(ConstexprEvaluation::Owned(Value::nil())),
             Self::Callable { .. } => Ok(ConstexprEvaluation::Impossible),
@@ -292,7 +302,7 @@ impl CompileTimeEvaluate for Expr {
     }
 }
 
-static VOID_ERROR_MESSAGE: &str = "function returns void";
+static VOID_ERROR_MESSAGE: &str = "this scope does not yield a value";
 
 impl IntoType for Expr {
     fn for_type(&self) -> Result<super::TypeLayout> {
@@ -337,7 +347,13 @@ impl IntoType for Expr {
 
                 Ok(return_type.clone().into_owned())
             }
-            Expr::ReferenceToSelf => Ok(TypeLayout::ClassSelf),
+            Expr::ReferenceToSelf { is_valid } => {
+                if is_valid.get() {
+                    Ok(TypeLayout::ClassSelf)
+                } else {
+                    bail!("this reference to `self` is not valid here")
+                }
+            }
             Expr::ReferenceToConstructor(class_type) => {
                 Ok(TypeLayout::Function(class_type.constructor()))
             }
@@ -413,7 +429,7 @@ impl Dependencies for Expr {
                 lhs_deps
             }
             E::DotLookup { lhs, .. } => lhs.net_dependencies(),
-            E::ReferenceToSelf => vec![],
+            E::ReferenceToSelf { .. } => vec![],
             E::ReferenceToConstructor(..) => vec![],
             E::Nil => vec![],
             E::UnaryUnwrap { value, .. } => value.net_dependencies(),
@@ -560,7 +576,7 @@ fn compile_depth(
 
             Ok(lhs_compiled)
         }
-        Expr::ReferenceToSelf => Ok(vec![instruction!(load_fast "self")]),
+        Expr::ReferenceToSelf { .. } => Ok(vec![instruction!(load_fast "self")]),
         Expr::Callable(CallableContents::ToSelf { arguments, .. }) => {
             let callable = Callable::new_recursive_call(arguments);
 
@@ -638,7 +654,7 @@ fn parse_expr(
                         let raw_string = primary.as_str();
 
                         match raw_string {
-                            "self" => return Ok((Expr::ReferenceToSelf, Some(primary_pair))),
+                            "self" => return Ok((Expr::ReferenceToSelf { is_valid: Cell::new(user_data.get_type_of_executing_class().is_some()) }, Some(primary_pair))),
                             "Self" => {
                                 let class = user_data
                                 .get_type_of_executing_class()
@@ -736,6 +752,7 @@ fn parse_expr(
                 Rule::binary_xor => Op::BinaryXor,
                 Rule::bitwise_ls => Op::BitwiseLs,
                 Rule::bitwise_rs => Op::BitwiseRs,
+                Rule::is => Op::Is,
                 rule => unreachable!("Expr::parse expected infix operation, found {:?}", rule),
             };
 
@@ -804,7 +821,7 @@ fn parse_expr(
                 let lhs = Box::new(lhs);
 
                 match lhs.as_ref() {
-                    Expr::ReferenceToSelf => {
+                    Expr::ReferenceToSelf { is_valid } => {
                         let return_type = user_data.return_statement_expected_yield_type().map(|x| x.clone());
 
                         let function_arguments: Pair<Rule> = op.into_inner().next().unwrap();
@@ -816,6 +833,8 @@ fn parse_expr(
                             .to_err_vec()?;
 
                         let arguments: FunctionArguments = Parser::function_arguments(function_arguments, &parameters, None)?;
+
+                        is_valid.set(true);
 
                         return Ok((Expr::Callable(CallableContents::ToSelf { return_type, arguments }), l_span))
                     }
@@ -834,32 +853,35 @@ fn parse_expr(
                     _ => ()
                 }
 
-                let lhs_ty = lhs.for_type().to_err_vec()?;
+                let lhs_ty = lhs.for_type().details(l_span.as_ref().unwrap().as_span(), &user_data.get_source_file_name(), "bad expression 1").to_err_vec()?;
 
-                let Some(function_type) = lhs_ty.get_function() else {
-                    return Err(vec![new_err(l_span.unwrap().as_span(), &user_data.get_source_file_name(), "this is not callable".to_owned())]);
+                let Some(function_type) = lhs_ty.is_callable() else {
+                    return Err(vec![new_err(l_span.unwrap().as_span(), &user_data.get_source_file_name(), format!("`{lhs_ty}` is not callable"))]);
                 };
 
                 let function_arguments: Pair<Rule> = op.clone().into_inner().next().unwrap();
                 let function_arguments: Node = Node::new_with_user_data(function_arguments, Rc::clone(&user_data));
                 let function_arguments: FunctionArguments = Parser::function_arguments(function_arguments, function_type.parameters(), None)?;
 
-                Ok((Expr::Callable(CallableContents::Standard { lhs_raw: lhs, function: function_type, arguments: function_arguments }), Some(op)))
+                Ok((Expr::Callable(CallableContents::Standard { lhs_raw: lhs, function: function_type.into_owned(), arguments: function_arguments }), Some(op)))
             },
             Rule::list_index => {
-                let lhs = lhs?.0;
+                let (lhs_expr, lhs_span) = lhs?;
 
-                let lhs_ty = lhs.for_type().to_err_vec()?;
+                let lhs_span = lhs_span.unwrap().as_span();
+
+                let lhs_ty = lhs_expr.for_type().details(lhs_span, &user_data.get_source_file_name(), "bad expression 2").to_err_vec()?;
 
                 let index: Node = Node::new_with_user_data(op.clone(), Rc::clone(&user_data));
                 let index: Index = Parser::list_index(index, lhs_ty)?;
 
-                Ok((Expr::Index { lhs_raw: Box::new(lhs), index }, Some(op)))
+                Ok((Expr::Index { lhs_raw: Box::new(lhs_expr), index }, Some(op)))
             },
             Rule::dot_chain => {
-                let lhs = lhs?.0;
+                let (lhs, l_span) = lhs?;
+                let l_span = l_span.unwrap().as_span();
 
-                let lhs_ty = lhs.for_type().to_err_vec()?;
+                let lhs_ty = lhs.for_type().details(l_span, &user_data.get_source_file_name(), "bad expression 3").to_err_vec()?;
                 let lhs_ty = lhs_ty.assume_type_of_self(&user_data);
 
                 let index: Node = Node::new_with_user_data(op.clone(), Rc::clone(&user_data));
@@ -917,5 +939,13 @@ fn parse_expr(
         })
         .parse(pairs);
 
-    maybe_expr.map(|(expr, ..)| expr)
+    maybe_expr.and_then(|(expr, span)| {
+        expr.validate_owned()
+            .details(
+                span.unwrap().as_span(),
+                &user_data.get_source_file_name(),
+                "bad expression 4",
+            )
+            .to_err_vec()
+    })
 }

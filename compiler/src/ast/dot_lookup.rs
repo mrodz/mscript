@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 use crate::{
     instruction,
@@ -167,7 +167,7 @@ impl Parser {
 
         match input.as_rule() {
             Rule::dot_function_call => {
-                let Some(function_type) = type_of_property.is_callable() else {
+                let Some(function_type) = type_of_property.is_callable_allow_class(true) else {
                     return Err(vec![new_err(
                         ident_span,
                         &source_name,
@@ -195,11 +195,11 @@ impl Parser {
                             allow_self_type = Cow::Owned(ident_ty.clone().into_owned());
                         } else {
                             let callable_ty = ident_ty
-                                .is_callable()
+                                .is_callable_allow_class(true)
                                 .details(
                                     input.as_span(),
                                     &input.user_data().get_source_file_name(),
-                                    "this is not callable",
+                                    format!("`{ident_ty}` is not callable"),
                                 )
                                 .to_err_vec()?;
 
@@ -229,7 +229,8 @@ impl Parser {
 
                 let output_type = output_type
                     .get_type()
-                    .unwrap_or(&Cow::Owned(TypeLayout::Void));
+                    .context("this scope does not return a value, not even `void`")
+                    .to_err_vec()?;
 
                 let output_type = if output_type.is_class_self() {
                     lhs_ty_cow

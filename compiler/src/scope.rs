@@ -3,6 +3,7 @@ use std::{
     cell::{Ref, RefCell},
     collections::{HashMap, HashSet},
     fmt::Display,
+    ops::Deref,
     rc::Rc,
 };
 
@@ -157,49 +158,31 @@ impl Scopes {
         x.last_mut().unwrap().mark_should_return_as_completed()
     }
 
-    pub(crate) fn set_self_type_of_class(&self, new_class_type: ClassType) {
+    pub(crate) fn set_self_type_of_class(&self, new_class_type: ClassType) -> ClassType {
         let mut x = self.0.borrow_mut();
 
         let last = x.last_mut().unwrap();
 
         assert!(last.is_class());
 
+        let mut fields = Vec::with_capacity(new_class_type.fields().len());
+
         for field in new_class_type.fields() {
             let ty = field.ty().unwrap();
-            if let Some(function) = ty.is_function() {
-                let (is_return_type_class_self, is_return_type_optional) = {
-                    // scoped because `try_set_return_type` borrows mutably
-                    let return_type = function.return_type();
-                    let Some(ty) = return_type.get_type() else {
-                        continue;
-                    };
-                    (
-                        ty.disregard_distractors(true).is_class_self(),
-                        ty.disregard_distractors(false).is_optional().0,
-                    )
-                };
+            let fixed = ty.update_all_references_to_class_self(new_class_type.clone());
 
-                if is_return_type_class_self {
-                    let new_class_type = new_class_type.clone();
-
-                    let mut return_type = Cow::Owned(TypeLayout::Class(new_class_type));
-
-                    if is_return_type_optional {
-                        return_type = Cow::Owned(TypeLayout::Optional(Some(Box::new(return_type))))
-                    }
-
-                    let new_return_status = ScopeReturnStatus::Did(return_type);
-
-                    function.try_set_return_type(new_return_status)
-                }
-            }
+            fields.push(field.clone_with_type(Cow::Owned(fixed)));
         }
 
         let ScopeType::Class(ref mut class_type) = last.ty else {
             unreachable!()
         };
 
-        *class_type = Some(new_class_type);
+        let new_class_type = new_class_type.with_new_fields(fields.into());
+
+        *class_type = Some(new_class_type.clone());
+
+        new_class_type
     }
 
     /// Returns the depth at which the stack is expected to be once the added frame is cleaned up.
@@ -377,10 +360,34 @@ pub(crate) enum ScopeReturnStatus {
     Did(Cow<'static, TypeLayout>),
 }
 
+impl Display for ScopeReturnStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Void => write!(f, "void"),
+            Self::No => write!(f, "!never"),
+            Self::Should(x) | Self::ParentShould(x) | Self::Did(x) => write!(f, "{x}"),
+        }
+    }
+}
+
+#[derive(Clone)]
+struct VoidTypeWrapper(Cow<'static, TypeLayout>);
+unsafe impl Send for VoidTypeWrapper {}
+unsafe impl Sync for VoidTypeWrapper {}
+impl Deref for VoidTypeWrapper {
+    type Target = TypeLayout;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+static VOID_TYPE: VoidTypeWrapper = VoidTypeWrapper(Cow::Owned(TypeLayout::Void));
+
 impl ScopeReturnStatus {
     pub fn get_type(&self) -> Option<&Cow<'static, TypeLayout>> {
         match self {
             Self::Did(x) | Self::ParentShould(x) | Self::Should(x) => Some(x),
+            Self::Void => Some(&VOID_TYPE.0),
             _ => None,
         }
     }
@@ -395,7 +402,7 @@ impl ScopeReturnStatus {
         };
 
         use crate::ast::TypecheckFlags;
-        Ok(lhs.eq_complex(rhs, &TypecheckFlags::<&ClassType>::classless()))
+        Ok(lhs.eq_complex(rhs.as_ref(), &TypecheckFlags::<&ClassType>::classless()))
     }
 
     pub fn detect_should_return(val: Option<Cow<'static, TypeLayout>>) -> Self {

@@ -10,6 +10,7 @@ use crate::{
 };
 use anyhow::{bail, Result};
 use std::{
+    borrow::Cow,
     cell::{Ref, RefCell, RefMut},
     fmt::{Debug, Display},
     ops::Deref,
@@ -228,6 +229,27 @@ impl Primitive {
         impl_eq!(each Optional, Str, Bool, Function with itself);
     }
 
+    pub fn runtime_addr_check(&self, rhs: &Self) -> Result<Primitive> {
+        match (self, rhs) {
+            (Self::BuiltInFunction(id1), Self::BuiltInFunction(id2)) => {
+                return Ok(Primitive::Bool(id1 == id2))
+            }
+            (Self::Object(o1), Self::Object(o2)) => {
+                return Ok(Primitive::Bool(o1.as_ptr() == o2.as_ptr()))
+            }
+            (Self::Module(m1), Self::Module(m2)) => {
+                return Ok(Primitive::Bool(m1.as_ptr() == m2.as_ptr()))
+            }
+            (Self::Function(f1), Self::Function(f2)) => return Ok(Primitive::Bool(f1.true_eq(f2))),
+            (Self::Vector(v1), Self::Vector(v2)) => {
+                return Ok(Primitive::Bool(v1.as_ptr() == v2.as_ptr()))
+            }
+            _ => (),
+        }
+
+        self.equals(rhs).map(Primitive::Bool)
+    }
+
     /// Returns whether this primitive is numeric.
     pub fn is_numeric(&self) -> bool {
         use Type::*;
@@ -235,25 +257,19 @@ impl Primitive {
         matches!(self.ty(), Int | Float | Byte | BigInt)
     }
 
-    /// This function *must* be called before storing a primitive to any sort of
-    /// long-term storage, as [`Primitive::HeapPrimitive`]s are inherently dangerous
-    /// and should only be used for optimization/temporary register purposes.
-    ///
-    /// This code will blow up the VM if the HP ptr is not valid. If this happens, though,
-    /// it is a bug with the compiler. Users will NEVER encounter a stale mutable pointer on
-    /// their own, as it is a private type known only to the compiler used for array tricks.
-    ///
-    /// # Safety
-    /// This function assumes that if `self` is a [HeapPrimitive]
-    /// that points to memory inside a vector/list, the vector/list
-    /// is "pinned" and has not been modified since this pointer's creation.
-    /// Otherwise, this function will access a dangling reference and construct
-    /// a Primitive from binary garbage.
     pub fn move_out_of_heap_primitive(self) -> Self {
         if let Self::HeapPrimitive(primitive) = self {
             primitive.to_owned_primitive()
         } else {
             self
+        }
+    }
+
+    pub fn move_out_of_heap_primitive_borrow(&self) -> Cow<Self> {
+        if let Self::HeapPrimitive(primitive) = self {
+            Cow::Owned(primitive.to_owned_primitive())
+        } else {
+            Cow::Borrowed(self)
         }
     }
 

@@ -44,8 +44,8 @@ impl Parser {
                     )
                     .unwrap_or_default();
 
-                let message = if value.is_callable().to_err_vec()? {
-                    format!("declaration wanted `{ty}`, but value is a function that returns `{assignment_ty}`{hint}")
+                let message = if let Some(as_callable) = assignment_ty.is_callable() {
+                    format!("declaration wanted `{ty}`, but value is a function that returns `{}`{hint}", as_callable.return_type())
                 } else {
                     // TODO: special check for function types.
                     format!("declaration wanted `{ty}`, but value is `{assignment_ty}`{hint}")

@@ -1,0 +1,32 @@
+function A::$constructor
+	arg 0
+	store self
+	void
+	ret
+end
+function A
+	make_object
+	store_fast #1
+	make_function ./try_to_crash.mmm#A::$constructor
+	store_fast #0
+	load_fast #1
+	load_fast #0
+	call
+	load_fast #1
+	ret
+end
+function __module__
+	make_function ./try_to_crash.mmm#A
+	export_special A A
+	load A
+	store_fast #1
+	load_fast #1
+	call
+	store a
+	load a
+	store_fast #1
+	load_fast #1
+	call
+	void
+	ret_mod
+end

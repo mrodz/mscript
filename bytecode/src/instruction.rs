@@ -152,6 +152,7 @@ pub mod implementations {
             ("&", ..) => left & right,
             ("<<", ..) => left << right,
             (">>", ..) => left >> right,
+            ("is", ..) => left.runtime_addr_check(&right),
             _ => bail!("unknown operation: {symbols} (got &{left}, &{right})"),
         }
         .context("invalid binary operation")?;
@@ -266,6 +267,9 @@ pub mod implementations {
             let Some(indexable) = ctx.pop() else {
                 bail!("the stack is empty");
             };
+
+            let indexable = indexable.move_out_of_heap_primitive();
+
             // this manual byte slice to usize conversion is more performant
             let idx: usize = 'index_gen: {
                 let mut idx = 0;
@@ -321,7 +325,10 @@ pub mod implementations {
             match op_name.as_str() {
                 "reverse" => {
                     let Some(Primitive::Vector(vector)) = ctx.get_last_op_item() else {
-                        bail!("Cannot perform a vector operation on a non-vector")
+                        bail!(
+                            "Cannot perform a vector operation on a non-vector (found: {:?})",
+                            ctx.get_last_op_item()
+                        )
                     };
 
                     let mut vector = vector.borrow_mut();
@@ -340,8 +347,14 @@ pub mod implementations {
 
                     let new_item = ctx.pop().context("could not pop first item")?;
 
-                    let Some(Primitive::Vector(vector)) = ctx.get_last_op_item() else {
-                        bail!("Cannot perform a vector operation on a non-vector")
+                    let Some(primitive) = ctx.get_last_op_item() else {
+                        bail!("Stack is empty")
+                    };
+
+                    let primitive = primitive.move_out_of_heap_primitive_borrow();
+
+                    let Primitive::Vector(vector) = primitive.as_ref() else {
+                        bail!("Cannot perform a vector operation on a non-vector (found: {primitive})")
                     };
 
                     let mut vector = vector.borrow_mut();
