@@ -1002,6 +1002,12 @@ impl PrimitiveFunction {
     pub(crate) fn callback_state(&self) -> &Option<Rc<VariableMapping>> {
         &self.callback_state
     }
+
+    pub(crate) fn true_eq(&self, other: &Self) -> bool {
+        self.location == other.location
+            && self.callback_state.as_ref().map(Rc::as_ptr)
+                == other.callback_state.as_ref().map(Rc::as_ptr)
+    }
 }
 
 impl PartialEq for PrimitiveFunction {

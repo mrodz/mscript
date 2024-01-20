@@ -37,6 +37,7 @@ pub static PRATT_PARSER: Lazy<PrattParser<Rule>> = Lazy::new(|| {
     }
 
     PrattParser::new()
+        .op(infix!(is))
         .op(infix!(unwrap))
         .op(Op::prefix(optional_unwrap))
         .op(infix!(add_assign)
@@ -86,6 +87,7 @@ pub enum Op {
     BinaryAnd,
     BitwiseLs,
     BitwiseRs,
+    Is,
 }
 
 impl Display for Op {
@@ -122,6 +124,7 @@ impl Op {
             Op::BinaryOr => "|",
             Op::BitwiseLs => "<<",
             Op::BitwiseRs => ">>",
+            Op::Is => "is",
         }
     }
 
@@ -749,6 +752,7 @@ fn parse_expr(
                 Rule::binary_xor => Op::BinaryXor,
                 Rule::bitwise_ls => Op::BitwiseLs,
                 Rule::bitwise_rs => Op::BitwiseRs,
+                Rule::is => Op::Is,
                 rule => unreachable!("Expr::parse expected infix operation, found {:?}", rule),
             };
 
@@ -852,7 +856,7 @@ fn parse_expr(
                 let lhs_ty = lhs.for_type().details(l_span.as_ref().unwrap().as_span(), &user_data.get_source_file_name(), "bad expression 1").to_err_vec()?;
 
                 let Some(function_type) = lhs_ty.is_callable() else {
-                    return Err(vec![new_err(l_span.unwrap().as_span(), &user_data.get_source_file_name(), "this is not callable".to_owned())]);
+                    return Err(vec![new_err(l_span.unwrap().as_span(), &user_data.get_source_file_name(), format!("`{lhs_ty}` is not callable"))]);
                 };
 
                 let function_arguments: Pair<Rule> = op.clone().into_inner().next().unwrap();

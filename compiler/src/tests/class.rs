@@ -430,3 +430,86 @@ fn class_field() {
     )
     .unwrap()
 }
+
+#[test]
+fn bad_callable() {
+    eval(
+        r#"
+		class Cat {
+			name: str
+		
+			constructor(self, input: str) {
+				self.name = input
+			}
+			
+			fn to_str(self) -> str {
+				return "A cat named " + self.name
+			}
+		}
+		
+		Kitty = Cat
+		type NotADog Cat
+		KittyCat: fn(str) -> NotADog = Kitty
+		assert typeof KittyCat == "fn(str) -> NotADog"
+		
+		result = ["Garfield", "Remy", "Soba"]
+			.map(KittyCat)
+			.map(fn(in: Cat) -> str {
+				return in.to_str()
+			})
+
+		const expected_output = ["A cat named Garfield", "A cat named Remy", "A cat named Soba"]
+		assert result == expected_output
+	"#,
+    )
+    .unwrap();
+}
+
+#[test]
+fn field_of_self() {
+    eval(
+        r#"
+		class A {
+			field: [Self?...]?
+		
+			fn set_field(self, field: [Self...]) {
+				self.field = field
+			}
+		
+			fn to_str(self) -> str {
+				return "A { field: " + self.field.to_str() + " }"
+			}
+		
+			fn equ(self, rhs: Self) -> bool {
+				return self.field == rhs.field
+			}
+		}
+		
+		a = A()
+		
+		type B A
+		b: B? = A()
+		
+		a.set_field([a, b or a, A()])
+		
+		assert a.equ(get (get a.field)[0])
+		assert a is (get a.field)[0]
+		assert a is get (get a.field)[0]
+	"#,
+    )
+    .unwrap()
+}
+
+#[test]
+#[should_panic = "`A` is not callable"]
+fn do_not_allow_callable() {
+    eval(
+        r#"
+		class A {}
+
+		a = A()
+		a()
+	"#,
+    )
+    .unwrap();
+}

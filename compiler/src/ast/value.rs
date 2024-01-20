@@ -128,12 +128,6 @@ pub(crate) trait Indexable {
 }
 
 impl Value {
-    pub fn is_callable(&self) -> Result<bool> {
-        let ty = self.for_type()?;
-
-        Ok(ty.is_callable().is_some())
-    }
-
     pub fn associate_with_ident(&self, ident: &mut Ident, user_data: &AssocFileData) -> Result<()> {
         match self {
             Value::Function(ref f) => {

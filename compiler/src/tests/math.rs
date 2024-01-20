@@ -292,3 +292,31 @@ fn bit_ops() {
     )
     .unwrap()
 }
+
+#[test]
+fn is_operator() {
+    eval(
+        r#"
+		assert 5 is 5
+		assert 0b101 is 5
+		assert 0b101.abs() is (-5).abs()
+
+		class A {}
+
+		a1 = A()
+		a2 = A()
+		a3 = a1
+
+		assert !(a1 is a2)
+		assert a1 is a3
+
+		const v1 = [1, 2, 3]
+		const v2 = [1, 2, 3]
+		const v3 = v2
+
+		assert !(v1 is v2)
+		assert v2 is v3
+	"#,
+    )
+    .unwrap();
+}

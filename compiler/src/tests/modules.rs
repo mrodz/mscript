@@ -154,8 +154,8 @@ fn import_name() {
         assert cat1.cuteness == cat2.cuteness
         assert pup1.name == pup2.name
 
-        assert Cat == kitties.Cat
-        assert Dog == doggies.Dog
+        assert Cat is kitties.Cat
+        assert Dog is doggies.Dog
     "#,
     )
     .unwrap()
@@ -167,6 +167,9 @@ fn import_name() {
                 self.name = name
             }
             name: str
+            fn eq(self, other: Self) -> bool {
+                return self.name == other.name
+            }
         }
     "#,
     )
@@ -178,6 +181,9 @@ fn import_name() {
             cuteness: int
             constructor(self, cuteness: int) {
                 self.cuteness = cuteness
+            }
+            fn eq(self, other: Self) -> bool {
+                return self.cuteness == other.cuteness
             }
         }
     "#,

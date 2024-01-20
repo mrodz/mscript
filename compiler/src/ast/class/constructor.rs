@@ -116,7 +116,8 @@ impl WalkForType for Constructor {
         let parameters = input.children().next().unwrap();
         let parameters = Parser::function_parameters(parameters, false, true, true)?;
 
-        let function_type = FunctionType::new(Rc::new(parameters), ScopeReturnStatus::Void, false);
+        let function_type =
+            FunctionType::new(Rc::new(parameters), ScopeReturnStatus::Void, false, true);
 
         let ident = Ident::new(
             "$constructor".to_owned(),
@@ -130,8 +131,12 @@ impl WalkForType for Constructor {
 
 impl IntoType for Constructor {
     fn for_type(&self) -> Result<crate::ast::TypeLayout> {
-        let function_type =
-            FunctionType::new(self.parameters.clone(), ScopeReturnStatus::Void, false);
+        let function_type = FunctionType::new(
+            self.parameters.clone(),
+            ScopeReturnStatus::Void,
+            false,
+            true,
+        );
 
         Ok(TypeLayout::Function(function_type))
     }

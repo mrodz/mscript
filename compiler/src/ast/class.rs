@@ -38,6 +38,7 @@ use super::{
 pub struct Class {
     ident: Ident,
     body: ClassBody,
+    class_type: ClassType,
     flags: ClassFlags,
     path_str: Arc<PathBuf>,
 }
@@ -46,11 +47,7 @@ impl Compile for Class {
     fn compile(&self, state: &super::CompilationState) -> Result<Vec<CompiledItem>, anyhow::Error> {
         let body_compiled = self.body.compile(state)?;
 
-        let TypeLayout::Class(ty) = self.ident.ty()?.as_ref() else {
-            unreachable!()
-        };
-
-        let id = CompiledFunctionId::Custom(ty.name().to_owned());
+        let id = CompiledFunctionId::Custom(self.class_type.name().to_owned());
 
         let compiled_class = CompiledItem::Function {
             id: id.clone(),
@@ -239,7 +236,7 @@ impl ClassType {
 
         let empty_parameters = Rc::new(FunctionParameters::TypesOnly(vec![]));
 
-        FunctionType::new(empty_parameters, return_type, false)
+        FunctionType::new(empty_parameters, return_type, false, true)
     }
 
     pub fn name(&self) -> &str {
@@ -333,7 +330,7 @@ impl Parser {
 
         let body_node = children.next().unwrap();
 
-        let body = {
+        let (body, class_type) = {
             let _class_scope = input.user_data().push_class_unknown_self();
 
             let fields = ClassBody::get_members(&body_node).to_err_vec()?;
@@ -349,18 +346,19 @@ impl Parser {
             ident
                 .link_force_no_inherit(
                     input.user_data(),
-                    Cow::Owned(TypeLayout::ClassConstructor(class_type.clone())),
+                    Cow::Owned(TypeLayout::Function(class_type.constructor())),
                 )
                 .to_err_vec()?;
 
             log::trace!("class {} {{ ... }}", ident.name());
 
-            Self::class_body(body_node)?
+            (Self::class_body(body_node)?, class_type)
         };
 
-        input
-            .user_data()
-            .add_type(ident.name().into(), ident.ty().unwrap().clone());
+        input.user_data().add_type(
+            ident.name().into(),
+            Cow::Owned(TypeLayout::Class(class_type.clone())),
+        );
 
         input.user_data().add_dependency(&ident);
 
@@ -368,6 +366,7 @@ impl Parser {
             ident,
             body,
             flags,
+            class_type,
             path_str: input.user_data().bytecode_path(),
         };
 

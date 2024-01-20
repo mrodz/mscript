@@ -54,7 +54,8 @@ bin_op = _{
     unwrap | 
     binary_xor | 
     binary_and | 
-    binary_or
+    binary_or | 
+    is
 }
 
 add = { "+" }
@@ -88,6 +89,8 @@ or = { "||" }
 xor = { "^" }
 
 unwrap = { "?=" }
+
+is = { "is" }
 
 escape_character = _{ "\\" | "r" | "n" }
 escape_sequence = @{ "\\" ~ escape_character }

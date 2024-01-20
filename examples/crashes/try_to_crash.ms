@@ -1,8 +1,3 @@
-class A {}
-a = A()
-a()
-
-###
 class A {
 	field: [Self?...]?
 
@@ -24,9 +19,8 @@ a = A()
 type B A
 b = A()
 
-a.set_field([a, b(), A()])
+a.set_field([a, b, A()])
 
-print a
-print a.to_str()
 print a.equ(get (get a.field)[0])
-###
+print a is (get a.field)[0]
+print a is get (get a.field)[0]

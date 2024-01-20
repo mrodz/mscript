@@ -360,6 +360,16 @@ pub(crate) enum ScopeReturnStatus {
     Did(Cow<'static, TypeLayout>),
 }
 
+impl Display for ScopeReturnStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Void => write!(f, "void"),
+            Self::No => write!(f, "!never"),
+            Self::Should(x) | Self::ParentShould(x) | Self::Did(x) => write!(f, "{x}"),
+        }
+    }
+}
+
 #[derive(Clone)]
 struct VoidTypeWrapper(Cow<'static, TypeLayout>);
 unsafe impl Send for VoidTypeWrapper {}

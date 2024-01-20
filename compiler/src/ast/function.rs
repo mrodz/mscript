@@ -33,6 +33,7 @@ pub(crate) struct Function {
     pub return_type: ScopeReturnStatus,
     pub path_str: Arc<PathBuf>,
     is_associated_fn: bool,
+    is_constructor: bool,
 }
 
 #[derive(Debug, Clone, Eq)]
@@ -40,6 +41,7 @@ pub(crate) struct FunctionType {
     parameters: Rc<FunctionParameters>,
     return_type: Box<RefCell<ScopeReturnStatus>>,
     is_associated_fn: bool,
+    is_constructor: bool,
 }
 
 impl FunctionType {
@@ -47,7 +49,11 @@ impl FunctionType {
         self.return_type.borrow()
     }
 
-    pub fn is_associated_fn(&self) -> bool {
+    pub const fn is_constructor(&self) -> bool {
+        self.is_constructor
+    }
+
+    pub const fn is_associated_fn(&self) -> bool {
         self.is_associated_fn
     }
 
@@ -61,10 +67,6 @@ impl FunctionType {
 
     pub fn parameters(&self) -> &FunctionParameters {
         &self.parameters
-    }
-
-    pub(crate) fn arced_parameters(&self) -> Rc<FunctionParameters> {
-        Rc::clone(&self.parameters)
     }
 }
 
@@ -125,6 +127,7 @@ pub mod eq_hash_test {
             )])),
             ScopeReturnStatus::Void,
             false,
+            false,
         );
         let rhs = FunctionType::new(
             Rc::new(FunctionParameters::Named(vec![Ident::new(
@@ -133,6 +136,7 @@ pub mod eq_hash_test {
                 false,
             )])),
             ScopeReturnStatus::Void,
+            false,
             false,
         );
 
@@ -147,6 +151,7 @@ pub mod eq_hash_test {
             )])),
             ScopeReturnStatus::Void,
             false,
+            false,
         );
         let rhs = FunctionType::new(
             Rc::new(FunctionParameters::Named(vec![Ident::new(
@@ -155,6 +160,7 @@ pub mod eq_hash_test {
                 false,
             )])),
             ScopeReturnStatus::Void,
+            false,
             false,
         );
 
@@ -171,6 +177,7 @@ pub mod eq_hash_test {
             )])),
             ScopeReturnStatus::Void,
             false,
+            false,
         );
         let rhs = FunctionType::new(
             Rc::new(FunctionParameters::Named(vec![Ident::new(
@@ -179,6 +186,7 @@ pub mod eq_hash_test {
                 false,
             )])),
             ScopeReturnStatus::Void,
+            false,
             false,
         );
 
@@ -195,6 +203,7 @@ pub mod eq_hash_test {
             )])),
             ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Native(NativeType::Bool))),
             false,
+            false,
         );
         let rhs = FunctionType::new(
             Rc::new(FunctionParameters::Named(vec![Ident::new(
@@ -203,6 +212,7 @@ pub mod eq_hash_test {
                 false,
             )])),
             ScopeReturnStatus::Did(Cow::Owned(TypeLayout::Native(NativeType::Bool))),
+            false,
             false,
         );
 
@@ -215,17 +225,29 @@ impl FunctionType {
         parameters: Rc<FunctionParameters>,
         return_type: ScopeReturnStatus,
         is_associated_fn: bool,
+        is_constructor: bool,
     ) -> Self {
         Self {
             parameters,
             return_type: Box::new(RefCell::new(return_type)),
             is_associated_fn,
+            is_constructor,
         }
     }
 }
 
 impl Display for FunctionType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.is_constructor() {
+            return write!(
+                f,
+                "{}",
+                self.return_type()
+                    .get_type()
+                    .expect("constructor does not return a type")
+            );
+        }
+
         let return_type: Cow<'static, str> = if let ScopeReturnStatus::Should(return_type)
         | ScopeReturnStatus::Did(return_type) =
             &*self.return_type.borrow()
@@ -253,6 +275,7 @@ impl Function {
         return_type: ScopeReturnStatus,
         path_str: Arc<PathBuf>,
         is_associated_fn: bool,
+        is_constructor: bool,
     ) -> Self {
         Self {
             parameters,
@@ -260,6 +283,7 @@ impl Function {
             return_type,
             path_str,
             is_associated_fn,
+            is_constructor,
         }
     }
 }
@@ -270,6 +294,7 @@ impl IntoType for Function {
             self.parameters.clone(),
             self.return_type.clone(),
             self.is_associated_fn,
+            self.is_constructor,
         )))
     }
 }
@@ -374,6 +399,7 @@ impl Parser {
                 ScopeReturnStatus::Void,
                 path_str,
                 false,
+                false,
             ));
         };
 
@@ -427,6 +453,7 @@ impl Parser {
             body,
             return_type,
             path_str,
+            false,
             false,
         ))
     }

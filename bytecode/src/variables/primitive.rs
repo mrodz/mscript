@@ -10,10 +10,11 @@ use crate::{
 };
 use anyhow::{bail, Result};
 use std::{
+    borrow::Cow,
     cell::{Ref, RefCell, RefMut},
     fmt::{Debug, Display},
     ops::Deref,
-    rc::Rc, borrow::Cow,
+    rc::Rc,
 };
 
 /// This macro allows easy recursion over variants.
@@ -226,6 +227,27 @@ impl Primitive {
         impl_eq!(Byte with Float(r=f64), BigInt(r=i128), Int(r=i32));
 
         impl_eq!(each Optional, Str, Bool, Function with itself);
+    }
+
+    pub fn runtime_addr_check(&self, rhs: &Self) -> Result<Primitive> {
+        match (self, rhs) {
+            (Self::BuiltInFunction(id1), Self::BuiltInFunction(id2)) => {
+                return Ok(Primitive::Bool(id1 == id2))
+            }
+            (Self::Object(o1), Self::Object(o2)) => {
+                return Ok(Primitive::Bool(o1.as_ptr() == o2.as_ptr()))
+            }
+            (Self::Module(m1), Self::Module(m2)) => {
+                return Ok(Primitive::Bool(m1.as_ptr() == m2.as_ptr()))
+            }
+            (Self::Function(f1), Self::Function(f2)) => return Ok(Primitive::Bool(f1.true_eq(f2))),
+            (Self::Vector(v1), Self::Vector(v2)) => {
+                return Ok(Primitive::Bool(v1.as_ptr() == v2.as_ptr()))
+            }
+            _ => (),
+        }
+
+        self.equals(rhs).map(Primitive::Bool)
     }
 
     /// Returns whether this primitive is numeric.

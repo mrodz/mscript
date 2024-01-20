@@ -236,12 +236,24 @@ impl Parser {
                         )]);
                     }
 
-                    let ident = property.to_owned();
+                    let mut ident = property.to_owned();
 
-                    if ident.ty().unwrap().is_class() {
-                        input
-                            .user_data()
-                            .add_type(ident.boxed_name(), ident.ty().cloned().unwrap())
+                    match ident.ty().unwrap().as_ref() {
+                        TypeLayout::Class(class_type) => {
+                            input
+                                .user_data()
+                                .add_type(ident.boxed_name(), ident.ty().cloned().unwrap());
+                            ident.set_type_no_link(Cow::Owned(TypeLayout::Function(
+                                class_type.constructor(),
+                            )));
+                        }
+                        TypeLayout::Function(f) if f.is_constructor() => {
+                            input.user_data().add_type(
+                                ident.boxed_name(),
+                                f.return_type().get_type().expect("no return type").clone(),
+                            )
+                        }
+                        _ => (),
                     }
 
                     input.user_data().add_dependency(&ident);

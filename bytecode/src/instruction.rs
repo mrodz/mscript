@@ -152,6 +152,7 @@ pub mod implementations {
             ("&", ..) => left & right,
             ("<<", ..) => left << right,
             (">>", ..) => left >> right,
+            ("is", ..) => left.runtime_addr_check(&right),
             _ => bail!("unknown operation: {symbols} (got &{left}, &{right})"),
         }
         .context("invalid binary operation")?;
@@ -324,7 +325,10 @@ pub mod implementations {
             match op_name.as_str() {
                 "reverse" => {
                     let Some(Primitive::Vector(vector)) = ctx.get_last_op_item() else {
-                        bail!("Cannot perform a vector operation on a non-vector (found: {:?})", ctx.get_last_op_item())
+                        bail!(
+                            "Cannot perform a vector operation on a non-vector (found: {:?})",
+                            ctx.get_last_op_item()
+                        )
                     };
 
                     let mut vector = vector.borrow_mut();
@@ -348,7 +352,7 @@ pub mod implementations {
                     };
 
                     let primitive = primitive.move_out_of_heap_primitive_borrow();
-                    
+
                     let Primitive::Vector(vector) = primitive.as_ref() else {
                         bail!("Cannot perform a vector operation on a non-vector (found: {primitive})")
                     };

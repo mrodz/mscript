@@ -544,7 +544,6 @@ pub(crate) enum TypeLayout {
     List(ListType),
     ValidIndexes(ListBound),
     Class(ClassType),
-    ClassConstructor(ClassType),
     Module(ModuleType),
     ClassSelf,
     Generic(GenericType),
@@ -566,7 +565,6 @@ impl Display for TypeLayout {
             Self::List(list) => write!(f, "{list}"),
             Self::ValidIndexes(upper) => write!(f, "[..{upper}]"),
             Self::Class(class_type) => write!(f, "{}", class_type.name()),
-            Self::ClassConstructor(class_type) => write!(f, "{}$constructor", class_type.name()),
             Self::ClassSelf => write!(f, "Self"),
             Self::Optional(Some(ty)) => write!(f, "{ty}?"),
             Self::Optional(None) => write!(f, "nil"),
@@ -586,8 +584,10 @@ where
     lhs_allow_optional_unwrap: bool,
     force_rhs_to_be_unwrapped_lhs: bool,
     signature_check: bool,
+    enforce_str_comptime_len_if_present: bool,
 }
 
+#[allow(unused)]
 impl<T> TypecheckFlags<T>
 where
     T: Deref<Target = ClassType>,
@@ -598,6 +598,7 @@ where
             lhs_allow_optional_unwrap: false,
             force_rhs_to_be_unwrapped_lhs: false,
             signature_check: false,
+            enforce_str_comptime_len_if_present: false,
         }
     }
 
@@ -607,6 +608,7 @@ where
             lhs_allow_optional_unwrap: false,
             force_rhs_to_be_unwrapped_lhs: false,
             signature_check: true,
+            enforce_str_comptime_len_if_present: false,
         }
     }
 
@@ -616,6 +618,7 @@ where
             lhs_allow_optional_unwrap: false,
             force_rhs_to_be_unwrapped_lhs: false,
             signature_check: false,
+            enforce_str_comptime_len_if_present: false,
         }
     }
 
@@ -624,9 +627,13 @@ where
         self
     }
 
-    #[allow(unused)]
     pub const fn force_rhs_to_be_unwrapped_lhs(mut self, predicate: bool) -> Self {
         self.force_rhs_to_be_unwrapped_lhs = predicate;
+        self
+    }
+
+    pub const fn enforce_str_comptime_len_if_present(mut self, predicate: bool) -> Self {
+        self.enforce_str_comptime_len_if_present = predicate;
         self
     }
 }
@@ -638,6 +645,7 @@ macro_rules! new_assoc_function {
                 Rc::new(FunctionParameters::TypesOnly($types)),
                 $return_value,
                 true,
+                false,
             ),
         ))))
     };
@@ -710,6 +718,7 @@ impl TypeLayout {
         let me = self.get_type_recursively();
 
         matches!(me, TypeLayout::Class(..))
+            || me.is_function().is_some_and(FunctionType::is_constructor)
     }
 
     pub fn supports_equ(&self) -> bool {
@@ -721,7 +730,7 @@ impl TypeLayout {
             TypeLayout::Module(..) => false,
             TypeLayout::ValidIndexes(..) => unreachable!(),
             TypeLayout::Void => false,
-            _ => true
+            _ => true,
         }
     }
 
@@ -731,7 +740,7 @@ impl TypeLayout {
         class_self: Option<T>,
     ) -> Option<String>
     where
-        T: Deref<Target = ClassType>,
+        T: Deref<Target = ClassType> + Debug,
     {
         self.get_error_hint_between_types_recursive(incompatible, class_self, 2)
     }
@@ -743,8 +752,9 @@ impl TypeLayout {
         tab_depth: usize,
     ) -> Option<String>
     where
-        T: Deref<Target = ClassType>,
+        T: Deref<Target = ClassType> + Debug,
     {
+        let class_self = class_self.as_deref();
         use NativeType::*;
         use TypeLayout::*;
 
@@ -785,7 +795,7 @@ impl TypeLayout {
                     }
                     (ListType::Mixed(types), ListType::Open(ty)) | (ListType::Open(ty), ListType::Mixed(types)) => {
                         for (i, t) in types.iter().enumerate() {
-                            if !ty.eq_complex(t, &TypecheckFlags::<&ClassType>::classless()) {
+                            if !ty.eq_complex(t, &TypecheckFlags::use_class(class_self)) {
                                 let maybe_extended_hint = t.get_error_hint_between_types_recursive(ty, class_self, tab_depth + 1).unwrap_or_default();
 
                                 return Some(format!("\n{tabs}+ hint: value at index {i} has type `{t}`, which is not compatible with `{ty}`{maybe_extended_hint}"));
@@ -904,7 +914,7 @@ impl TypeLayout {
                     *ty = Cow::Owned(result);
                 }
 
-                return TypeLayout::Generic(generic.clone());
+                TypeLayout::Generic(generic.clone())
             }
             Self::List(ListType::Mixed(types)) => {
                 let mut result = Vec::with_capacity(types.len());
@@ -923,7 +933,6 @@ impl TypeLayout {
             )))),
             Self::ClassSelf => TypeLayout::Class(class_type),
             ret @ (Self::Class(..)
-            | Self::ClassConstructor(..)
             | Self::Optional(None)
             | Self::Module(..)
             | Self::Native(..)
@@ -933,11 +942,13 @@ impl TypeLayout {
     }
 
     pub fn is_callable(&self) -> Option<Cow<FunctionType>> {
-        let me = self.get_type_recursively();
+        self.is_callable_allow_class(false)
+    }
 
-        match me {
-            Self::ClassConstructor(class_type) /*if class_type.is_callable()*/ => Some(Cow::Owned(class_type.constructor())),
+    pub fn is_callable_allow_class(&self, allow_class: bool) -> Option<Cow<FunctionType>> {
+        match self.get_type_recursively() {
             Self::Function(f) => Some(Cow::Borrowed(f)),
+            Self::Class(class_type) if allow_class => Some(Cow::Owned(class_type.constructor())),
             _ => None,
         }
     }
@@ -950,22 +961,6 @@ impl TypeLayout {
         };
 
         Some(f)
-    }
-
-    pub fn get_function(self) -> Option<FunctionType> {
-        match self.get_owned_type_recursively() {
-            TypeLayout::Function(f) => Some(f),
-            TypeLayout::Class(class_ty) => {
-                let constructor = class_ty.constructor();
-
-                Some(FunctionType::new(
-                    constructor.arced_parameters(),
-                    ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Class(class_ty))),
-                    false,
-                ))
-            }
-            _ => None,
-        }
     }
 
     pub fn get_property_type<'a>(
@@ -1008,7 +1003,9 @@ impl TypeLayout {
                     _ => (),
                 }
 
-                if let Ok(open_list_type) = list_type.try_coerce_to_open() {
+                if let Ok(open_list_type) =
+                    list_type.try_coerce_to_open(&TypecheckFlags::<&ClassType>::classless())
+                {
                     let ListType::Open(list_type) = open_list_type.as_ref() else {
                         unreachable!();
                     };
@@ -1034,6 +1031,7 @@ impl TypeLayout {
                                 Rc::new(callback_function_parameters),
                                 callback_return_type,
                                 true,
+                                false,
                             ));
 
                             let resulting_list = TypeLayout::List(ListType::Open(Box::new(
@@ -1055,6 +1053,7 @@ impl TypeLayout {
                                 Rc::new(callback_function_parameters),
                                 callback_return_type,
                                 true,
+                                false,
                             ));
 
                             let resulting_list = TypeLayout::List(open_list_type.into_owned());
@@ -1298,20 +1297,22 @@ impl TypeLayout {
                     "fn to_str() -> str",
                 ];
 
-                let additional =
-                    if let Ok(ListType::Open(ty)) = list_type.try_coerce_to_open().as_deref() {
-                        Some(vec![
-                            "fn reverse()".to_owned(),
-                            format!("fn remove(int) -> {ty}"),
-                            format!("fn push({ty})"),
-                            format!("fn join([{ty}...])"),
-                            format!("fn map(fn({ty}) -> K) -> [K...]"),
-                            format!("fn filter(fn({ty}) -> bool) -> [{ty}...]"),
-                            format!("fn index_of({ty})"),
-                        ])
-                    } else {
-                        None
-                    };
+                let additional = if let Ok(ListType::Open(ty)) = list_type
+                    .try_coerce_to_open(&TypecheckFlags::<&ClassType>::classless())
+                    .as_deref()
+                {
+                    Some(vec![
+                        "fn reverse()".to_owned(),
+                        format!("fn remove(int) -> {ty}"),
+                        format!("fn push({ty})"),
+                        format!("fn join([{ty}...])"),
+                        format!("fn map(fn({ty}) -> K) -> [K...]"),
+                        format!("fn filter(fn({ty}) -> bool) -> [{ty}...]"),
+                        format!("fn index_of({ty})"),
+                    ])
+                } else {
+                    None
+                };
 
                 items
                     .iter()
@@ -1465,7 +1466,7 @@ impl TypeLayout {
             }
             (Self::ClassSelf, other, Some(executing_class))
             | (other, Self::ClassSelf, Some(executing_class)) => {
-                TypeLayout::Class(executing_class.deref().to_owned()).eq_complex(&other, flags)
+                TypeLayout::Class(executing_class.deref().to_owned()).eq_complex(other, flags)
             }
             (Self::List(ListType::Mixed(t1)), Self::List(ListType::Mixed(t2)), _) => {
                 let flags = Box::new(flags.deref());
@@ -1506,6 +1507,11 @@ impl TypeLayout {
             (Self::Optional(Some(x)), y, _) if !flags.signature_check => x.eq_complex(y, flags),
             (y, Self::Optional(Some(x)), _) if flags.lhs_allow_optional_unwrap => {
                 x.eq_complex(y, flags)
+            }
+            (Self::Native(NativeType::Str(..)), Self::Native(NativeType::Str(..)), _)
+                if !flags.enforce_str_comptime_len_if_present =>
+            {
+                true
             }
             _ => false,
         }
@@ -1644,6 +1650,16 @@ impl TypeLayout {
                 let x = g.try_get_lock()?;
                 return x.get_output_type(y, op);
             }
+            (TypeLayout::Function(f), TypeLayout::Class(class_type)) if f.is_constructor() => {
+                let class_constructor = TypeLayout::Function(class_type.constructor());
+                let f_as_typelayout = TypeLayout::Function(f.clone());
+                return f_as_typelayout.get_output_type(&class_constructor, op);
+            }
+            (TypeLayout::Class(class_type), TypeLayout::Function(f)) if f.is_constructor() => {
+                let class_constructor = TypeLayout::Function(class_type.constructor());
+                let f_as_typelayout = TypeLayout::Function(f.clone());
+                return class_constructor.get_output_type(&f_as_typelayout, op);
+            }
             _ => (),
         }
 
@@ -1659,6 +1675,7 @@ impl TypeLayout {
         let other = other.disregard_optional()?;
 
         match op {
+            Op::Is => return Some(TypeLayout::Native(NativeType::Bool)),
             Op::AddAssign => return lhs.get_output_type(other, &Op::Add),
             Op::SubAssign => return lhs.get_output_type(other, &Op::Subtract),
             Op::MulAssign => return lhs.get_output_type(other, &Op::Multiply),
@@ -1806,6 +1823,7 @@ impl Parser {
         Ok(FunctionType::new(
             types,
             ScopeReturnStatus::detect_should_return(return_type),
+            false,
             false,
         ))
     }

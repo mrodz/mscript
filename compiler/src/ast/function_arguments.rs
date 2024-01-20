@@ -106,7 +106,7 @@ impl Parser {
                 "s"
             };
 
-            let msg = format!("supplied {result_len} argument{result_plural}, but this function's signature specifies {expected_parameters_len} parameter{expected_plural} (Expected: `fn ({expected_parameters}) ...`)");
+            let msg = format!("supplied {result_len} argument{result_plural}, but this function's signature specifies {expected_parameters_len} parameter{expected_plural} (Expected arguments: `({expected_parameters})`)");
 
             errors.push(new_err(
                 child_span,
