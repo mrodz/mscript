@@ -52,7 +52,7 @@ impl Compile for IfStatement {
 
         let if_size = body_init.len() + if self.else_statement.is_some() { 2 } else { 1 };
 
-        result.push(instruction!(if if_size));
+        result.push(instruction!(if_stmt if_size));
 
         // result:
         //  - value_init...
@@ -106,7 +106,7 @@ impl Compile for ElseStatement {
             Self::IfStatement(if_statement) => if_statement.compile(state),
         }?;
 
-        content.insert(0, instruction!(else));
+        content.insert(0, instruction!(else_stmt));
         content.push(instruction!(done));
 
         Ok(content)

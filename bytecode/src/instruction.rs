@@ -2,7 +2,6 @@
 
 use super::context::Ctx;
 use super::function::InstructionExitState;
-use super::instruction_constants;
 use super::stack::{Stack, VariableMapping};
 use super::variables::{ObjectBuilder, Primitive};
 use anyhow::{bail, Context, Result};
@@ -34,18 +33,7 @@ pub mod implementations {
     use std::collections::HashMap;
     use std::rc::Rc;
 
-    pub(crate) fn constexpr(ctx: &mut Ctx, args: &[String]) -> Result<()> {
-        if args.len() != 1 {
-            bail!("unexpected 1 parameter")
-        }
-
-        let var = Primitive::from(args[0].as_str());
-
-        ctx.push(var);
-
-        Ok(())
-    }
-
+    #[inline(always)]
     pub(crate) fn pop(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         if !args.is_empty() {
             bail!("unexpected parameter")
@@ -56,6 +44,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn stack_dump(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         println!("====== Start Context Dump ======");
         'get_data: {
@@ -93,6 +82,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn neg(ctx: &mut Ctx, _args: &[String]) -> Result<()> {
         let Some(val) = ctx.get_last_op_item_mut() else {
             bail!("neg requires one item on the local operating stack")
@@ -103,6 +93,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn not(ctx: &mut Ctx, _args: &[String]) -> Result<()> {
         let Some(val) = ctx.get_last_op_item_mut() else {
             bail!("not requires one item on the local operating stack")
@@ -117,6 +108,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn bin_op(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         use Primitive::*;
         let symbols = args
@@ -162,6 +154,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn bin_op_assign(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let op = args
             .first()
@@ -222,6 +215,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn ptr_mut(ctx: &mut Ctx, _args: &[String]) -> Result<()> {
         if ctx.stack_size() < 2 {
             bail!(
@@ -242,6 +236,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn vec_op(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let mut arg_iter = args.iter();
         let op_name = arg_iter.next().context("Expected a vector operation")?;
@@ -368,31 +363,18 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn nop(_: &mut Ctx, _: &[String]) -> Result<()> {
         bail!("nop/0x00 (null) instructions are usually signs of the runtime incorrectly loading a function. This instruction will never be emitted by the compiler")
     }
 
-    pub(crate) fn len(ctx: &mut Ctx, _: &[String]) -> Result<()> {
-        let Some(top) = ctx.pop() else {
-            bail!("len requires an item on the local stack")
-        };
-
-        let result = match top {
-            Primitive::Vector(v) => int!(v.borrow().len().try_into()?),
-            Primitive::Str(s) => int!(s.len().try_into()?),
-            _ => bail!("cannot get the raw length of a non-string/vector"),
-        };
-
-        ctx.push(result);
-
-        Ok(())
-    }
-
+    #[inline(always)]
     pub(crate) fn void(ctx: &mut Ctx, _: &[String]) -> Result<()> {
         ctx.clear_stack();
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn breakpoint(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         if cfg!(feature = "skip_breakpoint") {
             return Ok(());
@@ -419,6 +401,7 @@ pub mod implementations {
         }
     }
 
+    #[inline(always)]
     pub(crate) fn ret(ctx: &mut Ctx, _args: &[String]) -> Result<()> {
         if ctx.stack_size() > 1 {
             bail!("ret can only return a single item");
@@ -437,6 +420,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn ret_mod(ctx: &mut Ctx, _args: &[String]) -> Result<()> {
         if ctx.stack_size() != 0 {
             bail!("ret_mod should have a clean operating stack");
@@ -451,6 +435,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn make_bool(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         if args.len() != 1 {
             bail!("expected 1 parameter")
@@ -463,6 +448,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn make_int(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         if args.len() != 1 {
             bail!("expected 1 parameter")
@@ -475,6 +461,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn make_float(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         if args.len() != 1 {
             bail!("expected 1 parameter")
@@ -487,6 +474,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn make_byte(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         if args.len() != 1 {
             bail!("expected 1 parameter")
@@ -499,6 +487,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn make_bigint(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         if args.len() != 1 {
             bail!("expected 1 parameter")
@@ -511,6 +500,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn make_str(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let raw_str = match args.len() {
             0 => "",
@@ -525,6 +515,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn make_function(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let Some(location) = args.first() else {
             bail!("making a function pointer requires a path to find it")
@@ -557,6 +548,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn make_object(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         if !args.is_empty() {
             bail!("`make_object` does not require arguments")
@@ -607,6 +599,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn make_vector(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         if args.len() > 1 {
             bail!("`make_vector` instruction requires 1 argument (capacity) or none (initializes with contents of local operating stack)")
@@ -632,6 +625,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn printn(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let Some(arg) = args.first() else {
             bail!("expected 1 parameter (index into local operating stack), or * to print all");
@@ -671,6 +665,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn call_object(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let path = args.last().context("missing method name argument")?;
 
@@ -697,6 +692,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn mutate(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let var_name = args
             .first()
@@ -729,6 +725,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn call(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let Some(first) = args.first() else {
             let last = ctx.pop();
@@ -788,6 +785,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn call_self(ctx: &mut Ctx, _args: &[String]) -> Result<()> {
         let arguments = ctx.get_local_operating_stack().clone();
 
@@ -815,6 +813,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn module_entry(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let Some(first) = args.first() else {
             bail!("expected one argument");
@@ -834,6 +833,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn split_lookup_store(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let Some(top) = ctx.get_last_op_item() else {
             bail!("`split_lookup_store` expected an item at the top of the operating stack");
@@ -858,6 +858,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn arg(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let Some(first) = args.first() else {
             bail!("expected one argument")
@@ -876,6 +877,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn stack_size(ctx: &mut Ctx, _args: &[String]) -> Result<()> {
         let size = int!(ctx.frames_count().try_into()?);
         ctx.push(size);
@@ -883,11 +885,13 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn reserve_primitive(ctx: &mut Ctx, _args: &[String]) -> Result<()> {
         ctx.push(optional!(empty));
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn unwrap_into(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let Some(name) = args.first() else {
             bail!("`unwrap_into` requires a name");
@@ -926,6 +930,8 @@ pub mod implementations {
 
         Ok(())
     }
+
+    #[inline(always)]
     pub(crate) fn unwrap(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let Some(primitive) = ctx.get_last_op_item_mut() else {
             bail!("`unwrap` requires a primitive at the top of the local operating stack");
@@ -946,6 +952,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn jmp_not_nil(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let Some(primitive) = ctx.get_last_op_item_mut() else {
             bail!("`jmp_not_nil` requires a primitive at the top of the local operating stack");
@@ -969,6 +976,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn store(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let Some(name) = args.first() else {
             bail!("`store` requires a name")
@@ -990,6 +998,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn export_name(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let Some(name) = args.first() else {
             bail!("`export_name` requires a name")
@@ -1005,6 +1014,8 @@ pub mod implementations {
 
         Ok(())
     }
+
+    #[inline(always)]
     pub(crate) fn load_self_export(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let Some(src) = args.first() else {
             bail!("`load_self_export` requires a source name")
@@ -1021,6 +1032,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn export_special(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let Some(name) = args.first() else {
             bail!("`export_special` requires a name")
@@ -1046,6 +1058,8 @@ pub mod implementations {
 
         Ok(())
     }
+
+    #[inline(always)]
     pub(crate) fn store_fast(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let Some(name) = args.first() else {
             bail!("store_fast requires a name")
@@ -1063,6 +1077,8 @@ pub mod implementations {
 
         Ok(())
     }
+
+    #[inline(always)]
     pub(crate) fn store_object(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let Some(name) = args.first() else {
             bail!("store_object requires a name")
@@ -1080,6 +1096,8 @@ pub mod implementations {
 
         Ok(())
     }
+
+    #[inline(always)]
     pub(crate) fn store_skip(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let Some([name, predicate, lines_to_jump]) = args.get(0..=2) else {
             bail!("store_skip: name:str predicate:u8(1/0) lines_to_jump:isize")
@@ -1128,6 +1146,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn fast_rev2(ctx: &mut Ctx, _args: &[String]) -> Result<()> {
         if ctx.stack_size() != 2 {
             bail!("fast_rev2 requires a stack size of 2");
@@ -1143,6 +1162,8 @@ pub mod implementations {
 
         Ok(())
     }
+
+    #[inline(always)]
     pub(crate) fn load(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let Some(name) = args.first() else {
             bail!("load requires a name")
@@ -1160,6 +1181,8 @@ pub mod implementations {
 
         Ok(())
     }
+
+    #[inline(always)]
     pub(crate) fn load_fast(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let Some(name) = args.first() else {
             bail!("load requires a name")
@@ -1171,6 +1194,8 @@ pub mod implementations {
 
         Ok(())
     }
+
+    #[inline(always)]
     pub(crate) fn load_callback(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let Some(name) = args.first() else {
             bail!("loading a callback variable requires one parameter: (name)")
@@ -1183,6 +1208,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn delete_name_scoped(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         if args.is_empty() {
             bail!("delete_name_scoped requires names to delete")
@@ -1194,6 +1220,8 @@ pub mod implementations {
 
         Ok(())
     }
+
+    #[inline(always)]
     pub(crate) fn delete_name_reference_scoped(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         if args.len() != 1 {
             bail!("delete_name_reference_scoped can only delete to retrieve one name");
@@ -1208,6 +1236,8 @@ pub mod implementations {
 
         Ok(())
     }
+
+    #[inline(always)]
     pub(crate) fn lookup(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         if ctx.stack_size() != 1 {
             bail!(
@@ -1237,6 +1267,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn ld_self(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let Some(name) = args.first() else {
             bail!("`ld_self` requires a name argument");
@@ -1249,6 +1280,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn assert(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         if ctx.stack_size() != 1 {
             bail!("assert can only operate on a single item");
@@ -1267,34 +1299,7 @@ pub mod implementations {
         Ok(())
     }
 
-    pub(crate) fn typecmp(ctx: &mut Ctx, _args: &[String]) -> Result<()> {
-        if ctx.stack_size() != 2 {
-            bail!("typecmp requires only 2 items in the local stack")
-        }
-
-        let first = ctx.pop().unwrap();
-        let second = ctx.pop().unwrap();
-
-        let cmp = first.ty() == second.ty();
-
-        ctx.push(bool!(cmp));
-
-        Ok(())
-    }
-    pub(crate) fn strict_equ(ctx: &mut Ctx, _args: &[String]) -> Result<()> {
-        if ctx.stack_size() != 2 {
-            bail!("equ requires only 2 items in the local stack")
-        }
-
-        let first = ctx.pop().unwrap().move_out_of_heap_primitive();
-        let second = ctx.pop().unwrap().move_out_of_heap_primitive();
-
-        let result = first == second;
-
-        ctx.push(bool!(result));
-
-        Ok(())
-    }
+    #[inline(always)]
     pub(crate) fn equ(ctx: &mut Ctx, _args: &[String]) -> Result<()> {
         if ctx.stack_size() != 2 {
             bail!("equ requires only 2 items in the local stack")
@@ -1309,6 +1314,8 @@ pub mod implementations {
 
         Ok(())
     }
+
+    #[inline(always)]
     pub(crate) fn neq(ctx: &mut Ctx, _args: &[String]) -> Result<()> {
         if ctx.stack_size() != 2 {
             bail!("neq requires only 2 items in the local stack");
@@ -1324,6 +1331,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn if_stmt(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         if ctx.stack_size() == 0 {
             bail!("if statements require at least one entry in the local stack")
@@ -1348,6 +1356,8 @@ pub mod implementations {
 
         Ok(())
     }
+
+    #[inline(always)]
     pub(crate) fn while_loop(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         if ctx.stack_size() == 0 {
             bail!("while statements require at least one entry in the local stack")
@@ -1373,6 +1383,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn jmp(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let Some(offset) = args.first() else {
             bail!("jmp statements require an argument to instruct where to jump")
@@ -1383,6 +1394,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn jmp_pop(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let Some(offset) = args.first() else {
             bail!("jmp_pop statements require an argument to instruct where to jump")
@@ -1400,6 +1412,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn done(ctx: &mut Ctx, _args: &[String]) -> Result<()> {
         log::trace!("DONE & POP");
         ctx.signal(InstructionExitState::PopScope);
@@ -1407,6 +1420,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn else_stmt(ctx: &mut Ctx, _args: &[String]) -> Result<()> {
         log::trace!("PUSH ELSE");
 
@@ -1415,6 +1429,7 @@ pub mod implementations {
         Ok(())
     }
 
+    #[inline(always)]
     pub(crate) fn call_lib(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let (Some(lib_name), Some(func_name)) = (args.first(), args.get(1)) else {
             bail!("expected syntax: call_lib path/to/lib.dll function_name")
@@ -1435,19 +1450,6 @@ pub mod implementations {
         ctx.clear_stack();
         Ok(())
     }
-}
-
-/// Get a function pointer to the bytecode instruction associated with a byte.
-pub fn query(byte: u8) -> InstructionSignature {
-    instruction_constants::FUNCTION_POINTER_LOOKUP[byte as usize]
-}
-
-/// Run an instruction.
-#[inline(always)]
-pub fn run_instruction(ctx: &mut Ctx, instruction: &Instruction) -> Result<()> {
-    let instruction_fn = query(instruction.id);
-    instruction_fn(ctx, &instruction.arguments)?;
-    Ok(())
 }
 
 /// Parse a string into tokens based on preset rules.
@@ -1598,7 +1600,7 @@ pub struct Instruction {
     /// for valid identities.
     pub id: u8,
     /// The arguments to the instruction.
-    arguments: Box<[String]>,
+    pub(crate) arguments: Box<[String]>,
 }
 
 impl Instruction {

@@ -11,6 +11,7 @@ doctest = false
 
 [dependencies]
 anyhow = "1.0.69"
+casey = "0.4.0"
 lazy_static = "1.4.0"
 libloading = "0.8.0"
 log = "0.4.19"

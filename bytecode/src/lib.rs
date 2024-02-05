@@ -46,7 +46,7 @@ pub mod compilation_bridge {
     /// assert_eq!(update, &0x28);
     /// ```
     pub fn string_instruction_representation_to_byte(string: &str) -> Option<&u8> {
-        REPR_TO_BIN.get(string.as_bytes())
+        REPR_TO_BIN.get(string)
     }
 
     /// Reverse an instruction from its byte to its name.
@@ -64,9 +64,8 @@ pub mod compilation_bridge {
     /// ```
     pub fn raw_byte_instruction_to_string_representation(byte: u8) -> Option<Cow<'static, str>> {
         let byte_string = BIN_TO_REPR.get(byte as usize)?;
-        let as_str = String::from_utf8_lossy(byte_string);
-
-        Some(as_str)
+        // let as_str = String::from_utf8_lossy(byte_string);
+        Some(Cow::Borrowed(byte_string))
     }
 }
 
