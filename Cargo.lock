@@ -73,7 +73,7 @@ dependencies = [
 
 [[package]]
 name = "bytecode"
-version = "1.0.0-rc.3"
+version = "1.0.0-rc.4"
 dependencies = [
  "anyhow",
  "casey",
@@ -166,7 +166,7 @@ dependencies = [
 
 [[package]]
 name = "compiler"
-version = "1.0.0-rc.3"
+version = "1.0.0-rc.4"
 dependencies = [
  "anyhow",
  "bytecode",
@@ -356,7 +356,7 @@ dependencies = [
 
 [[package]]
 name = "mscript"
-version = "1.0.0-rc.3"
+version = "1.0.0-rc.4"
 dependencies = [
  "anyhow",
  "bytecode",
