@@ -11,8 +11,8 @@ impl Parser {
         input: Node,
         is_const: bool,
         is_modify: bool,
-        self_type: Option<ClassType>,
-    ) -> Result<(Assignment, bool), Vec<anyhow::Error>> {
+        self_type: Option<&ClassType>,
+    ) -> Result<(Assignment, Option<Ident>), Vec<anyhow::Error>> {
         let mut children = input.children();
 
         let ident: Node = children.next().unwrap();
@@ -23,7 +23,16 @@ impl Parser {
 
         let mut ident: Ident = Self::ident(ident).to_err_vec()?;
 
-        let did_exist_before = input.user_data().has_name_been_mapped_local(ident.name());
+        let did_exist_before = if !is_modify {
+            input
+                .user_data()
+                .has_name_been_mapped_in_function(ident.name())
+        } else {
+            input
+                .user_data()
+                .get_dependency_flags_from_name(ident.name())
+                .map(|x| x.0.to_owned())
+        };
 
         if is_const {
             ident.mark_const();
@@ -35,7 +44,7 @@ impl Parser {
         if let Ok(ref assignment_ty) = value.for_type() {
             if !ty.as_ref().get_type_recursively().eq_complex(
                 assignment_ty.get_type_recursively(),
-                &TypecheckFlags::use_class(self_type.as_ref()).lhs_unwrap(false),
+                &TypecheckFlags::use_class(self_type).lhs_unwrap(false),
             ) {
                 let hint = ty
                     .get_error_hint_between_types(

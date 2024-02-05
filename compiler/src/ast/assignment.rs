@@ -14,7 +14,8 @@ use crate::{
 
 use super::{
     map_err, new_err, value::Value, CompilationState, Compile, CompileTimeEvaluate,
-    ConstexprEvaluation, Dependencies, Dependency, Ident, IntoType, TypeLayout, WalkForType,
+    ConstexprEvaluation, Dependencies, Dependency, Ident, IntoType, TypeLayout, TypecheckFlags,
+    WalkForType,
 };
 
 #[derive(Debug)]
@@ -379,7 +380,7 @@ impl Parser {
                 Self::assignment_no_type(assignment, is_const, is_modify)?
             }
             Rule::assignment_type => {
-                Self::assignment_type(assignment, is_const, is_modify, self_type)?
+                Self::assignment_type(assignment, is_const, is_modify, self_type.as_ref())?
             }
             Rule::assignment_unpack => {
                 if is_export {
@@ -429,6 +430,12 @@ impl Parser {
                     )]);
                 }
             }
+        } else if let Some(ident) = did_exist_before {
+            return Err(vec![new_err(
+                input.as_span(),
+                &user_data.get_source_file_name(),
+                format!("this unpack operation shadows one or more names accesible from this scope, starting at `{}`", ident.name()),
+            )]);
         }
 
         if let Some(flags) = flags {
@@ -436,7 +443,30 @@ impl Parser {
         }
 
         if x.idents.len() == 1 {
-            let requires_check = did_exist_before || is_modify;
+            if let Some(previous_ident) = did_exist_before.as_ref() {
+                let ident = &x.idents[0];
+
+                if previous_ident.is_const() {
+                    return Err(vec![new_err(
+                        value_span,
+                        &input.user_data().get_source_file_name(),
+                        "attempting to reassign to a const variable".to_owned(),
+                    )]);
+                }
+
+                if !previous_ident.ty().unwrap().eq_complex(
+                    ident.ty().unwrap(),
+                    &TypecheckFlags::use_class(self_type.as_ref()),
+                ) {
+                    return Err(vec![new_err(
+                    value_span,
+                    &input.user_data().get_source_file_name(),
+                    format!("type mismatch: this assignment will update a variable with type `{}`, which is not compatible with the original type `{}`", ident.ty().unwrap(), previous_ident.ty().unwrap())
+                )]);
+                }
+            }
+
+            let requires_check = did_exist_before.is_some() || is_modify;
 
             let can_modify_if_applicable = map_err(
                 x.can_modify_if_applicable(user_data, is_modify),
@@ -450,10 +480,33 @@ impl Parser {
                     name_span,
                     &input.user_data().get_source_file_name(),
                     format!(
-                        "cannot reassign to \"{}\", which is a const variable",
+                        "cannot reassign to \"{}\", which is a `const` variable",
                         x.idents[0].name(),
                     ),
                 )]);
+            }
+
+            if let (Some(previous_ty), true) = (did_exist_before, is_modify) {
+                if previous_ty.is_const() {
+                    return Err(vec![new_err(
+                        name_span,
+                        &input.user_data().get_source_file_name(),
+                        format!(
+                            "cannot modify {}, a captured `const` variable",
+                            x.idents[0].name(),
+                        ),
+                    )]);
+                }
+                if !previous_ty.ty().unwrap().eq_complex(
+                    x.idents[0].ty().unwrap(),
+                    &TypecheckFlags::use_class(self_type.as_ref()),
+                ) {
+                    return Err(vec![new_err(
+                        name_span,
+                        &input.user_data().get_source_file_name(),
+                        format!("type mismatch: this assignment will update a variable with type `{}`, which is not compatible with the original type `{}`", previous_ty.ty().unwrap(), &x.idents[0])
+                    )]);
+                }
             }
         }
 

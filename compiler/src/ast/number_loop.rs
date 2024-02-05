@@ -14,7 +14,8 @@ use crate::{
 use super::{
     new_err,
     r#type::{IntoType, NativeType},
-    BinaryOperation, CompilationState, Compile, Dependencies, TypeLayout, Value,
+    BinaryOperation, ClassType, CompilationState, Compile, Dependencies, TypeLayout,
+    TypecheckFlags, Value,
 };
 
 #[derive(Debug)]
@@ -226,7 +227,7 @@ impl Parser {
         // ^^^ these are guaranteed.
 
         let mut step: Option<(Value, Span)> = None;
-        let mut name: Option<Ident> = None;
+        let mut name: Option<(Ident, Span)> = None;
         let mut body: Option<Block> = None;
 
         for next in children {
@@ -238,8 +239,9 @@ impl Parser {
                 }
                 Rule::number_loop_bind_name => {
                     name = {
-                        let mut ident =
-                            Self::ident(next.children().single().unwrap()).to_err_vec()?;
+                        let node = next.children().single().unwrap();
+                        let span = node.as_span();
+                        let mut ident = Self::ident(node).to_err_vec()?;
 
                         ident
                             .link_force_no_inherit(
@@ -249,7 +251,7 @@ impl Parser {
                             .to_err_vec()?;
 
                         // input.user_data().add_dependency(ident.clone());
-                        Some(ident)
+                        Some((ident, span))
                     }
                 }
                 Rule::block => body = Some(Self::block(next)?),
@@ -329,21 +331,35 @@ impl Parser {
 
         number_loop_scope.consume();
 
-        let name_is_collision = name
-            .as_ref()
-            .map(|ident| input.user_data().has_name_been_mapped(ident.name()))
-            .unwrap_or(false);
+        let name_is_collision = name.as_ref().and_then(|(ident, _)| {
+            input
+                .user_data()
+                .has_name_been_mapped_in_function(ident.name())
+        });
+
+        if let Some(collision) = &name_is_collision {
+            if !collision.ty().unwrap().eq_complex(
+                &step_output_type,
+                &TypecheckFlags::<&ClassType>::classless(),
+            ) {
+                return Err(vec![new_err(
+                    name.unwrap().1,
+                    &input.user_data().get_source_file_name(),
+                    format!("this name shadows a variable with type `{}` in a higher scope, but this iteration construct yields `{}` and is not compatible", collision.ty().unwrap(), step_output_type)
+                )]);
+            }
+        }
 
         let inclusive = inclusive_or_exclusive.as_rule() == Rule::number_loop_inclusive;
 
         Ok(NumberLoop {
             body: body.unwrap(),
-            name,
+            name: name.map(|(name, _)| name),
             step: step.map(|(val, _)| val),
             val_start,
             val_end,
             inclusive,
-            name_is_collision,
+            name_is_collision: name_is_collision.is_some(),
         })
     }
 }

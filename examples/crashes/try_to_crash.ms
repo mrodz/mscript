@@ -1,26 +1,8 @@
-class A {
-	field: [Self?...]?
+a = "hello"
 
-	fn set_field(self, field: [Self...]) {
-		self.field = field
-	}
-
-	fn to_str(self) -> str {
-		return "A { field: " + self.field.to_str() + " }"
-	}
-
-	fn equ(self, rhs: Self) -> bool {
-		return self.field == rhs.field
-	}
+from 1 to 10, a {
+	print a
 }
 
-a = A()
-
-type B A
-b = A()
-
-a.set_field([a, b, A()])
-
-print a.equ(get (get a.field)[0])
-print a is (get a.field)[0]
-print a is get (get a.field)[0]
+print a
+print typeof a

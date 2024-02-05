@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 
 use crate::{
+    ast::Ident,
     parser::{Node, Parser, Rule},
     VecErr,
 };
@@ -17,7 +18,7 @@ impl Parser {
         input: Node,
         is_const: bool,
         is_modify: bool,
-    ) -> Result<(Assignment, bool), Vec<anyhow::Error>> {
+    ) -> Result<(Assignment, Option<Ident>), Vec<anyhow::Error>> {
         let file_name = &input.user_data().get_file_name();
 
         let input_span = input.as_span();
@@ -37,6 +38,8 @@ impl Parser {
 
         let mut value_node = None;
 
+        let mut maybe_collision = None;
+
         for child in children {
             match child.as_rule() {
                 Rule::ident => (),
@@ -53,6 +56,15 @@ impl Parser {
             if is_const {
                 ident.mark_const();
             }
+
+            if let (true, collison @ Some(..)) = (
+                maybe_collision.is_none(),
+                input
+                    .user_data()
+                    .has_name_been_mapped_in_function(ident.name()),
+            ) {
+                maybe_collision = collison;
+            };
 
             idents.push(ident);
             spans.push(ident_span);
@@ -117,7 +129,7 @@ impl Parser {
 
         Ok((
             Assignment::new_multi(idents.into_boxed_slice(), value),
-            false,
+            maybe_collision, // for now, this will suffice
         ))
     }
 }

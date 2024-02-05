@@ -207,6 +207,7 @@ fn types_with_reassignment() {
 }
 
 #[test]
+#[ignore = "2/4/2024 - type updates are no longer in spec"]
 fn type_updates() {
     eval(
         r#"
@@ -225,6 +226,7 @@ fn type_updates() {
 
 /// `2` is an invalid index into "hi", so this test asserts that types and values are being updated
 #[test]
+#[ignore = "2/4/2024 - type updates are no longer in spec"]
 fn type_updates_index() {
     eval(
         r#"
