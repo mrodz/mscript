@@ -13,7 +13,8 @@ use std::rc::{Rc, Weak};
 use crate::compilation_bridge::raw_byte_instruction_to_string_representation;
 use crate::context::{Ctx, SpecialScope};
 use crate::file::MScriptFile;
-use crate::instruction::{run_instruction, Instruction, JumpRequestDestination};
+use crate::instruction::{Instruction, JumpRequestDestination};
+use crate::instruction_constants::query;
 
 use super::instruction::JumpRequest;
 use super::stack::{Stack, VariableMapping};
@@ -1242,7 +1243,7 @@ impl Function {
 
             // queries the function pointer associated with the instruction,
             // and gives it ownership of the instruction.
-            run_instruction(&mut context, instruction)
+            query!(&mut context, instruction)
                 .context("failed to run instruction")
                 .with_context(|| {
                     let instruction_as_str =

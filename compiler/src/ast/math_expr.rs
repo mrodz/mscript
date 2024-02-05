@@ -617,7 +617,7 @@ fn compile_depth(
 
             Ok(value_compiled)
         }
-        Expr::Typeof(_, name) => Ok(vec![instruction!(string name)]),
+        Expr::Typeof(_, name) => Ok(vec![instruction!(make_str name)]),
     }
 }
 

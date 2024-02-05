@@ -4,6 +4,7 @@
 //! ```
 
 mod assertions;
+mod assignments;
 mod builtins;
 mod class;
 mod comments;

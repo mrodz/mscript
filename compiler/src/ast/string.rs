@@ -42,7 +42,7 @@ impl IntoType for AstString {
 impl Compile for AstString {
     fn compile(&self, _: &CompilationState) -> Result<Vec<CompiledItem>> {
         match self {
-            AstString::Plain(content) => Ok(vec![instruction!(string content)]),
+            AstString::Plain(content) => Ok(vec![instruction!(make_str content)]),
             AstString::FormattedString() => todo!(),
         }
     }

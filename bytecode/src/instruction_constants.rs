@@ -4,244 +4,111 @@ use std::collections::HashMap;
 
 use once_cell::sync::Lazy;
 
-use super::instruction::implementations;
-use super::instruction::InstructionSignature;
-
 /// This constant maps an instruction's string representation to its byte identifier.
 /// ie.
 /// * "printn" -> 0x13
 /// * "equ" -> 0x20
 /// * ...
-pub static REPR_TO_BIN: Lazy<HashMap<&[u8], u8>> = Lazy::new(|| {
+pub static REPR_TO_BIN: Lazy<HashMap<&str, u8>> = Lazy::new(|| {
     (0..BIN_TO_REPR.len())
         .map(|idx| (BIN_TO_REPR[idx], idx as u8))
         .collect()
 });
 
-/// This is the total tally of the instructions that the interpreter supports.
-///
-/// Saving this as a constant makes it harder for the arrays to fall out of sync
-/// by requiring that they both take the same size.
-pub const INSTRUCTION_COUNT: usize = 69;
+macro_rules! generate_consts {
+    ($($const_name:ident $index:literal)+) => {
+        #[macro_export]
+        macro_rules! query {
+            ($ctx:expr, $instruction:expr) => {
+                match ($instruction).id {
+                    $(
+                        $index => casey::lower!{$crate::instruction::implementations::$const_name($ctx, &(($instruction).arguments))},
+                    )+
+                    bad => unreachable!("impossible op code: {bad}"),
+                }
+            };
+        }
 
-/// This is an array that provides O(1) lookups of names from bytes.
-pub static BIN_TO_REPR: [&[u8]; INSTRUCTION_COUNT] = [
-    /* 0x00 [0]  */ b"nop",
-    /* 0x01 [1]  */ b"constexpr",
-    /* 0x02 [2]  */ b"stack_dump",
-    /* 0x03 [3]  */ b"pop",
-    /* 0x04 [4]  */ b"bin_op",
-    /* 0x05 [5]  */ b"vec_op",
-    /* 0x06 [6]  */ b"bool",
-    /* 0x07 [7]  */ b"string",
-    /* 0x08 [8]  */ b"bigint",
-    /* 0x09 [9]  */ b"int",
-    /* 0x0A [10] */ b"float",
-    /* 0x0B [11] */ b"char", // @DEPRECATED
-    /* 0x0C [12] */ b"byte",
-    /* 0x0D [13] */ b"make_function",
-    /* 0x0E [14] */ b"make_object",
-    /* 0x0F [15] */ b"make_vector",
-    /* 0x10 [16] */ b"void",
-    /* 0x11 [17] */ b"breakpoint",
-    /* 0x12 [18] */ b"ret",
-    /* 0x13 [19] */ b"printn",
-    /* 0x14 [20] */ b"call",
-    /* 0x15 [21] */ b"call_object",
-    /* 0x16 [22] */ b"stack_size",
-    /* 0x17 [23] */ b"store",
-    /* 0x18 [24] */ b"store_object",
-    /* 0x19 [25] */ b"load",
-    /* 0x1A [26] */ b"load_fast",
-    /* 0x1B [27] */ b"typecmp",
-    /* 0x1C [28] */ b"if",
-    /* 0x1D [29] */ b"jmp",
-    /* 0x1E [30] */ b"endif", // @DEPRECATED
-    /* 0x1F [31] */ b"strict_equ",
-    /* 0x20 [32] */ b"equ",
-    /* 0x21 [33] */ b"arg",
-    /* 0x22 [34] */ b"mutate",
-    /* 0x23 [35] */ b"load_callback", // Same as `load_object`
-    /* 0x24 [36] */ b"load_object", // Same as `load_callback`
-    /* 0x25 [37] */ b"call_lib",
-    /* 0x26 [38] */ b"len",
-    /* 0x27 [39] */ b"done",
-    /* 0x28 [40] */ b"update", // @DEPRECATED
-    /* 0x29 [41] */ b"scope", // Same as `else`
-    /* 0x2A [42] */ b"else", // Same as `scope`
-    /* 0x2B [43] */ b"neg",
-    /* 0x2C [44] */ b"neq",
-    /* 0x2D [45] */ b"not",
-    /* 0x2E [46] */ b"call_self",
-    /* 0x2F [47] */ b"store_skip",
-    /* 0x30 [48] */ b"fast_rev2",
-    /* 0x31 [49] */ b"while_loop",
-    /* 0x32 [50] */ b"jmp_pop",
-    /* 0x33 [51] */ b"store_fast",
-    /* 0x34 [52] */ b"delete_name_scoped",
-    /* 0x35 [53] */ b"delete_name_reference_scoped",
-    /* 0x36 [54] */ b"ptr_mut",
-    /* 0x37 [55] */ b"assert",
-    /* 0x38 [56] */ b"reserve_primitive",
-    /* 0x39 [57] */ b"lookup",
-    /* 0x3A [58] */ b"ld_self",
-    /* 0x3B [59] */ b"export_name",
-    /* 0x3C [60] */ b"export_special",
-    /* 0x3D [61] */ b"load_self_export",
-    /* 0x3E [62] */ b"unwrap_into",
-    /* 0x3F [63] */ b"unwrap",
-    /* 0x40 [64] */ b"jmp_not_nil",
-    /* 0x41 [65] */ b"bin_op_assign",
-    /* 0x42 [66] */ b"ret_mod",
-    /* 0x43 [67] */ b"module_entry",
-    /* 0x44 [68] */ b"split_lookup_store",
-];
+        mod query_export {
+            pub use query;
+        }
 
-/// Similar to [`BIN_TO_REPR`][crate::instruction_constants::BIN_TO_REPR],
-/// except that this array contains function pointers to the evaluable instructions.
-pub static FUNCTION_POINTER_LOOKUP: [InstructionSignature; INSTRUCTION_COUNT] = [
-    implementations::nop,
-    implementations::constexpr,
-    implementations::stack_dump,
-    implementations::pop,
-    implementations::bin_op,
-    implementations::vec_op,
-    implementations::make_bool,
-    implementations::make_str,
-    implementations::make_bigint,
-    implementations::make_int,
-    implementations::make_float,
-    implementations::nop, // @DEPRECATED
-    implementations::make_byte,
-    implementations::make_function,
-    implementations::make_object,
-    implementations::make_vector,
-    implementations::void,
-    implementations::breakpoint,
-    implementations::ret,
-    implementations::printn,
-    implementations::call,
-    implementations::call_object,
-    implementations::stack_size,
-    implementations::store,
-    implementations::store_object,
-    implementations::load,
-    implementations::load_fast,
-    implementations::typecmp,
-    implementations::if_stmt,
-    implementations::jmp,
-    implementations::nop, // @DEPRECATED
-    implementations::strict_equ,
-    implementations::equ,
-    implementations::arg,
-    implementations::mutate,
-    implementations::load_callback, // Same as `load_object`
-    implementations::load_callback, // Same as `load_callback`
-    implementations::call_lib,
-    implementations::len,
-    implementations::done,
-    implementations::nop,       // @ DEPRECATED
-    implementations::else_stmt, // Same as `else`
-    implementations::else_stmt, // Same as `scope`
-    implementations::neg,
-    implementations::neq,
-    implementations::not,
-    implementations::call_self,
-    implementations::store_skip,
-    implementations::fast_rev2,
-    implementations::while_loop,
-    implementations::jmp_pop,
-    implementations::store_fast,
-    implementations::delete_name_scoped,
-    implementations::delete_name_reference_scoped,
-    implementations::ptr_mut,
-    implementations::assert,
-    implementations::reserve_primitive,
-    implementations::lookup,
-    implementations::ld_self,
-    implementations::export_name,
-    implementations::export_special,
-    implementations::load_self_export,
-    implementations::unwrap_into,
-    implementations::unwrap,
-    implementations::jmp_not_nil,
-    implementations::bin_op_assign,
-    implementations::ret_mod,
-    implementations::module_entry,
-    implementations::split_lookup_store,
-];
+        pub(crate) use query_export::query;
 
-pub mod id {
-    pub const NOP: u8 = 0;
-    pub const CONSTEXPR: u8 = 1;
-    pub const STACK_DUMP: u8 = 2;
-    pub const POP: u8 = 3;
-    pub const BIN_OP: u8 = 4;
-    pub const VEC_OP: u8 = 5;
-    pub const BOOL: u8 = 6;
-    pub const STRING: u8 = 7;
-    pub const BIGINT: u8 = 8;
-    pub const INT: u8 = 9;
-    pub const FLOAT: u8 = 10;
-    #[deprecated]
-    pub const CHAR: u8 = 11;
-    pub const BYTE: u8 = 12;
-    pub const MAKE_FUNCTION: u8 = 13;
-    pub const MAKE_OBJECT: u8 = 14;
-    pub const MAKE_VECTOR: u8 = 15;
-    pub const VOID: u8 = 16;
-    pub const BREAKPOINT: u8 = 17;
-    pub const RET: u8 = 18;
-    pub const PRINT: u8 = 19;
-    pub const CALL: u8 = 20;
-    pub const CALL_OBJECT: u8 = 21;
-    pub const STACK_SIZE: u8 = 22;
-    pub const STORE: u8 = 23;
-    pub const STORE_OBJECT: u8 = 24;
-    pub const LOAD: u8 = 25;
-    pub const LOAD_FAST: u8 = 26;
-    pub const TYPECMP: u8 = 27;
-    pub const IF: u8 = 28;
-    pub const JMP: u8 = 29;
-    #[deprecated]
-    pub const ENDIF: u8 = 30;
-    pub const STRICT_EQU: u8 = 31;
-    pub const EQU: u8 = 32;
-    pub const ARG: u8 = 33;
-    pub const MUTATE: u8 = 34;
-    pub const LOAD_CALLBACK: u8 = 35;
-    pub const LOAD_OBJECT: u8 = 36;
-    pub const CALL_LIB: u8 = 37;
-    pub const LEN: u8 = 38;
-    pub const DONE: u8 = 39;
-    #[deprecated]
-    pub const UPDATE: u8 = 40;
-    pub const SCOPE: u8 = 41;
-    pub const ELSE: u8 = 42;
-    pub const NEG: u8 = 43;
-    pub const NEQ: u8 = 44;
-    pub const NOT: u8 = 45;
-    pub const CALL_SELF: u8 = 46;
-    pub const STORE_SKIP: u8 = 47;
-    pub const FAST_REV2: u8 = 48;
-    pub const WHILE_LOOP: u8 = 49;
-    pub const JMP_POP: u8 = 50;
-    pub const STORE_FAST: u8 = 51;
-    pub const DELETE_NAME_SCOPED: u8 = 52;
-    pub const DELETE_NAME_REFERENCE_SCOPE: u8 = 53;
-    pub const PTR_MUT: u8 = 54;
-    pub const ASSERT: u8 = 55;
-    pub const RESERVE_PRIMITIVE: u8 = 56;
-    pub const LOOKUP: u8 = 57;
-    pub const LD_SELF: u8 = 58;
-    pub const EXPORT_NAME: u8 = 59;
-    pub const EXPORT_SELF: u8 = 60;
-    pub const LOAD_SELF_EXPORT: u8 = 61;
-    pub const UNWRAP_INTO: u8 = 62;
-    pub const UNWRAP: u8 = 63;
-    pub const JMP_NOT_NIL: u8 = 64;
-    pub const BIN_OP_ASSIGN: u8 = 65;
-    pub const RET_MOD: u8 = 66;
-    pub const MODULE_ENTRY: u8 = 67;
-    pub const SPLIT_LOOKUP_STORE: u8 = 68;
+        pub static BIN_TO_REPR: &[&str] = &[
+            $(
+                casey::lower!(stringify!($const_name)),
+            )+
+        ];
+
+        pub mod id {
+            type U8 = u8;
+            $(
+                casey::upper!{pub const $const_name: u8 = $index;}
+            )+
+        }
+    };
+}
+
+generate_consts! {
+    NOP                           0
+    WHILE_LOOP                    1
+    STACK_DUMP                    2
+    POP                           3
+    BIN_OP                        4
+    VEC_OP                        5
+    MAKE_BOOL                     6
+    MAKE_STR                      7
+    MAKE_BIGINT                   8
+    MAKE_INT                      9
+    MAKE_FLOAT                   10
+    MAKE_BYTE                    11
+    MAKE_FUNCTION                12
+    MAKE_OBJECT                  13
+    MAKE_VECTOR                  14
+    VOID                         15
+    BREAKPOINT                   16
+    RET                          17
+    PRINTN                       18
+    CALL                         19
+    CALL_OBJECT                  20
+    STACK_SIZE                   21
+    STORE                        22
+    STORE_OBJECT                 23
+    LOAD                         24
+    LOAD_FAST                    25
+    IF_STMT                      26
+    JMP                          27
+    EQU                          28
+    ARG                          29
+    MUTATE                       30
+    LOAD_CALLBACK                31
+    CALL_LIB                     32
+    DONE                         33
+    ELSE_STMT                    34
+    NEG                          35
+    NEQ                          36
+    NOT                          37
+    CALL_SELF                    38
+    STORE_SKIP                   39
+    FAST_REV2                    40
+    JMP_POP                      41
+    STORE_FAST                   42
+    DELETE_NAME_SCOPED           43
+    DELETE_NAME_REFERENCE_SCOPED 44
+    PTR_MUT                      45
+    ASSERT                       46
+    RESERVE_PRIMITIVE            47
+    LOOKUP                       48
+    LD_SELF                      49
+    EXPORT_NAME                  50
+    EXPORT_SPECIAL               51
+    LOAD_SELF_EXPORT             52
+    UNWRAP_INTO                  53
+    UNWRAP                       54
+    JMP_NOT_NIL                  55
+    BIN_OP_ASSIGN                56
+    RET_MOD                      57
+    MODULE_ENTRY                 58
+    SPLIT_LOOKUP_STORE           59
 }

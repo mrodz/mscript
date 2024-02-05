@@ -17,19 +17,19 @@ fn list_random() {
 	
 		take_ints(x)
 	
-		x: [int...] = [1, 2, 3, 4, 5]
+		y: [int...] = [1, 2, 3, 4, 5]
 		
-		assert x == [1, 2, 3, 4, 5]
+		assert y == [1, 2, 3, 4, 5]
 
-		x.reverse()
+		y.reverse()
 
-		assert x == [5, 4, 3, 2, 1]
+		assert y == [5, 4, 3, 2, 1]
 	
-		assert x.inner_capacity() >= 5
+		assert y.inner_capacity() >= 5
 	
-		x.ensure_inner_capacity(100)
+		y.ensure_inner_capacity(100)
 	
-		assert x.inner_capacity() >= 105
+		assert y.inner_capacity() >= 105
 	"#,
     )
     .unwrap();
@@ -74,19 +74,19 @@ fn open_list_type() {
 		assert typeof x == "[int...]"
 		assert typeof x[3] == "int"
 
-		x = x.map(fn(in: int) -> str {
+		x_as_str = x.map(fn(in: int) -> str {
 			return in + "!"
 		})
 
-		assert typeof x == "[str...]"
+		assert typeof x_as_str == "[str...]"
 
-		assert x == ["16!", "9999999!", "5!", "60!"]
+		assert x_as_str == ["16!", "9999999!", "5!", "60!"]
 		
-		x = x.join(["hello", "world"])
+		x_as_str = x_as_str.join(["hello", "world"])
 
-		assert typeof x[0] == "str"
+		assert typeof x_as_str[0] == "str"
 
-		assert x == ["16!", "9999999!", "5!", "60!", "hello", "world"]
+		assert x_as_str == ["16!", "9999999!", "5!", "60!", "hello", "world"]
 	"#,
     )
     .unwrap();

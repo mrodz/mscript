@@ -351,8 +351,19 @@ impl AssocFileData {
         self.get_dependency_flags_from_name(dependency).is_some()
     }
 
-    pub fn has_name_been_mapped_local(&self, dependency: &str) -> bool {
-        self.get_ident_from_name_local(dependency).is_some()
+    pub fn has_name_been_mapped_in_function(&self, dependency: &str) -> Option<Ident> {
+        for scope in self.scopes.iter() {
+            let maybe_result = scope.contains(dependency);
+            if maybe_result.is_some() {
+                return maybe_result.cloned();
+            }
+
+            if scope.is_function() {
+                break;
+            }
+        }
+
+        None
     }
 
     pub fn get_ident_from_name_local(&self, dependency: &str) -> Option<Ref<Ident>> {

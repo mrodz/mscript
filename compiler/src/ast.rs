@@ -318,7 +318,7 @@ macro_rules! instruction {
         use $crate::ast::*;
 
         let id = bytecode::compilation_bridge::string_instruction_representation_to_byte(stringify!($name))
-            .expect("instruction does not exist");
+            .unwrap_or_else(|| panic!("instruction `{}` does not exist", stringify!($name)));
 
         let arguments = vec![
             $(

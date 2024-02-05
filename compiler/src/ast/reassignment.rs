@@ -105,7 +105,7 @@ impl Compile for Reassignment {
 fn parse_path(
     pairs: Pairs<Rule>,
     user_data: Rc<AssocFileData>,
-) -> Result<ReassignmentPath, Vec<anyhow::Error>> {
+) -> Result<(ReassignmentPath, bool), Vec<anyhow::Error>> {
     PRATT_PARSER
         .map_primary(|primary| {
             assert!(matches!(primary.as_rule(), Rule::ident));
@@ -121,20 +121,23 @@ fn parse_path(
                             class_type,
                         )))),
                         primary.as_span(),
+                        false,
                     ));
                 }
 
-                return Ok((ReassignmentPath::ReferenceToSelf(None), primary.as_span()));
+                return Ok((
+                    ReassignmentPath::ReferenceToSelf(None),
+                    primary.as_span(),
+                    true,
+                ));
             }
-
-            let file_name = user_data.get_source_file_name();
 
             let (ident, is_callback) = user_data
                 .get_dependency_flags_from_name(raw_string)
                 .with_context(|| {
                     new_err(
                         primary.as_span(),
-                        &file_name,
+                        &user_data.get_source_file_name(),
                         "use of undeclared variable".into(),
                     )
                 })
@@ -146,11 +149,15 @@ fn parse_path(
                 ident.clone()
             };
 
-            Ok((ReassignmentPath::Ident(cloned), primary.as_span()))
+            Ok((
+                ReassignmentPath::Ident(cloned),
+                primary.as_span(),
+                ident.is_const(),
+            ))
         })
         .map_postfix(|lhs, op| match op.as_rule() {
             Rule::list_index => {
-                let (lhs, lhs_span) = lhs?;
+                let (lhs, lhs_span, is_const) = lhs?;
 
                 let lhs_ty = lhs
                     .for_type()
@@ -167,10 +174,11 @@ fn parse_path(
                         index,
                     },
                     lhs_span,
+                    is_const,
                 ))
             }
             Rule::dot_chain => {
-                let (lhs, lhs_span) = lhs?;
+                let (lhs, lhs_span, is_const) = lhs?;
 
                 let lhs_ty = lhs
                     .for_type()
@@ -194,16 +202,17 @@ fn parse_path(
                         expected_type: expected_type.into_owned(),
                     },
                     lhs_span,
+                    is_const,
                 ))
             }
             other => unimplemented!("{other:?}"),
         })
         .parse(pairs)
-        .map(|x| x.0)
+        .map(|x| (x.0, x.2))
 }
 
 impl ReassignmentPath {
-    pub(crate) fn parse(input: Node) -> Result<ReassignmentPath, Vec<anyhow::Error>> {
+    pub(crate) fn parse(input: Node) -> Result<(ReassignmentPath, bool), Vec<anyhow::Error>> {
         parse_path(input.children().into_pairs(), Rc::clone(input.user_data()))
     }
 
@@ -232,7 +241,16 @@ impl Parser {
 
         let path_span = value.as_span();
 
-        let path = ReassignmentPath::parse(path)?;
+        let (path, is_const) = ReassignmentPath::parse(path)?;
+
+        if is_const {
+            return Err(vec![new_err(
+                path_span,
+                &input.user_data().get_source_file_name(),
+                "The target of this assignment is const, and cannot be modified".to_owned(),
+            )]);
+        }
+
         let value = Self::value(value)?;
         let value_ty = value.for_type().to_err_vec()?;
 
