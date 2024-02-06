@@ -483,11 +483,15 @@ impl Hash for GenericType {
 
 impl GenericType {
     pub fn new() -> Self {
+        let mut locked = GENERIC_ID.write().unwrap();
+
         let ret = Self {
-            unique_id: *GENERIC_ID.read().unwrap(),
+            unique_id: *locked,
             stands_for: Rc::new(RefCell::new(None)),
         };
-        *GENERIC_ID.write().unwrap() += 1;
+
+        *locked += 1;
+
         ret
     }
 
@@ -1720,6 +1724,16 @@ impl TypeLayout {
                     _ => return None,
                 }
             }
+            (lhs, rhs, BinaryXor | BinaryAnd | BinaryOr | BitwiseLs | BitwiseRs) => {
+                match (lhs, rhs) {
+                    (Int, Int | BigInt | Byte) => Int,
+                    //======================
+                    (BigInt, BigInt | Int | Byte) => BigInt,
+                    //======================
+                    (Byte, Byte | Int | BigInt) => Int,
+                    _ => return None,
+                }
+            }
             (Int, Int, ..) => Int,
             (Int, BigInt, ..) => BigInt,
             (Int, Float, ..) => Float,
@@ -1732,8 +1746,7 @@ impl TypeLayout {
             (BigInt, Int, ..) => BigInt,
             (BigInt, Float, ..) => Float,
             //======================
-            (x, Byte, ..) => *x, // byte will always get overshadowed.
-            (Byte, Int, Add) => Byte,
+            (x, Byte, ..) | (Byte, x, ..) => *x, // byte will always get overshadowed.
             //======================
             (Str(StrWrapper(Some(len1))), Str(StrWrapper(Some(len2))), Add) => {
                 Str(StrWrapper(Some(len1 + len2)))
@@ -1917,12 +1930,21 @@ impl Parser {
         };
 
         let ty_node = children.next().unwrap();
+        let ty_span = ty_node.as_span();
 
         let mut ident = Self::ident(ident_node)?;
 
         let real_ty = Self::r#type(ty_node)?;
 
         log::trace!("formally aliasing `{}` = {real_ty}", ident.name());
+
+        if real_ty.is_optional().0 {
+            return Err(new_err(
+                ty_span,
+                &input.user_data().get_source_file_name(),
+                "an optional qualifier is not valid in type aliases".to_owned(),
+            ));
+        }
 
         if real_ty.is_class() {
             ident.link_force_no_inherit(input.user_data(), real_ty.clone())?;

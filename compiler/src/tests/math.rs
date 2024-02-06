@@ -320,3 +320,22 @@ fn is_operator() {
     )
     .unwrap();
 }
+
+#[test]
+#[should_panic = "attempting to evaluate this expression at compile time resulted in an error"]
+fn subtract_underflow() {
+    eval(
+        r#"
+		a = 0b0111
+		assert a.to_int().to_str() == "7"
+
+		# 0b0 - 0b111 is an underflow
+		from (0b0 - 0b111) to 5 step -1, i {
+			print i
+		}
+
+		assert false
+	"#,
+    )
+    .unwrap();
+}

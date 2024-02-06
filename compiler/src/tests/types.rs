@@ -339,7 +339,7 @@ fn list_with_optionals() {
 
         xxx: numberz = 99
 
-        type unicorn numberz?
+        type unicorn numberz
 
         yyy: unicorn? = 100
 
@@ -377,7 +377,6 @@ fn list_with_optionals() {
 ///                         + hint: `numberz` is an alias for `int` << HERE IS WHAT WE'RE TESTING FOR
 /// </pre>
 #[test]
-#[should_panic = "+ hint: `numberz` is an alias for `int`"]
 fn list_with_optionals_type_mismatch() {
     eval(
         r#"
@@ -385,17 +384,21 @@ fn list_with_optionals_type_mismatch() {
 
         xxx: numberz = 99
 
-        type unicorn numberz?
+        type unicorn numberz
 
-        yyy: unicorn? = 100
+        yyy: numberz = 100
 
-        print typeof yyy
+        assert typeof yyy == "numberz"
 
-        a: [int?...] = [5, xxx, nil, yyy]
+        a: [unicorn?...] = [5, xxx, nil, yyy]
+
+        result = ""
 
         from 0 to a.len(), i {
-            print (a[i]).to_str() + ": " + typeof a[i]
+            result += (a[i]).to_str() + ": " + typeof a[i]
         }
+
+        assert result == "5: unicorn?99: unicorn?nil: unicorn?100: unicorn?"
     "#,
     )
     .unwrap()

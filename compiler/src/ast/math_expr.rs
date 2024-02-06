@@ -253,7 +253,7 @@ impl CompileTimeEvaluate for Expr {
 
                 let bin_op_applied = match op {
                     Op::Add => lhs + rhs,
-                    Op::Subtract => lhs + rhs,
+                    Op::Subtract => lhs - rhs,
                     Op::Multiply => lhs * rhs,
                     Op::Divide => lhs / rhs,
                     Op::Modulo => lhs % rhs,

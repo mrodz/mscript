@@ -217,7 +217,7 @@ fn get_or_complex() {
 }
 
 #[test]
-#[should_panic = "could not get the type"]
+#[should_panic = "at compile time, this operation was flagged because it always unwraps `nil`"]
 fn abort_store_missing_type() {
     eval(
         r#"
@@ -241,7 +241,7 @@ fn abort_store() {
 }
 
 #[test]
-#[should_panic = "Interpreter crashed"]
+#[should_panic = "at compile time, this operation was flagged because it always unwraps `nil`"]
 fn abort_declaration() {
     eval(
         r#"

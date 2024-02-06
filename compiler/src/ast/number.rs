@@ -1,12 +1,14 @@
+use std::borrow::Cow;
 use std::fmt::Display;
 
 use anyhow::{bail, Result};
 
+use crate::ast::Value;
 use crate::instruction;
 use crate::parser::{Node, Parser, Rule};
 
 use super::{r#type::IntoType, Compile, Dependencies, TypeLayout};
-use super::{CompilationState, CompiledItem};
+use super::{CompilationState, CompileTimeEvaluate, CompiledItem, ConstexprEvaluation};
 
 #[derive(Debug, Clone)]
 pub enum Number {
@@ -25,6 +27,31 @@ impl Number {
             Float(x) => Float("-".to_owned() + x),
             Byte(_) => return None,
         })
+    }
+}
+
+impl CompileTimeEvaluate for Number {
+    fn try_constexpr_eval(&self) -> Result<ConstexprEvaluation> {
+        dbg!(self);
+        use Number::*;
+        let mut window = Cow::Borrowed(self);
+
+        'tests: {
+            if let Integer(i) = window.as_ref() {
+                if (i.parse::<i32>()).is_ok() {
+                    break 'tests;
+                }
+                window = Cow::Owned(BigInt(i.to_owned()));
+            }
+
+            if let BigInt(b) = window.as_ref() {
+                b.parse::<i128>()?; // we can give up, because nothing is bigger an an i128
+            }
+        }
+
+        Ok(ConstexprEvaluation::Owned(Value::Number(
+            window.into_owned(),
+        )))
     }
 }
 
@@ -330,7 +357,11 @@ pub fn number_from_string(string: &str, rule: Rule) -> Result<Number> {
                 Number::Float(as_str)
             }
         }
-        Rule::byte => Number::Byte(as_str),
+        Rule::byte => Number::Byte(
+            u8::from_str_radix(&as_str[2..], 2)
+                .expect("parser allowed a non-standard byte literal")
+                .to_string(),
+        ),
         _ => bail!("non-number rule"),
     };
 

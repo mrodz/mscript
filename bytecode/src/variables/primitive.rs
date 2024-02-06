@@ -383,14 +383,16 @@ impl Primitive {
     pub fn make_byte(string: &str) -> Result<Self> {
         let bytes = string.as_bytes();
 
-        if string.len() >= 3 && bytes[..2] == [b'0', b'b'] {
-            let byte =
-                u8::from_str_radix(&string[2..], 2).expect("malformed byte. format: (0b10101010)");
+        let offset = if string.len() >= 3 && bytes[..2] == [b'0', b'b'] {
+            (2, 2)
+        } else {
+            (0, 10)
+        };
 
-            return Ok(byte!(byte));
-        }
+        let byte = u8::from_str_radix(&string[offset.0..], offset.1)
+            .expect("malformed byte. format: (0b10101010)");
 
-        bail!("not a Byte")
+        Ok(byte!(byte))
     }
 
     /// Parse a string slice to a bytecode [`Primitive::Float`] primitive.
@@ -510,82 +512,12 @@ impl Display for Primitive {
     }
 }
 
-impl From<String> for Primitive {
-    fn from(value: String) -> Self {
-        Self::from(value.as_str())
-    }
-}
-
-impl From<&str> for Primitive {
-    fn from(value: &str) -> Self {
-        if let Ok(byte) = Primitive::make_byte(value) {
-            return byte;
-        }
-
-        if let Ok(int) = Primitive::make_int(value) {
-            return int;
-        }
-
-        if let Ok(bigint) = Primitive::make_bigint(value) {
-            return bigint;
-        }
-
-        if let Ok(float) = Primitive::make_float(value) {
-            return float;
-        }
-
-        if let Ok(bool) = Primitive::make_bool(value) {
-            return bool;
-        }
-
-        if let Ok(str) = Primitive::make_str(value) {
-            return str;
-        }
-
-        panic!("Invalid constexpr: {value}")
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::Primitive;
-    use crate::{bigint, bool, byte, float, int, string};
-    use std::f64::consts::PI;
-
-    #[test]
-    fn byte_1() {
-        let var = Primitive::from("0b101".to_owned());
-        assert_eq!(var, byte!(0b101));
-    }
-
-    #[test]
-    fn byte_2() {
-        let var = Primitive::from("0b11111111".to_owned());
-        assert_eq!(var, byte!(0b11111111));
-    }
-
-    #[test]
-    fn display() {
-        println!("{}", byte!(0b101));
-        println!("{}", int!(5));
-        println!("{}", float!(PI));
-        println!("{}", string!(raw "Hello"));
-        println!("{}", bool!(false));
-    }
-
-    #[test]
-    fn is_numeric() {
-        assert!(byte!(0b1000).is_numeric());
-        assert!(int!(5).is_numeric());
-        assert!(float!(3.0 / 2.0).is_numeric());
-        assert!(bigint!(2147483648).is_numeric());
-        assert!(!string!(raw "Hello").is_numeric());
-        assert!(!bool!(true).is_numeric());
-    }
-
-    #[test]
-    fn int() {
-        assert_eq!(Primitive::from("2147483647"), int!(i32::MAX));
-        assert_eq!(Primitive::from("2147483648"), bigint!(2147483648));
-    }
+#[test]
+fn is_numeric() {
+    assert!(byte!(0b1000).is_numeric());
+    assert!(int!(5).is_numeric());
+    assert!(float!(3.0 / 2.0).is_numeric());
+    assert!(bigint!(2147483648).is_numeric());
+    assert!(!string!(raw "Hello").is_numeric());
+    assert!(!bool!(true).is_numeric());
 }

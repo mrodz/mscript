@@ -9,13 +9,12 @@ use anyhow::{bail, Context, Result};
 use crate::{
     instruction,
     parser::{AssocFileData, Node, Parser, Rule},
-    CompilationError, VecErr,
+    VecErr,
 };
 
 use super::{
-    map_err, new_err, value::Value, CompilationState, Compile, CompileTimeEvaluate,
-    ConstexprEvaluation, Dependencies, Dependency, Ident, IntoType, TypeLayout, TypecheckFlags,
-    WalkForType,
+    map_err, new_err, value::Value, CompilationState, Compile, Dependencies, Dependency, Ident,
+    IntoType, TypeLayout, TypecheckFlags, WalkForType,
 };
 
 #[derive(Debug)]
@@ -404,19 +403,6 @@ impl Parser {
                 &input.user_data().get_source_file_name(),
                 "cannot store void".to_owned(),
             )]);
-        }
-
-        if let ConstexprEvaluation::Owned(data) = x
-            .value()
-            .try_constexpr_eval()
-            .details(
-                value_span,
-                &input.user_data().get_source_file_name(),
-                "attempting to evaluate this expression at compile time resulted in an error",
-            )
-            .to_err_vec()?
-        {
-            x.value = data;
         }
 
         if x.idents.len() == 1 {

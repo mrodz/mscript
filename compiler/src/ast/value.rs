@@ -4,7 +4,7 @@ use anyhow::{bail, Result};
 
 use crate::{
     parser::{AssocFileData, Node, Parser, Rule},
-    VecErr,
+    CompilationError, VecErr,
 };
 
 use super::{
@@ -109,7 +109,7 @@ pub(crate) trait CompileTimeEvaluate {
 impl CompileTimeEvaluate for Value {
     fn try_constexpr_eval(&self) -> Result<ConstexprEvaluation> {
         match self {
-            Self::Number(number) => Ok(ConstexprEvaluation::Owned(Value::Number(number.clone()))),
+            Self::Number(number) => number.try_constexpr_eval(),
             Self::Boolean(bool) => Ok(ConstexprEvaluation::Owned(Value::Boolean(*bool))),
             Self::String(string) => Ok(ConstexprEvaluation::Owned(Value::String(string.clone()))),
             Self::MathExpr(expr) => expr.try_constexpr_eval(),
@@ -220,7 +220,8 @@ impl Parser {
         assert_eq!(input.as_rule(), Rule::value);
 
         let value = children.next().unwrap();
-        let matched = match value.as_rule() {
+        let value_span = value.as_span();
+        let mut matched = match value.as_rule() {
             Rule::function => Value::Function(Self::function(value)?),
             Rule::ident => Value::Ident(Self::ident(value).to_err_vec()?),
             Rule::number => Value::Number(Self::number(value).to_err_vec()?),
@@ -230,6 +231,18 @@ impl Parser {
             Rule::WHITESPACE => unreachable!("{:?}", value.as_span()),
             x => unreachable!("not sure how to handle `{x:?}`"),
         };
+
+        if let ConstexprEvaluation::Owned(new_match) = matched
+            .try_constexpr_eval()
+            .details(
+                value_span,
+                &input.user_data().get_source_file_name(),
+                "attempting to evaluate this expression at compile time resulted in an error",
+            )
+            .to_err_vec()?
+        {
+            matched = new_match;
+        }
 
         Ok(matched)
     }
