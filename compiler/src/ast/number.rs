@@ -32,7 +32,6 @@ impl Number {
 
 impl CompileTimeEvaluate for Number {
     fn try_constexpr_eval(&self) -> Result<ConstexprEvaluation> {
-        dbg!(self);
         use Number::*;
         let mut window = Cow::Borrowed(self);
 
@@ -336,7 +335,7 @@ pub fn number_from_string(string: &str, rule: Rule) -> Result<Number> {
 
     let matched = match rule {
         Rule::bigint => {
-            let no_prefix = &string[1..];
+            let no_prefix = &as_str[1..];
             if let Some(hex_part) = no_prefix.strip_prefix("0x") {
                 let as_hex = i128::from_str_radix(hex_part, 16)?;
                 Number::BigInt(as_hex.to_string())

@@ -102,7 +102,7 @@ impl Parser {
 					spans.swap_remove(upper_bound),
 					file_name,
 					format!(
-						"the compiler knows that this value has an upper bound for indexing at `{upper_bound}`, but this variable (and any past it) push past that limit"
+						"the compiler knows that this value has an upper bound for indexing at `{upper_bound}`, and will not permit unpacking past this variable"
 					),
 				)]);
             }

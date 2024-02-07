@@ -63,7 +63,7 @@ subtract = { "-" }
 multiply = { "*" }
 divide = { "/" }
 modulo = { "%" }
-binary_xor = { "xor" }
+binary_xor = ${ "xor" ~ WHITESPACE }
 binary_and = { "&" }
 binary_or = { "|" }
 bitwise_ls = { "<<" }
@@ -90,7 +90,7 @@ xor = { "^" }
 
 unwrap = { "?=" }
 
-is = { "is" }
+is = ${ "is" ~ WHITESPACE }
 
 escape_character = _{ "\\" | "r" | "n" }
 escape_sequence = @{ "\\" ~ escape_character }

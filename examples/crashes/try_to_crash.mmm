@@ -1,15 +1,19 @@
 function __module__
-	int 1
-	store_fast L#1
-	int 10000000
-	store_fast L#2
-	load_fast L#1
-	load_fast L#2
-	bin_op <
-	while_loop 4
-	int 1
-	bin_op_assign += L#1
-	jmp_pop -6
-	delete_name_scoped L#1 L#2
+	make_byte 5
+	store five
+	make_int 10
+	store_fast #1
+	load_fast #1
+	lookup to_byte
+	store_fast #2
+	ld_self #1
+	load_fast #2
+	call
+	store ten
+	make_int 31
+	store x
+	make_int -2147483648
+	printn *
+	void
 	ret_mod
 end
