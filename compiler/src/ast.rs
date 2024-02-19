@@ -243,25 +243,26 @@ impl CompiledItem {
     }
 
     pub fn repr(&self, use_string_version: bool) -> Result<String> {
-        fn fix_arg_if_needed(arg: &String) -> Result<Cow<String>> {
-            let starts = arg.starts_with('\"');
-            let ends = arg.ends_with('\"');
-
-            if starts ^ ends {
-                bail!("non-matching `\"` on arg {arg}")
-            }
-
-            let has_quotes = starts && ends;
-
-            if !has_quotes && arg.contains(' ') {
-                let mut combined = String::with_capacity(arg.len() + 2);
-                combined.push('"');
-                combined.push_str(arg);
-                combined.push('"');
-                Ok(Cow::Owned(combined))
-            } else {
-                Ok(Cow::Borrowed(arg))
-            }
+        fn fix_arg_if_needed(arg: &str) -> Result<Cow<str>> {
+            Ok(Cow::Owned("\"".to_owned() + arg + "\""))
+            // let starts = arg.starts_with('"');
+            // let ends = arg.ends_with('"') && !arg.ends_with(r#"\""#);
+            //
+            // if starts ^ ends {
+            //     bail!("non-matching `\"` on arg {arg} ({starts} & {ends})")
+            // }
+            //
+            // let has_quotes = starts && ends;
+            //
+            // if !has_quotes && arg.contains(' ') {
+            //     let mut combined = String::with_capacity(arg.len() + 2);
+            //     combined.push('"');
+            //     combined.push_str(arg);
+            //     combined.push('"');
+            //     Ok(Cow::Owned(combined))
+            // } else {
+            //     Ok(Cow::Borrowed(arg))
+            // }
         }
 
         match self {
@@ -291,8 +292,9 @@ impl CompiledItem {
                 if arguments.len() >= 1 {
                     for arg in &arguments[..] {
                         args.push(' ');
-                        let arg = fix_arg_if_needed(arg).unwrap();
-                        args.push_str(arg.as_str());
+                        let replaced = arg.replace('"', "\\\"");
+                        let arg = fix_arg_if_needed(&replaced)?;
+                        args.push_str(arg.as_ref());
                     }
                 }
 
@@ -384,7 +386,7 @@ impl CompilationState {
         &self,
         file_manager: &FileManager,
         driver: &mut impl FnMut(&File, Vec<CompiledItem>) -> Result<()>,
-    ) -> Result<(), Vec<anyhow::Error>> {
+    ) -> Result<(), Vec<Error>> {
         {
             let completed = file_manager.completed_ast.borrow();
             log::debug!(
@@ -401,7 +403,7 @@ impl CompilationState {
         file_manager: &FileManager,
         driver: &mut impl FnMut(&File, Vec<CompiledItem>) -> Result<()>,
         depth: usize,
-    ) -> Result<(), Vec<anyhow::Error>> {
+    ) -> Result<(), Vec<Error>> {
         let mut view = self.compilation_queue.borrow_mut();
 
         let mut node @ Some(..) = view.take() else {
@@ -452,7 +454,7 @@ impl CompilationState {
 
     pub fn free_loop_register(&self, register: NumberLoopRegister) {
         if let NumberLoopRegister::Generated(id) = register {
-            assert!(self.loop_register_c.get() == id);
+            assert_eq!(self.loop_register_c.get(), id);
 
             self.loop_register_c.set(id - 1);
         }
@@ -503,7 +505,7 @@ impl CompilationState {
     }
 }
 
-pub(crate) trait Compile<E = anyhow::Error> {
+pub(crate) trait Compile<E = Error> {
     fn compile(&self, state: &CompilationState) -> Result<Vec<CompiledItem>, E>;
 }
 
@@ -580,10 +582,10 @@ impl<'a> From<&'a Ident> for Dependency<'a> {
 ///
 /// The algorithm for "satisfying" dependencies is as follows:
 /// * If dependency.name != supplied.name, continue
-/// * If dependency is a variable from a child scope, succeed if supplied.type == dependency.type
+/// * If dependency is a variable from a child scope, succeed if `supplied.type == dependency.type`
 /// * If dependency is not a variable from a child scope, it will be propagated regardless of whether the types
 ///   match (required for cases where a variable from a parent scope is copied to a separate local variable with the same name).
-/// * Succeed if supplied.type == dependency.type
+/// * Succeed if `supplied.type == dependency.type`
 pub(crate) fn get_net_dependencies(ast_item: &dyn Dependencies, is_scope: bool) -> Vec<Dependency> {
     let supplies = ast_item.supplies();
     let dependencies = ast_item.dependencies();
@@ -637,7 +639,7 @@ pub(crate) trait Dependencies {
 
     /// This function is used to calculate the outstanding dependencies by filtering out identities
     /// _needed_ from the identities _supplied_ by an AST node. If implementing an AST node that
-    /// **DIRECTLY** creates a scope (For example, a block of code), this method should be overriden.
+    /// **DIRECTLY** creates a scope (For example, a block of code), this method should be overridden.
     ///
     /// [`get_net_dependencies(self, false)`](get_net_dependencies) is the default implementation.
     /// Override this function and pass `true` if dealing with an AST node that creates a scope.
