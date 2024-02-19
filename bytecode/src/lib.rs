@@ -25,7 +25,7 @@ pub mod compilation_bridge {
     use crate::instruction_constants::{BIN_TO_REPR, REPR_TO_BIN};
     use std::borrow::Cow;
 
-    pub use crate::instruction::split_string;
+    pub use crate::instruction::{split_string, split_string_v2};
 
     pub use crate::file::{MScriptFile, MScriptFileBuilder};
     pub use crate::instruction::Instruction;

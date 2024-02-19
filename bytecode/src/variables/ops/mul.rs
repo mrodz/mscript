@@ -22,7 +22,7 @@ impl std::ops::Mul for &Primitive {
         }
 
         /// we cannot use built-in repeat, since Primitive does not implement Copy.
-        fn repeat_vec(original: &Vec<Primitive>, new_size: usize) -> Result<Vec<Primitive>> {
+        fn repeat_vec(original: &[Primitive], new_size: usize) -> Result<Vec<Primitive>> {
             let len = original.len();
             let Some(new_size) = len.checked_mul(new_size) else {
                 bail!("new size is too large")

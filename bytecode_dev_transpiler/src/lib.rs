@@ -1,7 +1,6 @@
 use anyhow::{bail, Result};
 use bytecode::compilation_bridge::*;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use std::borrow::Cow;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Seek, Write};
 use std::path::Path;
@@ -154,7 +153,7 @@ pub fn transpile_file(path: &str, new_path: &str) -> Result<()> {
                     pb.tick();
                 }
 
-                let arguments = split_string(Cow::Borrowed(args))?;
+                let arguments = split_string(args)?;
 
                 let name = name.trim_start();
 

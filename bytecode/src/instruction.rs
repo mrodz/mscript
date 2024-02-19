@@ -1,4 +1,4 @@
-//! All of the implementations for each bytecode instruction are found here.
+//! All the implementations for each bytecode instruction are found here.
 
 use super::context::Ctx;
 use super::function::InstructionExitState;
@@ -505,7 +505,7 @@ pub mod implementations {
         let raw_str = match args.len() {
             0 => "",
             1 => &args[0],
-            _ => bail!("make_str requires 0 arguments (empty string) or one argument (the string)"),
+            _ => bail!("make_str requires 0 arguments (empty string) or one argument (the string), but got {args:?}"),
         };
 
         let var = crate::string!(raw raw_str);
@@ -765,7 +765,7 @@ pub mod implementations {
                     }
                     ctx.pop_frame();
 
-                    return Ok(())
+                    return Ok(());
                 }
                 _ => bail!("missing argument, and the last item in the local stack ({last:?}, S:{:#?}) is not a function.", ctx.get_local_operating_stack()),
             }
@@ -1483,7 +1483,13 @@ pub mod implementations {
 /// println!("{combined:?}"); // Ok(["Hello World"])
 ///
 /// ```
-pub fn split_string(string: Cow<str>) -> Result<Box<[String]>> {
+pub fn split_string(string: &str) -> Result<Box<[String]>> {
+    split_string_v2(string, true)
+}
+
+/// Choose whether the output is one string, or if spaces/quotes
+/// are delimiters for many outputs.
+pub fn split_string_v2(string: &str, multi_target: bool) -> Result<Box<[String]>> {
     let mut result = Vec::<String>::new();
     let mut buf = String::new();
     let mut in_quotes = false;
@@ -1491,9 +1497,13 @@ pub fn split_string(string: Cow<str>) -> Result<Box<[String]>> {
 
     for char in string.chars() {
         if !in_quotes && (char.is_whitespace()) {
-            if !buf.is_empty() {
-                result.push(buf.to_string());
-                buf.clear();
+            if multi_target {
+                if !buf.is_empty() {
+                    result.push(buf.to_string());
+                    buf.clear();
+                }
+            } else {
+                buf.push(char);
             }
             continue;
         }
@@ -1514,7 +1524,7 @@ pub fn split_string(string: Cow<str>) -> Result<Box<[String]>> {
                     continue;
                 }
 
-                if in_quotes {
+                if multi_target && in_quotes {
                     result.push(buf.to_string());
                     buf.clear();
                 }
@@ -1551,8 +1561,15 @@ pub fn split_string(string: Cow<str>) -> Result<Box<[String]>> {
         bail!("found EOL while parsing string: `{string}`")
     } else {
         if !buf.is_empty() {
+            // flush buffer at the end of processing
             result.push(buf.to_string());
         }
+
+        if result.is_empty() {
+            // edge case
+            result.push(String::new());
+        }
+
         Ok(result.into_boxed_slice())
     }
 }

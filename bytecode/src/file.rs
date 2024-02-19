@@ -256,7 +256,7 @@ impl MScriptFile {
                 // instruction (w. Args) syntax: `{id} arg1 arg2 "multi arg" arg4\0`
                 // where {id}: u8
                 [instruction, b' ', args @ .., 0x00] if in_function => {
-                    let args = split_string(String::from_utf8_lossy(args))?;
+                    let args = split_string(String::from_utf8_lossy(args).as_ref())?;
 
                     let instruction = Instruction::new(*instruction, args);
 

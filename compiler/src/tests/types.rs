@@ -207,7 +207,7 @@ fn types_with_reassignment() {
 }
 
 #[test]
-#[ignore = "2/4/2024 - type updates are no longer in spec"]
+#[should_panic = "type mismatch: this assignment will update a variable with type `int`, which is not compatible with the original type `str`"]
 fn type_updates() {
     eval(
         r#"
@@ -224,9 +224,8 @@ fn type_updates() {
     .unwrap()
 }
 
-/// `2` is an invalid index into "hi", so this test asserts that types and values are being updated
 #[test]
-#[ignore = "2/4/2024 - type updates are no longer in spec"]
+#[should_panic = "type mismatch: this assignment will update a variable with type `[int...]`, which is not compatible with the original type `str`"]
 fn type_updates_index() {
     eval(
         r#"
@@ -240,12 +239,12 @@ fn type_updates_index() {
 }
 
 #[test]
-#[should_panic = "cannot index with `3` into list whose known valid safe indexes are 0..2"]
+#[should_panic = "type mismatch: this assignment will update a variable with type `[int, int, int]`, which is not compatible with the original type `str`"]
 fn invalid_index() {
     eval(
         r#"
         x = "hi"
-        x = [1, 2, 3]
+        const x = [1, 2, 3]
     
         x[3]
     "#,
@@ -470,5 +469,72 @@ fn list_with_optional_class() {
         assert cats_str == ["Cat named Muna is a tabby: Cat", "Cat named Scout is a tabby: Cat", "Cat named Odie is a tabby: Cat", "Cat named Air Bud is a tabby: Cat", "Cat named Old Yeller is a tabby: Cat"]
     "#,
     )
-    .unwrap();
+        .unwrap();
+}
+
+#[test]
+fn escape_sequence_strings() {
+    eval(
+        r#"
+        const MESSAGE = "Santa said, \"Ho Ho Ho!\" (North Pole Chronicle 52).\n\t--12/25/0002"
+
+        assert MESSAGE[12] == "\""
+
+        const QUOT_ORD: byte = 34.to_byte()
+        const LF_ORD: byte = 10.to_byte()
+        const TAB_ORD: byte = 9.to_byte()
+
+        assert MESSAGE[12] == QUOT_ORD.to_ascii()
+
+        assert MESSAGE.index_of("\n") == 50
+        assert MESSAGE[50] == LF_ORD.to_ascii()
+
+        assert MESSAGE[51] == TAB_ORD.to_ascii()
+    "#,
+    )
+    .unwrap()
+}
+
+/// https://github.com/mrodz/mscript/issues/185
+#[test]
+fn cross_file_escape_behavior() {
+    EvalEnvironment::entrypoint(
+        "main.ms",
+        r#"
+        import other
+
+        const MESSAGE = "hello \"world\""
+
+        print MESSAGE == other.MESSAGE
+        print MESSAGE
+        print other.MESSAGE
+
+        me = other.Person("Billy Bob")
+
+        print me.to_str()
+        assert me.to_str() == "Person {\n\tname: \"Billy Bob\"\n}"
+    "#,
+    )
+    .unwrap()
+    .add(
+        "other.ms",
+        r#"
+        export const MESSAGE: str = "hello \"world\""
+
+        export class Person {
+            name: str
+
+            constructor(self, name: str) {
+                self.name = name
+            }
+
+            fn to_str(self) -> str {
+                return "Person {\n\tname: \"" + self.name + "\"\n}"
+            }
+        }
+    "#,
+    )
+    .unwrap()
+    .run()
+    .unwrap()
 }
