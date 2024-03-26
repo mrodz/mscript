@@ -32,7 +32,7 @@ impl Constructor {
         Self {
             parameters: Rc::new(FunctionParameters::Named(vec![Ident::new(
                 "self".to_owned(),
-                Some(Cow::Owned(TypeLayout::ClassSelf)),
+                Some(Cow::Owned(TypeLayout::ClassSelf(None))),
                 true,
             )])),
             body: Block::empty_body(),
