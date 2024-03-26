@@ -76,12 +76,7 @@ impl Parser {
 
             let active_class = input.user_data().get_type_of_executing_class();
 
-            if let Some(ref c) = active_class {
-                println!("\tFOR {c}");
-            }
             let class_sent_for_comparison = maybe_class_type.or(active_class.as_deref());
-
-            println!("\t- {result_len} {user_gave} & {expected_ty_at_idx} with {class_sent_for_comparison:?}");
 
             if !expected_ty_at_idx.eq_complex(
                 user_gave,

@@ -105,15 +105,12 @@ impl Parser {
         for dot_chain_option_node in input.children() {
             must_call = true;
 
-            println!("{:?}", dot_chain_option_node.as_str());
-
             let dot_chain_option = Self::dot_chain_option(dot_chain_option_node, lhs_ty)?;
 
             if let DotLookupOption::FunctionCall { .. } = dot_chain_option.lookup_type {
                 // reset
                 must_call = false;
             }
-
 
             if let Some(function_type) = dot_chain_option.output_type.is_function() {
                 if !function_type.is_associated_fn() {
@@ -150,8 +147,6 @@ impl Parser {
         let ident = children.next().unwrap();
         let ident_str = ident.as_str().to_owned();
 
-        println!("\t{ident_str:?}");
-
         let ident_span = ident.as_span();
 
         let source_name = input.user_data().get_source_file_name();
@@ -183,8 +178,6 @@ impl Parser {
                         ),
                     )]);
                 };
-
-                println!("\t\t{function_type}");
 
                 let arguments = children.next().unwrap().children().single().unwrap();
 

@@ -284,7 +284,11 @@ impl AssocFileData {
                 let Ok(parameters) = Ref::filter_map(parameters, |parameters| {
                     let Some(parameters) = parameters.as_ref() else {
                         if let Some(dependency) = scope.contains("self") {
-                            if dependency.ty().expect("unmapped type").as_ref().is_class_self()
+                            if dependency
+                                .ty()
+                                .expect("unmapped type")
+                                .as_ref()
+                                .is_class_self()
                             {
                                 return None;
                             }

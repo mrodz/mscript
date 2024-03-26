@@ -513,3 +513,87 @@ fn do_not_allow_callable() {
     )
     .unwrap();
 }
+
+#[test]
+#[should_panic = "type mismatch when calling function (argument #1 was expected to be `Bar` based on type signature, instead found `Self`"]
+fn deny_bad_class_self_in_method() {
+    eval(
+        r#"
+		class Bar {
+			fn buzz(self, other: Self) {
+				# do nothing
+			}
+		}
+
+		class Foo {
+			fn x(self) {
+				(Bar()).buzz(self)
+			}
+		}
+	"#,
+    )
+    .unwrap()
+}
+
+#[test]
+#[should_panic = "type mismatch when calling function (argument #1 was expected to be `Bar` based on type signature, instead found `Self`"]
+fn deny_bad_class_self_in_constructor() {
+    eval(
+        r#"
+		class Bar {
+			fn buzz(self, other: Self) {
+				# do nothing
+			}
+		}
+
+		class Foo {
+			constructor(self) {
+				(Bar()).buzz(self)
+			}
+		}
+	"#,
+    )
+    .unwrap()
+}
+
+#[test]
+fn allow_good_class_self() {
+    eval(
+        r#"
+		class Person {
+			name: str
+			friends: [Self...]
+		
+			constructor(self, name: str) {
+				self.name = name
+				self.friends = []
+			}
+		
+			fn add_friend(self, friend: Self) {
+				self.friends.push(friend)
+			}
+
+			fn add_mutual(self, friend: Self) {
+				self.friends.push(friend)
+				friend.friends.push(self)
+			}
+		}
+
+		me = Person("Mateo")
+		friend_1 = Person("Yanga")
+		friend_2 = Person("Dylan")
+		friend_3 = Person("Davey")
+
+		me.add_friend(friend_1)
+		me.add_friend(friend_2)
+		me.add_friend(friend_3)
+
+		friend_4 = Person("Brendan")
+		me.add_mutual(friend_4)
+
+		assert me.friends.len() == 4
+		assert (friend_4.friends)[0] is me
+	"#,
+    )
+    .unwrap()
+}
