@@ -1,6 +1,6 @@
 use std::{
     borrow::Cow,
-    cell::Cell,
+    cell::RefCell,
     fmt::{Debug, Display},
     rc::Rc,
 };
@@ -154,12 +154,17 @@ pub(crate) trait UnwrapSpanDisplayable: Debug + Display {}
 impl<T> UnwrapSpanDisplayable for T where T: Debug + Display {}
 
 #[derive(Debug)]
+pub enum ReferenceToSelf {
+    Class(ClassType),
+    Function,
+    Invalid,
+}
+
+#[derive(Debug)]
 pub(crate) enum Expr {
     Nil,
     Value(Value),
-    ReferenceToSelf {
-        is_valid: Cell<bool>,
-    },
+    ReferenceToSelf(RefCell<ReferenceToSelf>),
     ReferenceToConstructor(ClassType),
     UnaryMinus(Box<Expr>),
     UnaryNot(Box<Expr>),
@@ -347,9 +352,9 @@ impl IntoType for Expr {
 
                 Ok(return_type.clone().into_owned())
             }
-            Expr::ReferenceToSelf { is_valid } => {
-                if is_valid.get() {
-                    Ok(TypeLayout::ClassSelf)
+            Expr::ReferenceToSelf(is_valid) => {
+                if let ReferenceToSelf::Class(class_type) = &*is_valid.borrow() {
+                    Ok(TypeLayout::ClassSelf(Some(class_type.clone())))
                 } else {
                     bail!("this reference to `self` is not valid here")
                 }
@@ -654,7 +659,14 @@ fn parse_expr(
                         let raw_string = primary.as_str();
 
                         match raw_string {
-                            "self" => return Ok((Expr::ReferenceToSelf { is_valid: Cell::new(user_data.get_type_of_executing_class().is_some()) }, Some(primary_pair))),
+                            "self" => {
+                                let self_reference = if let Some(c) = user_data.get_type_of_executing_class() {
+                                    ReferenceToSelf::Class(c.to_owned())
+                                } else {
+                                    ReferenceToSelf::Invalid
+                                };
+                                return Ok((Expr::ReferenceToSelf(RefCell::new(self_reference)), Some(primary_pair)))
+                            },
                             "Self" => {
                                 let class = user_data
                                 .get_type_of_executing_class()
@@ -821,7 +833,7 @@ fn parse_expr(
                 let lhs = Box::new(lhs);
 
                 match lhs.as_ref() {
-                    Expr::ReferenceToSelf { is_valid } => {
+                    Expr::ReferenceToSelf(is_valid) => {
                         let return_type = user_data.return_statement_expected_yield_type().map(|x| x.clone());
 
                         let function_arguments: Pair<Rule> = op.into_inner().next().unwrap();
@@ -834,7 +846,7 @@ fn parse_expr(
 
                         let arguments: FunctionArguments = Parser::function_arguments(function_arguments, &parameters, None)?;
 
-                        is_valid.set(true);
+                        *is_valid.borrow_mut() = ReferenceToSelf::Function;
 
                         return Ok((Expr::Callable(CallableContents::ToSelf { return_type, arguments }), l_span))
                     }

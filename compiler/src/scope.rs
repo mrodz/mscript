@@ -242,7 +242,11 @@ impl Scopes {
             "bool" => return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(Bool)))),
             "bigint" => return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(BigInt)))),
             "byte" => return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::Native(Byte)))),
-            "Self" => return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::ClassSelf))),
+            "Self" => {
+                return TypeSearchResult::Ok(Owned(Cow::Owned(TypeLayout::ClassSelf(
+                    self.get_owned_type_of_executing_class(0),
+                ))))
+            }
             _ => (),
         }
 

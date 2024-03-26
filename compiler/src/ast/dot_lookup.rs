@@ -104,6 +104,7 @@ impl Parser {
 
         for dot_chain_option_node in input.children() {
             must_call = true;
+
             let dot_chain_option = Self::dot_chain_option(dot_chain_option_node, lhs_ty)?;
 
             if let DotLookupOption::FunctionCall { .. } = dot_chain_option.lookup_type {

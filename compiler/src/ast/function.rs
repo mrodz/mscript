@@ -68,6 +68,10 @@ impl FunctionType {
     pub fn parameters(&self) -> &FunctionParameters {
         &self.parameters
     }
+
+    pub fn parameters_mut(&mut self) -> &mut Rc<FunctionParameters> {
+        &mut self.parameters
+    }
 }
 
 impl PartialEq for FunctionType {

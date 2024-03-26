@@ -117,7 +117,7 @@ impl Parser {
                     if add_to_scope_dependencies {
                         let ident = Ident::new(
                             "self".to_owned(),
-                            Some(Cow::Owned(TypeLayout::ClassSelf)),
+                            Some(Cow::Owned(TypeLayout::ClassSelf(None))),
                             false,
                         );
                         input.user_data().add_dependency(&ident);

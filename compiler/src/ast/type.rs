@@ -549,7 +549,7 @@ pub(crate) enum TypeLayout {
     ValidIndexes(ListBound),
     Class(ClassType),
     Module(ModuleType),
-    ClassSelf,
+    ClassSelf(Option<ClassType>),
     Generic(GenericType),
     Void,
 }
@@ -569,7 +569,7 @@ impl Display for TypeLayout {
             Self::List(list) => write!(f, "{list}"),
             Self::ValidIndexes(upper) => write!(f, "[..{upper}]"),
             Self::Class(class_type) => write!(f, "{}", class_type.name()),
-            Self::ClassSelf => write!(f, "Self"),
+            Self::ClassSelf(..) => write!(f, "Self"),
             Self::Optional(Some(ty)) => write!(f, "{ty}?"),
             Self::Optional(None) => write!(f, "nil"),
             Self::Void => write!(f, "void"),
@@ -715,7 +715,7 @@ impl TypeLayout {
     pub fn is_class_self(&self) -> bool {
         let me = self.get_type_recursively();
 
-        matches!(me, TypeLayout::ClassSelf)
+        matches!(me, TypeLayout::ClassSelf(..))
     }
 
     pub fn is_class(&self) -> bool {
@@ -788,7 +788,7 @@ impl TypeLayout {
                 let maybe_extended_hint = x.get_error_hint_between_types_recursive(y, class_self, tab_depth + 1).unwrap_or_default();
                 format!("\n{tabs}+ hint: unwrap this optional to use its value using the `get` keyword, or provide a fallback with the `or` keyword{maybe_extended_hint}")
             }
-            _ if self.disregard_distractors(true) == &ClassSelf || incompatible.disregard_distractors(true) == &ClassSelf => {
+            _ if self.disregard_distractors(true).is_class_self() || incompatible.disregard_distractors(true).is_class_self() => {
                 format!("\n{tabs}+ hint: `Self` in this context means {}", class_self.map(|x| Cow::Owned(format!("`{}`", x.name()))).unwrap_or(Cow::Borrowed("a function's associated class")))
             }
             (List(l1), List(l2)) => {
@@ -865,7 +865,7 @@ impl TypeLayout {
     }
 
     pub fn assume_type_of_self(self, user_data: &AssocFileData) -> TypeLayout {
-        if matches!(self, TypeLayout::ClassSelf) {
+        if self.is_class_self() {
             TypeLayout::Class(user_data.get_type_of_executing_class().unwrap().clone())
         } else {
             self
@@ -884,6 +884,7 @@ impl TypeLayout {
                 Self::CallbackVariable(Box::new(cb.update_all_references_to_class_self(class_type)))
             }
             Self::Function(function) => {
+                let mut new_function = function.clone();
                 let (is_return_type_class_self, is_return_type_optional) = {
                     // scoped because `try_set_return_type` borrows mutably
                     let return_type = function.return_type();
@@ -899,7 +900,7 @@ impl TypeLayout {
                 };
 
                 if is_return_type_class_self {
-                    let mut return_type = Cow::Owned(TypeLayout::Class(class_type));
+                    let mut return_type = Cow::Owned(TypeLayout::Class(class_type.clone()));
 
                     if is_return_type_optional {
                         return_type = Cow::Owned(TypeLayout::Optional(Some(Box::new(return_type))))
@@ -907,10 +908,35 @@ impl TypeLayout {
 
                     let new_return_status = ScopeReturnStatus::Did(return_type);
 
-                    function.try_set_return_type(new_return_status);
+                    new_function.try_set_return_type(new_return_status);
                 }
 
-                TypeLayout::Function(function.clone())
+                let p = new_function.parameters_mut();
+
+                let mut new_parameters = Vec::with_capacity(p.len());
+
+                for ty in p.to_types().iter() {
+                    let is_type_class_self = ty.disregard_distractors(true).is_class_self();
+                    if is_type_class_self {
+                        let is_type_optional = ty.disregard_distractors(false).is_optional().0;
+
+                        let class_self = Cow::Owned(TypeLayout::Class(class_type.clone()));
+
+                        let replacement = if is_type_optional {
+                            Cow::Owned(TypeLayout::Optional(Some(Box::new(class_self))))
+                        } else {
+                            class_self
+                        };
+
+                        new_parameters.push(replacement);
+                    } else {
+                        new_parameters.push(ty.clone());
+                    }
+                }
+
+                *p = Rc::new(FunctionParameters::TypesOnly(new_parameters));
+
+                TypeLayout::Function(new_function)
             }
             Self::Generic(generic) => {
                 if let Some(mut ty) = generic.try_get_lock_mut() {
@@ -935,7 +961,8 @@ impl TypeLayout {
             Self::Optional(Some(o)) => Self::Optional(Some(Box::new(Cow::Owned(
                 o.update_all_references_to_class_self(class_type),
             )))),
-            Self::ClassSelf => TypeLayout::Class(class_type),
+            Self::ClassSelf(Some(known_confirmed)) => TypeLayout::Class(known_confirmed.clone()),
+            Self::ClassSelf(None) => TypeLayout::Class(class_type),
             ret @ (Self::Class(..)
             | Self::Optional(None)
             | Self::Module(..)
@@ -1449,8 +1476,13 @@ impl TypeLayout {
     where
         T: Deref<Target = ClassType> + Debug,
     {
-        let lhs = self.disregard_distractors(false);
-        let rhs = rhs.disregard_distractors(false);
+        let lhs = Cow::Borrowed(self.disregard_distractors(false));
+        let rhs = Cow::Borrowed(rhs.disregard_distractors(false));
+
+        // if let Some(executing_class) = flags.executing_class.as_ref() {
+        //     lhs = Cow::Owned(lhs.update_all_references_to_class_self(executing_class.deref().clone()));
+        //     rhs = Cow::Owned(rhs.update_all_references_to_class_self(executing_class.deref().clone()));
+        // }
 
         log::debug!("lhs:{lhs:?} rhs:{rhs:?} f:{:?}", flags.deref());
 
@@ -1464,12 +1496,16 @@ impl TypeLayout {
             };
         }
 
-        match (lhs, rhs, &flags.executing_class) {
+        match (lhs.as_ref(), rhs.as_ref(), &flags.executing_class) {
             (Self::Generic(generic), other, _) | (other, Self::Generic(generic), _) => {
                 generic.is_compatible(other, &flags)
             }
-            (Self::ClassSelf, other, Some(executing_class))
-            | (other, Self::ClassSelf, Some(executing_class)) => {
+            (Self::ClassSelf(Some(known)), other, ..)
+            | (other, Self::ClassSelf(Some(known)), ..) => {
+                TypeLayout::Class(known.to_owned()).eq_complex(other, flags)
+            }
+            (Self::ClassSelf(None), other, Some(executing_class))
+            | (other, Self::ClassSelf(None), Some(executing_class)) => {
                 TypeLayout::Class(executing_class.deref().to_owned()).eq_complex(other, flags)
             }
             (Self::List(ListType::Mixed(t1)), Self::List(ListType::Mixed(t2)), _) => {
@@ -1783,8 +1819,8 @@ impl TypeLayout {
 
     pub(crate) fn eq_include_class_self(&self, value: &Self) -> bool {
         match (self, value) {
-            (TypeLayout::Class(..), TypeLayout::ClassSelf) => true,
-            (TypeLayout::ClassSelf, TypeLayout::Class(..)) => true,
+            (TypeLayout::Class(..), TypeLayout::ClassSelf(None)) => true,
+            (TypeLayout::ClassSelf(None), TypeLayout::Class(..)) => true,
             (x, y) => x.eq_complex(y, &TypecheckFlags::<&ClassType>::classless()),
         }
     }
