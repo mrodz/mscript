@@ -5,6 +5,7 @@ use super::function::InstructionExitState;
 use super::stack::{Stack, VariableMapping};
 use super::variables::{ObjectBuilder, Primitive};
 use anyhow::{bail, Context, Result};
+use gc::Gc;
 use once_cell::sync::Lazy;
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -23,6 +24,8 @@ pub type InstructionSignature = fn(&mut Ctx, &[String]) -> Result<()>;
 /// each instruction, and nothing more.
 #[deny(dead_code)]
 pub mod implementations {
+    use gc::Gc;
+
     use super::*;
     use crate::context::SpecialScope;
     use crate::function::{PrimitiveFunction, ReturnValue};
@@ -172,11 +175,11 @@ pub mod implementations {
                 let no_mut: &Primitive = value;
 
                 match op.as_str() {
-                    "+=" => (bundle.primitive() + no_mut)?,
-                    "-=" => (bundle.primitive() - no_mut)?,
-                    "*=" => (bundle.primitive() * no_mut)?,
-                    "/=" => (bundle.primitive() / no_mut)?,
-                    "%=" => (bundle.primitive() % no_mut)?,
+                    "+=" => (&*bundle.primitive() + no_mut)?,
+                    "-=" => (&*bundle.primitive() - no_mut)?,
+                    "*=" => (&*bundle.primitive() * no_mut)?,
+                    "/=" => (&*bundle.primitive() / no_mut)?,
+                    "%=" => (&*bundle.primitive() % no_mut)?,
                     _ => bail!("unknown assignment operation: {op}"),
                 }
             };
@@ -199,11 +202,11 @@ pub mod implementations {
             let result = ptr
                 .update(|current| {
                     Ok(match op.as_str() {
-                        "+=" => (current + &value)?,
-                        "-=" => (current - &value)?,
-                        "*=" => (current * &value)?,
-                        "/=" => (current / &value)?,
-                        "%=" => (current % &value)?,
+                        "+=" => (current.deref() + &value)?,
+                        "-=" => (current.deref() - &value)?,
+                        "*=" => (current.deref() * &value)?,
+                        "/=" => (current.deref() / &value)?,
+                        "%=" => (current.deref() % &value)?,
                         _ => bail!("unknown assignment operation: {op}"),
                     })
                 })?
@@ -227,7 +230,7 @@ pub mod implementations {
         let new_val = ctx.pop().unwrap();
         let maybe_vec = ctx.pop().unwrap();
 
-        let Primitive::HeapPrimitive(vec_ptr) = maybe_vec else {
+        let Primitive::HeapPrimitive(ref vec_ptr) = maybe_vec else {
             bail!("expected a mutable heap primitive, found {maybe_vec}");
         };
 
@@ -253,11 +256,11 @@ pub mod implementations {
                 .load_local(&op_name[1..])
                 .context("vector not found for pushing")?;
 
-            let Primitive::Vector(ref vector) = primitive_with_flags.primitive() else {
+            let Primitive::Vector(ref vector) = &*primitive_with_flags.primitive() else {
                 bail!("not a vector, trying to push")
             };
 
-            vector.borrow_mut().push(new_val);
+            vector.0.borrow_mut().push(new_val);
         } else if let [b'[', index @ .., b']'] = bytes {
             let Some(indexable) = ctx.pop() else {
                 bail!("the stack is empty");
@@ -287,19 +290,19 @@ pub mod implementations {
             };
 
             match indexable {
-                Primitive::Vector(vector_shared) => {
+                Primitive::Vector(ref vector_shared) => {
                     {
-                        let len = vector_shared.borrow().len();
+                        let len = vector_shared.0.borrow().len();
                         if idx >= len {
                             bail!("index {idx} out of bounds (len {len})")
                         }
                     }
 
-                    let heap_primitive = HeapPrimitive::new_array_view(vector_shared, idx);
+                    let heap_primitive = HeapPrimitive::new_array_view(vector_shared.clone(), idx);
 
                     ctx.push(Primitive::HeapPrimitive(heap_primitive));
                 }
-                Primitive::Str(string) => {
+                Primitive::Str(ref string) => {
                     let mut str_chars = string.chars();
                     ctx.push(Primitive::Str(
                         str_chars
@@ -326,7 +329,7 @@ pub mod implementations {
                         )
                     };
 
-                    let mut vector = vector.borrow_mut();
+                    let mut vector = vector.0.borrow_mut();
 
                     vector.reverse();
                 }
@@ -352,7 +355,7 @@ pub mod implementations {
                         bail!("Cannot perform a vector operation on a non-vector (found: {primitive})")
                     };
 
-                    let mut vector = vector.borrow_mut();
+                    let mut vector = vector.0.borrow_mut();
 
                     vector[idx] = new_item;
                 }
@@ -536,7 +539,7 @@ pub mod implementations {
                 arguments.insert(var_name.clone(), var.clone());
             }
 
-            Some(Rc::new(arguments.into()))
+            Some(arguments.into())
         } else {
             None
         };
@@ -556,14 +559,14 @@ pub mod implementations {
 
         let object_variables = {
             let frame_variables = ctx.get_frame_variables()?;
-            Rc::new(VariableMapping::clone(&frame_variables))
+            VariableMapping::clone(&frame_variables)
         };
 
         let function = ctx.owner();
         let name = function.name();
 
         let obj = unsafe {
-            if !OBJECT_BUILDER.has_class_been_registered(&name) {
+            if !OBJECT_BUILDER.has_class_been_registered(name) {
                 let location = &function.location();
                 let object_path = format!("{}#{name}$", location.upgrade().unwrap().path());
 
@@ -585,16 +588,16 @@ pub mod implementations {
                     mapping.insert(func.get_qualified_name());
                 }
 
-                OBJECT_BUILDER.register_class(Rc::clone(&name), mapping);
+                OBJECT_BUILDER.register_class(name.to_owned(), mapping);
             }
 
             OBJECT_BUILDER
-                .name(Rc::clone(&name))
+                .name(name.to_owned())
                 .object_variables(object_variables)
                 .build()
         };
 
-        ctx.push(object!(Rc::new(RefCell::new(obj))));
+        ctx.push(object!(obj));
 
         Ok(())
     }
@@ -677,7 +680,7 @@ pub mod implementations {
             bail!("last item in the local stack {first:?} is not an object.")
         };
 
-        let callback_state = Some(o.borrow().object_variables.clone());
+        let callback_state = Some(o.object_variables.clone());
 
         let arguments = ctx.get_local_operating_stack().clone();
         ctx.clear_stack();
@@ -708,7 +711,7 @@ pub mod implementations {
             bail!("Cannot perform an object mutation on a non-object")
         };
 
-        let obj_view = o.borrow();
+        let obj_view = o /*.borrow() */;
         let has_variable = obj_view
             .has_variable(var_name)
             .context("variable does not exist on object")?;
@@ -731,7 +734,7 @@ pub mod implementations {
             let last = ctx.pop();
 
             match last {
-                Some(Primitive::Function(f)) => {
+                Some(Primitive::Function(ref f)) => {
                     let destination = JumpRequestDestination::Standard(f.location().to_owned());
 
                     let callback_state = f.callback_state().clone();
@@ -747,7 +750,7 @@ pub mod implementations {
 
                     return Ok(());
                 }
-                Some(Primitive::BuiltInFunction(variant)) => {
+                Some(Primitive::BuiltInFunction(ref variant)) => {
                     ctx.add_frame(format!("<native code>#{variant:?}"));
                     match variant.run(ctx).with_context(|| format!("built-in function raised an exception: {variant:?}()"))? {
                         (Some(primitive), None) => {
@@ -842,7 +845,8 @@ pub mod implementations {
         match top {
             Primitive::Module(module) => {
                 let module = module.clone(); // to please borrow checker
-                let view = module.borrow();
+                // let view = module.borrow();
+                let view = module;
 
                 for name in args {
                     let Some(bundle) = view.get(name) else {
@@ -904,7 +908,7 @@ pub mod implementations {
         let primitive = primitive.move_out_of_heap_primitive();
 
         let status = match primitive {
-            Primitive::Optional(Some(unwrapped)) => {
+            Primitive::Optional(Some(ref unwrapped)) => {
                 let var = unwrapped.as_ref().to_owned();
 
                 let var = var.move_out_of_heap_primitive();
@@ -1592,7 +1596,7 @@ pub struct JumpRequest {
     pub destination: JumpRequestDestination,
     /// If this request is a closure or introduces a unique environment,
     /// this field will be `Some`.
-    pub callback_state: Option<Rc<VariableMapping>>,
+    pub callback_state: Option<VariableMapping>,
     /// This is a shared reference to the interpreter call stack.
     pub stack: Rc<RefCell<Stack>>,
     /// The arguments to the jump request. If this request is a function

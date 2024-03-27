@@ -3,6 +3,7 @@
 //! * Representation of runtime callbacks/closures ([`PrimitiveFunction`])
 
 use anyhow::{bail, Context, Result};
+use gc::{Finalize, Gc, Trace};
 use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -15,6 +16,7 @@ use crate::context::{Ctx, SpecialScope};
 use crate::file::MScriptFile;
 use crate::instruction::{Instruction, JumpRequestDestination};
 use crate::instruction_constants::query;
+use crate::{vector, GcVector};
 
 use super::instruction::JumpRequest;
 use super::stack::{Stack, VariableMapping};
@@ -93,7 +95,7 @@ impl BuiltInFunction {
                     unreachable!()
                 };
 
-                let len = v.borrow().len();
+                let len = v.0.borrow().len();
 
                 Ok((
                     Some(Primitive::Int(len.try_into().with_context(|| {
@@ -107,7 +109,7 @@ impl BuiltInFunction {
                     unreachable!()
                 };
 
-                v.borrow_mut().reverse();
+                v.0.borrow_mut().reverse();
 
                 Ok((None, None))
             }
@@ -116,7 +118,7 @@ impl BuiltInFunction {
                     unreachable!()
                 };
 
-                let cap = v.borrow().capacity();
+                let cap = v.0.borrow().capacity();
 
                 Ok((
                     Some(Primitive::Int(cap.try_into().with_context(|| {
@@ -134,14 +136,14 @@ impl BuiltInFunction {
                     unreachable!()
                 };
 
-                v.borrow_mut().reserve((*size).try_into().with_context(|| {
+                v.0.borrow_mut().reserve((*size).try_into().with_context(|| {
                     format!("additional vector capacity `{size}` could not fit in an int (i32)")
                 })?);
 
                 Ok((None, None))
             }
             Self::VecMap => {
-                let Primitive::Function(callback_fn) = arguments.remove(1) else {
+                let Primitive::Function(ref callback_fn) = arguments.remove(1) else {
                     unreachable!()
                 };
 
@@ -152,25 +154,25 @@ impl BuiltInFunction {
                 #[derive(Debug)]
                 struct MapOp {
                     callback_path: String,
-                    callback_state: Option<Rc<VariableMapping>>,
-                    underlying: Rc<RefCell<Vec<Primitive>>>,
+                    callback_state: Option<VariableMapping>,
+                    underlying: GcVector,
                     call_stack: Rc<RefCell<Stack>>,
-                    map_result: Rc<RefCell<Vec<Primitive>>>,
+                    map_result: GcVector,
                     index: Cell<i32>,
                 }
 
                 impl MapOp {
                     fn new(
                         callback_fn: PrimitiveFunction,
-                        underlying: Rc<RefCell<Vec<Primitive>>>,
+                        underlying: GcVector,
                         call_stack: Rc<RefCell<Stack>>,
                     ) -> Self {
-                        let underlying_len = { underlying.borrow().len() };
+                        let underlying_len = { underlying.0.borrow().len() };
                         Self {
-                            callback_path: callback_fn.location,
-                            callback_state: callback_fn.callback_state,
+                            callback_path: callback_fn.location.clone(),
+                            callback_state: callback_fn.callback_state.clone(),
                             call_stack,
-                            map_result: Rc::new(RefCell::new(Vec::with_capacity(underlying_len))),
+                            map_result: GcVector::with_capacity(underlying_len),
                             underlying,
                             index: Cell::new(0),
                         }
@@ -181,7 +183,7 @@ impl BuiltInFunction {
                     fn wait_for(&self) -> Result<JumpRequest> {
                         let this_index = self.index.get();
                         self.index.set(this_index + 1);
-                        let underlying = self.underlying.borrow();
+                        let underlying = self.underlying.0.borrow();
                         let this_value: Primitive = underlying[this_index as usize].clone();
 
                         Ok(JumpRequest {
@@ -195,13 +197,13 @@ impl BuiltInFunction {
                     }
 
                     fn then(&self, return_value: ReturnValue) -> Result<bool> {
-                        let mut result = self.map_result.borrow_mut();
+                        let mut result = self.map_result.0.borrow_mut();
 
                         if let ReturnValue::Value(value) = return_value {
                             result.push(value);
                         }
 
-                        Ok((self.index.get() as usize) < self.underlying.borrow().len())
+                        Ok((self.index.get() as usize) < self.underlying.0.borrow().len())
                     }
 
                     fn finish(&self) -> Result<Option<Primitive>> {
@@ -212,14 +214,14 @@ impl BuiltInFunction {
                 Ok((
                     None,
                     Some(Box::new(MapOp::new(
-                        callback_fn,
+                        callback_fn.clone(),
                         v.clone(),
                         ctx.rced_call_stack(),
                     ))),
                 ))
             }
             Self::VecFilter => {
-                let Primitive::Function(callback_fn) = arguments.remove(1) else {
+                let Primitive::Function(ref callback_fn) = arguments.remove(1) else {
                     unreachable!()
                 };
 
@@ -230,24 +232,24 @@ impl BuiltInFunction {
                 #[derive(Debug)]
                 struct FilterOp {
                     callback_path: String,
-                    callback_state: Option<Rc<VariableMapping>>,
-                    underlying: Rc<RefCell<Vec<Primitive>>>,
+                    callback_state: Option<VariableMapping>,
+                    underlying: GcVector,
                     call_stack: Rc<RefCell<Stack>>,
-                    filter_result: Rc<RefCell<Vec<Primitive>>>,
+                    filter_result: GcVector,
                     index: Cell<i32>,
                 }
 
                 impl FilterOp {
                     fn new(
                         callback_fn: PrimitiveFunction,
-                        underlying: Rc<RefCell<Vec<Primitive>>>,
+                        underlying: GcVector,
                         call_stack: Rc<RefCell<Stack>>,
                     ) -> Self {
                         Self {
-                            callback_path: callback_fn.location,
-                            callback_state: callback_fn.callback_state,
+                            callback_path: callback_fn.location.clone(),
+                            callback_state: callback_fn.callback_state.clone(),
                             call_stack,
-                            filter_result: Rc::new(RefCell::new(vec![])),
+                            filter_result: GcVector::default(),
                             underlying,
                             index: Cell::new(0),
                         }
@@ -258,7 +260,7 @@ impl BuiltInFunction {
                     fn wait_for(&self) -> Result<JumpRequest> {
                         let this_index = self.index.get();
                         self.index.set(this_index + 1);
-                        let underlying = self.underlying.borrow();
+                        let underlying = self.underlying.0.borrow();
                         let this_value: Primitive = underlying[this_index as usize].clone();
 
                         Ok(JumpRequest {
@@ -272,16 +274,16 @@ impl BuiltInFunction {
                     }
 
                     fn then(&self, return_value: ReturnValue) -> Result<bool> {
-                        let mut result = self.filter_result.borrow_mut();
+                        let mut result = self.filter_result.0.borrow_mut();
 
                         if let ReturnValue::Value(Primitive::Bool(true)) = return_value {
-                            let underlying = self.underlying.borrow();
+                            let underlying = self.underlying.0.borrow();
                             let this_index: usize = (self.index.get() - 1).try_into()?;
                             result.push(underlying[this_index].clone());
                         }
 
                         Ok(<i32 as TryInto<usize>>::try_into(self.index.get())?
-                            < self.underlying.borrow().len())
+                            < self.underlying.0.borrow().len())
                     }
 
                     fn finish(&self) -> Result<Option<Primitive>> {
@@ -292,7 +294,7 @@ impl BuiltInFunction {
                 Ok((
                     None,
                     Some(Box::new(FilterOp::new(
-                        callback_fn,
+                        callback_fn.clone(),
                         v.clone(),
                         ctx.rced_call_stack(),
                     ))),
@@ -307,7 +309,7 @@ impl BuiltInFunction {
                     unreachable!()
                 };
 
-                let removed = v.borrow_mut().remove((*i).try_into().with_context(|| {
+                let removed = v.0.borrow_mut().remove((*i).try_into().with_context(|| {
                     format!("vector index `{i}` could not fit in an int (i32)")
                 })?);
 
@@ -322,7 +324,7 @@ impl BuiltInFunction {
                     unreachable!()
                 };
 
-                v.borrow_mut().push(primitive.clone());
+                v.0.borrow_mut().push(primitive.clone());
 
                 Ok((None, None))
             }
@@ -336,8 +338,9 @@ impl BuiltInFunction {
                 };
 
                 {
-                    let mut v_original = v_original_shared.borrow_mut();
-                    let mut v_add = v_add.borrow_mut();
+                    
+                    let mut v_original = v_original_shared.0.borrow_mut();
+                    let mut v_add = v_add.0.borrow_mut();
 
                     v_original.append(v_add.as_mut());
                 }
@@ -353,7 +356,8 @@ impl BuiltInFunction {
                     unreachable!()
                 };
 
-                let view = v.borrow();
+                let view = v.0.borrow();
+
                 let result = view.iter().enumerate().find(|(_, x)| {
                     x.equals(primitive)
                         .expect("the compiler allowed an illegal type comparison")
@@ -697,10 +701,10 @@ impl BuiltInFunction {
 
                 if *mid < 0 {
                     return Ok((
-                        Some(Primitive::Vector(Rc::new(RefCell::new(vec![
+                        Some(vector![
                             Primitive::Str(s.to_owned()),
                             Primitive::Str("".to_owned()),
-                        ])))),
+                        ]),
                         None,
                     ));
                 }
@@ -711,10 +715,10 @@ impl BuiltInFunction {
                         .context("len (usize) does not fit in an int")?
                 {
                     return Ok((
-                        Some(Primitive::Vector(Rc::new(RefCell::new(vec![
+                        Some(vector![
                             Primitive::Str(s.to_owned()),
                             Primitive::Str("".to_owned()),
-                        ])))),
+                        ]),
                         None,
                     ));
                 }
@@ -726,10 +730,10 @@ impl BuiltInFunction {
                 );
 
                 Ok((
-                    Some(Primitive::Vector(Rc::new(RefCell::new(vec![
+                    Some(vector![
                         Primitive::Str(lhs.to_owned()),
                         Primitive::Str(rhs.to_owned()),
-                    ])))),
+                    ]),
                     None,
                 ))
             }
@@ -949,20 +953,21 @@ impl BuiltInFunction {
 /// no way to call a callback from an FFI interface. Once the interpreter
 /// moves to FFI-land, all MScript code will wait until the blocking
 /// library finishes its execution.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Trace, Finalize)]
 pub struct PrimitiveFunction {
     /// Used to keep track of where to jump when this function gets called.
+    #[unsafe_ignore_trace]
     location: String,
     /// Each callback has an `Rc` to a [`VariableMapping`]. In other words, a shared
     /// reference to a map of shared references to variables. This allows multiple instances
     /// of the same callback to operate on the same data in a thread-safe manner,
     /// but there is a notable hit to performance.
-    callback_state: Option<Rc<VariableMapping>>,
+    callback_state: Option<VariableMapping>,
 }
 
 impl PrimitiveFunction {
     /// Initialize a [`PrimitiveFunction`] given its fields.
-    pub(crate) const fn new(path: String, callback_state: Option<Rc<VariableMapping>>) -> Self {
+    pub(crate) const fn new(path: String, callback_state: Option<VariableMapping>) -> Self {
         Self {
             location: path,
             callback_state,
@@ -977,7 +982,7 @@ impl PrimitiveFunction {
     /// the file. It will also error if the file does not exist.
     pub(crate) fn try_new(
         path: String,
-        callback_state: Option<Rc<VariableMapping>>,
+        callback_state: Option<VariableMapping>,
     ) -> Result<Self> {
         // get the file system path from an MScript function path.
         // ie. path/to/file.mmm#__fn0
@@ -1000,14 +1005,14 @@ impl PrimitiveFunction {
     }
 
     /// Get the variables mapped to this closure.
-    pub(crate) fn callback_state(&self) -> &Option<Rc<VariableMapping>> {
+    pub(crate) fn callback_state(&self) -> &Option<VariableMapping> {
         &self.callback_state
     }
 
     pub(crate) fn true_eq(&self, other: &Self) -> bool {
         self.location == other.location
-            && self.callback_state.as_ref().map(Rc::as_ptr)
-                == other.callback_state.as_ref().map(Rc::as_ptr)
+            /*&& self.callback_state.as_ref().map(|x| x as *const _)
+                == other.callback_state.as_ref().map(|x| x.as_ref() as *const _)*/
     }
 }
 
@@ -1024,7 +1029,7 @@ impl Display for PrimitiveFunction {
         write!(f, "function ptr {}()", self.location)?;
 
         if let Some(ref callback_state) = self.callback_state {
-            write!(f, " + pool@{:#x}", Rc::as_ptr(callback_state) as usize)?;
+            write!(f, " + pool@+{}", callback_state.len())?;
         };
 
         Ok(())
@@ -1145,7 +1150,7 @@ pub struct Function {
     /// A list of the instructions this subroutine consists of.
     instructions: Box<[Instruction]>,
     /// The name of this function.
-    name: Rc<String>,
+    name: String,
 }
 
 impl Debug for Function {
@@ -1170,7 +1175,7 @@ impl Function {
     /// Initialize a [`Function`] given its fields.
     pub(crate) const fn new(
         location: Weak<MScriptFile>,
-        name: Rc<String>,
+        name: String,
         instructions: Box<[Instruction]>,
     ) -> Self {
         Self {
@@ -1223,7 +1228,7 @@ impl Function {
         &self,
         args: Cow<Vec<Primitive>>,
         current_frame: Rc<RefCell<Stack>>,
-        callback_state: Option<Rc<VariableMapping>>,
+        callback_state: Option<VariableMapping>,
         jump_callback: &mut impl Fn(&JumpRequest) -> Result<ReturnValue>,
     ) -> Result<ReturnValue> {
         {
@@ -1359,8 +1364,8 @@ impl Function {
     }
 
     /// Get a function's name.
-    pub(crate) fn name(&self) -> Rc<String> {
-        self.name.clone()
+    pub(crate) fn name(&self) -> &str {
+        &self.name
     }
 
     /// Get a function's location.
@@ -1372,12 +1377,12 @@ impl Function {
 /// A map of a function's name to the function struct.
 #[derive(Debug)]
 pub struct Functions {
-    pub(crate) map: HashMap<Rc<String>, Function>,
+    pub(crate) map: HashMap<String, Function>,
 }
 
 impl<'a> Functions {
     /// Initialize a [`Functions`] map given its fields.
-    pub(crate) const fn new(map: HashMap<Rc<String>, Function>) -> Self {
+    pub(crate) const fn new(map: HashMap<String, Function>) -> Self {
         Self { map }
     }
 
@@ -1392,7 +1397,7 @@ impl<'a> Functions {
         name: &String,
         args: Cow<Vec<Primitive>>,
         current_frame: Rc<RefCell<Stack>>,
-        callback_state: Option<Rc<VariableMapping>>,
+        callback_state: Option<VariableMapping>,
         jump_callback: &mut impl Fn(&JumpRequest) -> Result<ReturnValue>,
     ) -> Result<ReturnValue> {
         let Some(function) = &self.map.get(name) else {
@@ -1405,10 +1410,10 @@ impl<'a> Functions {
     pub(crate) fn add_function(
         &mut self,
         file: Weak<MScriptFile>,
-        name: Rc<String>,
+        name: String,
         bytecode: Box<[Instruction]>,
     ) -> Option<Function> {
-        let function = Function::new(file, Rc::clone(&name), bytecode);
+        let function = Function::new(file, name.clone(), bytecode);
 
         // TODO: If Rc<name> == self.map.name, we can change Function::name to be the same Rc.
 

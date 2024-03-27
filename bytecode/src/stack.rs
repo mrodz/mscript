@@ -1,11 +1,13 @@
 //! Program call stack
 
 use anyhow::{anyhow, bail, Context, Result};
+use gc::{Finalize, Gc, GcCell, GcCellRef, GcCellRefMut, Trace};
 use once_cell::sync::Lazy;
 use std::borrow::Cow;
 use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
+use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
@@ -23,15 +25,18 @@ pub(crate) mod flag_constants {
     pub const LOOP_VARIABLE: u8 = 0b00001000;
 }
 
-#[derive(Clone)]
-pub struct PrimitiveFlagsPair(Rc<UnsafeCell<(Primitive, VariableFlags)>>);
+#[derive(Clone, Trace, Finalize)]
+struct TupleWithGcOpt(Primitive, #[unsafe_ignore_trace] VariableFlags);
+
+#[derive(Clone, Trace, Finalize)]
+pub struct PrimitiveFlagsPair(Gc<GcCell<TupleWithGcOpt>>);
 
 static PRIMITIVE_MODULE_MEMBER_FLAGS: VariableFlags = VariableFlags(READ_ONLY);
 
 macro_rules! make_compiler_builtin {
     ($ident:expr) => {
-        Arc::new(Mutex::new(PrimitiveFlagsPair(Rc::new(UnsafeCell::new((
-            Primitive::BuiltInFunction($ident),
+        Arc::new(Mutex::new(PrimitiveFlagsPair(Gc::new(GcCell::new(TupleWithGcOpt(
+            Primitive::BuiltInFunction($crate::NonSweepingBuiltInFunction($ident)),
             PRIMITIVE_MODULE_MEMBER_FLAGS,
         ))))))
     };
@@ -125,50 +130,52 @@ static_module_generator! {
 
 impl PrimitiveFlagsPair {
     pub fn new(primitive: Primitive, flags: VariableFlags) -> Self {
-        Self(Rc::new(UnsafeCell::new((primitive, flags))))
+        Self(Gc::new(GcCell::new(TupleWithGcOpt(primitive, flags))))
     }
 
-    pub fn primitive(&self) -> &Primitive {
-        unsafe { &(*self.0.get()).0 }
+    pub fn primitive(&self) -> GcCellRef<Primitive> {
+        GcCellRef::map(self.0.borrow(), |x| &x.0)
+        // unsafe { &(*self.0).0 }
     }
 
-    pub fn flags(&self) -> &VariableFlags {
-        unsafe { &(*self.0.get()).1 }
+    pub fn flags(&self) -> GcCellRef<VariableFlags> {
+        GcCellRef::map(self.0.borrow(), |x| &x.1)
+        // unsafe { &(*self.0.get()).1 }
     }
 
     pub fn set_primitive(&self, new_value: Primitive) -> Primitive {
-        let ptr = self.0.get();
-        let ptr = unsafe { &mut (*ptr).0 };
-        std::mem::replace(ptr, new_value)
+        // let ptr = self.0.get();
+        // let ptr = unsafe { &mut (*ptr).0 };
+        // std::mem::replace(ptr, new_value)
+        let mut mutable_gc_view = self.0.borrow_mut();
+        std::mem::replace(&mut mutable_gc_view.0, new_value)
     }
 
     pub fn update_primitive(
         &self,
-        setter: impl FnOnce(&Primitive) -> Result<Primitive>,
-    ) -> Result<&Primitive> {
-        let new_value = setter(self.primitive())?;
+        setter: impl FnOnce(&dyn Deref<Target = Primitive>) -> Result<Primitive>,
+    ) -> Result<GcCellRef<Primitive>> {
+        let new_value = setter(&self.primitive())?;
         self.set_primitive(new_value);
         Ok(self.primitive())
     }
 
     pub fn set_flags(&self, new_value: VariableFlags) -> VariableFlags {
-        let ptr = self.0.get();
-        let ptr = unsafe { &mut (*ptr).1 };
-        std::mem::replace(ptr, new_value)
+        std::mem::replace(&mut self.0.borrow_mut().1, new_value)
     }
 }
 
 impl PartialEq for PrimitiveFlagsPair {
     fn eq(&self, other: &Self) -> bool {
-        self.primitive() == other.primitive() && self.flags() == other.flags()
+        self.primitive().eq(&*other.primitive()) && self.flags().eq(&*other.flags())
     }
 }
 
 impl Debug for PrimitiveFlagsPair {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("PrimitiveFlagsPair")
-            .field(self.primitive())
-            .field(self.flags())
+            .field(&*self.primitive())
+            .field(&*self.flags())
             .finish()
     }
 }
@@ -214,7 +221,7 @@ impl Debug for VariableFlags {
     }
 }
 
-#[derive(Default, Debug, PartialEq)]
+#[derive(Default, Debug, PartialEq, Trace, Finalize, Clone)]
 pub struct VariableMapping(HashMap<String, PrimitiveFlagsPair>);
 
 impl Display for VariableMapping {
@@ -295,6 +302,10 @@ impl VariableMapping {
         }
 
         Ok(())
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
     }
 }
 
