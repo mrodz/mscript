@@ -44,7 +44,7 @@ impl ObjectBuilder {
         self.functions.insert(class_name, functions);
     }
 
-    pub fn build(&'static mut self) -> Object {
+    pub fn build(&mut self) -> Object {
         let name = self.name.clone().unwrap();
 
         Object {
@@ -132,8 +132,7 @@ impl PartialOrd for Object {
 impl PartialEq for Object {
     fn eq(&self, other: &Self) -> bool {
         // println!("{self} == {other}");
-        self.name == other.name
-            && std::ptr::eq(self.debug_lock.as_ref(), other.debug_lock.as_ref())
+        self.name == other.name && std::ptr::eq(self.debug_lock.as_ref(), other.debug_lock.as_ref())
     }
 }
 
@@ -161,13 +160,12 @@ impl Object {
             return maybe_property;
         }
 
-        let include_class_name = if let (true, Some(name)) =
-            (include_functions, self.name.as_deref())
-        {
-            Some(name)
-        } else {
-            None
-        };
+        let include_class_name =
+            if let (true, Some(name)) = (include_functions, self.name.as_deref()) {
+                Some(name)
+            } else {
+                None
+            };
 
         self.has_function(property_name, include_class_name)
     }

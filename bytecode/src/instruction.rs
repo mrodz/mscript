@@ -12,9 +12,11 @@ use std::collections::HashSet;
 use std::fmt::Debug;
 use std::io::{stdin, stdout, Write};
 use std::rc::Rc;
+use std::sync::Mutex;
 
 /// This variable allows instructions to register objects on the fly.
-static mut OBJECT_BUILDER: Lazy<ObjectBuilder> = Lazy::new(ObjectBuilder::new);
+static mut OBJECT_BUILDER: Lazy<Mutex<ObjectBuilder>> =
+    Lazy::new(|| Mutex::new(ObjectBuilder::new()));
 
 /// Used for type declarations in lookup tables.
 pub type InstructionSignature = fn(&mut Ctx, &[String]) -> Result<()>;
@@ -562,7 +564,9 @@ pub mod implementations {
         let name = function.name();
 
         let obj = unsafe {
-            if !OBJECT_BUILDER.has_class_been_registered(name) {
+            let mut lock = OBJECT_BUILDER.lock().unwrap();
+
+            if !lock.has_class_been_registered(name) {
                 let location = &function.location();
                 let object_path = format!("{}#{name}$", location.upgrade().unwrap().path());
 
@@ -584,11 +588,10 @@ pub mod implementations {
                     mapping.insert(func.get_qualified_name());
                 }
 
-                OBJECT_BUILDER.register_class(name.to_owned(), mapping);
+                lock.register_class(name.to_owned(), mapping);
             }
 
-            OBJECT_BUILDER
-                .name(name.to_owned())
+            lock.name(name.to_owned())
                 .object_variables(object_variables)
                 .build()
         };

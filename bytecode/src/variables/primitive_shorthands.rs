@@ -167,9 +167,7 @@ mod test {
         let vector = BytecodePrimitive::Vector(GcVector::new(vec![
             BytecodePrimitive::Int(5),
             BytecodePrimitive::Str("Hello".into()),
-            BytecodePrimitive::Vector(GcVector::new(vec![
-                BytecodePrimitive::Float(3.14159),
-            ])),
+            BytecodePrimitive::Vector(GcVector::new(vec![BytecodePrimitive::Float(3.14159)])),
         ]));
 
         assert_eq!(

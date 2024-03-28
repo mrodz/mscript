@@ -33,10 +33,12 @@ static PRIMITIVE_MODULE_MEMBER_FLAGS: VariableFlags = VariableFlags(READ_ONLY);
 
 macro_rules! make_compiler_builtin {
     ($ident:expr) => {
-        Arc::new(Mutex::new(PrimitiveFlagsPair(Gc::new(GcCell::new(TupleWithGcOpt(
-            Primitive::BuiltInFunction($crate::NonSweepingBuiltInFunction($ident)),
-            PRIMITIVE_MODULE_MEMBER_FLAGS,
-        ))))))
+        Arc::new(Mutex::new(PrimitiveFlagsPair(Gc::new(GcCell::new(
+            TupleWithGcOpt(
+                Primitive::BuiltInFunction($crate::NonSweepingBuiltInFunction($ident)),
+                PRIMITIVE_MODULE_MEMBER_FLAGS,
+            ),
+        )))))
     };
 }
 
@@ -309,14 +311,14 @@ impl VariableMapping {
 
 /// A stack frame in the MScript interpreter. Each stack frame has a name and
 /// variables associated with the frame.
-#[derive(Debug)]
+#[derive(Debug, Trace, Finalize)]
 struct StackFrame {
     label: String,
     variables: VariableMapping,
 }
 
 /// The call stack of an interpreter. Standard LIFO implementation.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Trace, Finalize)]
 pub struct Stack(Vec<StackFrame>);
 
 struct StackIter<'a> {

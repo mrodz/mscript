@@ -136,9 +136,10 @@ impl BuiltInFunction {
                     unreachable!()
                 };
 
-                v.0.borrow_mut().reserve((*size).try_into().with_context(|| {
-                    format!("additional vector capacity `{size}` could not fit in an int (i32)")
-                })?);
+                v.0.borrow_mut()
+                    .reserve((*size).try_into().with_context(|| {
+                        format!("additional vector capacity `{size}` could not fit in an int (i32)")
+                    })?);
 
                 Ok((None, None))
             }
@@ -338,7 +339,6 @@ impl BuiltInFunction {
                 };
 
                 {
-                    
                     let mut v_original = v_original_shared.0.borrow_mut();
                     let mut v_add = v_add.0.borrow_mut();
 
@@ -980,10 +980,7 @@ impl PrimitiveFunction {
     /// # Errors
     /// This function will propagate I/O errors from traversing symlinks in seRch of
     /// the file. It will also error if the file does not exist.
-    pub(crate) fn try_new(
-        path: String,
-        callback_state: Option<VariableMapping>,
-    ) -> Result<Self> {
+    pub(crate) fn try_new(path: String, callback_state: Option<VariableMapping>) -> Result<Self> {
         // get the file system path from an MScript function path.
         // ie. path/to/file.mmm#__fn0
         //     ^^^^^^^^^^^^^^^^
@@ -1011,8 +1008,8 @@ impl PrimitiveFunction {
 
     pub(crate) fn true_eq(&self, other: &Self) -> bool {
         self.location == other.location
-            /*&& self.callback_state.as_ref().map(|x| x as *const _)
-                == other.callback_state.as_ref().map(|x| x.as_ref() as *const _)*/
+        /*&& self.callback_state.as_ref().map(|x| x as *const _)
+        == other.callback_state.as_ref().map(|x| x.as_ref() as *const _)*/
     }
 }
 

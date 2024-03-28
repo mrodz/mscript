@@ -2,7 +2,13 @@
 //! Every "value" in the interpreter is a primitive.
 
 use crate::{
-    bigint, bool, byte, file::ExportMap, float, function::{BuiltInFunction, PrimitiveFunction}, int, stack::{PrimitiveFlagsPair, PRIMITIVE_MODULE}, string
+    bigint, bool, byte,
+    file::ExportMap,
+    float,
+    function::{BuiltInFunction, PrimitiveFunction},
+    int,
+    stack::{PrimitiveFlagsPair, PRIMITIVE_MODULE},
+    string,
 };
 use anyhow::{bail, Result};
 use gc::{Finalize, Gc, GcCell, GcCellRef, GcCellRefMut, Trace};
