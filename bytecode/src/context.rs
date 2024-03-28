@@ -72,7 +72,7 @@ pub struct Ctx<'a> {
     /// A separate variable mapping for closures and objects. If `None`, this function is neither.
     /// Otherwise, contains a reference shared amongst all instances of the callback to point to
     /// shared/global data.
-    callback_state: Option<Rc<VariableMapping>>,
+    callback_state: Option<VariableMapping>,
 }
 
 impl<'a> Ctx<'a> {
@@ -88,7 +88,7 @@ impl<'a> Ctx<'a> {
         function: &'a Function,
         call_stack: Rc<RefCell<Stack>>,
         args: Cow<'a, Vec<Primitive>>,
-        callback_state: Option<Rc<VariableMapping>>,
+        callback_state: Option<VariableMapping>,
     ) -> Self {
         Self {
             stack: Vec::new(),
@@ -126,7 +126,8 @@ impl<'a> Ctx<'a> {
             .location()
             .upgrade()
             .expect("could not get a reference to the backing file");
-        Primitive::Module(location.get_exports())
+        let exports = location.get_exports();
+        Primitive::Module(exports.clone())
     }
 
     /// Loads the shared [`Primitive`] stored as a callback variable, along with its associated [`VariableFlags`].
@@ -363,7 +364,7 @@ impl<'a> Ctx<'a> {
     }
 
     /// Return the callback variables associated to this function, if they exist.
-    pub(crate) fn get_callback_variables(&self) -> Option<Rc<VariableMapping>> {
+    pub(crate) fn get_callback_variables(&self) -> Option<VariableMapping> {
         self.callback_state.as_ref().cloned()
     }
 }

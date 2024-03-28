@@ -1,9 +1,26 @@
-type Miles int
-type Kilometers float
+class A {
+	field: [Self?...]?
 
-const marathon: Miles = 27
-const in_km = (marathon * 1.609).ipart()
+	fn set_field(self, field: [Self...]) {
+		self.field = field
+	}
 
-const expected: Kilometers = 43.0
+	fn to_str(self) -> str {
+		return "A { field: " + self.field.to_str() + " }"
+	}
 
-assert in_km == expected
+	fn equ(self, rhs: Self) -> bool {
+		return self.field == rhs.field
+	}
+}
+
+a = A()
+
+type B A
+b: B? = A()
+
+a.set_field([a, b or a, A()])
+
+assert a.equ(get (get a.field)[0])
+assert a is (get a.field)[0]
+assert a is get (get a.field)[0]

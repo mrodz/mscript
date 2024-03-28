@@ -25,9 +25,9 @@ impl std::ops::Add for &Primitive {
             (Str(x), y) => string!(x.to_owned() + &y.to_string()),
             (x, Str(y)) => string!(x.to_string() + y),
             (Vector(x), Vector(y)) => {
-                let mut x = Vec::clone(x.borrow().as_ref());
+                let mut x = Vec::clone(x.0.borrow().as_ref());
 
-                x.extend_from_slice(y.borrow().as_ref());
+                x.extend_from_slice(y.0.borrow().as_ref());
                 vector!(raw x)
             }
             (x, y) => bail!("<{:?} + {:?}> is invalid. (valid ops are: <num + num>, <str + any>, <any + str>, <vec + vec>", x.ty(), y.ty()),

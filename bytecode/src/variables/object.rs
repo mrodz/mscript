@@ -1,9 +1,10 @@
+use gc::{Finalize, Gc, Trace};
+
 use crate::stack::{PrimitiveFlagsPair, VariableMapping};
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
-use std::rc::Rc;
 
 pub struct MappedObject<'a> {
     name: &'a str,
@@ -11,9 +12,9 @@ pub struct MappedObject<'a> {
 }
 
 pub struct ObjectBuilder {
-    name: Option<Rc<String>>,
-    object_variables: Option<Rc<VariableMapping>>,
-    functions: HashMap<Rc<String>, HashSet<String>>,
+    name: Option<String>,
+    object_variables: Option<VariableMapping>,
+    functions: HashMap<String, HashSet<String>>,
 }
 
 impl ObjectBuilder {
@@ -25,37 +26,37 @@ impl ObjectBuilder {
         }
     }
 
-    pub fn name(&mut self, name: Rc<String>) -> &mut Self {
+    pub fn name(&mut self, name: String) -> &mut Self {
         self.name = Some(name);
         self
     }
 
-    pub fn object_variables(&mut self, object_variables: Rc<VariableMapping>) -> &mut Self {
+    pub fn object_variables(&mut self, object_variables: VariableMapping) -> &mut Self {
         self.object_variables = Some(object_variables);
         self
     }
 
-    pub fn has_class_been_registered(&self, name: &String) -> bool {
+    pub fn has_class_been_registered(&self, name: &str) -> bool {
         self.functions.contains_key(name)
     }
 
-    pub fn register_class(&mut self, class_name: Rc<String>, functions: HashSet<String>) {
+    pub fn register_class(&mut self, class_name: String, functions: HashSet<String>) {
         self.functions.insert(class_name, functions);
     }
 
-    pub fn build(&'static mut self) -> Object {
+    pub fn build(&mut self) -> Object {
         let name = self.name.clone().unwrap();
 
         Object {
             name: Some(name),
-            object_variables: self.object_variables.clone().expect("no name"),
-            debug_lock: Rc::new(DebugPrintableLock::new()),
+            object_variables: self.object_variables.as_ref().expect("no name").clone(),
+            debug_lock: Gc::new(DebugPrintableLock::default()),
         }
     }
 }
 
-#[derive(Clone, Eq)]
-struct DebugPrintableLock(Cell<bool>);
+#[derive(Clone, Eq, Trace, Finalize)]
+pub struct DebugPrintableLock(#[unsafe_ignore_trace] Cell<bool>);
 
 impl PartialEq for DebugPrintableLock {
     /// no-impl makes this field invisible
@@ -69,37 +70,35 @@ impl Hash for DebugPrintableLock {
     fn hash<H: std::hash::Hasher>(&self, _state: &mut H) {}
 }
 
-impl DebugPrintableLock {
-    pub fn new() -> Self {
+impl Default for DebugPrintableLock {
+    fn default() -> Self {
         Self(Cell::new(true))
     }
+}
 
+impl DebugPrintableLock {
     pub fn can_write(&self) -> bool {
         self.0.get()
     }
 
     pub fn lock(&self) {
-        unsafe {
-            let ptr = self.0.as_ptr();
-            assert!(*ptr, "DebugPrintableAlreadyLockedError");
-            *ptr = false;
-        }
+        assert!(self.0.get(), "DebugPrintableAlreadyLockedError");
+        self.0.set(false);
     }
 
     pub fn release(&self) {
-        unsafe {
-            let ptr = self.0.as_ptr();
-            assert!(!*ptr, "DebugPrintableAlreadyReleasedError");
-            *ptr = true;
-        }
+        assert!(!self.0.get(), "DebugPrintableAlreadyReleasedError");
+        self.0.set(true);
     }
 }
 
+#[derive(Clone, Trace, Finalize)]
 pub struct Object {
-    pub name: Option<Rc<String>>,
-    pub object_variables: Rc<VariableMapping>,
+    #[unsafe_ignore_trace]
+    pub name: Option<String>,
+    pub object_variables: VariableMapping,
     #[doc(hidden)]
-    debug_lock: Rc<DebugPrintableLock>,
+    debug_lock: Gc<DebugPrintableLock>,
 }
 
 impl Debug for Object {
@@ -132,17 +131,22 @@ impl PartialOrd for Object {
 
 impl PartialEq for Object {
     fn eq(&self, other: &Self) -> bool {
-        self.name == other.name && self.object_variables == other.object_variables
+        // println!("{self} == {other}");
+        self.name == other.name && std::ptr::eq(self.debug_lock.as_ref(), other.debug_lock.as_ref())
     }
 }
 
 impl Object {
-    pub fn new(name: Rc<String>, object_variables: Rc<VariableMapping>) -> Self {
+    pub fn new(name: String, object_variables: VariableMapping) -> Self {
         Self {
             name: Some(name),
             object_variables,
-            debug_lock: Rc::new(DebugPrintableLock::new()),
+            debug_lock: Gc::new(DebugPrintableLock::default()),
         }
+    }
+
+    pub fn id_addr(&self) -> *const DebugPrintableLock {
+        self.debug_lock.as_ref() as *const _
     }
 
     pub fn get_property(
@@ -156,13 +160,12 @@ impl Object {
             return maybe_property;
         }
 
-        let include_class_name = if let (true, Some(name)) =
-            (include_functions, self.name.as_ref().map(|x| x.as_str()))
-        {
-            Some(name)
-        } else {
-            None
-        };
+        let include_class_name =
+            if let (true, Some(name)) = (include_functions, self.name.as_deref()) {
+                Some(name)
+            } else {
+                None
+            };
 
         self.has_function(property_name, include_class_name)
     }
@@ -188,11 +191,7 @@ impl Object {
             }
         }
 
-        let direct_lookup = self.object_variables.get(function_name);
-
-        let Some(field) = direct_lookup else {
-            return None;
-        };
+        let field = self.object_variables.get(function_name)?;
 
         let bundle = field.primitive().is_function();
 

@@ -109,28 +109,23 @@ macro_rules! function {
 #[macro_export]
 macro_rules! vector {
     () => {{
-        use $crate::BytecodePrimitive;
+        use $crate::{BytecodePrimitive, GcVector};
 
-        BytecodePrimitive::Vector(std::rc::Rc::new(std::cell::RefCell::new(vec![])))
+        BytecodePrimitive::Vector(GcVector::new(vec![]))
     }};
     ($elem:expr; $n:expr) => {{
-        use $crate::BytecodePrimitive;
+        use $crate::{BytecodePrimitive, GcVector};
 
-        BytecodePrimitive::Vector(std::rc::Rc::new(std::cell::RefCell::new(vec![$elem; $n])))
+        BytecodePrimitive::Vector(GcVector::new(vec![$elem; $n]))
     }};
     ($($x:expr),+ $(,)?) => {{
-        use $crate::BytecodePrimitive;
-
-        let mut vector = vec![];
-        $(
-            vector.push($x);
-        )*
-        BytecodePrimitive::Vector(std::rc::Rc::new(std::cell::RefCell::new(vector)))
+        use $crate::{BytecodePrimitive, GcVector};
+        BytecodePrimitive::Vector(GcVector::new(vec![$($x,)*]))
     }};
     (raw $data:expr) => {{
-        use $crate::BytecodePrimitive;
+        use $crate::{BytecodePrimitive, GcVector};
 
-        BytecodePrimitive::Vector(std::rc::Rc::new(std::cell::RefCell::new($data)))
+        BytecodePrimitive::Vector(GcVector::new($data))
     }};
 }
 
@@ -169,13 +164,11 @@ mod test {
 
     #[test]
     pub fn vectors() {
-        let vector = BytecodePrimitive::Vector(std::rc::Rc::new(std::cell::RefCell::new(vec![
+        let vector = BytecodePrimitive::Vector(GcVector::new(vec![
             BytecodePrimitive::Int(5),
             BytecodePrimitive::Str("Hello".into()),
-            BytecodePrimitive::Vector(std::rc::Rc::new(std::cell::RefCell::new(vec![
-                BytecodePrimitive::Float(3.14159),
-            ]))),
-        ])));
+            BytecodePrimitive::Vector(GcVector::new(vec![BytecodePrimitive::Float(3.14159)])),
+        ]));
 
         assert_eq!(
             vector![int!(5), string!(raw "Hello"), vector![float!(3.14159)]],

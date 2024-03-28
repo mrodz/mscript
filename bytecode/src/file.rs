@@ -9,6 +9,7 @@ use std::rc::Rc;
 
 use crate::function::ReturnValue;
 use anyhow::{bail, Context, Result};
+use gc::{Gc, GcCell};
 
 use crate::function::Function;
 use crate::instruction::{split_string, Instruction, JumpRequest};
@@ -17,7 +18,7 @@ use crate::Primitive;
 
 use super::function::Functions;
 
-pub(crate) type ExportMap = Rc<RefCell<VariableMapping>>;
+pub(crate) type ExportMap = Gc<GcCell<VariableMapping>>;
 
 /// Wrapper around a bytecode file.
 #[derive(Debug)]
@@ -41,12 +42,12 @@ impl MScriptFileBuilder {
             building: Rc::new(MScriptFile {
                 path: Rc::new(path_to_file.replace('\\', "/")),
                 functions: RefCell::new(Some(Functions::new_empty())),
-                exports: Rc::new(RefCell::new(VariableMapping::default())),
+                exports: Gc::new(GcCell::new(VariableMapping::default())),
             }),
         }
     }
 
-    pub fn add_function(&mut self, name: Rc<String>, bytecode: Box<[Instruction]>) {
+    pub fn add_function(&mut self, name: String, bytecode: Box<[Instruction]>) {
         log::trace!("[BLDR ADD_FN @ {}] `{name}`", self.building.path);
 
         let functions = &self.building.functions;
@@ -124,7 +125,7 @@ impl MScriptFile {
         let new_uninit = Rc::new(Self {
             path,
             functions: RefCell::new(None),
-            exports: Rc::new(RefCell::new(VariableMapping::default())),
+            exports: Gc::new(GcCell::new(VariableMapping::default())),
         });
 
         let functions = new_uninit.get_functions()?;
@@ -143,7 +144,7 @@ impl MScriptFile {
         name: &String,
         args: Cow<Vec<Primitive>>,
         current_frame: Rc<RefCell<Stack>>,
-        callback_state: Option<Rc<VariableMapping>>,
+        callback_state: Option<VariableMapping>,
         jump_callback: &mut impl Fn(&JumpRequest) -> Result<ReturnValue>,
     ) -> Result<ReturnValue> {
         // let name = format!("{}#{name}", self.path);
@@ -177,17 +178,21 @@ impl MScriptFile {
         Ref::filter_map(functions, |functions| functions.as_ref()).ok()
     }
 
-    pub(crate) fn get_exports(&self) -> Rc<RefCell<VariableMapping>> {
+    pub(crate) fn get_exports(&self) -> ExportMap {
         self.exports.clone()
     }
 
     pub fn add_export(&self, name: String, var: PrimitiveFlagsPair) -> Result<()> {
         let mut view = self.exports.borrow_mut();
 
-        log::trace!("[add_export()] Exporting {name:?} = {var:?}");
+        log::trace!("[add_export({})] Exporting {name:?} = {var:?}", &self.path);
 
         view.update_once(name, var)
-            .context("Double export: name is already exported")
+            .context("Double export: name is already exported")?;
+
+        log::trace!("[add_export({})] exports = {view}", &self.path);
+
+        Ok(())
     }
 
     pub fn get_export(&self, name: &str) -> Option<PrimitiveFlagsPair> {
@@ -214,7 +219,7 @@ impl MScriptFile {
 
         // when the loader reaches a `e\0` symbol, all the current function's
         // instructions and name are pushed to this map.
-        let mut functions: HashMap<Rc<String>, Function> = HashMap::new();
+        let mut functions: HashMap<String, Function> = HashMap::new();
 
         // growable list of all the instructions that belong to a function.
         let mut instruction_buffer: Vec<Instruction> = Vec::new();
@@ -239,11 +244,9 @@ impl MScriptFile {
                 [b'e', 0x00] | [b'e', .., 0x00] if in_function => {
                     in_function = false;
 
-                    let current_function_name = Rc::new(
-                        current_function_name
-                            .take()
-                            .context("found `end` outside of a function")?,
-                    );
+                    let current_function_name = current_function_name
+                        .take()
+                        .context("found `end` outside of a function")?;
 
                     let function = Function::new(
                         Rc::downgrade(self),

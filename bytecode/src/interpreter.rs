@@ -101,7 +101,7 @@ impl Program {
                 log::info!("Syncing {path}'s exports");
                 view.insert(
                     format!("{path}#__module__"),
-                    RefCell::new(file_in_use.get_exports()),
+                    RefCell::new(file_in_use.get_exports().clone()),
                 );
             }
 
@@ -114,7 +114,7 @@ impl Program {
             let mut exports = self.module_cache.borrow_mut();
             exports.insert(
                 format!("{path}#__module__"),
-                RefCell::new(new_file.get_exports()),
+                RefCell::new(new_file.get_exports().clone()),
             );
 
             let mut borrow = self.files_in_use.borrow_mut();
@@ -176,8 +176,7 @@ impl Program {
             .get_file(path_ref)
             .with_context(|| format!("failed jumping to {path}"))?;
 
-        let callback_state: Option<Rc<crate::stack::VariableMapping>> =
-            request.callback_state.as_ref().cloned();
+        let callback_state = request.callback_state.clone();
 
         let return_value = file.run_function(
             &label[1..].to_owned(),
@@ -231,11 +230,13 @@ impl Program {
         match &request.destination {
             JumpRequestDestination::Standard(_) => self.process_standard_jump_request(request),
             JumpRequestDestination::Module(path) => {
+                log::info!("runtime @import {path}");
                 {
                     let view = self.module_cache.borrow_mut();
 
                     if let Some(cached) = view.get(path) {
                         let module = cached.borrow();
+                        log::info!("runtime @import cache HIT -> {module:?} (from {view:?})");
                         return Ok(ReturnValue::Value(BytecodePrimitive::Module(
                             module.clone(),
                         )));
@@ -290,7 +291,7 @@ impl Program {
             let mut cache_view = self.module_cache.borrow_mut();
             cache_view.insert(
                 format!("{path}#__module__"),
-                RefCell::new(entrypoint.get_exports()),
+                RefCell::new(entrypoint.get_exports().clone()),
             );
             log::info!("Synced module cache with the entrypoint");
         }

@@ -2,26 +2,27 @@
 //! Every "value" in the interpreter is a primitive.
 
 use crate::{
-    bigint, bool, byte, float,
-    function::BuiltInFunction,
+    bigint, bool, byte,
+    file::ExportMap,
+    float,
+    function::{BuiltInFunction, PrimitiveFunction},
     int,
-    stack::{PrimitiveFlagsPair, VariableMapping, PRIMITIVE_MODULE},
+    stack::{PrimitiveFlagsPair, PRIMITIVE_MODULE},
     string,
 };
 use anyhow::{bail, Result};
+use gc::{Finalize, Gc, GcCell, GcCellRef, GcCellRefMut, Trace};
 use std::{
     borrow::Cow,
-    cell::{Ref, RefCell, RefMut},
     fmt::{Debug, Display},
     ops::Deref,
-    rc::Rc,
 };
 
 /// This macro allows easy recursion over variants.
 macro_rules! primitive {
     ($($variant:ident($type:ty)),+ $(,)?) => {
         /// Every possible form of variable data used in the interpreter.
-        #[derive(PartialEq, Debug, Clone)]
+        #[derive(PartialEq, Debug, Clone, Trace, Finalize)]
         pub enum Primitive {
             $(
                 $variant($type),
@@ -57,9 +58,9 @@ macro_rules! primitive {
     };
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Trace, Finalize)]
 pub enum HeapPrimitive {
-    ArrayPtr(Rc<RefCell<Vec<Primitive>>>, usize),
+    ArrayPtr(GcVector, usize),
     /// To test for corruption:
     /// * `rustup default stable-x86-64-pc-windows-msvc`
     /// * `cargo +nightly r -Zbuild-std --target x86_64-pc-windows-msvc -Zbuild-std-features=core/debug_refcell --features debug -- run PATH/TO/FILE.ms --verbose`
@@ -67,7 +68,7 @@ pub enum HeapPrimitive {
 }
 
 impl HeapPrimitive {
-    pub const fn new_array_view(array: Rc<RefCell<Vec<Primitive>>>, index: usize) -> Self {
+    pub const fn new_array_view(array: GcVector, index: usize) -> Self {
         Self::ArrayPtr(array, index)
     }
 
@@ -77,7 +78,7 @@ impl HeapPrimitive {
 
     pub(crate) fn to_owned_primitive(&self) -> Primitive {
         match self {
-            Self::ArrayPtr(array, index) => array.borrow().get(*index).unwrap().to_owned(),
+            Self::ArrayPtr(array, index) => array.0.borrow().get(*index).unwrap().to_owned(),
             Self::Lookup(cell) => cell.primitive().clone(),
         }
     }
@@ -88,32 +89,35 @@ impl HeapPrimitive {
                 cell.set_primitive(new_val);
             }
             Self::ArrayPtr(array, index) => {
-                *array.borrow_mut().get_mut(*index).unwrap() = new_val;
+                *array.0.borrow_mut().get_mut(*index).unwrap() = new_val;
             }
         }
     }
 
-    pub(crate) fn update<F>(&self, setter: F) -> Result<Box<dyn Deref<Target = Primitive> + '_>>
-    where
-        F: FnOnce(&Primitive) -> Result<Primitive>,
-    {
+    pub(crate) fn update(
+        &self,
+        setter: impl FnOnce(&dyn Deref<Target = Primitive>) -> Result<Primitive>,
+    ) -> Result<Primitive> {
         match self {
             Self::Lookup(lookup) => {
                 let new_value = lookup.update_primitive(setter)?;
-                Ok(Box::new(new_value))
+                Ok(new_value.to_owned())
+                // Ok(Box::new(new_value))
             }
             Self::ArrayPtr(array, index) => {
-                let new_val = { setter(array.borrow().get(*index).unwrap())? };
+                let new_val = { setter(&array.0.borrow().get(*index).unwrap())? };
+                let view = array.0.borrow_mut();
 
-                let view = array.borrow_mut();
-
-                let result = RefMut::map(view, |view| {
+                let result = GcCellRefMut::map(view, |view| {
                     let view = view.get_mut(*index).unwrap();
                     *view = new_val;
                     view
                 });
 
-                Ok(Box::new(result))
+                // let result = array.0.borrow().get(*index).unwrap();
+
+                // Ok(Box::new(result.to_owned()))
+                Ok(result.to_owned())
             }
         }
     }
@@ -121,15 +125,12 @@ impl HeapPrimitive {
     fn borrow(&self) -> Box<dyn Deref<Target = Primitive> + '_> {
         match self {
             Self::Lookup(lookup) => Box::new(lookup.primitive()),
+
             Self::ArrayPtr(array, index) => {
-                let view = array.borrow();
-
-                let result = Ref::map(view, |view| {
-                    let view = view.get(*index).unwrap();
-                    view
-                });
-
-                Box::new(result)
+                Box::new(GcCellRef::map(array.0.borrow(), |view| {
+                    view.get(*index).unwrap()
+                }))
+                // Box::new(array.0.borrow().get(*index).unwrap())
             }
         }
     }
@@ -138,12 +139,49 @@ impl HeapPrimitive {
 impl PartialEq for HeapPrimitive {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::ArrayPtr(a1, i1), Self::ArrayPtr(a2, i2)) => {
-                a1.borrow().eq(&a2.borrow()[..]) && i1 == i2
-            }
+            (Self::ArrayPtr(a1, i1), Self::ArrayPtr(a2, i2)) => a1.0.eq(&a2.0) && i1 == i2,
             (Self::Lookup(lhs), Self::Lookup(rhs)) => lhs == rhs,
             _ => unimplemented!("not comparable"),
         }
+    }
+}
+
+#[derive(Clone, Trace, Finalize, Debug, Default)]
+pub struct GcVector(pub(crate) Gc<GcCell<Vec<Primitive>>>);
+
+impl GcVector {
+    pub fn new(vec: Vec<Primitive>) -> Self {
+        Self(Gc::new(GcCell::new(vec)))
+    }
+
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self(Gc::new(GcCell::new(Vec::with_capacity(capacity))))
+    }
+
+    pub fn addr(&self) -> *const Primitive {
+        self.0.borrow().as_ptr()
+    }
+}
+
+impl PartialEq for GcVector {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.eq(&other.0)
+    }
+}
+
+#[derive(Trace, Finalize, Clone, Debug, PartialEq, Eq)]
+pub struct NonSweepingBuiltInFunction(#[unsafe_ignore_trace] pub(crate) BuiltInFunction);
+
+impl Deref for NonSweepingBuiltInFunction {
+    type Target = BuiltInFunction;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Display for NonSweepingBuiltInFunction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
     }
 }
 
@@ -155,12 +193,12 @@ primitive! {
     Float(f64),
     Byte(u8),
     // We don't need reference counting because cloning a primitive function is cheap
-    Function(crate::function::PrimitiveFunction),
-    BuiltInFunction(BuiltInFunction),
-    Vector(Rc<RefCell<Vec<crate::variables::Primitive>>>),
+    Function(PrimitiveFunction),
+    BuiltInFunction(NonSweepingBuiltInFunction),
+    Vector(GcVector),
     HeapPrimitive(HeapPrimitive),
-    Object(Rc<RefCell<crate::variables::Object>>),
-    Module(Rc<RefCell<VariableMapping>>),
+    Object(crate::variables::Object),
+    Module(ExportMap),
     // Supports Lazy Allocation
     Optional(Option<Box<crate::variables::Primitive>>),
 }
@@ -185,7 +223,7 @@ impl Primitive {
             (each $($lhs_and_rhs:ident),+ $(,)? with itself) => {
                 match (self, rhs) {
                     $(
-                        (Primitive::$lhs_and_rhs(x), Primitive::$lhs_and_rhs(y)) => return Ok(x == y),
+                        (Primitive::$lhs_and_rhs(x), Primitive::$lhs_and_rhs(y)) => return Ok(x.eq(y)),
                     )*
                     _ => bail!("cannot compare {:?} with {:?}", self.ty(), rhs.ty())
 
@@ -212,7 +250,9 @@ impl Primitive {
             (x, P::Optional(None)) | (P::Optional(None), x) => {
                 return Ok(matches!(x, Primitive::Optional(None)))
             }
-            (P::Vector(v1), P::Vector(v2)) => return Ok(v1.borrow().eq(v2.borrow().as_slice())),
+            (P::Vector(v1), P::Vector(v2)) => {
+                return Ok(v1.0.borrow()[..].eq(v2.0.borrow().as_slice()))
+            }
             (P::Optional(maybe), yes) | (yes, P::Optional(maybe)) => {
                 if let Some(maybe_unwrapped) = maybe {
                     return maybe_unwrapped.as_ref().equals(yes);
@@ -235,14 +275,12 @@ impl Primitive {
                 return Ok(Primitive::Bool(id1 == id2))
             }
             (Self::Object(o1), Self::Object(o2)) => {
-                return Ok(Primitive::Bool(o1.as_ptr() == o2.as_ptr()))
+                return Ok(Primitive::Bool(o1.id_addr() == o2.id_addr()))
             }
-            (Self::Module(m1), Self::Module(m2)) => {
-                return Ok(Primitive::Bool(m1.as_ptr() == m2.as_ptr()))
-            }
-            (Self::Function(f1), Self::Function(f2)) => return Ok(Primitive::Bool(f1.true_eq(f2))),
+            (Self::Module(m1), Self::Module(m2)) => return Ok(Primitive::Bool(m1 == m2)),
+            (Self::Function(f1), Self::Function(f2)) => return Ok(Primitive::Bool(f1 == f2)),
             (Self::Vector(v1), Self::Vector(v2)) => {
-                return Ok(Primitive::Bool(v1.as_ptr() == v2.as_ptr()))
+                return Ok(Primitive::Bool(v1.addr() == v2.addr()))
             }
             _ => (),
         }
@@ -258,7 +296,7 @@ impl Primitive {
     }
 
     pub fn move_out_of_heap_primitive(self) -> Self {
-        if let Self::HeapPrimitive(primitive) = self {
+        if let Self::HeapPrimitive(ref primitive) = self {
             primitive.to_owned_primitive()
         } else {
             self
@@ -281,11 +319,7 @@ impl Primitive {
                     unreachable!()
                 };
 
-                let property = obj
-                    .clone()
-                    .borrow()
-                    .get_property(property, true)
-                    .ok_or(ret)?;
+                let property = obj.get_property(property, true).ok_or(ret)?;
                 Ok(property)
             }
             ret @ P::Module(..) => {
@@ -293,7 +327,14 @@ impl Primitive {
                     unreachable!()
                 };
 
-                module.clone().borrow().get(property).ok_or(ret)
+                let module = module.borrow();
+
+                if let Some(property_value) = module.get(property) {
+                    Ok(property_value)
+                } else {
+                    drop(module);
+                    Err(ret)
+                }
             }
             _ if property == "to_str" => Ok(PRIMITIVE_MODULE.generic_to_str()),
             ret @ P::Vector(..) => match property {
@@ -467,7 +508,7 @@ impl Primitive {
             BuiltInFunction(name) => write!(f, "<static {name:?}>"),
             Vector(l) => {
                 write!(f, "[")?;
-                let borrow = l.borrow();
+                let borrow = &l.0.borrow();
                 let mut iter = borrow.iter();
 
                 depth += 1;
@@ -484,11 +525,13 @@ impl Primitive {
                 write!(f, "]")
             }
             Module(module) => {
-                if cfg!(feature = "debug") {
-                    write!(f, "module {:#?}", module.borrow())
-                } else {
-                    write!(f, "<module @ {:#x}>", module.as_ptr() as usize)
-                }
+                write!(f, "module {:#?}", module)
+
+                // if cfg!(feature = "debug") {
+                //     write!(f, "module {:#?}", module)
+                // } else {
+                //     write!(f, "<module @ {:#x}>", module as *const _ as usize)
+                // }
             }
             HeapPrimitive(hp) => {
                 let view = hp.borrow();
@@ -499,7 +542,7 @@ impl Primitive {
                     write!(f, "{view}")
                 }
             }
-            Object(o) => write!(f, "{}", o.borrow()),
+            Object(o) => write!(f, "{o}"),
             Optional(Some(primitive)) => write!(f, "{primitive}"),
             Optional(None) => write!(f, "nil"),
         }
