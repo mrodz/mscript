@@ -5,7 +5,6 @@ use super::function::InstructionExitState;
 use super::stack::{Stack, VariableMapping};
 use super::variables::{ObjectBuilder, Primitive};
 use anyhow::{bail, Context, Result};
-use gc::Gc;
 use once_cell::sync::Lazy;
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -24,8 +23,6 @@ pub type InstructionSignature = fn(&mut Ctx, &[String]) -> Result<()>;
 /// each instruction, and nothing more.
 #[deny(dead_code)]
 pub mod implementations {
-    use gc::Gc;
-
     use super::*;
     use crate::context::SpecialScope;
     use crate::function::{PrimitiveFunction, ReturnValue};
@@ -34,7 +31,6 @@ pub mod implementations {
     use crate::variables::HeapPrimitive;
     use crate::{bool, function, int, object, optional, vector};
     use std::collections::HashMap;
-    use std::rc::Rc;
 
     #[inline(always)]
     pub(crate) fn pop(ctx: &mut Ctx, args: &[String]) -> Result<()> {
@@ -845,8 +841,8 @@ pub mod implementations {
         match top {
             Primitive::Module(module) => {
                 let module = module.clone(); // to please borrow checker
-                // let view = module.borrow();
-                let view = module;
+                let view = module.borrow();
+                // let view = module;
 
                 for name in args {
                     let Some(bundle) = view.get(name) else {

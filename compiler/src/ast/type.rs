@@ -574,6 +574,7 @@ impl Display for TypeLayout {
             Self::Optional(None) => write!(f, "nil"),
             Self::Void => write!(f, "void"),
             Self::Generic(generic) => write!(f, "{generic}"),
+            Self::Module(module) if cfg!(test) => write!(f, "<module {:?}>", module),
             Self::Module(module) => write!(f, "<module {:?}>", module.name.as_os_str()),
         }
     }

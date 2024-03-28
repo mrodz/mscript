@@ -120,12 +120,7 @@ macro_rules! vector {
     }};
     ($($x:expr),+ $(,)?) => {{
         use $crate::{BytecodePrimitive, GcVector};
-
-        let mut vector = vec![];
-        $(
-            vector.push($x);
-        )*
-        BytecodePrimitive::Vector(GcVector::new(vector))
+        BytecodePrimitive::Vector(GcVector::new(vec![$($x,)*]))
     }};
     (raw $data:expr) => {{
         use $crate::{BytecodePrimitive, GcVector};

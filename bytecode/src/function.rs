@@ -3,7 +3,7 @@
 //! * Representation of runtime callbacks/closures ([`PrimitiveFunction`])
 
 use anyhow::{bail, Context, Result};
-use gc::{Finalize, Gc, Trace};
+use gc::{Finalize, Trace};
 use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -956,7 +956,7 @@ impl BuiltInFunction {
 #[derive(Debug, Clone, Trace, Finalize)]
 pub struct PrimitiveFunction {
     /// Used to keep track of where to jump when this function gets called.
-    #[unsafe_ignore_trace]
+    // #[unsafe_ignore_trace]
     location: String,
     /// Each callback has an `Rc` to a [`VariableMapping`]. In other words, a shared
     /// reference to a map of shared references to variables. This allows multiple instances

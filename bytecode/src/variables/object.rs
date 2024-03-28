@@ -5,7 +5,6 @@ use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
-use std::rc::Rc;
 
 pub struct MappedObject<'a> {
     name: &'a str,
@@ -51,13 +50,13 @@ impl ObjectBuilder {
         Object {
             name: Some(name),
             object_variables: self.object_variables.as_ref().expect("no name").clone(),
-            debug_lock: Gc::new(DebugPrintableLock::new()),
+            debug_lock: Gc::new(DebugPrintableLock::default()),
         }
     }
 }
 
 #[derive(Clone, Eq, Trace, Finalize)]
-pub(crate) struct DebugPrintableLock(#[unsafe_ignore_trace] Cell<bool>);
+pub struct DebugPrintableLock(#[unsafe_ignore_trace] Cell<bool>);
 
 impl PartialEq for DebugPrintableLock {
     /// no-impl makes this field invisible
@@ -71,29 +70,25 @@ impl Hash for DebugPrintableLock {
     fn hash<H: std::hash::Hasher>(&self, _state: &mut H) {}
 }
 
-impl DebugPrintableLock {
-    pub fn new() -> Self {
+impl Default for DebugPrintableLock {
+    fn default() -> Self {
         Self(Cell::new(true))
     }
+}
 
+impl DebugPrintableLock {
     pub fn can_write(&self) -> bool {
         self.0.get()
     }
 
     pub fn lock(&self) {
-        unsafe {
-            let ptr = self.0.as_ptr();
-            assert!(*ptr, "DebugPrintableAlreadyLockedError");
-            *ptr = false;
-        }
+        assert!(self.0.get(), "DebugPrintableAlreadyLockedError");
+        self.0.set(false);
     }
 
     pub fn release(&self) {
-        unsafe {
-            let ptr = self.0.as_ptr();
-            assert!(!*ptr, "DebugPrintableAlreadyReleasedError");
-            *ptr = true;
-        }
+        assert!(!self.0.get(), "DebugPrintableAlreadyReleasedError");
+        self.0.set(true);
     }
 }
 
@@ -136,7 +131,9 @@ impl PartialOrd for Object {
 
 impl PartialEq for Object {
     fn eq(&self, other: &Self) -> bool {
-        self.name == other.name && self.object_variables == other.object_variables
+        // println!("{self} == {other}");
+        self.name == other.name
+            && std::ptr::eq(self.debug_lock.as_ref(), other.debug_lock.as_ref())
     }
 }
 
@@ -145,13 +142,13 @@ impl Object {
         Self {
             name: Some(name),
             object_variables,
-            debug_lock: Gc::new(DebugPrintableLock::new()),
+            debug_lock: Gc::new(DebugPrintableLock::default()),
         }
     }
 
     pub fn id_addr(&self) -> *const DebugPrintableLock {
         self.debug_lock.as_ref() as *const _
-    } 
+    }
 
     pub fn get_property(
         &self,
@@ -165,7 +162,7 @@ impl Object {
         }
 
         let include_class_name = if let (true, Some(name)) =
-            (include_functions, self.name.as_ref().map(|x| x.as_str()))
+            (include_functions, self.name.as_deref())
         {
             Some(name)
         } else {
@@ -196,11 +193,7 @@ impl Object {
             }
         }
 
-        let direct_lookup = self.object_variables.get(function_name);
-
-        let Some(field) = direct_lookup else {
-            return None;
-        };
+        let field = self.object_variables.get(function_name)?;
 
         let bundle = field.primitive().is_function();
 

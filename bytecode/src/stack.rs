@@ -1,14 +1,12 @@
 //! Program call stack
 
 use anyhow::{anyhow, bail, Context, Result};
-use gc::{Finalize, Gc, GcCell, GcCellRef, GcCellRefMut, Trace};
+use gc::{Finalize, Gc, GcCell, GcCellRef, Trace};
 use once_cell::sync::Lazy;
 use std::borrow::Cow;
-use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::ops::Deref;
-use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 use crate::context::SpecialScope;

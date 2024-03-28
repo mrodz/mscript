@@ -230,11 +230,13 @@ impl Program {
         match &request.destination {
             JumpRequestDestination::Standard(_) => self.process_standard_jump_request(request),
             JumpRequestDestination::Module(path) => {
+                log::info!("runtime @import {path}");
                 {
                     let view = self.module_cache.borrow_mut();
 
                     if let Some(cached) = view.get(path) {
                         let module = cached.borrow();
+                        log::info!("runtime @import cache HIT -> {module:?} (from {view:?})");
                         return Ok(ReturnValue::Value(BytecodePrimitive::Module(
                             module.clone(),
                         )));

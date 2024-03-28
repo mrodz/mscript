@@ -86,14 +86,14 @@ macro_rules! generic_bitop {
             #[should_panic]
             fn round_two() {
                 let result = bigint!(2) $symbol int!(200);
-                assert_eq!(result.unwrap(), bigint!(2 $symbol 200))
+                result.unwrap();
             }
 
             #[test]
             #[should_panic]
             fn round_three() {
                 let result = bigint!(1) $symbol bigint!(-1_000);
-                assert_eq!(result.unwrap(), bigint!(1 $symbol -1_000))
+                result.unwrap();
             }
 
             #[test]

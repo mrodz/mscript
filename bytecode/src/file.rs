@@ -18,7 +18,7 @@ use crate::Primitive;
 
 use super::function::Functions;
 
-pub(crate) type ExportMap = VariableMapping;
+pub(crate) type ExportMap = Gc<GcCell<VariableMapping>>;
 
 /// Wrapper around a bytecode file.
 #[derive(Debug)]
@@ -28,7 +28,7 @@ pub struct MScriptFile {
     /// The functions in the file. Even though it is an `Option`, by the time an [`MScriptFile`]
     /// is initialized, this field will be propagated.
     functions: RefCell<Option<Functions>>,
-    exports: RefCell<ExportMap>,
+    exports: ExportMap,
 }
 
 #[derive(Debug)]
@@ -42,7 +42,7 @@ impl MScriptFileBuilder {
             building: Rc::new(MScriptFile {
                 path: Rc::new(path_to_file.replace('\\', "/")),
                 functions: RefCell::new(Some(Functions::new_empty())),
-                exports: RefCell::new(VariableMapping::default()),
+                exports: Gc::new(GcCell::new(VariableMapping::default())),
             }),
         }
     }
@@ -125,7 +125,7 @@ impl MScriptFile {
         let new_uninit = Rc::new(Self {
             path,
             functions: RefCell::new(None),
-            exports: RefCell::new(VariableMapping::default()),
+            exports: Gc::new(GcCell::new(VariableMapping::default())),
         });
 
         let functions = new_uninit.get_functions()?;
@@ -178,17 +178,21 @@ impl MScriptFile {
         Ref::filter_map(functions, |functions| functions.as_ref()).ok()
     }
 
-    pub(crate) fn get_exports(&self) -> Ref<VariableMapping> {
-        self.exports.borrow()
+    pub(crate) fn get_exports(&self) -> ExportMap {
+        self.exports.clone()
     }
 
     pub fn add_export(&self, name: String, var: PrimitiveFlagsPair) -> Result<()> {
         let mut view = self.exports.borrow_mut();
 
-        log::trace!("[add_export()] Exporting {name:?} = {var:?}");
+        log::trace!("[add_export({})] Exporting {name:?} = {var:?}", &self.path);
 
         view.update_once(name, var)
-            .context("Double export: name is already exported")
+            .context("Double export: name is already exported")?;
+
+        log::trace!("[add_export({})] exports = {view}", &self.path);
+
+        Ok(())
     }
 
     pub fn get_export(&self, name: &str) -> Option<PrimitiveFlagsPair> {

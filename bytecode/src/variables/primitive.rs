@@ -2,20 +2,14 @@
 //! Every "value" in the interpreter is a primitive.
 
 use crate::{
-    bigint, bool, byte, float,
-    function::{BuiltInFunction, PrimitiveFunction},
-    int,
-    stack::{PrimitiveFlagsPair, VariableMapping, PRIMITIVE_MODULE},
-    string,
+    bigint, bool, byte, file::ExportMap, float, function::{BuiltInFunction, PrimitiveFunction}, int, stack::{PrimitiveFlagsPair, PRIMITIVE_MODULE}, string
 };
 use anyhow::{bail, Result};
 use gc::{Finalize, Gc, GcCell, GcCellRef, GcCellRefMut, Trace};
 use std::{
     borrow::Cow,
-    cell::{Ref, RefCell, RefMut},
     fmt::{Debug, Display},
     ops::Deref,
-    rc::Rc,
 };
 
 /// This macro allows easy recursion over variants.
@@ -147,7 +141,7 @@ impl PartialEq for HeapPrimitive {
 }
 
 #[derive(Clone, Trace, Finalize, Debug, Default)]
-pub(crate) struct GcVector(pub(crate) Gc<GcCell<Vec<Primitive>>>);
+pub struct GcVector(pub(crate) Gc<GcCell<Vec<Primitive>>>);
 
 impl GcVector {
     pub fn new(vec: Vec<Primitive>) -> Self {
@@ -170,7 +164,7 @@ impl PartialEq for GcVector {
 }
 
 #[derive(Trace, Finalize, Clone, Debug, PartialEq, Eq)]
-pub(crate) struct NonSweepingBuiltInFunction(#[unsafe_ignore_trace] pub(crate) BuiltInFunction);
+pub struct NonSweepingBuiltInFunction(#[unsafe_ignore_trace] pub(crate) BuiltInFunction);
 
 impl Deref for NonSweepingBuiltInFunction {
     type Target = BuiltInFunction;
@@ -198,7 +192,7 @@ primitive! {
     Vector(GcVector),
     HeapPrimitive(HeapPrimitive),
     Object(crate::variables::Object),
-    Module(VariableMapping),
+    Module(ExportMap),
     // Supports Lazy Allocation
     Optional(Option<Box<crate::variables::Primitive>>),
 }
@@ -327,7 +321,14 @@ impl Primitive {
                     unreachable!()
                 };
 
-                module.get(property).ok_or(ret)
+                let module = module.borrow();
+
+                if let Some(property_value) = module.get(property) {
+                    Ok(property_value)
+                } else {
+                    drop(module);
+                    Err(ret)
+                }
             }
             _ if property == "to_str" => Ok(PRIMITIVE_MODULE.generic_to_str()),
             ret @ P::Vector(..) => match property {
@@ -518,11 +519,13 @@ impl Primitive {
                 write!(f, "]")
             }
             Module(module) => {
-                if cfg!(feature = "debug") {
-                    write!(f, "module {:#?}", module)
-                } else {
-                    write!(f, "<module @ {:#x}>", module as *const _ as usize)
-                }
+                write!(f, "module {:#?}", module)
+
+                // if cfg!(feature = "debug") {
+                //     write!(f, "module {:#?}", module)
+                // } else {
+                //     write!(f, "<module @ {:#x}>", module as *const _ as usize)
+                // }
             }
             HeapPrimitive(hp) => {
                 let view = hp.borrow();

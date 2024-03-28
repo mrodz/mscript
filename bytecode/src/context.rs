@@ -6,7 +6,6 @@ use super::stack::VariableMapping;
 use super::variables::Primitive;
 use crate::stack::{PrimitiveFlagsPair, Stack, VariableFlags};
 use anyhow::{bail, Context, Result};
-use gc::Gc;
 use std::borrow::Cow;
 use std::cell::{Ref, RefCell};
 use std::fmt::{Debug, Display};
