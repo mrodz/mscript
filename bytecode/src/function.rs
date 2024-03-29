@@ -1229,7 +1229,9 @@ impl Function {
         jump_callback: &mut impl Fn(&JumpRequest) -> Result<ReturnValue>,
     ) -> Result<ReturnValue> {
         {
-            current_frame.borrow_mut().extend(self.get_qualified_name());
+            current_frame
+                .borrow_mut()
+                .extend(Cow::Owned(self.get_qualified_name()));
         }
 
         // Each function needs its own context.
@@ -1239,6 +1241,8 @@ impl Function {
         let mut instruction_ptr = 0;
 
         let mut special_scopes: Vec<SpecialScope> = vec![];
+
+        let instruction_len = self.instructions.len();
 
         while instruction_ptr < self.instructions.len() {
             let instruction = &self.instructions[instruction_ptr];
@@ -1264,11 +1268,12 @@ impl Function {
             let old_ptr_location = instruction_ptr;
 
             let mut goto_fn = |offset: isize| -> Result<()> {
+                #[cfg(feature = "debug")]
                 let new_val = instruction_ptr
                     .checked_add_signed(offset)
                     .with_context(|| format!("numeric overflow ({instruction_ptr} + {offset})"))?;
-
-                let instruction_len = self.instructions.len();
+                #[cfg(not(feature = "debug"))]
+                let new_val = (instruction_ptr as isize + offset) as usize;
 
                 if new_val >= instruction_len {
                     bail!("goto position index {new_val} is too big, instruction length is {instruction_len}.");
@@ -1303,13 +1308,13 @@ impl Function {
                 }
                 InstructionExitState::PushScope(ty) => {
                     special_scopes.push(*ty);
-                    context.add_frame(ty.to_string());
+                    context.add_frame(Cow::Borrowed(ty.identity_str()));
                 }
                 InstructionExitState::GotoPushScope(offset, ty) => {
                     goto_fn((*offset).try_into()?)?;
 
                     special_scopes.push(*ty);
-                    context.add_frame(ty.to_string());
+                    context.add_frame(Cow::Borrowed(ty.identity_str()));
 
                     context.clear_signal();
                     continue;
@@ -1322,6 +1327,7 @@ impl Function {
 
                         context.pop_frame();
                     }
+                    // }
 
                     context.clear_signal();
                     continue;

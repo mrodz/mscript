@@ -33,6 +33,19 @@ impl SpecialScope {
             || label == DISPLAY_NAME_ELSE_SCOPE
             || label == DISPLAY_NAME_WHILE_LOOP_SCOPE
     }
+
+    pub fn is_label_loop(label: &str) -> bool {
+        label == DISPLAY_NAME_WHILE_LOOP_SCOPE
+    }
+
+    #[inline]
+    pub fn identity_str(&self) -> &'static str {
+        match self {
+            Self::Else => DISPLAY_NAME_ELSE_SCOPE,
+            Self::If => DISPLAY_NAME_IF_SCOPE,
+            Self::WhileLoop => DISPLAY_NAME_WHILE_LOOP_SCOPE,
+        }
+    }
 }
 
 impl Display for SpecialScope {
@@ -128,6 +141,15 @@ impl<'a> Ctx<'a> {
             .expect("could not get a reference to the backing file");
         let exports = location.get_exports();
         Primitive::Module(exports.clone())
+    }
+
+    pub fn is_scope_eligible_for_reuse(&self) -> bool {
+        unsafe {
+            let label = (*self.call_stack.as_ptr())
+                .get_frame_label()
+                .expect("no scope to reuse");
+            SpecialScope::is_label_special_scope(label)
+        }
     }
 
     /// Loads the shared [`Primitive`] stored as a callback variable, along with its associated [`VariableFlags`].
@@ -247,13 +269,17 @@ impl<'a> Ctx<'a> {
     }
 
     /// Add a new stack frame with a given label.
-    pub(crate) fn add_frame(&self, label: String) {
+    pub(crate) fn add_frame(&self, label: Cow<'static, str>) {
         self.call_stack.borrow_mut().extend(label)
     }
 
     /// Pop a frame from the stack.
     pub(crate) fn pop_frame(&self) {
         self.call_stack.borrow_mut().pop()
+    }
+
+    pub(crate) fn wipe_top(&self) {
+        self.call_stack.borrow_mut().deinit()
     }
 
     /// Get the depth of the call stack.

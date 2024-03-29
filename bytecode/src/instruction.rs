@@ -750,7 +750,7 @@ pub mod implementations {
                     return Ok(());
                 }
                 Some(Primitive::BuiltInFunction(ref variant)) => {
-                    ctx.add_frame(format!("<native code>#{variant:?}"));
+                    ctx.add_frame(Cow::Owned(format!("<native code>#{variant:?}")));
                     match variant.run(ctx).with_context(|| format!("built-in function raised an exception: {variant:?}()"))? {
                         (Some(primitive), None) => {
                             ctx.clear_and_set_stack(primitive);

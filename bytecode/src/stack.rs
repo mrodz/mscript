@@ -313,7 +313,7 @@ impl VariableMapping {
 /// variables associated with the frame.
 #[derive(Debug, Trace, Finalize)]
 struct StackFrame {
-    label: String,
+    label: Cow<'static, str>,
     variables: VariableMapping,
 }
 
@@ -352,13 +352,13 @@ impl Stack {
     }
 
     /// Get the label of the current frame.
-    pub fn get_frame_label(&self) -> Result<&String> {
+    pub fn get_frame_label(&self) -> Result<&str> {
         Ok(&self.0.last().context("nothing in the stack")?.label)
     }
 
-    pub fn get_executing_function_label(&self) -> Option<&String> {
+    pub fn get_executing_function_label(&self) -> Option<&str> {
         for frame in self.0.iter().rev() {
-            if !SpecialScope::is_label_special_scope(&frame.label) {
+            if !SpecialScope::is_label_loop(&frame.label) {
                 return Some(&frame.label);
             }
         }
@@ -372,7 +372,7 @@ impl Stack {
     }
 
     /// Extend the call stack by adding a new frame.
-    pub fn extend(&mut self, label: String) {
+    pub fn extend(&mut self, label: Cow<'static, str>) {
         log::trace!("Stack ++PUSH {label}");
         self.0.push(StackFrame {
             label,
@@ -389,6 +389,19 @@ impl Stack {
     pub fn pop(&mut self) {
         let popped = self.0.pop().expect("pop without stack frame");
         log::trace!("Stack --POP {}", popped.label);
+    }
+
+    pub fn deinit(&mut self) {
+        for variable in self
+            .0
+            .last_mut()
+            .expect("no frame")
+            .variables
+            .0
+            .values_mut()
+        {
+            variable.set_primitive(Primitive::Optional(None));
+        }
     }
 
     pub fn pop_until_function(&mut self) {
@@ -409,7 +422,7 @@ impl Stack {
             "{}",
             popped.fold("Stack --POP".to_owned(), |str, frame| str
                 + " "
-                + frame.label.as_str())
+                + &frame.label)
         );
     }
 
@@ -544,16 +557,15 @@ impl Display for Stack {
 
 #[cfg(test)]
 mod test {
+    use std::borrow::Cow;
+
     use super::Stack;
 
     #[test]
     fn add_frame() {
         let mut stack = Stack::new();
 
-        let one = String::from("Main");
-        let two = String::from("hi");
-
-        stack.extend(one);
-        stack.extend(two);
+        stack.extend(Cow::Borrowed("Main"));
+        stack.extend(Cow::Borrowed("hi"));
     }
 }
