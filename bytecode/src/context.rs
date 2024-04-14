@@ -328,7 +328,6 @@ impl<'a> Ctx<'a> {
 
     /// Store a variable to this function. Will get dropped when the function goes out of scope.
     pub(crate) fn register_variable(&self, name: Cow<'static, str>, var: Primitive) -> Result<()> {
-        // let call_stack = rc_to_ref(&self.call_stack);
         self.call_stack.borrow_mut().register_variable(name, var)
     }
 

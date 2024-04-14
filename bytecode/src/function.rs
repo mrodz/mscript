@@ -1008,8 +1008,6 @@ impl PrimitiveFunction {
 
     pub(crate) fn true_eq(&self, other: &Self) -> bool {
         self.location == other.location
-        /*&& self.callback_state.as_ref().map(|x| x as *const _)
-        == other.callback_state.as_ref().map(|x| x.as_ref() as *const _)*/
     }
 }
 
@@ -1287,7 +1285,6 @@ impl Function {
             match ret {
                 InstructionExitState::ReturnValue(ret) => {
                     current_frame.borrow_mut().pop_until_function();
-                    // rc_to_ref(&current_frame).pop_until_function();
                     return Ok(ret.clone());
                 }
                 InstructionExitState::JumpRequest(jump_request) => {
@@ -1327,7 +1324,6 @@ impl Function {
 
                         context.pop_frame();
                     }
-                    // }
 
                     context.clear_signal();
                     continue;
