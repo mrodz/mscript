@@ -358,7 +358,7 @@ impl Stack {
 
     pub fn get_executing_function_label(&self) -> Option<&str> {
         for frame in self.0.iter().rev() {
-            if !SpecialScope::is_label_loop(&frame.label) {
+            if !SpecialScope::is_label_special_scope(&frame.label) {
                 return Some(&frame.label);
             }
         }

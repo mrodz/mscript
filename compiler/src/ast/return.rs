@@ -38,9 +38,7 @@ impl Dependencies for ReturnStatement {
 
 impl Parser {
     pub fn return_statement(input: Node) -> Result<ReturnStatement, Vec<anyhow::Error>> {
-        {
-            input.user_data().mark_should_return_as_completed();
-        };
+        input.user_data().mark_should_return_as_completed();
 
         let value_node = input.children().next();
 

@@ -76,3 +76,40 @@ fn successful_modify() {
     )
     .unwrap()
 }
+
+#[test]
+fn fibonacci() {
+    eval(
+        r#"
+		fibonacci = fn(input: int) -> int {
+			if input == 0 {
+				return 0
+			} else if input == 1 {
+				return 1
+			} else {
+				return self(input - 1) + self(input - 2)
+			}
+		}
+	
+		assert fibonacci(15) == 610
+	"#,
+    )
+    .unwrap()
+}
+
+#[test]
+#[should_panic = "type mismatch when calling function (argument #1 was expected to be `str` based on type signature, instead found `int`)"]
+fn bad_self_arg() {
+    eval(
+        r#"
+		x = fn(input: str) {
+			while true {
+				self(1)
+			}
+		}
+
+		x("hello")
+	"#,
+    )
+    .unwrap()
+}

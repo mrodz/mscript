@@ -47,7 +47,7 @@ impl Compile for DotLookupOption {
                 let instance_register = state.poll_temporary_register();
                 let lhs_register = state.poll_temporary_register();
 
-                let mut result = vec![/*instruction!(breakpoint "TOP DotLookupOption")*/];
+                let mut result = vec![];
 
                 if *assume_self_is_on_top {
                     result.extend_from_slice(&[

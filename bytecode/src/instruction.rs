@@ -710,7 +710,7 @@ pub mod implementations {
             bail!("Cannot perform an object mutation on a non-object")
         };
 
-        let obj_view = o /*.borrow() */;
+        let obj_view = o;
         let has_variable = obj_view
             .has_variable(var_name)
             .context("variable does not exist on object")?;
