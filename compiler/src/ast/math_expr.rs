@@ -715,6 +715,7 @@ fn parse_expr(
                     Rule::function => Expr::Value(Value::Function(Parser::function(primary)?)),
                     Rule::list => Expr::Value(Value::List(Parser::list(primary)?)),
                     Rule::math_expr => parse_expr(primary_pair.clone().into_inner(), user_data.clone())?,
+                    Rule::map => Expr::Value(Value::Map(Parser::map(primary)?)),
                     rule => unreachable!("Expr::parse expected atom, found {:?}", rule),
                 };
 

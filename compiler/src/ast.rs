@@ -16,6 +16,7 @@ mod if_statement;
 mod import;
 mod list;
 mod loop_control_flow;
+mod map;
 mod math_expr;
 mod number;
 mod number_loop;

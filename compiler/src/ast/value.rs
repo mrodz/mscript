@@ -8,8 +8,7 @@ use crate::{
 };
 
 use super::{
-    r#type::IntoType, string::AstString, CompilationState, Compile, CompiledItem, Dependencies,
-    Dependency, Expr, Function, Ident, List, Number, TypeLayout,
+    map::Map, string::AstString, r#type::IntoType, CompilationState, Compile, CompiledItem, Dependencies, Dependency, Expr, Function, Ident, List, Number, TypeLayout
 };
 
 #[derive(Debug)]
@@ -21,6 +20,7 @@ pub(crate) enum Value {
     MathExpr(Box<Expr>),
     Boolean(bool),
     List(List),
+    Map(Map)
 }
 
 #[derive(Debug)]
@@ -165,6 +165,10 @@ impl Value {
                 let ty = list.for_type_force_mixed()?.get_owned_type_recursively();
                 ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
             }
+            Value::Map(ref map) => {
+                let ty = map.for_type()?.get_owned_type_recursively();
+                ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
+            }
         }
 
         Ok(())
@@ -181,6 +185,7 @@ impl IntoType for Value {
             Self::String(string) => string.for_type(),
             Self::Boolean(boolean) => boolean.for_type(),
             Self::List(list) => list.for_type(),
+            Self::Map(map) => map.for_type(),
         }
     }
 }
@@ -195,6 +200,7 @@ impl Dependencies for Value {
             Self::MathExpr(math_expr) => math_expr.net_dependencies(),
             Self::Boolean(boolean) => boolean.net_dependencies(),
             Self::List(list) => list.net_dependencies(),
+            Self::Map(map) => map.net_dependencies(),
         }
     }
 }
@@ -209,6 +215,7 @@ impl Compile for Value {
             Self::MathExpr(math_expr) => math_expr.compile(state),
             Self::Boolean(boolean) => boolean.compile(state),
             Self::List(list) => list.compile(state),
+            Self::Map(map) => map.compile(state),
         }
     }
 }

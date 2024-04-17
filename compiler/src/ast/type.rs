@@ -24,12 +24,7 @@ use std::{
 };
 
 use super::{
-    class::ClassType,
-    function::FunctionType,
-    list::{ListBound, ListType},
-    map_err,
-    math_expr::Op,
-    Compile, Dependencies, FunctionParameters, Ident, Value, WalkForType,
+    class::ClassType, function::FunctionType, list::{ListBound, ListType}, map::MapType, map_err, math_expr::Op, Compile, Dependencies, FunctionParameters, Ident, Value, WalkForType
 };
 
 pub(crate) struct SupportedTypesWrapper(Box<[Cow<'static, TypeLayout>]>);
@@ -552,6 +547,7 @@ pub(crate) enum TypeLayout {
     ClassSelf(Option<ClassType>),
     Generic(GenericType),
     Void,
+    Map(MapType)
 }
 
 impl Display for TypeLayout {
@@ -576,6 +572,7 @@ impl Display for TypeLayout {
             Self::Generic(generic) => write!(f, "{generic}"),
             Self::Module(module) if cfg!(test) => write!(f, "<module {:?}>", module),
             Self::Module(module) => write!(f, "<module {:?}>", module.name.as_os_str()),
+            Self::Map(map) => write!(f, "map[{}, {}]", map.key_type(), map.value_type())
         }
     }
 }
@@ -964,6 +961,11 @@ impl TypeLayout {
             )))),
             Self::ClassSelf(Some(known_confirmed)) => TypeLayout::Class(known_confirmed.clone()),
             Self::ClassSelf(None) => TypeLayout::Class(class_type),
+            Self::Map(map_type) => {
+                let key_type = map_type.key_type().update_all_references_to_class_self(class_type.clone());
+                let value_type = map_type.value_type().update_all_references_to_class_self(class_type);
+                Self::Map(MapType::new(key_type.into(), value_type.into()))
+            }
             ret @ (Self::Class(..)
             | Self::Optional(None)
             | Self::Module(..)
