@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use crate::{
-    ast::Ident,
+    ast::{ClassType, Ident, TypecheckFlags},
     parser::{Node, Parser, Rule},
     VecErr,
 };
@@ -110,7 +110,7 @@ impl Parser {
 
         for (idx, (ident, ident_span)) in idents.iter_mut().zip(spans).enumerate() {
             let index_as_number: Number = Number::Integer(idx.to_string());
-            let Ok(type_at_idx) = ty.get_output_type_from_index(&Value::Number(index_as_number))
+            let Ok(type_at_idx) = ty.get_output_type_from_index(&Value::Number(index_as_number), &TypecheckFlags::<&ClassType>::classless())
             else {
                 return Err(vec![new_err(ident_span, file_name, format!("unpacking index [{idx}] is deemed not safe by the compiler because it cannot guarantee it is a valid index"))]);
             };

@@ -279,6 +279,7 @@ impl IntoType for List {
 
 #[derive(Debug)]
 pub(crate) struct Index {
+    origin_is_map: bool,
     parts: Box<[Value]>,
     final_output_type: TypeLayout,
 }
@@ -313,7 +314,7 @@ impl Compile for Index {
         let value = self.try_constexpr_eval()?;
 
         // faster lookup if the value is already known.
-        if let Some(Value::Number(number)) = value.as_ref() {
+        if let (false, Some(Value::Number(number))) = (self.origin_is_map, value.as_ref()) {
             let index: usize = number.try_into()?;
             let instruction_str = format!("[{index}]");
             return Ok(vec![instruction!(vec_op instruction_str)]);
@@ -330,14 +331,17 @@ impl Compile for Index {
             let mut val_init = self.parts[i].compile(state)?;
             result.append(&mut val_init);
 
-            let instruction_str = format!("[{index_temp_register}]");
-
-            result.append(&mut vec![
-                instruction!(store_fast index_temp_register),
-                instruction!(delete_name_reference_scoped lhs_register),
-                instruction!(vec_op instruction_str),
-                // instruction!(delete_name_scoped index_temp_register),
-            ]);
+            if dbg!(self.parts[i].for_type().unwrap()).is_map() {
+                result.append(&mut vec![
+                    instruction!(map_op index_temp_register)
+                ]);
+            } else {
+                result.append(&mut vec![
+                    instruction!(store_fast index_temp_register),
+                    instruction!(delete_name_reference_scoped lhs_register),
+                    instruction!(vec_op(format!("[{index_temp_register}]"))),
+                ]);
+            }
 
             state.free_temporary_register(index_temp_register);
             state.free_temporary_register(lhs_register);
@@ -361,6 +365,8 @@ impl Parser {
     }
 
     pub fn list_index(input: Node, starting_type: TypeLayout) -> Result<Index, Vec<anyhow::Error>> {
+        let origin_is_map = starting_type.is_map();
+
         let children = input.children();
 
         let file_name: &str = &input.user_data().get_source_file_name();
@@ -390,7 +396,7 @@ impl Parser {
             }
 
             let index_output_ty = map_err(
-                last_ty.get_output_type_from_index(&value),
+                last_ty.get_output_type_from_index(&value, &TypecheckFlags::use_class(input.user_data().get_type_of_executing_class())),
                 value_span,
                 file_name,
                 format!("invalid index into `{last_ty}`"),
@@ -402,6 +408,7 @@ impl Parser {
         }
 
         Ok(Index {
+            origin_is_map,
             parts: values.into_boxed_slice(),
             final_output_type: last_ty,
         })

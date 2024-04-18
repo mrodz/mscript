@@ -24,7 +24,13 @@ use std::{
 };
 
 use super::{
-    class::ClassType, function::FunctionType, list::{ListBound, ListType}, map::MapType, map_err, math_expr::Op, Compile, Dependencies, FunctionParameters, Ident, Value, WalkForType
+    class::ClassType,
+    function::FunctionType,
+    list::{ListBound, ListType},
+    map::MapType,
+    map_err,
+    math_expr::Op,
+    Compile, Dependencies, FunctionParameters, Ident, Value, WalkForType,
 };
 
 pub(crate) struct SupportedTypesWrapper(Box<[Cow<'static, TypeLayout>]>);
@@ -547,7 +553,7 @@ pub(crate) enum TypeLayout {
     ClassSelf(Option<ClassType>),
     Generic(GenericType),
     Void,
-    Map(MapType)
+    Map(MapType),
 }
 
 impl Display for TypeLayout {
@@ -572,7 +578,7 @@ impl Display for TypeLayout {
             Self::Generic(generic) => write!(f, "{generic}"),
             Self::Module(module) if cfg!(test) => write!(f, "<module {:?}>", module),
             Self::Module(module) => write!(f, "<module {:?}>", module.name.as_os_str()),
-            Self::Map(map) => write!(f, "map[{}, {}]", map.key_type(), map.value_type())
+            Self::Map(map) => write!(f, "map[{}, {}]", map.key_type(), map.value_type()),
         }
     }
 }
@@ -967,8 +973,12 @@ impl TypeLayout {
             Self::ClassSelf(Some(known_confirmed)) => TypeLayout::Class(known_confirmed.clone()),
             Self::ClassSelf(None) => TypeLayout::Class(class_type),
             Self::Map(map_type) => {
-                let key_type = map_type.key_type().update_all_references_to_class_self(class_type.clone());
-                let value_type = map_type.value_type().update_all_references_to_class_self(class_type);
+                let key_type = map_type
+                    .key_type()
+                    .update_all_references_to_class_self(class_type.clone());
+                let value_type = map_type
+                    .value_type()
+                    .update_all_references_to_class_self(class_type);
                 Self::Map(MapType::new(key_type.into(), value_type.into()))
             }
             ret @ (Self::Class(..)
@@ -1565,11 +1575,21 @@ impl TypeLayout {
         }
     }
 
-    pub fn get_output_type_from_index(&self, index: &Value) -> Result<Cow<TypeLayout>> {
+    pub fn get_output_type_from_index(
+        &self,
+        index: &Value,
+        flags: &TypecheckFlags<impl Deref<Target = ClassType> + Debug>,
+    ) -> Result<Cow<TypeLayout>> {
         let me = self.disregard_distractors(false);
 
         if me.is_optional().0 {
             bail!("cannot index into an optional: unwrap this `{me}` first")
+        }
+
+        if let Self::Map(map) = me {
+            if map.key_type().eq_complex(&index.for_type()?, flags) {}
+
+            return Ok(Cow::Borrowed(map.value_type()));
         }
 
         let index_ty = index.for_type().context("could not get type of index")?;
@@ -1633,6 +1653,7 @@ impl TypeLayout {
 
                 Box::new([Cow::Owned(TypeLayout::ValidIndexes(upper))])
             }
+            Self::Map(map_type) => Box::new([Cow::Owned(map_type.key_type().to_owned())]),
             _ => return None,
         }))
     }

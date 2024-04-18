@@ -10,7 +10,7 @@ use crate::{
     stack::{PrimitiveFlagsPair, VariableMapping, PRIMITIVE_MODULE},
     string,
 };
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use gc::{Finalize, Gc, GcCell, GcCellRef, GcCellRefMut, Trace};
 use std::{
     borrow::Cow,
@@ -67,6 +67,7 @@ pub enum HeapPrimitive {
     /// * `rustup default stable-x86-64-pc-windows-msvc`
     /// * `cargo +nightly r -Zbuild-std --target x86_64-pc-windows-msvc -Zbuild-std-features=core/debug_refcell --features debug -- run PATH/TO/FILE.ms --verbose`
     Lookup(PrimitiveFlagsPair),
+    MapPtr(GcMap, Box<Primitive>),
 }
 
 impl HeapPrimitive {
@@ -78,14 +79,15 @@ impl HeapPrimitive {
         Self::Lookup(shared_ptr)
     }
 
-    pub(crate) fn to_owned_primitive(&self) -> Primitive {
+    pub(crate) fn to_owned_primitive(&self) -> Result<Primitive> {
         match self {
-            Self::ArrayPtr(array, index) => array.0.borrow().get(*index).unwrap().to_owned(),
-            Self::Lookup(cell) => cell.primitive().clone(),
+            Self::ArrayPtr(array, index) => Ok(array.0.borrow().get(*index).unwrap().to_owned()),
+            Self::Lookup(cell) => Ok(cell.primitive().clone()),
+            Self::MapPtr(map, index) => map.get((**index).clone()).context("key error: map does not have key"),
         }
     }
 
-    pub(crate) fn set(&self, new_val: Primitive) {
+    pub(crate) fn set(&self, new_val: Primitive) -> Result<()> {
         match self {
             Self::Lookup(cell) => {
                 cell.set_primitive(new_val);
@@ -93,7 +95,12 @@ impl HeapPrimitive {
             Self::ArrayPtr(array, index) => {
                 *array.0.borrow_mut().get_mut(*index).unwrap() = new_val;
             }
+            Self::MapPtr(map, key) => {
+                map.insert((**key).clone(), new_val)?;
+            }
         }
+
+        Ok(())
     }
 
     pub(crate) fn update(
@@ -121,19 +128,26 @@ impl HeapPrimitive {
                 // Ok(Box::new(result.to_owned()))
                 Ok(result.to_owned())
             }
+            Self::MapPtr(map, key) => {
+                let new_val =
+                    { setter(&&map.get((**key).clone()).context("key error: map does not have key")?)? };
+                map.insert((**key).clone(), new_val)?;
+                Ok(map.get((**key).clone()).unwrap())
+            }
         }
     }
 
-    fn borrow(&self) -> Box<dyn Deref<Target = Primitive> + '_> {
+    fn borrow(&self) -> Result<Box<dyn Deref<Target = Primitive> + '_>> {
         match self {
-            Self::Lookup(lookup) => Box::new(lookup.primitive()),
-
+            Self::Lookup(lookup) => Ok(Box::new(lookup.primitive())),
             Self::ArrayPtr(array, index) => {
-                Box::new(GcCellRef::map(array.0.borrow(), |view| {
+                Ok(Box::new(GcCellRef::map(array.0.borrow(), |view| {
                     view.get(*index).unwrap()
-                }))
-                // Box::new(array.0.borrow().get(*index).unwrap())
+                })))
             }
+            Self::MapPtr(map, key) => Ok(Box::new(Box::new(
+                map.get((**key).clone()).context("key error: map does not have key")?,
+            ))),
         }
     }
 }
@@ -169,9 +183,17 @@ impl GcMap {
         &*view as *const _
     }
 
-    pub fn insert(&self, key: Primitive, value: Primitive) -> Option<Primitive> {
+    pub fn insert(&self, key: Primitive, value: Primitive) -> Result<Option<Primitive>> {
         let mut view = self.0.borrow_mut();
-        view.insert(key, value)
+        Ok(view.insert(
+            key.move_out_of_heap_primitive()?,
+            value.move_out_of_heap_primitive()?,
+        ))
+    }
+
+    pub fn get(&self, key: Primitive) -> Result<Primitive> {
+        let view = self.0.borrow();
+        view.get(&key.move_out_of_heap_primitive()?).cloned().context("could not read from view")
     }
 }
 
@@ -259,7 +281,11 @@ impl Hash for Primitive {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         use Primitive::*;
 
-        match self.move_out_of_heap_primitive_borrow().as_ref() {
+        match self
+            .move_out_of_heap_primitive_borrow()
+            .unwrap_or(Cow::Owned(Primitive::Optional(None)))
+            .as_ref()
+        {
             Int(x) => x.hash(state),
             Bool(x) => x.hash(state),
             BigInt(x) => x.hash(state),
@@ -371,32 +397,34 @@ impl Primitive {
         matches!(self.ty(), Int | Float | Byte | BigInt)
     }
 
-    pub fn move_out_of_heap_primitive(self) -> Self {
+    pub fn move_out_of_heap_primitive(self) -> Result<Self> {
         if let Self::HeapPrimitive(ref primitive) = self {
-            primitive.to_owned_primitive()
+            Ok(primitive.to_owned_primitive()?)
         } else {
-            self
+            Ok(self)
         }
     }
 
-    pub fn move_out_of_heap_primitive_borrow(&self) -> Cow<Self> {
+    pub fn move_out_of_heap_primitive_borrow(&self) -> Result<Cow<Self>> {
         if let Self::HeapPrimitive(primitive) = self {
-            Cow::Owned(primitive.to_owned_primitive())
+            Ok(Cow::Owned(primitive.to_owned_primitive()?))
         } else {
-            Cow::Borrowed(self)
+            Ok(Cow::Borrowed(self))
         }
     }
 
-    pub fn lookup(self, property: &str) -> std::result::Result<PrimitiveFlagsPair, Self> {
+    pub fn lookup(self, property: &str) -> Result<std::result::Result<PrimitiveFlagsPair, Self>> {
         use Primitive as P;
-        match self.move_out_of_heap_primitive() {
+        match self.move_out_of_heap_primitive()? {
             ret @ P::Object(..) => {
                 let P::Object(ref obj) = ret else {
                     unreachable!()
                 };
 
-                let property = obj.get_property(property, true).ok_or(ret)?;
-                Ok(property)
+                match obj.get_property(property, true).ok_or(ret) {
+                    Ok(property) => Ok(Ok(property)),
+                    Err(this) => Ok(Err(this)),
+                }
             }
             ret @ P::Module(..) => {
                 let P::Module(ref module) = ret else {
@@ -406,14 +434,14 @@ impl Primitive {
                 let module = module.borrow();
 
                 if let Some(property_value) = module.get(property) {
-                    Ok(property_value)
+                    Ok(Ok(property_value))
                 } else {
                     drop(module);
-                    Err(ret)
+                    Ok(Err(ret))
                 }
             }
-            _ if property == "to_str" => Ok(PRIMITIVE_MODULE.generic_to_str()),
-            ret @ P::Vector(..) => match property {
+            _ if property == "to_str" => Ok(Ok(PRIMITIVE_MODULE.generic_to_str())),
+            ret @ P::Vector(..) => Ok(match property {
                 "len" => Ok(PRIMITIVE_MODULE.vector_len()),
                 "reverse" => Ok(PRIMITIVE_MODULE.vector_reverse()),
                 "inner_capacity" => Ok(PRIMITIVE_MODULE.vector_inner_capacity()),
@@ -425,8 +453,8 @@ impl Primitive {
                 "join" => Ok(PRIMITIVE_MODULE.vector_join()),
                 "index_of" => Ok(PRIMITIVE_MODULE.vector_index_of()),
                 _ => Err(ret),
-            },
-            ret @ P::Str(..) => match property {
+            }),
+            ret @ P::Str(..) => Ok(match property {
                 "len" => Ok(PRIMITIVE_MODULE.str_len()),
                 "substring" => Ok(PRIMITIVE_MODULE.str_substring()),
                 "contains" => Ok(PRIMITIVE_MODULE.str_contains()),
@@ -445,8 +473,8 @@ impl Primitive {
                 "parse_byte" => Ok(PRIMITIVE_MODULE.str_parse_byte()),
                 "split" => Ok(PRIMITIVE_MODULE.str_split()),
                 _ => Err(ret),
-            },
-            ret @ (P::Int(..) | P::BigInt(..) | P::Float(..) | P::Byte(..)) => match property {
+            }),
+            ret @ (P::Int(..) | P::BigInt(..) | P::Float(..) | P::Byte(..)) => Ok(match property {
                 "pow" => Ok(PRIMITIVE_MODULE.generic_num_pow()),
                 "powf" => Ok(PRIMITIVE_MODULE.generic_num_powf()),
                 "sqrt" => Ok(PRIMITIVE_MODULE.generic_num_sqrt()),
@@ -462,12 +490,12 @@ impl Primitive {
                 "floor" => Ok(PRIMITIVE_MODULE.float_floor()),
                 "ceil" => Ok(PRIMITIVE_MODULE.float_ceil()),
                 _ => Err(ret),
-            },
-            ret @ P::Function(..) => match property {
+            }),
+            ret @ P::Function(..) => Ok(match property {
                 "is_closure" => Ok(PRIMITIVE_MODULE.fn_is_closure()),
                 _ => Err(ret),
-            },
-            ret => Err(ret),
+            }),
+            ret => Ok(Err(ret)),
         }
     }
 
@@ -610,7 +638,8 @@ impl Primitive {
                 // }
             }
             HeapPrimitive(hp) => {
-                let view = hp.borrow();
+                let none = Primitive::Optional(None);
+                let view = hp.borrow().unwrap_or(Box::new(&none));
                 let view = view.deref().deref();
                 if cfg!(feature = "debug") {
                     write!(f, "&{view}")

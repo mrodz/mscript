@@ -123,8 +123,8 @@ pub mod implementations {
             )
         };
 
-        let left = left.move_out_of_heap_primitive();
-        let right = right.move_out_of_heap_primitive();
+        let left = left.move_out_of_heap_primitive()?;
+        let right = right.move_out_of_heap_primitive()?;
 
         let result = match (symbols.as_str(), &left, &right) {
             ("+", ..) => left + right,
@@ -232,7 +232,7 @@ pub mod implementations {
             bail!("expected a mutable heap primitive, found {maybe_vec}");
         };
 
-        vec_ptr.set(new_val);
+        vec_ptr.set(new_val)?;
 
         Ok(())
     }
@@ -264,7 +264,7 @@ pub mod implementations {
                 bail!("the stack is empty");
             };
 
-            let indexable = indexable.move_out_of_heap_primitive();
+            let indexable = indexable.move_out_of_heap_primitive()?;
 
             // this manual byte slice to usize conversion is more performant
             let idx: usize = 'index_gen: {
@@ -347,7 +347,7 @@ pub mod implementations {
                         bail!("Stack is empty")
                     };
 
-                    let primitive = primitive.move_out_of_heap_primitive_borrow();
+                    let primitive = primitive.move_out_of_heap_primitive_borrow()?;
 
                     let Primitive::Vector(vector) = primitive.as_ref() else {
                         bail!("Cannot perform a vector operation on a non-vector (found: {primitive})")
@@ -904,25 +904,25 @@ pub mod implementations {
             bail!("`unwrap_into` requires a primitive at the top of the local operating stack");
         };
 
-        let primitive = primitive.move_out_of_heap_primitive();
+        let primitive = primitive.move_out_of_heap_primitive()?;
 
         let status = match primitive {
             Primitive::Optional(Some(ref unwrapped)) => {
                 let var = unwrapped.as_ref().to_owned();
 
-                let var = var.move_out_of_heap_primitive();
+                let var = var.move_out_of_heap_primitive()?;
 
                 ctx.register_variable_local(name.to_owned(), var)?;
                 true
             }
             primitive @ Primitive::Optional(None) => {
-                let primitive = primitive.move_out_of_heap_primitive();
+                let primitive = primitive.move_out_of_heap_primitive()?;
 
                 ctx.register_variable_local(name.to_owned(), primitive)?;
                 false
             }
             other_primitive => {
-                let other_primitive = other_primitive.move_out_of_heap_primitive();
+                let other_primitive = other_primitive.move_out_of_heap_primitive()?;
 
                 ctx.register_variable_local(name.to_owned(), other_primitive)?;
                 true
@@ -994,7 +994,7 @@ pub mod implementations {
 
         let arg = ctx.pop().unwrap();
 
-        let arg = arg.move_out_of_heap_primitive();
+        let arg = arg.move_out_of_heap_primitive()?;
 
         ctx.register_variable(Cow::Owned(name.to_owned()), arg)?;
 
@@ -1052,7 +1052,7 @@ pub mod implementations {
 
         let arg = ctx.pop().unwrap();
 
-        let arg = arg.move_out_of_heap_primitive();
+        let arg = arg.move_out_of_heap_primitive()?;
 
         let variable = PrimitiveFlagsPair::new(arg, VariableFlags(READ_ONLY));
 
@@ -1074,7 +1074,7 @@ pub mod implementations {
 
         let arg = ctx.pop().unwrap();
 
-        let arg = arg.move_out_of_heap_primitive();
+        let arg = arg.move_out_of_heap_primitive()?;
 
         ctx.register_variable_local(name.clone(), arg)?;
 
@@ -1093,7 +1093,7 @@ pub mod implementations {
 
         let arg = ctx.pop().unwrap();
 
-        let arg = arg.move_out_of_heap_primitive();
+        let arg = arg.move_out_of_heap_primitive()?;
 
         ctx.update_callback_variable(name, arg)?;
 
@@ -1143,7 +1143,7 @@ pub mod implementations {
 
         let arg = ctx.pop().unwrap();
 
-        let arg = arg.move_out_of_heap_primitive();
+        let arg = arg.move_out_of_heap_primitive()?;
         ctx.register_variable_local(name.clone(), arg)?;
 
         Ok(())
@@ -1255,7 +1255,7 @@ pub mod implementations {
 
         let primitive = ctx.pop().unwrap();
 
-        let result = match primitive.lookup(name) {
+        let result = match primitive.lookup(name)? {
             Ok(result) => result,
             Err(Primitive::Optional(None)) => {
                 bail!("LOGIC ERROR IN CODE >> nil object, looking up `{name}`")
@@ -1308,8 +1308,8 @@ pub mod implementations {
             bail!("equ requires only 2 items in the local stack")
         }
 
-        let first = ctx.pop().unwrap().move_out_of_heap_primitive();
-        let second = ctx.pop().unwrap().move_out_of_heap_primitive();
+        let first = ctx.pop().unwrap().move_out_of_heap_primitive()?;
+        let second = ctx.pop().unwrap().move_out_of_heap_primitive()?;
 
         let result = first.equals(&second)?;
 
@@ -1324,8 +1324,8 @@ pub mod implementations {
             bail!("neq requires only 2 items in the local stack");
         }
 
-        let first = ctx.pop().unwrap().move_out_of_heap_primitive();
-        let second = ctx.pop().unwrap().move_out_of_heap_primitive();
+        let first = ctx.pop().unwrap().move_out_of_heap_primitive()?;
+        let second = ctx.pop().unwrap().move_out_of_heap_primitive()?;
 
         let result = !first.equals(&second)?;
 
@@ -1486,11 +1486,28 @@ pub mod implementations {
 
         let key = ctx.load_local(key_register)?;
 
-        map.insert(key.primitive().clone(), ctx.pop().expect("no value in the op stack"));
+        map.insert(key.primitive().clone(), ctx.pop().expect("no value in the op stack"))?;
 
         Ok(())
     }
 
+    
+    #[inline(always)]
+    pub(crate) fn map_op(ctx: &mut Ctx, args: &[String]) -> Result<()> {
+        let map_register = args.first().context("no map register arg")?;
+
+        let index_key = ctx.pop().context("no index in the stack")?;
+
+        let map = ctx.load_local(map_register).with_context(|| format!("no map at register {map_register}"))?;
+
+        let Primitive::Map(map) = &*map.primitive() else {
+            bail!("not a map")
+        };
+
+        ctx.push(Primitive::HeapPrimitive(HeapPrimitive::MapPtr(map.clone(), Box::new(index_key))));
+
+        Ok(())
+    }
 }
 
 /// Parse a string into tokens based on preset rules.

@@ -5,4 +5,4 @@ ages = map[str, int] {
     "Daniel": 55,
 }
 
-print ages
+print ages["Mateo"]
