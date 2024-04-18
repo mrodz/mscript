@@ -704,6 +704,11 @@ impl TypeLayout {
         (false, None)
     }
 
+    pub fn is_map(&self) -> bool {
+        let me = self.get_type_recursively();
+        matches!(me, TypeLayout::Map(..))
+    }
+
     pub fn is_float(&self) -> bool {
         let me = self.get_type_recursively();
 

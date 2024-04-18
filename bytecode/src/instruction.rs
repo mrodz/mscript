@@ -30,7 +30,7 @@ pub mod implementations {
     use crate::function::{PrimitiveFunction, ReturnValue};
     use crate::stack::flag_constants::READ_ONLY;
     use crate::stack::{PrimitiveFlagsPair, VariableFlags};
-    use crate::variables::HeapPrimitive;
+    use crate::variables::{GcMap, HeapPrimitive};
     use crate::{bool, function, int, object, optional, vector};
     use std::collections::HashMap;
 
@@ -1453,6 +1453,44 @@ pub mod implementations {
         ctx.clear_stack();
         Ok(())
     }
+
+    #[inline(always)]
+    pub fn make_map(ctx: &mut Ctx, args: &[String]) -> Result<()> {
+        /*
+         * The user can misbehave all they want, but that is not our concern.
+         */
+        #[allow(clippy::mutable_key_type)]
+        let raw_map = if let Some(first) = args.first() {
+            let capacity = str::parse::<usize>(first).context("could not parse usize for map capacity")?;
+            HashMap::with_capacity(capacity)
+        } else {
+            HashMap::new()
+        };
+
+        ctx.push(Primitive::Map(GcMap::new(raw_map)));
+
+        Ok(())
+    }
+
+    #[inline(always)]
+    pub fn fast_map_insert(ctx: &mut Ctx, args: &[String]) -> Result<()> {
+        let (Some(map_register), Some(key_register)) = (args.first(), args.get(1)) else {
+            bail!("fast map insert missing key register");
+        };
+
+        let map = ctx.load_local(map_register)?;
+
+        let Primitive::Map(map) = &*map.primitive() else {
+            bail!("inserting on a non-map")
+        };
+
+        let key = ctx.load_local(key_register)?;
+
+        map.insert(key.primitive().clone(), ctx.pop().expect("no value in the op stack"));
+
+        Ok(())
+    }
+
 }
 
 /// Parse a string into tokens based on preset rules.

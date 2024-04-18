@@ -4,3 +4,5 @@ ages = map[str, int] {
     "Scout": 7,
     "Daniel": 55,
 }
+
+print ages

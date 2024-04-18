@@ -7,14 +7,16 @@ use crate::{
     float,
     function::{BuiltInFunction, PrimitiveFunction},
     int,
-    stack::{PrimitiveFlagsPair, PRIMITIVE_MODULE},
+    stack::{PrimitiveFlagsPair, VariableMapping, PRIMITIVE_MODULE},
     string,
 };
 use anyhow::{bail, Result};
 use gc::{Finalize, Gc, GcCell, GcCellRef, GcCellRefMut, Trace};
 use std::{
     borrow::Cow,
+    collections::HashMap,
     fmt::{Debug, Display},
+    hash::Hash,
     ops::Deref,
 };
 
@@ -147,7 +149,41 @@ impl PartialEq for HeapPrimitive {
 }
 
 #[derive(Clone, Trace, Finalize, Debug, Default)]
+pub struct GcMap(pub(crate) Gc<GcCell<HashMap<Primitive, Primitive>>>);
+
+impl PartialEq for GcMap {
+    /// You cannot compare a hash map
+    fn eq(&self, _other: &Self) -> bool {
+        false
+    }
+}
+
+impl GcMap {
+    #[allow(clippy::mutable_key_type)]
+    pub fn new(raw_map: HashMap<Primitive, Primitive>) -> Self {
+        Self(Gc::new(GcCell::new(raw_map)))
+    }
+
+    pub fn addr(&self) -> *const HashMap<Primitive, Primitive> {
+        let view = self.0.borrow();
+        &*view as *const _
+    }
+
+    pub fn insert(&self, key: Primitive, value: Primitive) -> Option<Primitive> {
+        let mut view = self.0.borrow_mut();
+        view.insert(key, value)
+    }
+}
+
+#[derive(Clone, Trace, Finalize, Debug, Default)]
 pub struct GcVector(pub(crate) Gc<GcCell<Vec<Primitive>>>);
+
+impl Hash for GcVector {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let view = self.0.borrow();
+        view.hash(state)
+    }
+}
 
 impl GcVector {
     pub fn new(vec: Vec<Primitive>) -> Self {
@@ -169,7 +205,7 @@ impl PartialEq for GcVector {
     }
 }
 
-#[derive(Trace, Finalize, Clone, Debug, PartialEq, Eq)]
+#[derive(Trace, Finalize, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct NonSweepingBuiltInFunction(#[unsafe_ignore_trace] pub(crate) BuiltInFunction);
 
 impl Deref for NonSweepingBuiltInFunction {
@@ -201,6 +237,45 @@ primitive! {
     Module(ExportMap),
     // Supports Lazy Allocation
     Optional(Option<Box<crate::variables::Primitive>>),
+    Map(GcMap),
+}
+
+/// https://github.com/rust-lang/rust/blob/5c674a11471ec0569f616854d715941757a48a0a/src/libcore/num/f64.rs#L203-L216
+fn integer_decode(val: f64) -> (u64, i16, i8) {
+    let bits: u64 = val.to_bits();
+    let sign: i8 = if bits >> 63 == 0 { 1 } else { -1 };
+    let mut exponent: i16 = ((bits >> 52) & 0x7ff) as i16;
+    let mantissa = if exponent == 0 {
+        (bits & 0xfffffffffffff) << 1
+    } else {
+        (bits & 0xfffffffffffff) | 0x10000000000000
+    };
+
+    exponent -= 1023 + 52;
+    (mantissa, exponent, sign)
+}
+
+impl Hash for Primitive {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        use Primitive::*;
+
+        match self.move_out_of_heap_primitive_borrow().as_ref() {
+            Int(x) => x.hash(state),
+            Bool(x) => x.hash(state),
+            BigInt(x) => x.hash(state),
+            BuiltInFunction(x) => x.hash(state),
+            Byte(x) => x.hash(state),
+            Float(x) => integer_decode(*x).hash(state),
+            Function(x) => x.hash(state),
+            Map(_) => unimplemented!("you may not use a map as a key"),
+            Object(x) => x.hash(state),
+            Vector(x) => x.hash(state),
+            Str(x) => x.hash(state),
+            Module(x) => (&*x.borrow() as *const VariableMapping as usize).hash(state),
+            Optional(x) => x.hash(state),
+            HeapPrimitive(_) => unreachable!(),
+        }
+    }
 }
 
 impl Primitive {
@@ -282,6 +357,7 @@ impl Primitive {
             (Self::Vector(v1), Self::Vector(v2)) => {
                 return Ok(Primitive::Bool(v1.addr() == v2.addr()))
             }
+            (Self::Map(m1), Self::Map(m2)) => return Ok(Primitive::Bool(m1.addr() == m2.addr())),
             _ => (),
         }
 
@@ -545,6 +621,29 @@ impl Primitive {
             Object(o) => write!(f, "{o}"),
             Optional(Some(primitive)) => write!(f, "{primitive}"),
             Optional(None) => write!(f, "nil"),
+            Map(map) => {
+                write!(f, "{{")?;
+
+                let map = map.0.borrow();
+                let mut map_iter = map.iter();
+
+                depth += 1;
+
+                if let Some((key, value)) = map_iter.next() {
+                    key.fmt_recursive(f, depth)?;
+                    write!(f, ": ")?;
+                    value.fmt_recursive(f, depth)?;
+                }
+
+                for (key, value) in map_iter {
+                    write!(f, ", ")?;
+                    key.fmt_recursive(f, depth)?;
+                    write!(f, ": ")?;
+                    value.fmt_recursive(f, depth)?;
+                }
+
+                write!(f, "}}")
+            }
         }
     }
 }

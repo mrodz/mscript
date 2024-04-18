@@ -101,6 +101,24 @@ pub struct Object {
     debug_lock: Gc<DebugPrintableLock>,
 }
 
+impl Hash for Object {
+    /// Mark an object's field as transient by prefixing it with `__` (two underscores)
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
+
+        let mut variables = self.object_variables.iter().collect::<Vec<_>>();
+        variables.sort_by_key(|x| x.0);
+
+        for (name, value) in variables {
+            if !name.starts_with("__") {
+                name.hash(state);
+                value.primitive().hash(state);
+                value.flags().hash(state);
+            }
+        }
+    }
+}
+
 impl Debug for Object {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.debug_lock.can_write() {

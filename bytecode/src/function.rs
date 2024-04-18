@@ -8,6 +8,7 @@ use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
+use std::hash::Hash;
 use std::path::Path;
 use std::rc::{Rc, Weak};
 
@@ -22,7 +23,7 @@ use super::instruction::JumpRequest;
 use super::stack::{Stack, VariableMapping};
 use super::variables::Primitive;
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum BuiltInFunction {
     VecLen,
     VecReverse,
@@ -963,6 +964,12 @@ pub struct PrimitiveFunction {
     /// of the same callback to operate on the same data in a thread-safe manner,
     /// but there is a notable hit to performance.
     callback_state: Option<VariableMapping>,
+}
+
+impl Hash for PrimitiveFunction {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.location.hash(state)
+    }
 }
 
 impl PrimitiveFunction {
