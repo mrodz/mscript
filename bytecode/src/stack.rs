@@ -125,7 +125,12 @@ static_module_generator! {
     float_round(BuiltInFunction::FloatRound),
     float_floor(BuiltInFunction::FloatFloor),
     float_ceil(BuiltInFunction::FloatCeil),
-
+    map_len(BuiltInFunction::MapLen),
+    map_contains_key(BuiltInFunction::MapHasKey),
+    map_replace(BuiltInFunction::MapReplace),
+    map_keys(BuiltInFunction::MapKeys),
+    map_values(BuiltInFunction::MapValues),
+    map_pairs(BuiltInFunction::MapPairs),
 }
 
 impl PrimitiveFlagsPair {
@@ -180,7 +185,7 @@ impl Debug for PrimitiveFlagsPair {
     }
 }
 
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy, Hash)]
 pub struct VariableFlags(pub(crate) u8);
 
 impl VariableFlags {
@@ -264,6 +269,10 @@ impl From<HashMap<String, PrimitiveFlagsPair>> for VariableMapping {
 impl VariableMapping {
     pub fn get(&self, key: &str) -> Option<PrimitiveFlagsPair> {
         self.0.get(key).cloned()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&String, &PrimitiveFlagsPair)> {
+        self.0.iter()
     }
 
     /// Explicit clone, because this is probably not intented behavior.

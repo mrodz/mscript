@@ -12,10 +12,8 @@ use crate::{
 };
 
 use super::{
-    new_err,
-    r#type::{IntoType, NativeType},
-    BinaryOperation, ClassType, CompilationState, Compile, Dependencies, TypeLayout,
-    TypecheckFlags, Value,
+    new_err, r#type::NativeType, BinaryOperation, ClassType, CompilationState, Compile,
+    Dependencies, TypeLayout, TypecheckFlags, Value,
 };
 
 #[derive(Debug)]
@@ -215,14 +213,22 @@ impl Parser {
         let val_start_node = children.next().unwrap();
         let val_start_span = val_start_node.as_span();
         let val_start = Self::value(val_start_node)?;
-        let start_ty = val_start.for_type().to_err_vec()?;
+        let start_ty = val_start
+            .for_type(&TypecheckFlags::use_class(
+                input.user_data().get_type_of_executing_class(),
+            ))
+            .to_err_vec()?;
 
         let inclusive_or_exclusive = children.next().unwrap();
 
         let val_end_node = children.next().unwrap();
         let val_end_span = val_end_node.as_span();
         let val_end = Self::value(val_end_node)?;
-        let end_ty = val_end.for_type().to_err_vec()?;
+        let end_ty = val_end
+            .for_type(&TypecheckFlags::use_class(
+                input.user_data().get_type_of_executing_class(),
+            ))
+            .to_err_vec()?;
 
         // ^^^ these are guaranteed.
 
@@ -263,11 +269,19 @@ impl Parser {
             .as_ref()
             .map_or_else(
                 || Ok(TypeLayout::Native(NativeType::Int)),
-                |(val, _)| val.for_type(),
+                |(val, _)| {
+                    val.for_type(&TypecheckFlags::use_class(
+                        input.user_data().get_type_of_executing_class(),
+                    ))
+                },
             )
             .to_err_vec()?;
 
-        let Some(step_output_type) = start_ty.get_output_type(&rhs, &BinaryOperation::Add) else {
+        let Some(step_output_type) = start_ty.get_output_type(
+            &rhs,
+            &BinaryOperation::Add,
+            &TypecheckFlags::use_class(input.user_data().get_type_of_executing_class()),
+        ) else {
             let span = if let Some((_, span)) = step {
                 span
             } else {
@@ -281,8 +295,11 @@ impl Parser {
             )]);
         };
 
-        let after_step_output: Option<TypeLayout> =
-            step_output_type.get_output_type(&start_ty, &BinaryOperation::Lte);
+        let after_step_output: Option<TypeLayout> = step_output_type.get_output_type(
+            &start_ty,
+            &BinaryOperation::Lte,
+            &TypecheckFlags::use_class(input.user_data().get_type_of_executing_class()),
+        );
 
         let Some(TypeLayout::Native(NativeType::Bool)) = after_step_output else {
             return Err(vec![new_err(

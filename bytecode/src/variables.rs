@@ -5,6 +5,7 @@ mod primitive_shorthands;
 
 pub use object::Object;
 pub use object::ObjectBuilder;
+pub(crate) use primitive::GcMap;
 pub(crate) use primitive::GcVector;
 pub(crate) use primitive::HeapPrimitive;
 pub(crate) use primitive::NonSweepingBuiltInFunction;

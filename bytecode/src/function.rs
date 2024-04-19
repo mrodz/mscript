@@ -8,6 +8,7 @@ use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
+use std::hash::Hash;
 use std::path::Path;
 use std::rc::{Rc, Weak};
 
@@ -22,7 +23,7 @@ use super::instruction::JumpRequest;
 use super::stack::{Stack, VariableMapping};
 use super::variables::Primitive;
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum BuiltInFunction {
     VecLen,
     VecReverse,
@@ -67,6 +68,12 @@ pub enum BuiltInFunction {
     FloatRound,
     FloatFloor,
     FloatCeil,
+    MapLen,
+    MapHasKey,
+    MapReplace,
+    MapKeys,
+    MapValues,
+    MapPairs,
 }
 
 type BuiltInFunctionReturnBundle = (
@@ -79,7 +86,7 @@ impl BuiltInFunction {
         let mut arguments = ctx.ref_clear_local_operating_stack();
 
         for argument in arguments.iter_mut() {
-            *argument = argument.clone().move_out_of_heap_primitive();
+            *argument = argument.clone().move_out_of_heap_primitive()?;
         }
 
         match self {
@@ -941,6 +948,68 @@ impl BuiltInFunction {
 
                 Ok((Some(Primitive::Float(float.ceil())), None))
             }
+            Self::MapLen => {
+                let Some(Primitive::Map(map)) = arguments.first() else {
+                    unreachable!()
+                };
+
+                Ok((
+                    Some(Primitive::Int(map.len().try_into().expect(
+                        "map length could not be stored in a 32 bit integer",
+                    ))),
+                    None,
+                ))
+            }
+            Self::MapHasKey => {
+                let (Some(Primitive::Map(map)), Some(key)) = (arguments.first(), arguments.get(1))
+                else {
+                    unreachable!()
+                };
+
+                Ok((Some(Primitive::Bool(map.contains_key(key))), None))
+            }
+            Self::MapReplace => {
+                let (Some(Primitive::Map(map)), Some(key), Some(value)) =
+                    (arguments.first(), arguments.get(1), arguments.get(2))
+                else {
+                    unreachable!()
+                };
+
+                let maybe_existing_value = map.insert(key.clone(), value.clone())?;
+                Ok((
+                    Some(Primitive::Optional(maybe_existing_value.map(Box::new))),
+                    None,
+                ))
+            }
+            Self::MapKeys => {
+                let Some(Primitive::Map(map)) = arguments.first() else {
+                    unreachable!()
+                };
+
+                Ok((Some(Primitive::Vector(GcVector::new(map.keys()))), None))
+            }
+            Self::MapValues => {
+                let Some(Primitive::Map(map)) = arguments.first() else {
+                    unreachable!()
+                };
+
+                Ok((Some(Primitive::Vector(GcVector::new(map.values()))), None))
+            }
+            Self::MapPairs => {
+                let Some(Primitive::Map(map)) = arguments.first() else {
+                    unreachable!()
+                };
+
+                Ok((
+                    Some(Primitive::Vector(GcVector::new(
+                        map.pairs()
+                            .into_iter()
+                            .map(|(key, value)| Primitive::Vector(GcVector::new(vec![key, value])))
+                            .collect::<Vec<_>>(),
+                    ))),
+                    None,
+                ))
+            }
         }
     }
 }
@@ -963,6 +1032,12 @@ pub struct PrimitiveFunction {
     /// of the same callback to operate on the same data in a thread-safe manner,
     /// but there is a notable hit to performance.
     callback_state: Option<VariableMapping>,
+}
+
+impl Hash for PrimitiveFunction {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.location.hash(state)
+    }
 }
 
 impl PrimitiveFunction {

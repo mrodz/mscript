@@ -111,4 +111,7 @@ generate_consts! {
     RET_MOD                      57
     MODULE_ENTRY                 58
     SPLIT_LOOKUP_STORE           59
+    MAKE_MAP                     60
+    FAST_MAP_INSERT              61
+    MAP_OP                       62
 }

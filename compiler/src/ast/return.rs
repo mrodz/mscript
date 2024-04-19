@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use anyhow::Result;
 
 use crate::{
-    ast::{new_err, r#type::IntoType},
+    ast::new_err,
     instruction,
     parser::{Node, Parser},
     VecErr,
@@ -73,7 +73,11 @@ impl Parser {
 
         let value = Self::value(value_node)?;
 
-        let supplied_type = value.for_type().to_err_vec()?;
+        let supplied_type = value
+            .for_type(&TypecheckFlags::use_class(
+                input.user_data().get_type_of_executing_class(),
+            ))
+            .to_err_vec()?;
         let supplied_type = supplied_type.get_type_recursively();
 
         let expected_return_type = input.user_data().get_return_type();

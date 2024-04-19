@@ -2,6 +2,7 @@ use std::{
     borrow::Cow,
     cell::RefCell,
     fmt::{Debug, Display},
+    ops::Deref,
     rc::Rc,
 };
 
@@ -195,17 +196,121 @@ pub(crate) enum Expr {
 }
 
 impl Expr {
-    pub(crate) fn validate(&self) -> Result<&Self> {
-        self.for_type().map(|_| self)
+    pub(crate) fn validate(
+        &self,
+        flags: &TypecheckFlags<impl Deref<Target = ClassType> + Debug>,
+    ) -> Result<&Self> {
+        self.for_type(flags).map(|_| self)
     }
 
-    pub(crate) fn validate_owned(self) -> Result<Self> {
-        self.for_type().map(|_| self)
+    pub(crate) fn validate_owned(
+        self,
+        flags: &TypecheckFlags<impl Deref<Target = ClassType> + Debug>,
+    ) -> Result<Self> {
+        self.for_type(flags).map(|_| self)
     }
 
     pub(crate) fn parse(input: Node) -> Result<Expr, Vec<anyhow::Error>> {
         let children_as_pairs = input.children().into_pairs();
         parse_expr(children_as_pairs, input.user_data().clone())
+    }
+
+    pub(crate) fn for_type(
+        &self,
+        flags: &TypecheckFlags<impl Deref<Target = ClassType> + Debug>,
+    ) -> Result<super::TypeLayout> {
+        match self {
+            Expr::Value(val) => val.for_type(flags),
+            Expr::BinOp { lhs, op, rhs } => {
+                let lhs = if op.is_op_assign() {
+                    match lhs.as_ref() {
+                        Expr::Value(Value::Ident(ident)) => {
+                            if ident.is_const() {
+                                bail!(
+                                    "cannot reassign using {op} to {}, which is const",
+                                    ident.name()
+                                )
+                            }
+                            Cow::Owned(lhs.for_type(flags)?)
+                        }
+                        Expr::DotLookup { expected_type, .. } => Cow::Borrowed(expected_type),
+                        _ => bail!("invalid left operand for {op}"),
+                    }
+                } else {
+                    Cow::Owned(lhs.for_type(flags)?)
+                };
+
+                let rhs = rhs.for_type(flags)?;
+
+                lhs.get_output_type(&rhs, op, flags)
+                    .with_context(|| format!("invalid operation: {} {} {}", lhs, op.symbol(), rhs))
+            }
+            Expr::UnaryMinus(val) | Expr::UnaryNot(val) => val.for_type(flags),
+            Expr::Callable(CallableContents::Standard { function, .. }) => {
+                let return_type = function.return_type();
+
+                let return_type = return_type.get_type().context(VOID_ERROR_MESSAGE)?;
+
+                Ok(return_type.clone().into_owned())
+            }
+            Expr::Callable(CallableContents::ToSelf { return_type, .. }) => {
+                let Some(return_type) = return_type else {
+                    bail!(VOID_ERROR_MESSAGE)
+                };
+
+                Ok(return_type.clone().into_owned())
+            }
+            Expr::ReferenceToSelf(is_valid) => {
+                if let ReferenceToSelf::Class(class_type) = &*is_valid.borrow() {
+                    Ok(TypeLayout::ClassSelf(Some(class_type.clone())))
+                } else {
+                    bail!("this reference to `self` is not valid here")
+                }
+            }
+            Expr::ReferenceToConstructor(class_type) => {
+                Ok(TypeLayout::Function(class_type.constructor()))
+            }
+            Expr::Index { index, .. } => index.for_type(),
+            Expr::DotLookup { expected_type, .. } => Ok(expected_type.to_owned()),
+            Expr::Nil => Ok(TypeLayout::Optional(None)),
+            Expr::UnaryUnwrap { value, span: _ } => {
+                let ty = value.for_type(flags)?;
+
+                if let (true, Some(ty)) = ty.is_optional() {
+                    return Ok(ty.clone().into_owned());
+                }
+
+                Ok(ty)
+            }
+            Expr::NilEval { primary, fallback } => {
+                let primary = primary.for_type(flags)?;
+                let fallback = fallback.for_type(flags)?;
+                Ok(if let (true, ty) = primary.is_optional() {
+                    if let Some(ty) = ty {
+                        let ty = ty.disregard_distractors(false);
+
+                        if ty.is_optional().1.is_some() && fallback.is_optional().1.is_some() {
+                            // only check if neither of the operands is `nil`
+                            assert_eq!(ty, &fallback);
+                        }
+
+                        ty.clone()
+                    } else {
+                        // `lhs` is nil, use fallback to infer type
+                        fallback
+                    }
+                } else {
+                    assert_eq!(
+                        primary.disregard_distractors(false),
+                        fallback.disregard_distractors(false)
+                    );
+                    primary
+                })
+            }
+            Expr::Typeof(_, repr) => Ok(TypeLayout::Native(NativeType::Str(StrWrapper::sized(
+                repr.len(),
+            )))),
+        }
     }
 }
 
@@ -237,7 +342,10 @@ impl CompileTimeEvaluate for Expr {
 
                 let constexpr_eval = maybe_constexpr_eval.as_ref().unwrap();
 
-                if constexpr_eval.for_type()?.supports_negate() {
+                if constexpr_eval
+                    .for_type(&TypecheckFlags::<&ClassType>::classless())?
+                    .supports_negate()
+                {
                     let val = constexpr_eval.try_negate()?;
                     if let Some(val) = val {
                         return Ok(ConstexprEvaluation::Owned(val));
@@ -309,103 +417,6 @@ impl CompileTimeEvaluate for Expr {
 
 static VOID_ERROR_MESSAGE: &str = "this scope does not yield a value";
 
-impl IntoType for Expr {
-    fn for_type(&self) -> Result<super::TypeLayout> {
-        match self {
-            Expr::Value(val) => val.for_type(),
-            Expr::BinOp { lhs, op, rhs } => {
-                let lhs = if op.is_op_assign() {
-                    match lhs.as_ref() {
-                        Expr::Value(Value::Ident(ident)) => {
-                            if ident.is_const() {
-                                bail!(
-                                    "cannot reassign using {op} to {}, which is const",
-                                    ident.name()
-                                )
-                            }
-                            Cow::Owned(lhs.for_type()?)
-                        }
-                        Expr::DotLookup { expected_type, .. } => Cow::Borrowed(expected_type),
-                        _ => bail!("invalid left operand for {op}"),
-                    }
-                } else {
-                    Cow::Owned(lhs.for_type()?)
-                };
-
-                let rhs = rhs.for_type()?;
-
-                lhs.get_output_type(&rhs, op)
-                    .with_context(|| format!("invalid operation: {} {} {}", lhs, op.symbol(), rhs))
-            }
-            Expr::UnaryMinus(val) | Expr::UnaryNot(val) => val.for_type(),
-            Expr::Callable(CallableContents::Standard { function, .. }) => {
-                let return_type = function.return_type();
-
-                let return_type = return_type.get_type().context(VOID_ERROR_MESSAGE)?;
-
-                Ok(return_type.clone().into_owned())
-            }
-            Expr::Callable(CallableContents::ToSelf { return_type, .. }) => {
-                let Some(return_type) = return_type else {
-                    bail!(VOID_ERROR_MESSAGE)
-                };
-
-                Ok(return_type.clone().into_owned())
-            }
-            Expr::ReferenceToSelf(is_valid) => {
-                if let ReferenceToSelf::Class(class_type) = &*is_valid.borrow() {
-                    Ok(TypeLayout::ClassSelf(Some(class_type.clone())))
-                } else {
-                    bail!("this reference to `self` is not valid here")
-                }
-            }
-            Expr::ReferenceToConstructor(class_type) => {
-                Ok(TypeLayout::Function(class_type.constructor()))
-            }
-            Expr::Index { index, .. } => index.for_type(),
-            Expr::DotLookup { expected_type, .. } => Ok(expected_type.to_owned()),
-            Expr::Nil => Ok(TypeLayout::Optional(None)),
-            Expr::UnaryUnwrap { value, span: _ } => {
-                let ty = value.for_type()?;
-
-                if let (true, Some(ty)) = ty.is_optional() {
-                    return Ok(ty.clone().into_owned());
-                }
-
-                Ok(ty)
-            }
-            Expr::NilEval { primary, fallback } => {
-                let primary = primary.for_type()?;
-                let fallback = fallback.for_type()?;
-                Ok(if let (true, ty) = primary.is_optional() {
-                    if let Some(ty) = ty {
-                        let ty = ty.disregard_distractors(false);
-
-                        if ty.is_optional().1.is_some() && fallback.is_optional().1.is_some() {
-                            // only check if neither of the operands is `nil`
-                            assert_eq!(ty, &fallback);
-                        }
-
-                        ty.clone()
-                    } else {
-                        // `lhs` is nil, use fallback to infer type
-                        fallback
-                    }
-                } else {
-                    assert_eq!(
-                        primary.disregard_distractors(false),
-                        fallback.disregard_distractors(false)
-                    );
-                    primary
-                })
-            }
-            Expr::Typeof(_, repr) => Ok(TypeLayout::Native(NativeType::Str(StrWrapper::sized(
-                repr.len(),
-            )))),
-        }
-    }
-}
-
 impl Dependencies for Expr {
     fn dependencies(&self) -> Vec<Dependency> {
         use Expr as E;
@@ -456,13 +467,13 @@ fn compile_depth(
     match expr {
         Expr::Value(val) => val.compile(state),
         Expr::UnaryNot(expr) => {
-            if let Expr::Value(value) = expr.as_ref() {
-                let ty = value.for_type()?;
-
-                if !ty.is_boolean() {
-                    bail!("cannot apply binary not to {:?}", ty)
-                }
-            }
+            // This should not be in the `compile` function!!!!
+            // if let Expr::Value(value) = expr.as_ref() {
+            //     let ty = value.for_type(flags)?;
+            //     if !ty.is_boolean() {
+            //         bail!("cannot apply binary not to {:?}", ty)
+            //     }
+            // }
 
             let mut eval = expr.compile(state)?;
 
@@ -715,6 +726,7 @@ fn parse_expr(
                     Rule::function => Expr::Value(Value::Function(Parser::function(primary)?)),
                     Rule::list => Expr::Value(Value::List(Parser::list(primary)?)),
                     Rule::math_expr => parse_expr(primary_pair.clone().into_inner(), user_data.clone())?,
+                    Rule::map => Expr::Value(Value::Map(Parser::map(primary)?)),
                     rule => unreachable!("Expr::parse expected atom, found {:?}", rule),
                 };
 
@@ -775,7 +787,7 @@ fn parse_expr(
                 rhs: Box::new(rhs),
             };
 
-            if let Err(e) = bin_op.validate() {
+            if let Err(e) = bin_op.validate(&TypecheckFlags::use_class(user_data.get_type_of_executing_class())) {
                 return Err(vec![new_err(
                     span.as_span(),
                     &user_data.get_source_file_name(),
@@ -790,14 +802,14 @@ fn parse_expr(
 
                 match op.as_rule() {
                     Rule::unary_minus => {
-                        let ty = expr.for_type().to_err_vec()?;
+                        let ty = expr.for_type(&TypecheckFlags::use_class(user_data.get_type_of_executing_class())).to_err_vec()?;
                         if !ty.disregard_distractors(false).supports_negate() {
                             return Err(vec![new_err(pair.unwrap().as_span(), &user_data.get_source_file_name(), format!("{ty} cannot be negated"))])
                         }
                         Ok((Expr::UnaryMinus(Box::new(expr)), pair))
                     }
                     Rule::not => {
-                        let ty = expr.for_type().to_err_vec()?;
+                        let ty = expr.for_type(&TypecheckFlags::use_class(user_data.get_type_of_executing_class())).to_err_vec()?;
                         if !ty.disregard_distractors(false).is_boolean() {
                             return Err(vec![new_err(pair.unwrap().as_span(), &user_data.get_source_file_name(), format!("{ty} cannot be negated"))])
                         }
@@ -811,7 +823,7 @@ fn parse_expr(
                         }, pair))
                     }
                     Rule::r#typeof => {
-                        match expr.for_type() {
+                        match expr.for_type(&TypecheckFlags::use_class(user_data.get_type_of_executing_class())) {
                             Ok(ty) => Ok((Expr::Typeof(Box::new(expr), ty.to_string()), pair)),
                             Err(e) => {
                                 // hacky but works
@@ -865,7 +877,7 @@ fn parse_expr(
                     _ => ()
                 }
 
-                let lhs_ty = lhs.for_type().details(l_span.as_ref().unwrap().as_span(), &user_data.get_source_file_name(), "bad expression 1").to_err_vec()?;
+                let lhs_ty = lhs.for_type(&TypecheckFlags::use_class(user_data.get_type_of_executing_class())).details(l_span.as_ref().unwrap().as_span(), &user_data.get_source_file_name(), "bad expression 1").to_err_vec()?;
 
                 let Some(function_type) = lhs_ty.is_callable() else {
                     return Err(vec![new_err(l_span.unwrap().as_span(), &user_data.get_source_file_name(), format!("`{lhs_ty}` is not callable"))]);
@@ -882,7 +894,7 @@ fn parse_expr(
 
                 let lhs_span = lhs_span.unwrap().as_span();
 
-                let lhs_ty = lhs_expr.for_type().details(lhs_span, &user_data.get_source_file_name(), "bad expression 2").to_err_vec()?;
+                let lhs_ty = lhs_expr.for_type(&TypecheckFlags::use_class(user_data.get_type_of_executing_class())).details(lhs_span, &user_data.get_source_file_name(), "bad expression 2").to_err_vec()?;
 
                 let index: Node = Node::new_with_user_data(op.clone(), Rc::clone(&user_data));
                 let index: Index = Parser::list_index(index, lhs_ty)?;
@@ -893,7 +905,7 @@ fn parse_expr(
                 let (lhs, l_span) = lhs?;
                 let l_span = l_span.unwrap().as_span();
 
-                let lhs_ty = lhs.for_type().details(l_span, &user_data.get_source_file_name(), "bad expression 3").to_err_vec()?;
+                let lhs_ty = lhs.for_type(&TypecheckFlags::use_class(user_data.get_type_of_executing_class())).details(l_span, &user_data.get_source_file_name(), "bad expression 3").to_err_vec()?;
                 let lhs_ty = lhs_ty.assume_type_of_self(&user_data);
 
                 let index: Node = Node::new_with_user_data(op.clone(), Rc::clone(&user_data));
@@ -911,7 +923,7 @@ fn parse_expr(
                 let (lhs, l_span) = lhs?;
                 let l_span = l_span.unwrap();
 
-                let lhs_ty = lhs.for_type().details(l_span.as_span(), &user_data.get_source_file_name(), "the type of this value cannot be used in an unwrap").to_err_vec()?;
+                let lhs_ty = lhs.for_type(&TypecheckFlags::use_class(user_data.get_type_of_executing_class())).details(l_span.as_span(), &user_data.get_source_file_name(), "the type of this value cannot be used in an unwrap").to_err_vec()?;
 
                 let fallback = op.into_inner().next().unwrap();
                 assert_eq!(fallback.as_rule(), Rule::value);
@@ -922,7 +934,7 @@ fn parse_expr(
 
                 let fallback = Parser::value(value_node)?;
 
-                let fallback_ty = fallback.for_type().details(value_span, &user_data.get_source_file_name(), format!("this value cannot be used as a fallback for `{lhs_ty}`")).to_err_vec()?;
+                let fallback_ty = fallback.for_type(&TypecheckFlags::use_class(user_data.get_type_of_executing_class())).details(value_span, &user_data.get_source_file_name(), format!("this value cannot be used as a fallback for `{lhs_ty}`")).to_err_vec()?;
 
                 let lhs_ty_for_comp = lhs_ty.disregard_optional().unwrap_or(&TypeLayout::Optional(None));
 
@@ -952,12 +964,14 @@ fn parse_expr(
         .parse(pairs);
 
     maybe_expr.and_then(|(expr, span)| {
-        expr.validate_owned()
-            .details(
-                span.unwrap().as_span(),
-                &user_data.get_source_file_name(),
-                "bad expression 4",
-            )
-            .to_err_vec()
+        expr.validate_owned(&TypecheckFlags::use_class(
+            user_data.get_type_of_executing_class(),
+        ))
+        .details(
+            span.unwrap().as_span(),
+            &user_data.get_source_file_name(),
+            "bad expression 4",
+        )
+        .to_err_vec()
     })
 }

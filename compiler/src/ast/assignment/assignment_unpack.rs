@@ -1,16 +1,13 @@
 use std::borrow::Cow;
 
 use crate::{
-    ast::Ident,
+    ast::{ClassType, Ident, TypecheckFlags},
     parser::{Node, Parser, Rule},
     VecErr,
 };
 
 use crate::ast::{
-    list::ListBound,
-    new_err,
-    r#type::{IntoType, NativeType},
-    Assignment, Number, TypeLayout, Value,
+    list::ListBound, new_err, r#type::NativeType, Assignment, Number, TypeLayout, Value,
 };
 
 impl Parser {
@@ -76,7 +73,11 @@ impl Parser {
 
         let value = Self::value(value_node)?;
 
-        let ty = value.for_type().to_err_vec()?;
+        let ty = value
+            .for_type(&TypecheckFlags::use_class(
+                input.user_data().get_type_of_executing_class(),
+            ))
+            .to_err_vec()?;
 
         let Some(value_ty) = ty.supports_index() else {
             return Err(vec![new_err(
@@ -110,8 +111,10 @@ impl Parser {
 
         for (idx, (ident, ident_span)) in idents.iter_mut().zip(spans).enumerate() {
             let index_as_number: Number = Number::Integer(idx.to_string());
-            let Ok(type_at_idx) = ty.get_output_type_from_index(&Value::Number(index_as_number))
-            else {
+            let Ok(type_at_idx) = ty.get_output_type_from_index(
+                &Value::Number(index_as_number),
+                &TypecheckFlags::<&ClassType>::classless(),
+            ) else {
                 return Err(vec![new_err(ident_span, file_name, format!("unpacking index [{idx}] is deemed not safe by the compiler because it cannot guarantee it is a valid index"))]);
             };
 

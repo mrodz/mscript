@@ -20,7 +20,7 @@ typeof = ${ "typeof" ~ WHITESPACE }
 
 primitive = _{ number | string }
 
-allow_bin_op = _{ function | list | nil | primitive | ident }
+allow_bin_op = _{ function | map | list | nil | primitive | ident }
 
 math_primary = _{ allow_bin_op | "(" ~ math_expr ~ ")" }
 
@@ -97,6 +97,10 @@ escape_sequence = @{ "\\" ~ escape_character }
 
 string = @{ "\"" ~ (("\\\"") | (!("\"") ~ ANY))* ~ "\"" }
 
+map_kv = { value ~ ":" ~ value }
+map_initializer = { "{" ~ map_kv? ~ ("," ~ map_kv)* ~ ","? ~ "}" }
+map_type = { "[" ~ type ~ "," ~ type ~ ","? ~ "]" }
+map = { "map" ~ map_type ~ map_initializer? }
 
 ident_chars = _{ ASCII_ALPHANUMERIC | "_" }
 

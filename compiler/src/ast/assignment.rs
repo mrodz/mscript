@@ -14,7 +14,7 @@ use crate::{
 
 use super::{
     map_err, new_err, value::Value, CompilationState, Compile, Dependencies, Dependency, Ident,
-    IntoType, TypeLayout, TypecheckFlags, WalkForType,
+    TypeLayout, TypecheckFlags, WalkForType,
 };
 
 #[derive(Debug)]
@@ -395,7 +395,12 @@ impl Parser {
         };
 
         if matches!(
-            x.value.for_type().unwrap().disregard_distractors(true),
+            x.value
+                .for_type(&TypecheckFlags::use_class(
+                    input.user_data().get_type_of_executing_class()
+                ))
+                .unwrap()
+                .disregard_distractors(true),
             TypeLayout::Void
         ) {
             return Err(vec![new_err(

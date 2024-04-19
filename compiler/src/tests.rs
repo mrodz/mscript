@@ -10,6 +10,7 @@ mod class;
 mod comments;
 mod functions;
 mod r#if;
+mod maps;
 mod math;
 mod modify_edge_cases;
 mod modules;

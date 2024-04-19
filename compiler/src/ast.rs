@@ -16,6 +16,7 @@ mod if_statement;
 mod import;
 mod list;
 mod loop_control_flow;
+mod map;
 mod math_expr;
 mod number;
 mod number_loop;
@@ -508,8 +509,6 @@ impl CompilationState {
 pub(crate) trait Compile<E = Error> {
     fn compile(&self, state: &CompilationState) -> Result<Vec<CompiledItem>, E>;
 }
-
-pub(crate) trait Optimize {}
 
 #[derive(Clone, Debug)]
 pub(crate) struct Dependency<'a> {

@@ -62,6 +62,7 @@ pub static KEYWORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
         "xor",
         "nil",
         "is",
+        "map",
     ])
 });
 
