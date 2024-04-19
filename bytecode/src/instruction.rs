@@ -170,7 +170,8 @@ pub mod implementations {
                 .context("there must be a value at the top of the stack for a `bin_op_assign`")?;
 
             let result = {
-                let no_mut: &Primitive = value;
+                let no_hp = value.move_out_of_heap_primitive_borrow()?;
+                let no_mut: &Primitive = &no_hp;
 
                 match op.as_str() {
                     "+=" => (&*bundle.primitive() + no_mut)?,
@@ -187,7 +188,8 @@ pub mod implementations {
         } else {
             let value = ctx
                 .pop()
-                .context("there must be a value at the top of the stack for a `bin_op_assign`")?;
+                .context("there must be a value at the top of the stack for a `bin_op_assign`")?
+                .move_out_of_heap_primitive()?;
 
             let Some(maybe_ptr) = ctx.get_last_op_item_mut() else {
                 bail!("`bin_op_assign` without a name argument will attempt to modify a pointer that is second to last on the stack, but no primitive was there");
@@ -1461,7 +1463,8 @@ pub mod implementations {
          */
         #[allow(clippy::mutable_key_type)]
         let raw_map = if let Some(first) = args.first() {
-            let capacity = str::parse::<usize>(first).context("could not parse usize for map capacity")?;
+            let capacity =
+                str::parse::<usize>(first).context("could not parse usize for map capacity")?;
             HashMap::with_capacity(capacity)
         } else {
             HashMap::new()
@@ -1486,25 +1489,32 @@ pub mod implementations {
 
         let key = ctx.load_local(key_register)?;
 
-        map.insert(key.primitive().clone(), ctx.pop().expect("no value in the op stack"))?;
+        map.insert(
+            key.primitive().clone(),
+            ctx.pop().expect("no value in the op stack"),
+        )?;
 
         Ok(())
     }
 
-    
     #[inline(always)]
     pub(crate) fn map_op(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let map_register = args.first().context("no map register arg")?;
 
         let index_key = ctx.pop().context("no index in the stack")?;
 
-        let map = ctx.load_local(map_register).with_context(|| format!("no map at register {map_register}"))?;
+        let map = ctx
+            .load_local(map_register)
+            .with_context(|| format!("no map at register {map_register}"))?;
 
         let Primitive::Map(map) = &*map.primitive() else {
-            bail!("not a map")
+            bail!("{} is not a map", map.primitive())
         };
 
-        ctx.push(Primitive::HeapPrimitive(HeapPrimitive::MapPtr(map.clone(), Box::new(index_key))));
+        ctx.push(Primitive::HeapPrimitive(HeapPrimitive::MapPtr(
+            map.clone(),
+            Box::new(index_key),
+        )));
 
         Ok(())
     }

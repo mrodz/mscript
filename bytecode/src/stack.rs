@@ -125,7 +125,12 @@ static_module_generator! {
     float_round(BuiltInFunction::FloatRound),
     float_floor(BuiltInFunction::FloatFloor),
     float_ceil(BuiltInFunction::FloatCeil),
-
+    map_len(BuiltInFunction::MapLen),
+    map_contains_key(BuiltInFunction::MapHasKey),
+    map_replace(BuiltInFunction::MapReplace),
+    map_keys(BuiltInFunction::MapKeys),
+    map_values(BuiltInFunction::MapValues),
+    map_pairs(BuiltInFunction::MapPairs),
 }
 
 impl PrimitiveFlagsPair {

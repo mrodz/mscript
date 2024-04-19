@@ -1,4 +1,4 @@
-use crate::variables::Primitive::{self, *};
+use crate::variables::Primitive::*;
 use crate::*;
 use anyhow::{bail, Result};
 

@@ -1,4 +1,9 @@
-use std::{borrow::Cow, fmt::Display, hash::Hash};
+use std::{
+    borrow::Cow,
+    fmt::{Debug, Display},
+    hash::Hash,
+    ops::Deref,
+};
 
 use anyhow::{bail, Context, Result};
 
@@ -20,14 +25,43 @@ pub(crate) struct List {
 }
 
 impl List {
-    pub fn for_type_force_mixed(&self) -> Result<TypeLayout> {
+    pub fn for_type_force_mixed(
+        &self,
+        flags: &TypecheckFlags<impl Deref<Target = ClassType> + Debug>,
+    ) -> Result<TypeLayout> {
         let mut types = Vec::with_capacity(self.values.len());
         for value in &self.values {
-            let value_ty = value.for_type()?;
+            let value_ty = value.for_type(flags)?;
             types.push(Cow::Owned(value_ty));
         }
 
         Ok(TypeLayout::List(ListType::Mixed(types)))
+    }
+
+    pub(crate) fn for_type(
+        &self,
+        flags: &TypecheckFlags<impl Deref<Target = ClassType> + Debug>,
+    ) -> Result<TypeLayout> {
+        let mut types = self
+            .values
+            .iter()
+            .map(|x| x.for_type(flags))
+            .collect::<Vec<_>>();
+
+        if types.len() == 1 {
+            // `swap_remove` to get ownership in O(1)
+            return Ok(TypeLayout::List(ListType::Open(Box::new(Cow::Owned(
+                types.swap_remove(0)?,
+            )))));
+        }
+
+        let mut no_result = Vec::with_capacity(types.len());
+
+        for ty in types {
+            no_result.push(Cow::Owned(ty?));
+        }
+
+        Ok(TypeLayout::List(ListType::Mixed(no_result)))
     }
 }
 
@@ -256,31 +290,28 @@ impl IntoType for Index {
     }
 }
 
-impl IntoType for List {
-    fn for_type(&self) -> Result<TypeLayout> {
-        let mut types = self.values.iter().map(Value::for_type).collect::<Vec<_>>();
+#[derive(Debug, PartialEq)]
+pub(crate) enum IndexInstruction {
+    VecOp,
+    MapOp,
+}
 
-        if types.len() == 1 {
-            // `swap_remove` to get ownership in O(1)
-            return Ok(TypeLayout::List(ListType::Open(Box::new(Cow::Owned(
-                types.swap_remove(0)?,
-            )))));
+impl<T> From<T> for IndexInstruction
+where
+    T: Into<TypeLayout>,
+{
+    fn from(value: T) -> Self {
+        match value.into() {
+            TypeLayout::Map(..) => Self::MapOp,
+            _ => Self::VecOp,
         }
-
-        let mut no_result = Vec::with_capacity(types.len());
-
-        for ty in types {
-            no_result.push(Cow::Owned(ty?));
-        }
-
-        Ok(TypeLayout::List(ListType::Mixed(no_result)))
     }
 }
 
 #[derive(Debug)]
 pub(crate) struct Index {
     origin_is_map: bool,
-    parts: Box<[Value]>,
+    parts: Box<[(Value, IndexInstruction)]>,
     final_output_type: TypeLayout,
 }
 
@@ -294,7 +325,7 @@ impl Dependencies for Index {
     fn dependencies(&self) -> Vec<super::Dependency> {
         self.parts
             .iter()
-            .flat_map(Value::net_dependencies)
+            .flat_map(|x| x.0.net_dependencies())
             .collect()
     }
 }
@@ -302,7 +333,7 @@ impl Dependencies for Index {
 impl CompileTimeEvaluate for Index {
     fn try_constexpr_eval(&self) -> Result<ConstexprEvaluation> {
         if self.parts.len() == 1 {
-            self.parts[0].try_constexpr_eval()
+            self.parts[0].0.try_constexpr_eval()
         } else {
             Ok(ConstexprEvaluation::Impossible)
         }
@@ -328,13 +359,13 @@ impl Compile for Index {
             result.push(instruction!(store_fast lhs_register));
             let index_temp_register = state.poll_temporary_register();
 
-            let mut val_init = self.parts[i].compile(state)?;
+            let (i_value, i_type) = &self.parts[i];
+
+            let mut val_init = i_value.compile(state)?;
             result.append(&mut val_init);
 
-            if dbg!(self.parts[i].for_type().unwrap()).is_map() {
-                result.append(&mut vec![
-                    instruction!(map_op index_temp_register)
-                ]);
+            if i_type == &IndexInstruction::MapOp {
+                result.append(&mut vec![instruction!(map_op lhs_register)]);
             } else {
                 result.append(&mut vec![
                     instruction!(store_fast index_temp_register),
@@ -378,7 +409,11 @@ impl Parser {
         for value in children {
             let value_span = value.as_span();
             let value = Self::value(value)?;
-            let value_ty = value.for_type().to_err_vec()?;
+            let value_ty = value
+                .for_type(&TypecheckFlags::use_class(
+                    input.user_data().get_type_of_executing_class(),
+                ))
+                .to_err_vec()?;
 
             let Some(expected_type_for_value) = last_ty.supports_index() else {
                 return Err(vec![new_err(
@@ -389,22 +424,31 @@ impl Parser {
             };
 
             if !expected_type_for_value
-                .contains(&value, value_span, file_name)
+                .contains(
+                    &value,
+                    value_span,
+                    file_name,
+                    &TypecheckFlags::use_class(input.user_data().get_type_of_executing_class()),
+                )
                 .to_err_vec()?
             {
                 return Err(vec![new_err(value_span, file_name, format!("`{last_ty}` does not support indexing for `{value_ty}` (Hint: this type does support indexes of types {expected_type_for_value})"))]);
             }
 
             let index_output_ty = map_err(
-                last_ty.get_output_type_from_index(&value, &TypecheckFlags::use_class(input.user_data().get_type_of_executing_class())),
+                last_ty.get_output_type_from_index(
+                    &value,
+                    &TypecheckFlags::use_class(input.user_data().get_type_of_executing_class()),
+                ),
                 value_span,
                 file_name,
                 format!("invalid index into `{last_ty}`"),
             )
-            .to_err_vec()?;
+            .to_err_vec()?
+            .into_owned();
 
-            last_ty = index_output_ty.into_owned();
-            values.push(value);
+            values.push((value, IndexInstruction::from(last_ty)));
+            last_ty = index_output_ty;
         }
 
         Ok(Index {

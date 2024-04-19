@@ -83,7 +83,9 @@ impl HeapPrimitive {
         match self {
             Self::ArrayPtr(array, index) => Ok(array.0.borrow().get(*index).unwrap().to_owned()),
             Self::Lookup(cell) => Ok(cell.primitive().clone()),
-            Self::MapPtr(map, index) => map.get((**index).clone()).context("key error: map does not have key"),
+            Self::MapPtr(map, index) => map
+                .get((**index).clone())
+                .context("key error: map does not have key"),
         }
     }
 
@@ -129,8 +131,13 @@ impl HeapPrimitive {
                 Ok(result.to_owned())
             }
             Self::MapPtr(map, key) => {
-                let new_val =
-                    { setter(&&map.get((**key).clone()).context("key error: map does not have key")?)? };
+                let new_val = {
+                    setter(
+                        &&map
+                            .get((**key).clone())
+                            .context("key error: map does not have key")?,
+                    )?
+                };
                 map.insert((**key).clone(), new_val)?;
                 Ok(map.get((**key).clone()).unwrap())
             }
@@ -146,7 +153,8 @@ impl HeapPrimitive {
                 })))
             }
             Self::MapPtr(map, key) => Ok(Box::new(Box::new(
-                map.get((**key).clone()).context("key error: map does not have key")?,
+                map.get((**key).clone())
+                    .context("key error: map does not have key")?,
             ))),
         }
     }
@@ -193,7 +201,37 @@ impl GcMap {
 
     pub fn get(&self, key: Primitive) -> Result<Primitive> {
         let view = self.0.borrow();
-        view.get(&key.move_out_of_heap_primitive()?).cloned().context("could not read from view")
+        Ok(view
+            .get(&key.move_out_of_heap_primitive()?)
+            .cloned()
+            .unwrap_or(Primitive::Optional(None)))
+    }
+
+    pub fn len(&self) -> usize {
+        let view = self.0.borrow();
+        view.len()
+    }
+
+    pub fn contains_key(&self, key: &Primitive) -> bool {
+        let view = self.0.borrow();
+        view.contains_key(key)
+    }
+
+    pub fn keys(&self) -> Vec<Primitive> {
+        let view = self.0.borrow();
+        view.keys().cloned().collect::<Vec<_>>()
+    }
+
+    pub fn values(&self) -> Vec<Primitive> {
+        let view = self.0.borrow();
+        view.values().cloned().collect::<Vec<_>>()
+    }
+
+    pub fn pairs(&self) -> Vec<(Primitive, Primitive)> {
+        let view = self.0.borrow();
+        view.iter()
+            .map(|kv| (kv.0.clone(), kv.1.clone()))
+            .collect::<Vec<_>>()
     }
 }
 
@@ -493,6 +531,15 @@ impl Primitive {
             }),
             ret @ P::Function(..) => Ok(match property {
                 "is_closure" => Ok(PRIMITIVE_MODULE.fn_is_closure()),
+                _ => Err(ret),
+            }),
+            ret @ P::Map(..) => Ok(match property {
+                "len" => Ok(PRIMITIVE_MODULE.map_len()),
+                "contains_key" => Ok(PRIMITIVE_MODULE.map_contains_key()),
+                "replace" => Ok(PRIMITIVE_MODULE.map_replace()),
+                "keys" => Ok(PRIMITIVE_MODULE.map_keys()),
+                "values" => Ok(PRIMITIVE_MODULE.map_values()),
+                "pairs" => Ok(PRIMITIVE_MODULE.map_pairs()),
                 _ => Err(ret),
             }),
             ret => Ok(Err(ret)),

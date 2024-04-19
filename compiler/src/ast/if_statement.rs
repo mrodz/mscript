@@ -8,7 +8,7 @@ use crate::{
 };
 
 use super::{
-    new_err, r#type::IntoType, Block, CompilationState, Compile, CompiledItem, Dependencies, Value,
+    new_err, Block, CompilationState, Compile, CompiledItem, Dependencies, TypecheckFlags, Value,
 };
 
 #[derive(Debug)]
@@ -145,7 +145,11 @@ impl Parser {
 
         let condition_as_value = Self::value(condition)?;
 
-        let condition_type = condition_as_value.for_type().to_err_vec()?;
+        let condition_type = condition_as_value
+            .for_type(&TypecheckFlags::use_class(
+                input.user_data().get_type_of_executing_class(),
+            ))
+            .to_err_vec()?;
 
         if !condition_type.is_boolean() {
             return Err(vec![new_err(

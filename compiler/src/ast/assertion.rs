@@ -7,7 +7,7 @@ use crate::{
 };
 
 use super::{
-    new_err, r#type::IntoType, CompilationState, Compile, CompiledItem, Dependencies, Value,
+    new_err, CompilationState, Compile, CompiledItem, Dependencies, TypecheckFlags, Value,
 };
 
 #[derive(Debug)]
@@ -37,7 +37,11 @@ impl Parser {
         let value_span = value_node.as_span();
         let value = Self::value(value_node)?;
 
-        let value_ty = value.for_type().to_err_vec()?;
+        let value_ty = value
+            .for_type(&TypecheckFlags::use_class(
+                input.user_data().get_type_of_executing_class(),
+            ))
+            .to_err_vec()?;
         if !value_ty.is_boolean() {
             return Err(vec![new_err(
                 value_span,

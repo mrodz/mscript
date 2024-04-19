@@ -6,7 +6,7 @@ use crate::{
     VecErr,
 };
 
-use super::{new_err, r#type::IntoType, Block, CompilationState, Compile, Dependencies, Value};
+use super::{new_err, Block, CompilationState, Compile, Dependencies, TypecheckFlags, Value};
 
 #[derive(Debug)]
 pub struct WhileLoop {
@@ -99,7 +99,11 @@ impl Parser {
 
         let condition = Self::value(condition)?;
 
-        let condition_ty = condition.for_type().to_err_vec()?;
+        let condition_ty = condition
+            .for_type(&TypecheckFlags::use_class(
+                input.user_data().get_type_of_executing_class(),
+            ))
+            .to_err_vec()?;
 
         if !condition_ty.is_boolean() {
             return Err(vec![new_err(

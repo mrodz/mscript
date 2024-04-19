@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, fmt::Debug, ops::Deref};
 
 use anyhow::{bail, Result};
 
@@ -8,7 +8,9 @@ use crate::{
 };
 
 use super::{
-    map::Map, string::AstString, r#type::IntoType, CompilationState, Compile, CompiledItem, Dependencies, Dependency, Expr, Function, Ident, List, Number, TypeLayout
+    map::Map, r#type::IntoType, string::AstString, ClassType, CompilationState, Compile,
+    CompiledItem, Dependencies, Dependency, Expr, Function, Ident, List, Number, TypeLayout,
+    TypecheckFlags,
 };
 
 #[derive(Debug)]
@@ -20,7 +22,7 @@ pub(crate) enum Value {
     MathExpr(Box<Expr>),
     Boolean(bool),
     List(List),
-    Map(Map)
+    Map(Map),
 }
 
 #[derive(Debug)]
@@ -119,14 +121,6 @@ impl CompileTimeEvaluate for Value {
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct Dot;
-
-#[deprecated]
-pub(crate) trait Indexable {
-    fn output_from_value(&self, value: &Value) -> Result<Cow<'static, TypeLayout>>;
-}
-
 impl Value {
     pub fn associate_with_ident(&self, ident: &mut Ident, user_data: &AssocFileData) -> Result<()> {
         match self {
@@ -146,7 +140,11 @@ impl Value {
                 ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
             }
             Value::MathExpr(ref math_expr) => {
-                let ty = math_expr.for_type()?.get_owned_type_recursively();
+                let ty = math_expr
+                    .for_type(&TypecheckFlags::use_class(
+                        user_data.get_type_of_executing_class(),
+                    ))?
+                    .get_owned_type_recursively();
 
                 if let TypeLayout::Optional(None) = ty {
                     bail!(
@@ -162,7 +160,11 @@ impl Value {
                 ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
             }
             Value::List(ref list) => {
-                let ty = list.for_type_force_mixed()?.get_owned_type_recursively();
+                let ty = list
+                    .for_type_force_mixed(&TypecheckFlags::use_class(
+                        user_data.get_type_of_executing_class(),
+                    ))?
+                    .get_owned_type_recursively();
                 ident.link_force_no_inherit(user_data, Cow::Owned(ty))?;
             }
             Value::Map(ref map) => {
@@ -173,18 +175,19 @@ impl Value {
 
         Ok(())
     }
-}
 
-impl IntoType for Value {
-    fn for_type(&self) -> Result<TypeLayout> {
+    pub(crate) fn for_type(
+        &self,
+        flags: &TypecheckFlags<impl Deref<Target = ClassType> + Debug>,
+    ) -> Result<TypeLayout> {
         match self {
             Self::Function(function) => function.for_type(),
             Self::Ident(ident) => Ok(ident.ty()?.clone().into_owned()),
-            Self::MathExpr(math_expr) => math_expr.for_type(),
+            Self::MathExpr(math_expr) => math_expr.for_type(flags),
             Self::Number(number) => number.for_type(),
             Self::String(string) => string.for_type(),
             Self::Boolean(boolean) => boolean.for_type(),
-            Self::List(list) => list.for_type(),
+            Self::List(list) => list.for_type(flags),
             Self::Map(map) => map.for_type(),
         }
     }

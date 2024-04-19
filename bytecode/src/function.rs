@@ -68,6 +68,12 @@ pub enum BuiltInFunction {
     FloatRound,
     FloatFloor,
     FloatCeil,
+    MapLen,
+    MapHasKey,
+    MapReplace,
+    MapKeys,
+    MapValues,
+    MapPairs,
 }
 
 type BuiltInFunctionReturnBundle = (
@@ -941,6 +947,68 @@ impl BuiltInFunction {
                 };
 
                 Ok((Some(Primitive::Float(float.ceil())), None))
+            }
+            Self::MapLen => {
+                let Some(Primitive::Map(map)) = arguments.first() else {
+                    unreachable!()
+                };
+
+                Ok((
+                    Some(Primitive::Int(map.len().try_into().expect(
+                        "map length could not be stored in a 32 bit integer",
+                    ))),
+                    None,
+                ))
+            }
+            Self::MapHasKey => {
+                let (Some(Primitive::Map(map)), Some(key)) = (arguments.first(), arguments.get(1))
+                else {
+                    unreachable!()
+                };
+
+                Ok((Some(Primitive::Bool(map.contains_key(key))), None))
+            }
+            Self::MapReplace => {
+                let (Some(Primitive::Map(map)), Some(key), Some(value)) =
+                    (arguments.first(), arguments.get(1), arguments.get(2))
+                else {
+                    unreachable!()
+                };
+
+                let maybe_existing_value = map.insert(key.clone(), value.clone())?;
+                Ok((
+                    Some(Primitive::Optional(maybe_existing_value.map(Box::new))),
+                    None,
+                ))
+            }
+            Self::MapKeys => {
+                let Some(Primitive::Map(map)) = arguments.first() else {
+                    unreachable!()
+                };
+
+                Ok((Some(Primitive::Vector(GcVector::new(map.keys()))), None))
+            }
+            Self::MapValues => {
+                let Some(Primitive::Map(map)) = arguments.first() else {
+                    unreachable!()
+                };
+
+                Ok((Some(Primitive::Vector(GcVector::new(map.values()))), None))
+            }
+            Self::MapPairs => {
+                let Some(Primitive::Map(map)) = arguments.first() else {
+                    unreachable!()
+                };
+
+                Ok((
+                    Some(Primitive::Vector(GcVector::new(
+                        map.pairs()
+                            .into_iter()
+                            .map(|(key, value)| Primitive::Vector(GcVector::new(vec![key, value])))
+                            .collect::<Vec<_>>(),
+                    ))),
+                    None,
+                ))
             }
         }
     }

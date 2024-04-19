@@ -510,8 +510,6 @@ pub(crate) trait Compile<E = Error> {
     fn compile(&self, state: &CompilationState) -> Result<Vec<CompiledItem>, E>;
 }
 
-pub(crate) trait Optimize {}
-
 #[derive(Clone, Debug)]
 pub(crate) struct Dependency<'a> {
     pub ident: Cow<'a, Ident>,

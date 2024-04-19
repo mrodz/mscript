@@ -1,4 +1,3 @@
-use crate::variables::Primitive;
 use crate::*;
 use anyhow::{bail, Result};
 

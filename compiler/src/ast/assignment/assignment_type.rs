@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::ast::r#type::TypecheckFlags;
 use crate::ast::ClassType;
-use crate::ast::{new_err, r#type::IntoType, Assignment, Ident, Value};
+use crate::ast::{new_err, Assignment, Ident, Value};
 use crate::parser::{Node, Parser};
 use crate::VecErr;
 
@@ -41,7 +41,7 @@ impl Parser {
         let ty = Self::r#type(ty).to_err_vec()?;
         let value: Value = Self::value(value)?;
 
-        if let Ok(ref assignment_ty) = value.for_type() {
+        if let Ok(ref assignment_ty) = value.for_type(&TypecheckFlags::use_class(self_type)) {
             if !ty.as_ref().get_type_recursively().eq_complex(
                 assignment_ty.get_type_recursively(),
                 &TypecheckFlags::use_class(self_type).lhs_unwrap(false),

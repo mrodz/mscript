@@ -6,9 +6,8 @@ use crate::{
 };
 
 use super::{
-    new_err,
-    r#type::{IntoType, TypecheckFlags},
-    Dependencies, Dependency, FunctionParameters, TypeLayout, Value,
+    new_err, r#type::TypecheckFlags, Dependencies, Dependency, FunctionParameters, TypeLayout,
+    Value,
 };
 
 #[derive(Debug)]
@@ -58,7 +57,11 @@ impl Parser {
             child_span = child.as_span();
             let value_for_arg = Self::value(child)?;
 
-            let arg_ty = value_for_arg.for_type().to_err_vec()?;
+            let arg_ty = value_for_arg
+                .for_type(&TypecheckFlags::use_class(
+                    input.user_data().get_type_of_executing_class(),
+                ))
+                .to_err_vec()?;
 
             let expected_ty_at_idx = &expected_types[idx];
 

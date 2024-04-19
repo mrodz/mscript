@@ -52,10 +52,16 @@ impl Display for SupportedTypesWrapper {
 }
 
 impl SupportedTypesWrapper {
-    pub fn contains(&self, index: &Value, value_span: Span, file_name: &str) -> Result<bool> {
+    pub fn contains(
+        &self,
+        index: &Value,
+        value_span: Span,
+        file_name: &str,
+        flags: &TypecheckFlags<impl Deref<Target = ClassType> + Debug>,
+    ) -> Result<bool> {
         for supported_type in self.0.iter() {
             if map_err(
-                supported_type.eq_for_indexing(index),
+                supported_type.eq_for_indexing(index, flags),
                 value_span,
                 file_name,
                 "the compiler will not allow this index".to_string(),
@@ -680,6 +686,9 @@ macro_rules! new_assoc_function {
     };
     ($types:expr, @str) => {
         new_assoc_function!($types, ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Native(NativeType::Str(StrWrapper::unknown_size())))))
+    };
+    ($types:expr, @bool) => {
+        new_assoc_function!($types, ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Native(NativeType::Bool))))
     };
     ($types:expr, @float) => {
         new_assoc_function!(
@@ -1308,6 +1317,43 @@ impl TypeLayout {
                 )),
                 _ => None,
             },
+            Self::Map(map_type) => match property_name {
+                "len" => Some(new_assoc_function!(vec![], @int)),
+                "contains_key" => Some(
+                    new_assoc_function!(vec![Cow::Owned(map_type.key_type().to_owned())], @bool),
+                ),
+                "replace" => Some(new_assoc_function!(
+                    vec![
+                        Cow::Owned(map_type.key_type().to_owned()),
+                        Cow::Owned(map_type.value_type().to_owned())
+                    ],
+                    ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Optional(Some(Box::new(
+                        Cow::Owned(map_type.value_type().to_owned())
+                    )))))
+                )),
+                "keys" => Some(new_assoc_function!(
+                    vec![],
+                    ScopeReturnStatus::Should(Cow::Owned(TypeLayout::List(ListType::Open(
+                        Box::new(Cow::Owned(map_type.key_type().to_owned()))
+                    ))))
+                )),
+                "values" => Some(new_assoc_function!(
+                    vec![],
+                    ScopeReturnStatus::Should(Cow::Owned(TypeLayout::List(ListType::Open(
+                        Box::new(Cow::Owned(map_type.value_type().to_owned()))
+                    ))))
+                )),
+                "pairs" => Some(new_assoc_function!(
+                    vec![],
+                    ScopeReturnStatus::Should(Cow::Owned(TypeLayout::List(ListType::Open(
+                        Box::new(Cow::Owned(TypeLayout::List(ListType::Mixed(vec![
+                            Cow::Owned(map_type.key_type().to_owned()),
+                            Cow::Owned(map_type.value_type().to_owned()),
+                        ]))))
+                    ))))
+                )),
+                _ => None,
+            },
             _ => None,
         }
     }
@@ -1587,12 +1633,20 @@ impl TypeLayout {
         }
 
         if let Self::Map(map) = me {
-            if map.key_type().eq_complex(&index.for_type()?, flags) {}
+            let index_ty = index.for_type(flags)?;
+            if !map.key_type().eq_complex(&index_ty, flags) {
+                bail!(
+                    "cannot index into map with `{index_ty}` when it expects keys of type `{}`",
+                    map.key_type()
+                )
+            }
 
             return Ok(Cow::Borrowed(map.value_type()));
         }
 
-        let index_ty = index.for_type().context("could not get type of index")?;
+        let index_ty = index
+            .for_type(flags)
+            .context("could not get type of index")?;
 
         if !index_ty.can_be_used_as_list_index() {
             bail!("`{index_ty}` cannot be used as an index here");
@@ -1703,7 +1757,12 @@ impl TypeLayout {
         }
     }
 
-    pub fn get_output_type(&self, other: &Self, op: &Op) -> Option<TypeLayout> {
+    pub fn get_output_type(
+        &self,
+        other: &Self,
+        op: &Op,
+        flags: &TypecheckFlags<impl Deref<Target = ClassType> + Debug>,
+    ) -> Option<TypeLayout> {
         use TypeLayout::*;
 
         let lhs = self.disregard_distractors(false);
@@ -1713,21 +1772,21 @@ impl TypeLayout {
             (TypeLayout::Generic(g1), TypeLayout::Generic(g2)) => {
                 let t1 = g1.try_get_lock()?;
                 let t2 = g2.try_get_lock()?;
-                return t1.get_output_type(&t2, op);
+                return t1.get_output_type(&t2, op, flags);
             }
             (TypeLayout::Generic(g), y) | (y, TypeLayout::Generic(g)) => {
                 let x = g.try_get_lock()?;
-                return x.get_output_type(y, op);
+                return x.get_output_type(y, op, flags);
             }
             (TypeLayout::Function(f), TypeLayout::Class(class_type)) if f.is_constructor() => {
                 let class_constructor = TypeLayout::Function(class_type.constructor());
                 let f_as_typelayout = TypeLayout::Function(f.clone());
-                return f_as_typelayout.get_output_type(&class_constructor, op);
+                return f_as_typelayout.get_output_type(&class_constructor, op, flags);
             }
             (TypeLayout::Class(class_type), TypeLayout::Function(f)) if f.is_constructor() => {
                 let class_constructor = TypeLayout::Function(class_type.constructor());
                 let f_as_typelayout = TypeLayout::Function(f.clone());
-                return class_constructor.get_output_type(&f_as_typelayout, op);
+                return class_constructor.get_output_type(&f_as_typelayout, op, flags);
             }
             _ => (),
         }
@@ -1736,8 +1795,16 @@ impl TypeLayout {
             return Some(TypeLayout::Native(NativeType::Bool));
         }
 
-        if let (_, Optional(None), Eq | Neq) | (Optional(None), _, Eq | Neq) = (lhs, other, op) {
-            return Some(TypeLayout::Native(NativeType::Bool));
+        match (lhs, other, op) {
+            (_, Optional(None), Eq | Neq) | (Optional(None), _, Eq | Neq) => {
+                return Some(TypeLayout::Native(NativeType::Bool))
+            }
+            (x, Optional(Some(y)), Eq | Neq) | (Optional(Some(y)), x, Eq | Neq)
+                if x.eq_complex(y, flags) =>
+            {
+                return Some(TypeLayout::Native(NativeType::Bool))
+            }
+            _ => (),
         }
 
         let lhs = lhs.disregard_optional()?;
@@ -1745,11 +1812,11 @@ impl TypeLayout {
 
         match op {
             Op::Is => return Some(TypeLayout::Native(NativeType::Bool)),
-            Op::AddAssign => return lhs.get_output_type(other, &Op::Add),
-            Op::SubAssign => return lhs.get_output_type(other, &Op::Subtract),
-            Op::MulAssign => return lhs.get_output_type(other, &Op::Multiply),
-            Op::DivAssign => return lhs.get_output_type(other, &Op::Divide),
-            Op::ModAssign => return lhs.get_output_type(other, &Op::Modulo),
+            Op::AddAssign => return lhs.get_output_type(other, &Op::Add, flags),
+            Op::SubAssign => return lhs.get_output_type(other, &Op::Subtract, flags),
+            Op::MulAssign => return lhs.get_output_type(other, &Op::Multiply, flags),
+            Op::DivAssign => return lhs.get_output_type(other, &Op::Divide, flags),
+            Op::ModAssign => return lhs.get_output_type(other, &Op::Modulo, flags),
             _ => (),
         }
 
@@ -1839,10 +1906,14 @@ impl TypeLayout {
         }
     }
 
-    pub(crate) fn eq_for_indexing(&self, value: &Value) -> Result<bool> {
+    pub(crate) fn eq_for_indexing(
+        &self,
+        value: &Value,
+        flags: &TypecheckFlags<impl Deref<Target = ClassType> + Debug>,
+    ) -> Result<bool> {
         match self {
             Self::ValidIndexes(end) => ListBound::val_fits_between(end, value),
-            other => Ok(&value.for_type()? == other),
+            other => Ok(&value.for_type(flags)? == other),
         }
     }
 
@@ -1857,12 +1928,6 @@ impl TypeLayout {
 
 pub(crate) trait IntoType {
     fn for_type(&self) -> Result<TypeLayout>;
-    fn consume_for_type(self) -> Result<TypeLayout>
-    where
-        Self: Sized,
-    {
-        self.for_type()
-    }
 }
 
 impl Parser {

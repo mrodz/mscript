@@ -252,7 +252,11 @@ impl Parser {
         }
 
         let value = Self::value(value)?;
-        let value_ty = value.for_type().to_err_vec()?;
+        let value_ty = value
+            .for_type(&TypecheckFlags::use_class(
+                input.user_data().get_type_of_executing_class(),
+            ))
+            .to_err_vec()?;
 
         let expected_ty = path.expected_type();
 

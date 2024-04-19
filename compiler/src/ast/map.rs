@@ -142,18 +142,32 @@ impl Parser {
                     errors.append(&mut some_errors)
                 }
                 (Ok(key), Ok(value)) => {
-                    let maybe_class_type = input.user_data().get_type_of_executing_class();
+                    let maybe_class_type = {
+                        input
+                            .user_data()
+                            .get_type_of_executing_class()
+                            .map(|x| x.clone())
+                    };
 
-                    let key_type = key.for_type().unwrap();
-                    let flags = TypecheckFlags::use_class(maybe_class_type);
+                    let key_type = key
+                        .for_type(&TypecheckFlags::use_class(maybe_class_type.as_ref()))
+                        .unwrap();
 
-                    if !key_type.eq_complex(map_type.key_type(), &flags) {
+                    if !key_type.eq_complex(
+                        map_type.key_type(),
+                        &TypecheckFlags::use_class(maybe_class_type.as_ref()),
+                    ) {
                         errors.push(new_err(key_span, &input.user_data().get_source_file_name(), format!("This map expects keys with type `{}`, but instead found type `{key_type}`", map_type.key_type())))
                     }
 
-                    let value_type = value.for_type().unwrap();
+                    let value_type = value
+                        .for_type(&TypecheckFlags::use_class(maybe_class_type.as_ref()))
+                        .unwrap();
 
-                    if !value_type.eq_complex(map_type.value_type(), &flags) {
+                    if !value_type.eq_complex(
+                        map_type.value_type(),
+                        &TypecheckFlags::use_class(maybe_class_type.as_ref()),
+                    ) {
                         errors.push(new_err(value_span, &input.user_data().get_source_file_name(), format!("This map expects values with type `{}`, but instead found type `{value_type}`", map_type.value_type())))
                     }
 
