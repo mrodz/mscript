@@ -1800,7 +1800,7 @@ impl TypeLayout {
                 return Some(TypeLayout::Native(NativeType::Bool))
             }
             (x, Optional(Some(y)), Eq | Neq) | (Optional(Some(y)), x, Eq | Neq)
-                if x.eq_complex(y, flags) =>
+                if cfg!(feature = "allow_nil_through_eq") && x.eq_complex(y, flags) =>
             {
                 return Some(TypeLayout::Native(NativeType::Bool))
             }

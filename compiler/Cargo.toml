@@ -20,3 +20,4 @@ rand = "0.8.5"
 [features]
 debug = []
 output_hr = []
+allow_nil_through_eq = []
