@@ -233,6 +233,17 @@ impl GcMap {
             .map(|kv| (kv.0.clone(), kv.1.clone()))
             .collect::<Vec<_>>()
     }
+
+    pub fn clear(&self) {
+        self.0.borrow_mut().clear();
+    }
+
+    pub fn remove(&self, key: Primitive) -> Result<Option<Primitive>> {
+        Ok(self
+            .0
+            .borrow_mut()
+            .remove(&key.move_out_of_heap_primitive()?))
+    }
 }
 
 #[derive(Clone, Trace, Finalize, Debug, Default)]
@@ -490,6 +501,7 @@ impl Primitive {
                 "push" => Ok(PRIMITIVE_MODULE.vector_push()),
                 "join" => Ok(PRIMITIVE_MODULE.vector_join()),
                 "index_of" => Ok(PRIMITIVE_MODULE.vector_index_of()),
+                "clear" => Ok(PRIMITIVE_MODULE.vector_clear()),
                 _ => Err(ret),
             }),
             ret @ P::Str(..) => Ok(match property {
@@ -540,6 +552,8 @@ impl Primitive {
                 "keys" => Ok(PRIMITIVE_MODULE.map_keys()),
                 "values" => Ok(PRIMITIVE_MODULE.map_values()),
                 "pairs" => Ok(PRIMITIVE_MODULE.map_pairs()),
+                "clear" => Ok(PRIMITIVE_MODULE.map_clear()),
+                "remove" => Ok(PRIMITIVE_MODULE.map_remove()),
                 _ => Err(ret),
             }),
             ret => Ok(Err(ret)),

@@ -226,44 +226,9 @@ impl Display for CompiledItem {
 }
 
 impl CompiledItem {
-    pub fn is_loop_instruction(&self) -> bool {
-        const WHILE_LOOP: u8 = 0x31;
-        matches!(self, Self::Instruction { id: WHILE_LOOP, .. })
-    }
-
-    pub fn is_done_instruction(&self) -> bool {
-        const DONE: u8 = 0x27;
-        const JMP_POP: u8 = 0x32;
-        matches!(
-            self,
-            Self::Instruction {
-                id: DONE | JMP_POP,
-                ..
-            }
-        )
-    }
-
     pub fn repr(&self, use_string_version: bool) -> Result<String> {
         fn fix_arg_if_needed(arg: &str) -> Result<Cow<str>> {
             Ok(Cow::Owned("\"".to_owned() + arg + "\""))
-            // let starts = arg.starts_with('"');
-            // let ends = arg.ends_with('"') && !arg.ends_with(r#"\""#);
-            //
-            // if starts ^ ends {
-            //     bail!("non-matching `\"` on arg {arg} ({starts} & {ends})")
-            // }
-            //
-            // let has_quotes = starts && ends;
-            //
-            // if !has_quotes && arg.contains(' ') {
-            //     let mut combined = String::with_capacity(arg.len() + 2);
-            //     combined.push('"');
-            //     combined.push_str(arg);
-            //     combined.push('"');
-            //     Ok(Cow::Owned(combined))
-            // } else {
-            //     Ok(Cow::Borrowed(arg))
-            // }
         }
 
         match self {
