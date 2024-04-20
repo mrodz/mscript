@@ -189,3 +189,65 @@ fn two_sum() {
     )
     .unwrap()
 }
+
+#[test]
+fn longest_substring() {
+    eval(
+        r#"
+
+        ###
+		@see https://leetcode.com/problems/longest-substring-without-repeating-characters
+		###
+        length_of_longest_substring = fn(input: str) -> int {
+            letter_frequency = map[str, bool]
+
+            start_index = 0
+
+            result = -1
+
+            from 0 to input.len(), i {
+                if letter_frequency[input[i]] != nil {
+                    length = i - start_index
+
+                    if length > result {
+                        result = length
+                    }
+
+                    letter_frequency.clear()
+                    letter_frequency[input[i]] = true
+
+                    start_index = i
+                    continue
+                }
+
+                letter_frequency[input[i]] = true
+            }
+
+            if result == -1 {
+                return input.len()
+            } else {
+                return result
+            }
+        }
+
+        test_cases = map[str, int] {
+            "abcabcbb": 3,
+            "bbbbb": 1,
+            "pwwkew": 3,
+            "nviaj": 5,
+            "ckilbkd": 5,
+            "GEEKSFORGEEKS": 7,
+        }
+
+        pairs = test_cases.pairs()
+
+        from 0 to pairs.len(), i {
+            [key, value] = pairs[i]
+
+            print "Testing str: \"" + key + "\", expecting " + value
+            assert length_of_longest_substring(key) == value
+        }
+    "#,
+    )
+    .unwrap()
+}

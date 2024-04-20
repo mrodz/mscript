@@ -544,6 +544,21 @@ impl GenericType {
     }
 }
 
+impl<T> From<T> for ScopeReturnStatus
+where
+    T: Into<TypeLayout>,
+{
+    fn from(value: T) -> Self {
+        Self::Should(Cow::Owned(value.into()))
+    }
+}
+
+impl From<TypeLayout> for Cow<'_, TypeLayout> {
+    fn from(value: TypeLayout) -> Self {
+        Self::Owned(value)
+    }
+}
+
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub(crate) enum TypeLayout {
     Function(FunctionType),
@@ -702,6 +717,38 @@ macro_rules! new_assoc_function {
 }
 
 impl TypeLayout {
+    pub const fn int() -> Self {
+        Self::Native(NativeType::Int)
+    }
+
+    pub const fn bigint() -> Self {
+        Self::Native(NativeType::BigInt)
+    }
+
+    pub const fn float() -> Self {
+        Self::Native(NativeType::Float)
+    }
+
+    pub const fn byte() -> Self {
+        Self::Native(NativeType::Byte)
+    }
+
+    pub const fn str() -> Self {
+        Self::Native(NativeType::Str(StrWrapper::unknown_size()))
+    }
+
+    pub const fn bool() -> Self {
+        Self::Native(NativeType::Bool)
+    }
+
+    pub fn optional_of(self) -> Self {
+        Self::Optional(Some(Box::new(Cow::Owned(self))))
+    }
+
+    pub fn list_of(self) -> Self {
+        Self::List(ListType::Open(Box::new(Cow::Owned(self))))
+    }
+
     /// Returns whether a value is boolean. This function **does not** supply the value of the boolean.
     pub fn is_boolean(&self) -> bool {
         let me = self.get_type_recursively();
@@ -1055,7 +1102,7 @@ impl TypeLayout {
                     "inner_capacity" => return Some(new_assoc_function!(vec![], @int)),
                     "ensure_inner_capacity" => {
                         return Some(
-                            new_assoc_function!(vec![Cow::Owned(TypeLayout::Native(NativeType::Int))], @void),
+                            new_assoc_function!(vec![Cow::Owned(TypeLayout::int())], @void),
                         )
                     }
                     _ => (),
@@ -1072,8 +1119,8 @@ impl TypeLayout {
 
                     match property_name {
                         "remove" => Some(new_assoc_function!(
-                            vec![Cow::Owned(TypeLayout::Native(NativeType::Int))],
-                            ScopeReturnStatus::Should(list_type)
+                            vec![Cow::Owned(TypeLayout::int())],
+                            list_type.into_owned().into()
                         )),
                         "reverse" => Some(new_assoc_function!(vec![], @void)),
                         "push" => Some(new_assoc_function!(vec![list_type], @void)),
@@ -1082,9 +1129,9 @@ impl TypeLayout {
 
                             let callback_function_parameters =
                                 FunctionParameters::TypesOnly(vec![list_type]);
-                            let callback_return_type = ScopeReturnStatus::Should(Cow::Owned(
-                                TypeLayout::Generic(generic_constraint.clone()),
-                            ));
+                            let callback_return_type =
+                                TypeLayout::Generic(generic_constraint.clone()).into();
+
                             let callback_type = TypeLayout::Function(FunctionType::new(
                                 Rc::new(callback_function_parameters),
                                 callback_return_type,
@@ -1092,21 +1139,18 @@ impl TypeLayout {
                                 false,
                             ));
 
-                            let resulting_list = TypeLayout::List(ListType::Open(Box::new(
-                                Cow::Owned(TypeLayout::Generic(generic_constraint)),
-                            )));
+                            let resulting_list = TypeLayout::Generic(generic_constraint).list_of();
 
                             Some(new_assoc_function!(
                                 vec![Cow::Owned(callback_type)],
-                                ScopeReturnStatus::Should(Cow::Owned(resulting_list))
+                                resulting_list.into()
                             ))
                         }
                         "filter" => {
                             let callback_function_parameters =
                                 FunctionParameters::TypesOnly(vec![list_type]);
-                            let callback_return_type = ScopeReturnStatus::Should(Cow::Owned(
-                                TypeLayout::Native(NativeType::Bool),
-                            ));
+                            let callback_return_type = TypeLayout::bool().into();
+
                             let callback_type = TypeLayout::Function(FunctionType::new(
                                 Rc::new(callback_function_parameters),
                                 callback_return_type,
@@ -1114,11 +1158,9 @@ impl TypeLayout {
                                 false,
                             ));
 
-                            let resulting_list = TypeLayout::List(open_list_type.into_owned());
-
                             Some(new_assoc_function!(
                                 vec![Cow::Owned(callback_type)],
-                                ScopeReturnStatus::Should(Cow::Owned(resulting_list))
+                                TypeLayout::List(open_list_type.into_owned()).into()
                             ))
                         }
                         "join" => {
@@ -1126,18 +1168,14 @@ impl TypeLayout {
 
                             Some(new_assoc_function!(
                                 vec![Cow::Owned(list_param.clone())],
-                                ScopeReturnStatus::Should(Cow::Owned(list_param))
+                                list_param.into()
                             ))
                         }
                         "index_of" => {
-                            let return_type = TypeLayout::Optional(Some(Box::new(Cow::Owned(
-                                TypeLayout::Native(NativeType::Int),
-                            ))));
-                            Some(new_assoc_function!(
-                                vec![list_type],
-                                ScopeReturnStatus::Should(Cow::Owned(return_type))
-                            ))
+                            let return_type = TypeLayout::int().optional_of();
+                            Some(new_assoc_function!(vec![list_type], return_type.into()))
                         }
+                        "clear" => Some(new_assoc_function!(vec![], @void)),
                         _ => None,
                     }
                 } else {
@@ -1146,134 +1184,64 @@ impl TypeLayout {
             }
             Self::Native(NativeType::Str(..)) => match property_name {
                 "len" => Some(new_assoc_function!(vec![], @int)),
-                "substring" | "delete" => {
-                    let int_type = TypeLayout::Native(NativeType::Int);
-                    let str_type = Cow::Owned(TypeLayout::Native(NativeType::Str(
-                        StrWrapper::unknown_size(),
-                    )));
-                    Some(new_assoc_function!(
-                        vec![Cow::Owned(int_type.clone()), Cow::Owned(int_type)],
-                        ScopeReturnStatus::Should(str_type)
-                    ))
-                }
-                "contains" => {
-                    let str_type = Cow::Owned(TypeLayout::Native(NativeType::Str(
-                        StrWrapper::unknown_size(),
-                    )));
-                    Some(new_assoc_function!(
-                        vec![str_type],
-                        ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Native(NativeType::Bool)))
-                    ))
-                }
-                "index_of" => {
-                    let str_type = Cow::Owned(TypeLayout::Native(NativeType::Str(
-                        StrWrapper::unknown_size(),
-                    )));
-
-                    let return_type = TypeLayout::Optional(Some(Box::new(Cow::Owned(
-                        TypeLayout::Native(NativeType::Int),
-                    ))));
-
-                    Some(new_assoc_function!(
-                        vec![str_type],
-                        ScopeReturnStatus::Should(Cow::Owned(return_type))
-                    ))
-                }
+                "substring" | "delete" => Some(new_assoc_function!(
+                    vec![Cow::Owned(TypeLayout::int()), Cow::Owned(TypeLayout::int())],
+                    TypeLayout::str().into()
+                )),
+                "contains" => Some(new_assoc_function!(
+                    vec![TypeLayout::str().into()],
+                    TypeLayout::bool().into()
+                )),
+                "index_of" => Some(new_assoc_function!(
+                    vec![TypeLayout::str().into()],
+                    TypeLayout::int().optional_of().into()
+                )),
                 "inner_capacity" => Some(new_assoc_function!(vec![], @int)),
                 "reverse" => Some(new_assoc_function!(vec![], @str)),
-                "insert" => {
-                    let int_type = TypeLayout::Native(NativeType::Int);
-                    let str_type = TypeLayout::Native(NativeType::Str(StrWrapper::unknown_size()));
-                    Some(
-                        new_assoc_function!(vec![Cow::Owned(str_type.clone()), Cow::Owned(int_type)], @str),
-                    )
-                }
-                "replace" => {
-                    let str_type = TypeLayout::Native(NativeType::Str(StrWrapper::unknown_size()));
-                    Some(
-                        new_assoc_function!(vec![Cow::Owned(str_type.clone()), Cow::Owned(str_type)], @str),
-                    )
-                }
+                "insert" => Some(
+                    new_assoc_function!(vec![TypeLayout::str().into(), TypeLayout::int().into()], @str),
+                ),
+                "replace" => Some(
+                    new_assoc_function!(vec![TypeLayout::str().into(), TypeLayout::str().into()], @str),
+                ),
 
-                "parse_int" => {
-                    let return_type = TypeLayout::Optional(Some(Box::new(Cow::Owned(
-                        TypeLayout::Native(NativeType::Int),
-                    ))));
-
-                    Some(new_assoc_function!(
-                        vec![],
-                        ScopeReturnStatus::Should(Cow::Owned(return_type))
-                    ))
-                }
-                "parse_int_radix" => {
-                    let return_type = TypeLayout::Optional(Some(Box::new(Cow::Owned(
-                        TypeLayout::Native(NativeType::Int),
-                    ))));
-
-                    Some(new_assoc_function!(
-                        vec![Cow::Owned(TypeLayout::Native(NativeType::Int))],
-                        ScopeReturnStatus::Should(Cow::Owned(return_type))
-                    ))
-                }
-                "parse_bigint" => {
-                    let return_type = TypeLayout::Optional(Some(Box::new(Cow::Owned(
-                        TypeLayout::Native(NativeType::BigInt),
-                    ))));
-
-                    Some(new_assoc_function!(
-                        vec![],
-                        ScopeReturnStatus::Should(Cow::Owned(return_type))
-                    ))
-                }
-                "parse_bigint_radix" => {
-                    let return_type = TypeLayout::Optional(Some(Box::new(Cow::Owned(
-                        TypeLayout::Native(NativeType::BigInt),
-                    ))));
-
-                    Some(new_assoc_function!(
-                        vec![Cow::Owned(TypeLayout::Native(NativeType::Int))],
-                        ScopeReturnStatus::Should(Cow::Owned(return_type))
-                    ))
-                }
-                "parse_bool" => {
-                    let return_type = TypeLayout::Optional(Some(Box::new(Cow::Owned(
-                        TypeLayout::Native(NativeType::Bool),
-                    ))));
-
-                    Some(new_assoc_function!(
-                        vec![],
-                        ScopeReturnStatus::Should(Cow::Owned(return_type))
-                    ))
-                }
-                "parse_float" => {
-                    let return_type = TypeLayout::Optional(Some(Box::new(Cow::Owned(
-                        TypeLayout::Native(NativeType::Float),
-                    ))));
-
-                    Some(new_assoc_function!(
-                        vec![],
-                        ScopeReturnStatus::Should(Cow::Owned(return_type))
-                    ))
-                }
-                "parse_byte" => {
-                    let return_type = TypeLayout::Optional(Some(Box::new(Cow::Owned(
-                        TypeLayout::Native(NativeType::Byte),
-                    ))));
-
-                    Some(new_assoc_function!(
-                        vec![],
-                        ScopeReturnStatus::Should(Cow::Owned(return_type))
-                    ))
-                }
+                "parse_int" => Some(new_assoc_function!(
+                    vec![],
+                    TypeLayout::int().optional_of().into()
+                )),
+                "parse_int_radix" => Some(new_assoc_function!(
+                    vec![TypeLayout::int().into()],
+                    TypeLayout::int().optional_of().into()
+                )),
+                "parse_bigint" => Some(new_assoc_function!(
+                    vec![],
+                    TypeLayout::bigint().optional_of().into()
+                )),
+                "parse_bigint_radix" => Some(new_assoc_function!(
+                    vec![TypeLayout::int().into()],
+                    TypeLayout::bigint().optional_of().into()
+                )),
+                "parse_bool" => Some(new_assoc_function!(
+                    vec![],
+                    TypeLayout::bool().optional_of().into()
+                )),
+                "parse_float" => Some(new_assoc_function!(
+                    vec![],
+                    TypeLayout::float().optional_of().into()
+                )),
+                "parse_byte" => Some(new_assoc_function!(
+                    vec![],
+                    TypeLayout::byte().optional_of().into()
+                )),
                 "split" => {
-                    let str_type = TypeLayout::Native(NativeType::Str(StrWrapper::unknown_size()));
                     let return_array = TypeLayout::List(ListType::Mixed(vec![
-                        Cow::Owned(str_type.clone()),
-                        Cow::Owned(str_type),
+                        TypeLayout::str().into(),
+                        TypeLayout::str().into(),
                     ]));
+
                     Some(new_assoc_function!(
-                        vec![Cow::Owned(TypeLayout::Native(NativeType::Int))],
-                        ScopeReturnStatus::Should(Cow::Owned(return_array))
+                        vec![TypeLayout::int().into()],
+                        return_array.into()
                     ))
                 }
                 _ => None,
@@ -1284,24 +1252,17 @@ impl TypeLayout {
                 | NativeType::Byte
                 | NativeType::Float),
             ) => match (property_name, variant) {
-                ("pow", NativeType::Float) => Some(
-                    new_assoc_function!(vec![Cow::Owned(TypeLayout::Native(NativeType::Int))], @float),
-                ),
-                ("pow", ..) => Some(
-                    new_assoc_function!(vec![Cow::Owned(TypeLayout::Native(NativeType::Int))], @bigint),
-                ),
-                ("powf", ..) => Some(
-                    new_assoc_function!(vec![Cow::Owned(TypeLayout::Native(NativeType::Float))], @float),
-                ),
+                ("pow", NativeType::Float) => {
+                    Some(new_assoc_function!(vec![TypeLayout::int().into()], @float))
+                }
+                ("pow", ..) => Some(new_assoc_function!(vec![TypeLayout::int().into()], @bigint)),
+                ("powf", ..) => Some(new_assoc_function!(vec![TypeLayout::float().into()], @float)),
                 ("sqrt", ..) => Some(new_assoc_function!(vec![], @float)),
                 ("to_int", ..) => Some(new_assoc_function!(vec![], @int)),
                 ("to_bigint", ..) => Some(new_assoc_function!(vec![], @bigint)),
                 ("to_byte", ..) => Some(new_assoc_function!(vec![], @byte)),
                 ("to_float", ..) => Some(new_assoc_function!(vec![], @float)),
-                ("abs", ..) => Some(new_assoc_function!(
-                    vec![],
-                    ScopeReturnStatus::Should(Cow::Owned(whole_type.to_owned()))
-                )),
+                ("abs", ..) => Some(new_assoc_function!(vec![], whole_type.to_owned().into())),
                 ("to_ascii", NativeType::Byte) => Some(new_assoc_function!(vec![], @str)),
                 ("fpart", NativeType::Float) => Some(new_assoc_function!(vec![], @float)),
                 ("ipart", NativeType::Float) => Some(new_assoc_function!(vec![], @float)),
@@ -1311,10 +1272,7 @@ impl TypeLayout {
                 _ => None,
             },
             Self::Function(..) => match property_name {
-                "is_closure" => Some(new_assoc_function!(
-                    vec![],
-                    ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Native(NativeType::Bool)))
-                )),
+                "is_closure" => Some(new_assoc_function!(vec![], TypeLayout::bool().into())),
                 _ => None,
             },
             Self::Map(map_type) => match property_name {
@@ -1327,30 +1285,29 @@ impl TypeLayout {
                         Cow::Owned(map_type.key_type().to_owned()),
                         Cow::Owned(map_type.value_type().to_owned())
                     ],
-                    ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Optional(Some(Box::new(
-                        Cow::Owned(map_type.value_type().to_owned())
-                    )))))
+                    map_type.value_type().to_owned().optional_of().into()
                 )),
                 "keys" => Some(new_assoc_function!(
                     vec![],
-                    ScopeReturnStatus::Should(Cow::Owned(TypeLayout::List(ListType::Open(
-                        Box::new(Cow::Owned(map_type.key_type().to_owned()))
-                    ))))
+                    map_type.key_type().to_owned().list_of().into()
                 )),
                 "values" => Some(new_assoc_function!(
                     vec![],
-                    ScopeReturnStatus::Should(Cow::Owned(TypeLayout::List(ListType::Open(
-                        Box::new(Cow::Owned(map_type.value_type().to_owned()))
-                    ))))
+                    map_type.value_type().to_owned().list_of().into()
                 )),
                 "pairs" => Some(new_assoc_function!(
                     vec![],
-                    ScopeReturnStatus::Should(Cow::Owned(TypeLayout::List(ListType::Open(
-                        Box::new(Cow::Owned(TypeLayout::List(ListType::Mixed(vec![
-                            Cow::Owned(map_type.key_type().to_owned()),
-                            Cow::Owned(map_type.value_type().to_owned()),
-                        ]))))
-                    ))))
+                    TypeLayout::List(ListType::Mixed(vec![
+                        Cow::Owned(map_type.key_type().to_owned()),
+                        Cow::Owned(map_type.value_type().to_owned()),
+                    ]))
+                    .list_of()
+                    .into()
+                )),
+                "clear" => Some(new_assoc_function!(vec![], @void)),
+                "remove" => Some(new_assoc_function!(
+                    vec![Cow::Owned(map_type.key_type().clone())],
+                    map_type.value_type().clone().optional_of().into()
                 )),
                 _ => None,
             },

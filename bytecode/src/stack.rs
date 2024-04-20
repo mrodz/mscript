@@ -131,6 +131,9 @@ static_module_generator! {
     map_keys(BuiltInFunction::MapKeys),
     map_values(BuiltInFunction::MapValues),
     map_pairs(BuiltInFunction::MapPairs),
+    map_remove(BuiltInFunction::MapRemove),
+    map_clear(BuiltInFunction::MapClear),
+    vector_clear(BuiltInFunction::VecClear),
 }
 
 impl PrimitiveFlagsPair {
@@ -140,18 +143,13 @@ impl PrimitiveFlagsPair {
 
     pub fn primitive(&self) -> GcCellRef<Primitive> {
         GcCellRef::map(self.0.borrow(), |x| &x.0)
-        // unsafe { &(*self.0).0 }
     }
 
     pub fn flags(&self) -> GcCellRef<VariableFlags> {
         GcCellRef::map(self.0.borrow(), |x| &x.1)
-        // unsafe { &(*self.0.get()).1 }
     }
 
     pub fn set_primitive(&self, new_value: Primitive) -> Primitive {
-        // let ptr = self.0.get();
-        // let ptr = unsafe { &mut (*ptr).0 };
-        // std::mem::replace(ptr, new_value)
         let mut mutable_gc_view = self.0.borrow_mut();
         std::mem::replace(&mut mutable_gc_view.0, new_value)
     }

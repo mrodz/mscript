@@ -156,34 +156,28 @@ impl Compile for NumberLoop {
         result.push(instruction!(while_loop offset_to_end_of_loop));
         body_compiled.push(instruction!(jmp_pop offset_to_start_of_loop));
 
-        let mut loop_depth = 0;
-
         let final_body_compiled_len = body_compiled.len();
 
-        for (idx, body_item) in body_compiled.into_iter().enumerate() {
-            if body_item.is_loop_instruction() {
-                loop_depth += 1;
-            }
-
-            if body_item.is_done_instruction() {
-                loop_depth -= 1;
-            }
-
-            match body_item {
-                CompiledItem::Continue(frames_to_pop) if loop_depth == 0 => {
+        body_compiled
+            .iter_mut()
+            .enumerate()
+            .for_each(|(idx, body_item)| match body_item {
+                CompiledItem::Continue(ref frames_to_pop) => {
                     let distance_to_end = final_body_compiled_len - step_compiled_len - idx - 1;
 
                     let frames_to_pop = frames_to_pop - 1;
 
-                    result.push(instruction!(jmp_pop distance_to_end frames_to_pop))
+                    *body_item = instruction!(jmp_pop distance_to_end frames_to_pop);
                 }
-                CompiledItem::Break(frames_to_pop) if loop_depth == 0 => {
+                CompiledItem::Break(ref frames_to_pop) => {
                     let distance_to_end = final_body_compiled_len - idx;
-                    result.push(instruction!(jmp_pop distance_to_end frames_to_pop))
+
+                    *body_item = instruction!(jmp_pop distance_to_end frames_to_pop)
                 }
-                normal => result.push(normal),
-            }
-        }
+                _ => (),
+            });
+
+        result.append(&mut body_compiled);
 
         if !self.name_is_collision {
             result.push(instruction!(delete_name_scoped loop_identity end_loop_register));
