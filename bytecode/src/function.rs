@@ -74,6 +74,9 @@ pub enum BuiltInFunction {
     MapKeys,
     MapValues,
     MapPairs,
+    MapRemove,
+    MapClear,
+    VecClear,
 }
 
 type BuiltInFunctionReturnBundle = (
@@ -1009,6 +1012,35 @@ impl BuiltInFunction {
                     ))),
                     None,
                 ))
+            }
+            Self::MapRemove => {
+                let (Some(Primitive::Map(map)), Some(key)) = (arguments.first(), arguments.get(1))
+                else {
+                    unreachable!()
+                };
+
+                Ok((
+                    Some(Primitive::Optional(map.remove(key.clone())?.map(Box::new))),
+                    None,
+                ))
+            }
+            Self::MapClear => {
+                let Some(Primitive::Map(map)) = arguments.first() else {
+                    unreachable!()
+                };
+
+                map.clear();
+
+                Ok((None, None))
+            }
+            Self::VecClear => {
+                let Some(Primitive::Vector(vector)) = arguments.first() else {
+                    unreachable!()
+                };
+
+                vector.0.borrow_mut().clear();
+
+                Ok((None, None))
             }
         }
     }

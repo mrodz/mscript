@@ -131,6 +131,9 @@ static_module_generator! {
     map_keys(BuiltInFunction::MapKeys),
     map_values(BuiltInFunction::MapValues),
     map_pairs(BuiltInFunction::MapPairs),
+    map_remove(BuiltInFunction::MapRemove),
+    map_clear(BuiltInFunction::MapClear),
+    vector_clear(BuiltInFunction::VecClear),
 }
 
 impl PrimitiveFlagsPair {
