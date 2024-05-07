@@ -14,7 +14,7 @@ use pest::{
 };
 
 use crate::{
-    ast::{number, r#type::TypecheckFlags, Callable, ConstexprEvaluation},
+    ast::{number, r#type::TypecheckFlags, Callable, ConstexprEvaluation, Ident},
     instruction,
     parser::{AssocFileData, Node, Parser, Rule},
     CompilationError, VecErr,
@@ -154,7 +154,7 @@ pub(crate) enum CallableContents {
 pub(crate) trait UnwrapSpanDisplayable: Debug + Display {}
 impl<T> UnwrapSpanDisplayable for T where T: Debug + Display {}
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ReferenceToSelf {
     Class(ClassType),
     Function,
@@ -444,8 +444,28 @@ impl Dependencies for Expr {
                 lhs_deps.append(&mut index.net_dependencies());
                 lhs_deps
             }
-            E::DotLookup { lhs, .. } => lhs.net_dependencies(),
-            E::ReferenceToSelf { .. } => vec![],
+            E::DotLookup { lhs, .. } => {
+                let x = lhs.net_dependencies();
+
+                println!("{x:?}");
+
+                x
+            }
+            E::ReferenceToSelf(reference_to_self) => {
+                let reference_to_self = match reference_to_self.borrow().clone() {
+                    ReferenceToSelf::Class(class) => TypeLayout::Class(class.clone()),
+                    _ => {
+                        log::warn!("Invalid reference to self");
+                        return vec![];
+                    }
+                };
+                let self_dependency = Dependency::new(Cow::Owned(Ident::new(
+                    "self".to_owned(),
+                    Some(Cow::Owned(reference_to_self)),
+                    false,
+                )));
+                vec![self_dependency]
+            }
             E::ReferenceToConstructor(..) => vec![],
             E::Nil => vec![],
             E::UnaryUnwrap { value, .. } => value.net_dependencies(),

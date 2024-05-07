@@ -1,0 +1,56 @@
+function __fn0
+	load_fast "self"
+	printn "*"
+	void
+	void
+	ret
+end
+function Foo::bar
+	arg "0"
+	store "self"
+	make_function "./examples/crashes/#197.mmm#__fn0" "self"
+	ret
+end
+function Foo::$constructor
+	arg "0"
+	store "self"
+	void
+	ret
+end
+function Foo
+	make_function "./examples/crashes/#197.mmm#Foo::bar"
+	store_fast "Foo::bar"
+	make_object
+	store_fast "#1"
+	make_function "./examples/crashes/#197.mmm#Foo::$constructor"
+	store_fast "#0"
+	load_fast "#1"
+	load_fast "#0"
+	call
+	load_fast "#1"
+	ret
+end
+function __module__
+	make_function "./examples/crashes/#197.mmm#Foo"
+	export_special "Foo" "Foo"
+	load "Foo"
+	store_fast "#1"
+	load_fast "#1"
+	call
+	store "foo"
+	load "foo"
+	store_fast "#1"
+	load_fast "#1"
+	lookup "bar"
+	store_fast "#2"
+	ld_self "#1"
+	load_fast "#2"
+	call
+	store "x"
+	load "x"
+	store_fast "#1"
+	load_fast "#1"
+	call
+	void
+	ret_mod
+end
