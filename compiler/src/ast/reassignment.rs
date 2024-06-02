@@ -108,52 +108,55 @@ fn parse_path(
 ) -> Result<(ReassignmentPath, bool), Vec<anyhow::Error>> {
     PRATT_PARSER
         .map_primary(|primary| {
-            assert!(matches!(primary.as_rule(), Rule::ident));
+            match primary.as_rule() {
+                Rule::ident => {
+                    let raw_string = primary.as_str();
 
-            let raw_string = primary.as_str();
+                    if raw_string == "self" {
+                        if let Some(class_type) = user_data.get_type_of_executing_class() {
+                            // cloning ClassType is cheap
+                            let class_type = class_type.clone();
+                            return Ok((
+                                ReassignmentPath::ReferenceToSelf(Some(Cow::Owned(
+                                    TypeLayout::Class(class_type),
+                                ))),
+                                primary.as_span(),
+                                false,
+                            ));
+                        }
 
-            if raw_string == "self" {
-                if let Some(class_type) = user_data.get_type_of_executing_class() {
-                    // cloning ClassType is cheap
-                    let class_type = class_type.clone();
-                    return Ok((
-                        ReassignmentPath::ReferenceToSelf(Some(Cow::Owned(TypeLayout::Class(
-                            class_type,
-                        )))),
+                        return Ok((
+                            ReassignmentPath::ReferenceToSelf(None),
+                            primary.as_span(),
+                            true,
+                        ));
+                    }
+
+                    let (ident, is_callback) = user_data
+                        .get_dependency_flags_from_name(raw_string)
+                        .with_context(|| {
+                            new_err(
+                                primary.as_span(),
+                                &user_data.get_source_file_name(),
+                                "use of undeclared variable".into(),
+                            )
+                        })
+                        .to_err_vec()?;
+
+                    let cloned = if is_callback {
+                        ident.clone().wrap_in_callback().to_err_vec()?
+                    } else {
+                        ident.clone()
+                    };
+
+                    Ok((
+                        ReassignmentPath::Ident(cloned),
                         primary.as_span(),
-                        false,
-                    ));
+                        ident.is_const(),
+                    ))
                 }
-
-                return Ok((
-                    ReassignmentPath::ReferenceToSelf(None),
-                    primary.as_span(),
-                    true,
-                ));
+                x => unimplemented!("Cannot parse a path from {x:?}"),
             }
-
-            let (ident, is_callback) = user_data
-                .get_dependency_flags_from_name(raw_string)
-                .with_context(|| {
-                    new_err(
-                        primary.as_span(),
-                        &user_data.get_source_file_name(),
-                        "use of undeclared variable".into(),
-                    )
-                })
-                .to_err_vec()?;
-
-            let cloned = if is_callback {
-                ident.clone().wrap_in_callback().to_err_vec()?
-            } else {
-                ident.clone()
-            };
-
-            Ok((
-                ReassignmentPath::Ident(cloned),
-                primary.as_span(),
-                ident.is_const(),
-            ))
         })
         .map_postfix(|lhs, op| match op.as_rule() {
             Rule::list_index => {

@@ -251,3 +251,41 @@ fn longest_substring() {
     )
     .unwrap()
 }
+
+#[test]
+fn map_type_1() {
+    eval(
+        r#"
+		take_map = fn(input: map[str, int]) {
+			# ...
+		}
+
+		take_map(map[str, int])
+
+		class Foo {
+			inner_map: map[float, float]
+		}
+
+		foo = Foo()
+		foo.inner_map = map[float, float] {
+			3.1415: 6.283
+		}
+	"#,
+    )
+    .unwrap()
+}
+
+#[test]
+#[should_panic = "type mismatch when calling function (argument #1 was expected to be `map[str, int]` based on type signature, instead found `map[str, str]`)"]
+fn bad_map_type_1() {
+    eval(
+        r#"
+		take_map = fn(input: map[str, int]) {
+			# ...
+		}
+
+		take_map(map[str, str])
+	"#,
+    )
+    .unwrap()
+}
