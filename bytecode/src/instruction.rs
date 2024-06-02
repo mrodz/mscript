@@ -942,7 +942,11 @@ pub mod implementations {
             bail!("`unwrap` requires a primitive at the top of the local operating stack");
         };
 
-        if let Primitive::Optional(optional) = primitive {
+        if let Primitive::Optional(optional) = primitive
+            .move_out_of_heap_primitive_borrow()
+            .context("could not move out of heap primitive")?
+            .as_ref()
+        {
             if let Some(new_primitive) = optional {
                 *primitive = *new_primitive.clone();
             } else {
@@ -959,7 +963,7 @@ pub mod implementations {
 
     #[inline(always)]
     pub(crate) fn jmp_not_nil(ctx: &mut Ctx, args: &[String]) -> Result<()> {
-        let Some(primitive) = ctx.get_last_op_item_mut() else {
+        let Some(primitive) = ctx.get_last_op_item() else {
             bail!("`jmp_not_nil` requires a primitive at the top of the local operating stack");
         };
 
@@ -971,7 +975,11 @@ pub mod implementations {
             .parse::<isize>()
             .context("jmp_not_nil needs lines_to_jump: isize")?;
 
-        if let Primitive::Optional(None) = primitive {
+        if let Primitive::Optional(None) = primitive
+            .move_out_of_heap_primitive_borrow()
+            .context("could not move out of heap primitive")?
+            .as_ref()
+        {
             ctx.pop();
             return Ok(());
         }

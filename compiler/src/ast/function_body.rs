@@ -23,7 +23,7 @@ impl Dependencies for Block {
     fn dependencies(&self) -> Vec<Dependency> {
         let block_dependencies = self.0.iter().flat_map(|x| x.net_dependencies()).collect();
 
-        dbg!(block_dependencies)
+        block_dependencies
     }
 
     fn net_dependencies(&self) -> Vec<Dependency> {

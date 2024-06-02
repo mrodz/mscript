@@ -197,7 +197,7 @@ impl Dependencies for Value {
     fn dependencies(&self) -> Vec<Dependency> {
         let x = match self {
             Self::Function(function) => function.net_dependencies(),
-            Self::Ident(name) => dbg!(name.net_dependencies()),
+            Self::Ident(name) => name.net_dependencies(),
             Self::Number(number) => number.net_dependencies(),
             Self::String(string) => string.net_dependencies(),
             Self::MathExpr(math_expr) => math_expr.net_dependencies(),
@@ -206,9 +206,7 @@ impl Dependencies for Value {
             Self::Map(map) => map.net_dependencies(),
         };
 
-        dbg!(self);
-
-        dbg!(x)
+        x
     }
 }
 

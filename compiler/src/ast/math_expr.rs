@@ -14,7 +14,7 @@ use pest::{
 };
 
 use crate::{
-    ast::{number, r#type::TypecheckFlags, Callable, ConstexprEvaluation, Ident},
+    ast::{number, r#type::TypecheckFlags, Callable, ConstexprEvaluation},
     instruction,
     parser::{AssocFileData, Node, Parser, Rule},
     CompilationError, VecErr,
@@ -159,6 +159,7 @@ pub enum ReferenceToSelf {
     Class(ClassType),
     Function,
     Invalid,
+    InvalidClosureCapture,
 }
 
 #[derive(Debug)]
@@ -261,10 +262,10 @@ impl Expr {
                 Ok(return_type.clone().into_owned())
             }
             Expr::ReferenceToSelf(is_valid) => {
-                if let ReferenceToSelf::Class(class_type) = &*is_valid.borrow() {
-                    Ok(TypeLayout::ClassSelf(Some(class_type.clone())))
-                } else {
-                    bail!("this reference to `self` is not valid here")
+                match  &*is_valid.borrow() {
+                    ReferenceToSelf::Class(class_type) => Ok(TypeLayout::ClassSelf(Some(class_type.clone()))),
+                    ReferenceToSelf::InvalidClosureCapture => bail!("This reference to `self` refers to the closure, and not the class. Copy the fields you need into separate variables that *can* be captured if this is desired behavior"),
+                    _ => bail!("This reference to `self` is not valid here"),
                 }
             }
             Expr::ReferenceToConstructor(class_type) => {
@@ -446,11 +447,10 @@ impl Dependencies for Expr {
             }
             E::DotLookup { lhs, .. } => {
                 let x = lhs.net_dependencies();
-
-                println!("{x:?}");
-
                 x
             }
+            E::ReferenceToSelf(..) => vec![],
+            #[cfg(not)]
             E::ReferenceToSelf(reference_to_self) => {
                 let reference_to_self = match reference_to_self.borrow().clone() {
                     ReferenceToSelf::Class(class) => TypeLayout::Class(class.clone()),
@@ -692,7 +692,11 @@ fn parse_expr(
                         match raw_string {
                             "self" => {
                                 let self_reference = if let Some(c) = user_data.get_type_of_executing_class() {
-                                    ReferenceToSelf::Class(c.to_owned())
+                                    if user_data.is_function_a_class_method() {
+                                        ReferenceToSelf::Class(c.to_owned())
+                                    } else {
+                                        ReferenceToSelf::InvalidClosureCapture
+                                    }
                                 } else {
                                     ReferenceToSelf::Invalid
                                 };
@@ -897,7 +901,7 @@ fn parse_expr(
                     _ => ()
                 }
 
-                let lhs_ty = lhs.for_type(&TypecheckFlags::use_class(user_data.get_type_of_executing_class())).details(l_span.as_ref().unwrap().as_span(), &user_data.get_source_file_name(), "bad expression 1").to_err_vec()?;
+                let lhs_ty = lhs.for_type(&TypecheckFlags::use_class(user_data.get_type_of_executing_class())).details(l_span.as_ref().unwrap().as_span(), &user_data.get_source_file_name(), "bad expression (E1)").to_err_vec()?;
 
                 let Some(function_type) = lhs_ty.is_callable() else {
                     return Err(vec![new_err(l_span.unwrap().as_span(), &user_data.get_source_file_name(), format!("`{lhs_ty}` is not callable"))]);
@@ -914,7 +918,7 @@ fn parse_expr(
 
                 let lhs_span = lhs_span.unwrap().as_span();
 
-                let lhs_ty = lhs_expr.for_type(&TypecheckFlags::use_class(user_data.get_type_of_executing_class())).details(lhs_span, &user_data.get_source_file_name(), "bad expression 2").to_err_vec()?;
+                let lhs_ty = lhs_expr.for_type(&TypecheckFlags::use_class(user_data.get_type_of_executing_class())).details(lhs_span, &user_data.get_source_file_name(), "bad expression (E2)").to_err_vec()?;
 
                 let index: Node = Node::new_with_user_data(op.clone(), Rc::clone(&user_data));
                 let index: Index = Parser::list_index(index, lhs_ty)?;
@@ -925,7 +929,7 @@ fn parse_expr(
                 let (lhs, l_span) = lhs?;
                 let l_span = l_span.unwrap().as_span();
 
-                let lhs_ty = lhs.for_type(&TypecheckFlags::use_class(user_data.get_type_of_executing_class())).details(l_span, &user_data.get_source_file_name(), "bad expression 3").to_err_vec()?;
+                let lhs_ty = lhs.for_type(&TypecheckFlags::use_class(user_data.get_type_of_executing_class())).details(l_span, &user_data.get_source_file_name(), "bad expression (E3)").to_err_vec()?;
                 let lhs_ty = lhs_ty.assume_type_of_self(&user_data);
 
                 let index: Node = Node::new_with_user_data(op.clone(), Rc::clone(&user_data));
@@ -990,7 +994,7 @@ fn parse_expr(
         .details(
             span.unwrap().as_span(),
             &user_data.get_source_file_name(),
-            "bad expression 4",
+            "bad expression (E4)",
         )
         .to_err_vec()
     })

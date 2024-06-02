@@ -12,7 +12,7 @@ pub struct PrintStatement(Value);
 
 impl Dependencies for PrintStatement {
     fn dependencies(&self) -> Vec<Dependency> {
-        dbg!(self.0.net_dependencies())
+        self.0.net_dependencies()
     }
 }
 

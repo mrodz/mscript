@@ -128,7 +128,11 @@ impl Assignment {
 impl Dependencies for Assignment {
     fn supplies(&self) -> Vec<Dependency> {
         if !self.flags().contains(AssignmentFlag::modify()) {
-            return self.idents.iter().map(|ident| Dependency::new(Cow::Borrowed(ident))).collect();
+            return self
+                .idents
+                .iter()
+                .map(|ident| Dependency::new(Cow::Borrowed(ident)))
+                .collect();
         }
 
         // We are not introducing a new variable, just pointing to a callback variable.

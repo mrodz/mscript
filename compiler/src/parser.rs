@@ -379,9 +379,24 @@ impl AssocFileData {
         let mut iter = self.scopes.iter();
 
         let this_frame = iter.next().unwrap();
-        let parent_scope = iter.next().unwrap();
 
-        this_frame.is_class() || parent_scope.is_class()
+        if this_frame.is_class() {
+            log::debug!("Called `is_function_a_class_method` on a class type");
+            return true;
+        }
+
+        let mut found_function = false;
+
+        for scope in self.scopes.iter() {
+            if found_function {
+                return scope.is_class();
+            }
+            if scope.is_function() {
+                found_function = true;
+            }
+        }
+
+        false
     }
 
     pub fn get_dependency_flags_from_name(&self, dependency: &str) -> Option<(Ref<Ident>, bool)> {

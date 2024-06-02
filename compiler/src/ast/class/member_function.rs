@@ -6,7 +6,7 @@ use bytecode::compilation_bridge::id::{MAKE_FUNCTION, RET};
 use crate::{
     ast::{
         function::FunctionType, Block, CompilationState, Compile, CompiledFunctionId, CompiledItem,
-        Dependencies, Dependency, FunctionParameters, Ident, TypeLayout, WalkForType,
+        Dependencies, FunctionParameters, Ident, TypeLayout, WalkForType,
     },
     instruction,
     parser::{Node, Parser, Rule},
@@ -119,14 +119,12 @@ impl Dependencies for MemberFunction {
     }
 
     fn supplies(&self) -> Vec<crate::ast::Dependency> {
-        let mut params = self.parameters.supplies();
-        params.push(Dependency::new(Cow::Owned(Ident::new(
-            "self".to_owned(),
-            Some(Cow::Owned(TypeLayout::Class(self.class_type.clone()))),
-            false,
-        ))));
-
-        params
+        self.parameters.supplies()
+        // params.push(Dependency::new(Cow::Owned(Ident::new(
+        //     "self".to_owned(),
+        //     Some(Cow::Owned(TypeLayout::Class(self.class_type.clone()))),
+        //     false,
+        // ))));
     }
 }
 
