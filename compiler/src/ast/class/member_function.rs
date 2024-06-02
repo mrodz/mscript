@@ -14,18 +14,20 @@ use crate::{
     BytecodePathStr, VecErr,
 };
 
+use super::ClassType;
+
 #[derive(Debug)]
 pub(crate) struct MemberFunction {
     ident: Ident,
     parameters: Rc<FunctionParameters>,
     body: Block,
     path_str: Arc<PathBuf>,
-    class_name: Arc<String>,
+    class_type: ClassType,
 }
 
 impl MemberFunction {
     pub fn symbolic_id(&self) -> String {
-        format!("{}::{}", self.class_name, self.ident().name())
+        format!("{}::{}", self.class_type.name(), self.ident().name())
     }
 }
 
@@ -118,6 +120,11 @@ impl Dependencies for MemberFunction {
 
     fn supplies(&self) -> Vec<crate::ast::Dependency> {
         self.parameters.supplies()
+        // params.push(Dependency::new(Cow::Owned(Ident::new(
+        //     "self".to_owned(),
+        //     Some(Cow::Owned(TypeLayout::Class(self.class_type.clone()))),
+        //     false,
+        // ))));
     }
 }
 
@@ -162,7 +169,7 @@ impl Parser {
             parameters,
             path_str: input.user_data().bytecode_path(),
             body,
-            class_name: class_type.arced_name(),
+            class_type,
         })
     }
 }
