@@ -1993,6 +1993,10 @@ impl Parser {
 
                 ty
             }
+            Rule::user_map_type => {
+                let map = Self::map_type(ty.children().single().unwrap())?;
+                SuccessTypeSearchResult::Owned(Cow::Owned(TypeLayout::Map(map)))
+            }
             x => unreachable!("{x:?} as a type hasn't been implemented"),
         };
 
