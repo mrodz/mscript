@@ -450,22 +450,6 @@ impl Dependencies for Expr {
                 x
             }
             E::ReferenceToSelf(..) => vec![],
-            #[cfg(not)]
-            E::ReferenceToSelf(reference_to_self) => {
-                let reference_to_self = match reference_to_self.borrow().clone() {
-                    ReferenceToSelf::Class(class) => TypeLayout::Class(class.clone()),
-                    _ => {
-                        log::warn!("Invalid reference to self");
-                        return vec![];
-                    }
-                };
-                let self_dependency = Dependency::new(Cow::Owned(Ident::new(
-                    "self".to_owned(),
-                    Some(Cow::Owned(reference_to_self)),
-                    false,
-                )));
-                vec![self_dependency]
-            }
             E::ReferenceToConstructor(..) => vec![],
             E::Nil => vec![],
             E::UnaryUnwrap { value, .. } => value.net_dependencies(),

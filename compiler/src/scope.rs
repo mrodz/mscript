@@ -436,6 +436,7 @@ impl ScopeReturnStatus {
 
 #[derive(Debug)]
 pub(crate) struct Scope {
+    #[warn(clippy::mutable_key_type)]
     variables: HashSet<Ident>,
     types: HashMap<Box<str>, Cow<'static, TypeLayout>>,
     ty: ScopeType,
@@ -455,6 +456,9 @@ impl Display for Scope {
 }
 
 impl Scope {
+    /// # Safety
+    ///  [`Ident`] is hashed by const name only, hence it is safe to ignore clippy
+    #[allow(clippy::mutable_key_type)]
     const fn new(
         variables: HashSet<Ident>,
         types: HashMap<Box<str>, Cow<'static, TypeLayout>>,

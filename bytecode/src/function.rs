@@ -1059,6 +1059,11 @@ impl BuiltInFunction {
                     unreachable!()
                 };
 
+                /*
+                 * Clippy warns about this. Again, if a user makes a map with
+                 * a mutable type and mutates it... that's on them.
+                 */
+                #[allow(clippy::mutable_key_type)]
                 let raw_map = map.0.borrow().clone();
 
                 Ok((Some(Primitive::Map(GcMap::new(raw_map))), None))

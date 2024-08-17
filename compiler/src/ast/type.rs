@@ -1317,12 +1317,10 @@ impl TypeLayout {
                     vec![Cow::Owned(map_type.key_type().clone())],
                     map_type.value_type().clone().optional_of().into()
                 )),
-                "clone" => {
-                    return Some(new_assoc_function!(
-                        vec![],
-                        ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Map(map_type.clone())))
-                    ))
-                }
+                "clone" => Some(new_assoc_function!(
+                    vec![],
+                    ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Map(map_type.clone())))
+                )),
                 _ => None,
             },
             _ => None,
