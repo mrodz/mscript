@@ -134,6 +134,8 @@ static_module_generator! {
     map_remove(BuiltInFunction::MapRemove),
     map_clear(BuiltInFunction::MapClear),
     vector_clear(BuiltInFunction::VecClear),
+    vector_clone(BuiltInFunction::VecClone),
+    map_clone(BuiltInFunction::MapClone),
 }
 
 impl PrimitiveFlagsPair {

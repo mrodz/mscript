@@ -502,6 +502,7 @@ impl Primitive {
                 "join" => Ok(PRIMITIVE_MODULE.vector_join()),
                 "index_of" => Ok(PRIMITIVE_MODULE.vector_index_of()),
                 "clear" => Ok(PRIMITIVE_MODULE.vector_clear()),
+                "clone" => Ok(PRIMITIVE_MODULE.vector_clone()),
                 _ => Err(ret),
             }),
             ret @ P::Str(..) => Ok(match property {
@@ -554,6 +555,7 @@ impl Primitive {
                 "pairs" => Ok(PRIMITIVE_MODULE.map_pairs()),
                 "clear" => Ok(PRIMITIVE_MODULE.map_clear()),
                 "remove" => Ok(PRIMITIVE_MODULE.map_remove()),
+                "clone" => Ok(PRIMITIVE_MODULE.map_clone()),
                 _ => Err(ret),
             }),
             ret => Ok(Err(ret)),

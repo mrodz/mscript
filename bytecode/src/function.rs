@@ -17,6 +17,7 @@ use crate::context::{Ctx, SpecialScope};
 use crate::file::MScriptFile;
 use crate::instruction::{Instruction, JumpRequestDestination};
 use crate::instruction_constants::query;
+use crate::variables::GcMap;
 use crate::{vector, GcVector};
 
 use super::instruction::JumpRequest;
@@ -77,6 +78,8 @@ pub enum BuiltInFunction {
     MapRemove,
     MapClear,
     VecClear,
+    MapClone,
+    VecClone,
 }
 
 type BuiltInFunctionReturnBundle = (
@@ -1041,6 +1044,24 @@ impl BuiltInFunction {
                 vector.0.borrow_mut().clear();
 
                 Ok((None, None))
+            }
+            Self::VecClone => {
+                let Some(Primitive::Vector(vector)) = arguments.first() else {
+                    unreachable!()
+                };
+
+                let raw_vec = vector.0.borrow().to_vec();
+
+                Ok((Some(vector!(raw raw_vec)), None))
+            }
+            Self::MapClone => {
+                let Some(Primitive::Map(map)) = arguments.first() else {
+                    unreachable!()
+                };
+
+                let raw_map = map.0.borrow().clone();
+
+                Ok((Some(Primitive::Map(GcMap::new(raw_map))), None))
             }
         }
     }

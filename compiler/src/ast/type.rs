@@ -1105,6 +1105,14 @@ impl TypeLayout {
                             new_assoc_function!(vec![Cow::Owned(TypeLayout::int())], @void),
                         )
                     }
+                    "clone" => {
+                        return Some(new_assoc_function!(
+                            vec![],
+                            ScopeReturnStatus::Should(Cow::Owned(TypeLayout::List(
+                                list_type.clone()
+                            )))
+                        ))
+                    }
                     _ => (),
                 }
 
@@ -1309,6 +1317,12 @@ impl TypeLayout {
                     vec![Cow::Owned(map_type.key_type().clone())],
                     map_type.value_type().clone().optional_of().into()
                 )),
+                "clone" => {
+                    return Some(new_assoc_function!(
+                        vec![],
+                        ScopeReturnStatus::Should(Cow::Owned(TypeLayout::Map(map_type.clone())))
+                    ))
+                }
                 _ => None,
             },
             _ => None,
@@ -1343,10 +1357,11 @@ impl TypeLayout {
             }
             Self::List(list_type) => {
                 let items = [
-                    "fn len() -> int",
-                    "fn inner_capacity() -> int",
-                    "fn ensure_inner_capacity(int)",
-                    "fn to_str() -> str",
+                    "fn len() -> int".to_owned(),
+                    "fn inner_capacity() -> int".to_owned(),
+                    "fn ensure_inner_capacity(int)".to_owned(),
+                    "fn to_str() -> str".to_owned(),
+                    format!("fn clone() -> {list_type}"),
                 ];
 
                 let additional = if let Ok(ListType::Open(ty)) = list_type
@@ -1367,8 +1382,7 @@ impl TypeLayout {
                 };
 
                 items
-                    .iter()
-                    .map(|x| x.to_string())
+                    .into_iter()
                     .chain(additional.unwrap_or_default())
                     .collect::<Vec<_>>()
             }
@@ -1378,6 +1392,26 @@ impl TypeLayout {
                     "fn to_str() -> str".to_owned(),
                 ]
             }
+            Self::Map(map) => vec![
+                "fn len() -> int".to_owned(),
+                format!("fn has_key({}) -> bool", map.key_type()),
+                format!(
+                    "fn replace({}, {}) -> {}?",
+                    map.key_type(),
+                    map.value_type(),
+                    map.value_type()
+                ),
+                format!("fn keys() -> [{}...]", map.key_type()),
+                format!("fn values() -> [{}...]", map.value_type()),
+                format!(
+                    "fn pairs() -> [[{}, {}]...]",
+                    map.key_type(),
+                    map.value_type()
+                ),
+                format!("fn remove({}) -> {}?", map.key_type(), map.value_type()),
+                "fn clear()".to_owned(),
+                format!("fn clone() -> {self}"),
+            ],
             Self::Native(NativeType::Bool) => vec!["fn to_str() -> str".to_owned()],
             Self::Native(NativeType::Str(..)) => [
                 "fn len() -> int",
