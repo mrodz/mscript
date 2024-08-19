@@ -234,8 +234,9 @@ impl Expr {
                             }
                             Cow::Owned(lhs.for_type(flags)?)
                         }
+                        index @ Expr::Index { .. } => Cow::Owned(index.for_type(flags)?),
                         Expr::DotLookup { expected_type, .. } => Cow::Borrowed(expected_type),
-                        _ => bail!("invalid left operand for {op}"),
+                        _ => bail!("invalid left operand for {op} (cannot apply to {})", lhs.for_type(flags)?),
                     }
                 } else {
                     Cow::Owned(lhs.for_type(flags)?)
@@ -537,14 +538,14 @@ fn compile_depth(
 
                             return Ok(rhs)
                         }
-                        Expr::DotLookup { .. } => {
+                        // The bytecode instructions both expect a `HeapPrimitive`, so the code can be duplicated.
+                        Expr::DotLookup { .. } | Expr::Index { .. } => {
                             rhs.push(instruction!(store_fast depth));
                             rhs.append(&mut lhs);
                             rhs.push(instruction!(load_fast depth));
                             rhs.push(instruction!(bin_op_assign (op.symbol())));
 
                             return Ok(rhs)
-
                         }
                         lhs => unimplemented!("bin_op_asign has not been implemented for this left hand operand: {lhs:?}")
                     }

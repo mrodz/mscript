@@ -229,7 +229,7 @@ fn mod_equals() {
 }
 
 #[test]
-fn bin_op_assign() {
+fn class_member_bin_op_assignment() {
     eval(
         r#"
 
@@ -335,6 +335,39 @@ fn subtract_underflow() {
 		}
 
 		assert false
+	"#,
+    )
+    .unwrap();
+}
+
+#[test]
+fn array_index_bin_op_assignment() {
+    eval(
+        r#"
+		
+		positive_numbers: [int...] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+		from 0 to positive_numbers.len(), i {
+			positive_numbers[i] *= -1
+		}
+
+		assert positive_numbers == [-1, -2, -3, -4, -5, -6, -7, -8, -9, -10]
+	"#,
+    )
+    .unwrap();
+}
+
+#[test]
+#[should_panic(expected = "invalid operation: int *= bool")]
+fn unsupported_array_index_bin_op_assignment() {
+    eval(
+        r#"
+		
+		positive_numbers: [int...] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+		from 0 to positive_numbers.len(), i {
+			positive_numbers[i] *= true
+		}
 	"#,
     )
     .unwrap();
