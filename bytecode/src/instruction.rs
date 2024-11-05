@@ -317,7 +317,7 @@ pub mod implementations {
                             .to_string(),
                     ))
                 }
-                _ => bail!("Cannot perform a vector operation on a non-vector"),
+                other => bail!("Cannot perform a vector operation on a non-vector: {other:?}"),
             }
         } else {
             match op_name.as_str() {
@@ -732,10 +732,12 @@ pub mod implementations {
     #[inline(always)]
     pub(crate) fn call(ctx: &mut Ctx, args: &[String]) -> Result<()> {
         let Some(first) = args.first() else {
-            let last = ctx.pop();
+            let Some(last) = ctx.pop() else {
+                bail!("missing argument, and the local stack is empty");
+            };
 
-            match last {
-                Some(Primitive::Function(ref f)) => {
+            match last.move_out_of_heap_primitive()? {
+                Primitive::Function(ref f) => {
                     let destination = JumpRequestDestination::Standard(f.location().to_owned());
 
                     let callback_state = f.callback_state().clone();
@@ -751,7 +753,7 @@ pub mod implementations {
 
                     return Ok(());
                 }
-                Some(Primitive::BuiltInFunction(ref variant)) => {
+                Primitive::BuiltInFunction(ref variant) => {
                     ctx.add_frame(Cow::Owned(format!("<native code>#{variant:?}")));
                     match variant.run(ctx).with_context(|| format!("built-in function raised an exception: {variant:?}()"))? {
                         (Some(primitive), None) => {
@@ -771,7 +773,7 @@ pub mod implementations {
 
                     return Ok(());
                 }
-                _ => bail!("missing argument, and the last item in the local stack ({last:?}, S:{:#?}) is not a function.", ctx.get_local_operating_stack()),
+                last => bail!("missing argument, and the last item in the local stack ({last:?}, S:{:#?}) is not a function.", ctx.get_local_operating_stack()),
             }
         };
 

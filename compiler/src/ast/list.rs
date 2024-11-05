@@ -301,7 +301,8 @@ where
     T: Into<TypeLayout>,
 {
     fn from(value: T) -> Self {
-        match value.into() {
+        let t: TypeLayout = value.into();
+        match t.get_type_recursively() {
             TypeLayout::Map(..) => Self::MapOp,
             _ => Self::VecOp,
         }

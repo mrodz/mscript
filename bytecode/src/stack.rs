@@ -111,6 +111,7 @@ static_module_generator! {
     str_parse_float(BuiltInFunction::StrParseFloat),
     str_parse_byte(BuiltInFunction::StrParseByte),
     str_split(BuiltInFunction::StrSplit),
+    str_chars(BuiltInFunction::StrChars),
     generic_num_pow(BuiltInFunction::GenericPow),
     generic_num_powf(BuiltInFunction::GenericPowf),
     generic_num_sqrt(BuiltInFunction::GenericSqrt),

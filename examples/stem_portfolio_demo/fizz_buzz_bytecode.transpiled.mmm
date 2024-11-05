@@ -1,0 +1,66 @@
+function fizz_buzz
+	make_str ""
+	store_fast rea
+	arg 0
+	make_int 3
+	bin_op %
+	make_int 0
+	equ
+	if_stmt 4
+		make_str "Fizz"
+		bin_op_assign += rea
+		void
+		done
+	arg 0
+	make_int 5
+	bin_op %
+	make_int 0
+	equ
+	if_stmt 4
+		make_str "Buzz"
+		bin_op_assign += rea
+		void
+		done
+	load_fast rea
+	lookup len
+	load_fast rea
+	fast_rev2
+	call
+	make_int 0
+	equ
+	if_stmt 8
+		arg 0
+		lookup to_str
+		arg 0
+		fast_rev2
+		call
+		ret
+		done
+	load_fast rea
+	ret
+end
+function __module__
+	make_int 0
+	store_fast counter
+	
+	make_int 1
+	bin_op_assign += counter
+	load_fast counter
+	make_int 30
+	bin_op <=
+	if_stmt 9
+		load_fast counter
+		call fizz_buzz_bytecode.mmm#fizz_buzz
+		load_fast counter
+		fast_rev2
+		printn *
+		void 
+		jmp -12
+		done
+	else_stmt 5
+		make_str "Done!"
+		printn *
+		void
+		done
+	ret_mod
+end

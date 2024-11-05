@@ -523,6 +523,7 @@ impl Primitive {
                 "parse_float" => Ok(PRIMITIVE_MODULE.str_parse_float()),
                 "parse_byte" => Ok(PRIMITIVE_MODULE.str_parse_byte()),
                 "split" => Ok(PRIMITIVE_MODULE.str_split()),
+                "chars" => Ok(PRIMITIVE_MODULE.str_chars()),
                 _ => Err(ret),
             }),
             ret @ (P::Int(..) | P::BigInt(..) | P::Float(..) | P::Byte(..)) => Ok(match property {

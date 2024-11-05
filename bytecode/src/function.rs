@@ -55,6 +55,7 @@ pub enum BuiltInFunction {
     StrParseFloat,
     StrParseByte,
     StrSplit,
+    StrChars,
     GenericPow,
     GenericPowf,
     GenericSqrt,
@@ -407,6 +408,15 @@ impl BuiltInFunction {
                     })?)),
                     None,
                 ))
+            }
+            Self::StrChars => {
+                let Some(Primitive::Str(v)) = arguments.first() else {
+                    unreachable!()
+                };
+
+                let characters = v.chars().map(|c| Primitive::Str(c.to_string())).collect();
+
+                Ok((Some(vector!(raw characters)), None))
             }
             Self::StrSubstring => {
                 let Some(Primitive::Str(s)) = arguments.first() else {

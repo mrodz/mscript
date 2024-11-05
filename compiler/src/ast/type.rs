@@ -1252,6 +1252,7 @@ impl TypeLayout {
                         return_array.into()
                     ))
                 }
+                "chars" => Some(new_assoc_function!(vec![], TypeLayout::str().list_of().into())),
                 _ => None,
             },
             whole_type @ Self::Native(
