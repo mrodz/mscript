@@ -418,7 +418,7 @@ impl AssocFileData {
         dependency: &str,
         scopes: ScopeIter<'a>,
         skip: usize,
-    ) -> Option<(Ref<Ident>, bool)> {
+    ) -> Option<(Ref<'a, Ident>, bool)> {
         let mut is_callback = false;
 
         for (count, scope) in scopes.enumerate() {
