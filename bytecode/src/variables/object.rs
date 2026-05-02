@@ -134,7 +134,7 @@ impl Debug for Object {
 
             result
         } else if let Some(ref name) = self.name {
-            write!(f, "<self-reference to {}>", name)
+            write!(f, "<self-reference to {name}>")
         } else {
             write!(f, "...")
         }

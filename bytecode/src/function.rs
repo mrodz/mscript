@@ -798,7 +798,7 @@ impl BuiltInFunction {
                 let result: Primitive = match this {
                     Primitive::Int(i32) => Primitive::Float(f64::from(*i32).powf(*power)),
                     Primitive::BigInt(i128) => {
-                        Primitive::Float(f64::from(*i128 as i32).powf(*power))
+                        Primitive::Float((*i128 as f64).powf(*power))
                     }
                     Primitive::Byte(u8) => Primitive::Float((*u8 as f64).powf(*power)),
                     Primitive::Float(f64) => Primitive::Float(f64.powf(*power)),
@@ -814,7 +814,7 @@ impl BuiltInFunction {
 
                 let result: Primitive = match this {
                     Primitive::Int(i32) => Primitive::Float(f64::from(*i32).sqrt()),
-                    Primitive::BigInt(i128) => Primitive::Float(f64::from(*i128 as i32).sqrt()),
+                    Primitive::BigInt(i128) => Primitive::Float((*i128 as f64).sqrt()),
                     Primitive::Byte(u8) => Primitive::Float((*u8 as f64).sqrt()),
                     Primitive::Float(f64) => Primitive::Float(f64.sqrt()),
                     bad => unreachable!("{bad}"),
@@ -891,10 +891,7 @@ impl BuiltInFunction {
 
                 let result: Primitive = match this {
                     Primitive::Int(i32) => Primitive::Float((*i32).into()),
-                    Primitive::BigInt(i128) => Primitive::Float(f64::from(
-                        i32::try_from(*i128)
-                            .with_context(|| format!("`{i128}` cannot be made into a float"))?,
-                    )),
+                    Primitive::BigInt(i128) => Primitive::Float(*i128 as f64),
                     Primitive::Byte(u8) => Primitive::Float(*u8 as f64),
                     Primitive::Float(f64) => Primitive::Float(*f64),
                     bad => unreachable!("{bad}"),
@@ -1348,14 +1345,14 @@ impl Function {
     /// # Arguments
     /// * `args` - The arguments to this function, provided by the caller.
     /// * `current_frame` - A shared reference to the current stack trace. The caller
-    ///                     **SHOULD NOT** push a stack frame for a bytecode function
-    ///                     before calling it; this method will handle that.
+    ///   **SHOULD NOT** push a stack frame for a bytecode function
+    ///   before calling it; this method will handle that.
     /// * `callback_state` - A shared reference to the [`VariableMapping`] that this
-    ///                      function can access. This argument is used for callbacks
-    ///                      and closures exclusively. Normal variables should be
-    ///                      added to `current_frame`.
+    ///   function can access. This argument is used for callbacks
+    ///   and closures exclusively. Normal variables should be
+    ///   added to `current_frame`.
     /// * `jump_callback` - A callback that defines how this function's jumps are handled.
-    ///                     The implementation is up to the caller.
+    ///   The implementation is up to the caller.
     ///
     /// # Errors
     /// This function can error if an instruction raises an error during execution.
@@ -1364,7 +1361,7 @@ impl Function {
     /// This function will `panic!` if the instruction byte falls outside of (0..[`INSTRUCTION_COUNT`][crate::instruction_constants::INSTRUCTION_COUNT])
     pub(crate) fn run(
         &self,
-        args: Cow<Vec<Primitive>>,
+        args: Cow<[Primitive]>,
         current_frame: Rc<RefCell<Stack>>,
         callback_state: Option<VariableMapping>,
         jump_callback: &mut impl Fn(&JumpRequest) -> Result<ReturnValue>,
@@ -1414,7 +1411,9 @@ impl Function {
                     .checked_add_signed(offset)
                     .with_context(|| format!("numeric overflow ({instruction_ptr} + {offset})"))?;
                 #[cfg(not(feature = "debug"))]
-                let new_val = (instruction_ptr as isize + offset) as usize;
+                let new_val = instruction_ptr
+                    .checked_add_signed(offset)
+                    .with_context(|| format!("numeric overflow ({instruction_ptr} + {offset})"))?;
 
                 if new_val >= instruction_len {
                     bail!("goto position index {new_val} is too big, instruction length is {instruction_len}.");
@@ -1537,7 +1536,7 @@ impl<'a> Functions {
     pub(crate) fn run_function(
         &self,
         name: &String,
-        args: Cow<Vec<Primitive>>,
+        args: Cow<[Primitive]>,
         current_frame: Rc<RefCell<Stack>>,
         callback_state: Option<VariableMapping>,
         jump_callback: &mut impl Fn(&JumpRequest) -> Result<ReturnValue>,

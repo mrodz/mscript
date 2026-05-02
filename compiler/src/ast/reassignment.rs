@@ -242,7 +242,7 @@ impl Parser {
         let path = children.next().unwrap();
         let value = children.next().unwrap();
 
-        let path_span = value.as_span();
+        let path_span = path.as_span();
 
         let (path, is_const) = ReassignmentPath::parse(path)?;
 

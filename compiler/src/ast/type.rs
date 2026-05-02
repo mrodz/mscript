@@ -597,7 +597,7 @@ impl Display for TypeLayout {
             Self::Optional(None) => write!(f, "nil"),
             Self::Void => write!(f, "void"),
             Self::Generic(generic) => write!(f, "{generic}"),
-            Self::Module(module) if cfg!(test) => write!(f, "<module {:?}>", module),
+            Self::Module(module) if cfg!(test) => write!(f, "<module {module:?}>"),
             Self::Module(module) => write!(f, "<module {:?}>", module.name.as_os_str()),
             Self::Map(map) => write!(f, "map[{}, {}]", map.key_type(), map.value_type()),
         }
@@ -1677,7 +1677,7 @@ impl TypeLayout {
                 usize::MAX
             ),
             ValToUsize::NotConstexpr => match me {
-                TypeLayout::List(ListType::Open(ty)) => return Ok(Cow::Borrowed(ty.as_ref())),
+                TypeLayout::List(ListType::Open(ty)) => Ok(Cow::Borrowed(ty.as_ref())),
                 TypeLayout::List(ListType::Mixed(ty)) => bail!("Indexing into a mixed type list ({:?}) requires that the index be evaluable at compile time", ty.iter().map(|x| x.to_string()).collect::<Vec<_>>()),
                 _ => todo!()
             },

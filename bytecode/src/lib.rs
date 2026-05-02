@@ -1,6 +1,7 @@
 //! This is the API for all-things-bytecode.
 
 #![allow(dead_code)]
+#![allow(non_local_definitions)]
 
 pub(crate) mod context;
 pub(crate) mod file;

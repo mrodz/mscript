@@ -29,7 +29,7 @@ impl FunctionParameters {
         }
     }
 
-    pub fn to_types(&self) -> Cow<'_, Vec<Cow<'static, TypeLayout>>> {
+    pub fn to_types(&self) -> Cow<'_, [Cow<'static, TypeLayout>]> {
         match self {
             FunctionParameters::Named(names) => {
                 Cow::Owned(names.iter().map(|x| x.ty().unwrap().clone()).collect())
@@ -43,7 +43,7 @@ impl Display for FunctionParameters {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut buf: String = String::new();
 
-        let types: Cow<Vec<Cow<TypeLayout>>> = self.to_types();
+        let types: Cow<[Cow<TypeLayout>]> = self.to_types();
 
         let mut iter = types.iter();
         let Some(first) = iter.next() else {
