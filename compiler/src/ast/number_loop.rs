@@ -28,7 +28,7 @@ pub(crate) struct NumberLoop {
 }
 
 impl Dependencies for NumberLoop {
-    fn dependencies(&self) -> Vec<super::Dependency> {
+    fn dependencies(&self) -> Vec<super::Dependency<'_>> {
         let mut result = vec![];
 
         result.append(&mut self.val_start.net_dependencies());
@@ -43,7 +43,7 @@ impl Dependencies for NumberLoop {
         result
     }
 
-    fn supplies(&self) -> Vec<super::Dependency> {
+    fn supplies(&self) -> Vec<super::Dependency<'_>> {
         if let Some(ref name) = self.name {
             vec![name.into()]
         } else {

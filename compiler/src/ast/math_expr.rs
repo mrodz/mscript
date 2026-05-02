@@ -420,7 +420,7 @@ impl CompileTimeEvaluate for Expr {
 static VOID_ERROR_MESSAGE: &str = "this scope does not yield a value";
 
 impl Dependencies for Expr {
-    fn dependencies(&self) -> Vec<Dependency> {
+    fn dependencies(&self) -> Vec<Dependency<'_>> {
         use Expr as E;
         match self {
             E::Value(val) => val.net_dependencies(),

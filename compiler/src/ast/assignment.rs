@@ -126,7 +126,7 @@ impl Assignment {
 }
 
 impl Dependencies for Assignment {
-    fn supplies(&self) -> Vec<Dependency> {
+    fn supplies(&self) -> Vec<Dependency<'_>> {
         if !self.flags().contains(AssignmentFlag::modify()) {
             return self
                 .idents
@@ -141,7 +141,7 @@ impl Dependencies for Assignment {
         vec![]
     }
 
-    fn dependencies(&self) -> Vec<Dependency> {
+    fn dependencies(&self) -> Vec<Dependency<'_>> {
         let mut base = self.value().net_dependencies();
 
         if self.idents.len() == 1 && self.idents[0].is_instance_callback_variable().unwrap() {
@@ -152,7 +152,7 @@ impl Dependencies for Assignment {
     }
 
     /// custom implementation
-    fn net_dependencies(&self) -> Vec<Dependency> {
+    fn net_dependencies(&self) -> Vec<Dependency<'_>> {
         let dependencies = self.dependencies();
 
         let Some(supply_name) = self.supplies().pop() else {

@@ -58,7 +58,7 @@ impl ClassBody {
 }
 
 impl Dependencies for ClassBody {
-    fn supplies(&self) -> Vec<Dependency> {
+    fn supplies(&self) -> Vec<Dependency<'_>> {
         let mut features_sup: Vec<Dependency> =
             self.features.iter().flat_map(|x| x.supplies()).collect();
 
@@ -67,7 +67,7 @@ impl Dependencies for ClassBody {
         features_sup
     }
 
-    fn dependencies(&self) -> Vec<Dependency> {
+    fn dependencies(&self) -> Vec<Dependency<'_>> {
         let mut block_dependencies: Vec<Dependency> = self
             .features
             .iter()
@@ -79,7 +79,7 @@ impl Dependencies for ClassBody {
         block_dependencies
     }
 
-    fn net_dependencies(&self) -> Vec<Dependency> {
+    fn net_dependencies(&self) -> Vec<Dependency<'_>> {
         get_net_dependencies(self, true)
     }
 }

@@ -35,14 +35,14 @@ impl WalkForType for ClassFeature {
 }
 
 impl Dependencies for ClassFeature {
-    fn dependencies(&self) -> Vec<crate::ast::Dependency> {
+    fn dependencies(&self) -> Vec<crate::ast::Dependency<'_>> {
         match self {
             Self::Function(x) => x.net_dependencies(),
             Self::Variable(x) => x.net_dependencies(),
         }
     }
 
-    fn supplies(&self) -> Vec<crate::ast::Dependency> {
+    fn supplies(&self) -> Vec<crate::ast::Dependency<'_>> {
         match self {
             Self::Function(x) => x.supplies(),
             Self::Variable(x) => x.supplies(),

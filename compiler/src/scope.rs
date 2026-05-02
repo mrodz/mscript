@@ -138,11 +138,11 @@ impl Scopes {
         self.0.borrow().len()
     }
 
-    pub(crate) fn iter(&self) -> ScopeIter {
+    pub(crate) fn iter(&self) -> ScopeIter<'_> {
         ScopeIter::new(self.0.borrow())
     }
 
-    pub(crate) fn last(&self) -> Ref<Scope> {
+    pub(crate) fn last(&self) -> Ref<'_, Scope> {
         Ref::map(self.0.borrow(), |scopes| {
             scopes.last().expect("scopes was empty")
         })
@@ -227,7 +227,7 @@ impl Scopes {
         None
     }
 
-    pub(crate) fn get_type_from_str(&self, str: &str) -> TypeSearchResult {
+    pub(crate) fn get_type_from_str(&self, str: &str) -> TypeSearchResult<'_> {
         use crate::ast::NativeType::*;
         use SuccessTypeSearchResult::*;
 
@@ -286,7 +286,7 @@ impl Scopes {
     pub(crate) fn get_type_of_executing_class(
         &self,
         step_n_frames: usize,
-    ) -> Option<Ref<ClassType>> {
+    ) -> Option<Ref<'_, ClassType>> {
         Ref::filter_map(self.0.borrow(), |scopes| {
             let iter = scopes.iter().rev().skip(step_n_frames);
 

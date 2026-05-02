@@ -70,7 +70,7 @@ impl MemberVariable {
 }
 
 impl Dependencies for MemberVariable {
-    fn supplies(&self) -> Vec<crate::ast::Dependency> {
+    fn supplies(&self) -> Vec<crate::ast::Dependency<'_>> {
         vec![Dependency::new(Cow::Borrowed(&self.ident))]
     }
 }

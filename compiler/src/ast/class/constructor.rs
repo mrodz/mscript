@@ -143,12 +143,12 @@ impl IntoType for Constructor {
 }
 
 impl Dependencies for Constructor {
-    fn dependencies(&self) -> Vec<crate::ast::Dependency> {
+    fn dependencies(&self) -> Vec<crate::ast::Dependency<'_>> {
         let x = self.body.net_dependencies();
         x
     }
 
-    fn supplies(&self) -> Vec<crate::ast::Dependency> {
+    fn supplies(&self) -> Vec<crate::ast::Dependency<'_>> {
         self.parameters.supplies()
     }
 }

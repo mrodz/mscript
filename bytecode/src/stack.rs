@@ -144,11 +144,11 @@ impl PrimitiveFlagsPair {
         Self(Gc::new(GcCell::new(TupleWithGcOpt(primitive, flags))))
     }
 
-    pub fn primitive(&self) -> GcCellRef<Primitive> {
+    pub fn primitive(&self) -> GcCellRef<'_, Primitive> {
         GcCellRef::map(self.0.borrow(), |x| &x.0)
     }
 
-    pub fn flags(&self) -> GcCellRef<VariableFlags> {
+    pub fn flags(&self) -> GcCellRef<'_, VariableFlags> {
         GcCellRef::map(self.0.borrow(), |x| &x.1)
     }
 
@@ -160,7 +160,7 @@ impl PrimitiveFlagsPair {
     pub fn update_primitive(
         &self,
         setter: impl FnOnce(&dyn Deref<Target = Primitive>) -> Result<Primitive>,
-    ) -> Result<GcCellRef<Primitive>> {
+    ) -> Result<GcCellRef<'_, Primitive>> {
         let new_value = setter(&self.primitive())?;
         self.set_primitive(new_value);
         Ok(self.primitive())
@@ -355,7 +355,7 @@ impl Stack {
         Self(vec![])
     }
 
-    fn iter(&self) -> StackIter {
+    fn iter(&self) -> StackIter<'_> {
         StackIter {
             frames: self.0.as_ref(),
         }

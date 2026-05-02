@@ -26,7 +26,7 @@ impl Compile for Assertion {
 }
 
 impl Dependencies for Assertion {
-    fn dependencies(&self) -> Vec<super::Dependency> {
+    fn dependencies(&self) -> Vec<super::Dependency<'_>> {
         self.value.net_dependencies()
     }
 }

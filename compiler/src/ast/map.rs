@@ -49,7 +49,7 @@ impl MapType {
 }
 
 impl Dependencies for Map {
-    fn dependencies(&self) -> Vec<super::Dependency> {
+    fn dependencies(&self) -> Vec<super::Dependency<'_>> {
         let mut result = vec![];
         for (key, value) in &self.initializer.map {
             result.append(&mut key.net_dependencies());

@@ -275,7 +275,7 @@ impl FileManager {
             .unwrap_or_default()
     }
 
-    pub fn get_module_type(&self, path: &PathBuf) -> Option<Ref<ImportResult>> {
+    pub fn get_module_type(&self, path: &PathBuf) -> Option<Ref<'_, ImportResult>> {
         Ref::filter_map(self.loaded_modules.borrow(), |loaded_modules| {
             loaded_modules.get(path)
         })
@@ -305,7 +305,7 @@ impl FileManager {
         .to_owned()
     }
 
-    pub fn get_ast_file(&self, path: &PathBuf) -> Option<Ref<ASTFile>> {
+    pub fn get_ast_file(&self, path: &PathBuf) -> Option<Ref<'_, ASTFile>> {
         let x = Ref::filter_map(self.completed_ast.borrow(), |completed_ast| {
             completed_ast.get(path)
         })
@@ -454,7 +454,7 @@ pub(crate) fn root_ast_from_str(
     output_path: impl AsRef<Path>,
     mscript_code: &str,
     files_loaded: FileManager,
-) -> Result<Node, Vec<anyhow::Error>> {
+) -> Result<Node<'_>, Vec<anyhow::Error>> {
     let input_path = input_path.as_ref();
     let output_path = output_path.as_ref();
 

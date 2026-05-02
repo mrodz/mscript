@@ -533,12 +533,12 @@ impl GenericType {
         }
     }
 
-    pub fn try_get_lock(&self) -> Option<Ref<Cow<'static, TypeLayout>>> {
+    pub fn try_get_lock(&self) -> Option<Ref<'_, Cow<'static, TypeLayout>>> {
         // let view = self.stands_for.borrow();
         Ref::filter_map(self.stands_for.borrow(), Option::as_ref).ok()
     }
 
-    pub fn try_get_lock_mut(&self) -> Option<RefMut<Cow<'static, TypeLayout>>> {
+    pub fn try_get_lock_mut(&self) -> Option<RefMut<'_, Cow<'static, TypeLayout>>> {
         // let view = self.stands_for.borrow();
         RefMut::filter_map(self.stands_for.borrow_mut(), Option::as_mut).ok()
     }
@@ -1046,11 +1046,11 @@ impl TypeLayout {
         }
     }
 
-    pub fn is_callable(&self) -> Option<Cow<FunctionType>> {
+    pub fn is_callable(&self) -> Option<Cow<'_, FunctionType>> {
         self.is_callable_allow_class(false)
     }
 
-    pub fn is_callable_allow_class(&self, allow_class: bool) -> Option<Cow<FunctionType>> {
+    pub fn is_callable_allow_class(&self, allow_class: bool) -> Option<Cow<'_, FunctionType>> {
         match self.get_type_recursively() {
             Self::Function(f) => Some(Cow::Borrowed(f)),
             Self::Class(class_type) if allow_class => Some(Cow::Owned(class_type.constructor())),
@@ -1615,7 +1615,7 @@ impl TypeLayout {
         &self,
         index: &Value,
         flags: &TypecheckFlags<impl Deref<Target = ClassType> + Debug>,
-    ) -> Result<Cow<TypeLayout>> {
+    ) -> Result<Cow<'_, TypeLayout>> {
         let me = self.disregard_distractors(false);
 
         if me.is_optional().0 {

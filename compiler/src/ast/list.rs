@@ -112,7 +112,7 @@ impl CompileTimeEvaluate for List {
 }
 
 impl Dependencies for List {
-    fn dependencies(&self) -> Vec<super::Dependency> {
+    fn dependencies(&self) -> Vec<super::Dependency<'_>> {
         self.values
             .iter()
             .flat_map(|x| x.net_dependencies())
@@ -181,7 +181,7 @@ impl ListType {
     pub fn try_coerce_to_open(
         &self,
         comparison_flags: &TypecheckFlags<&ClassType>,
-    ) -> Result<Cow<Self>> {
+    ) -> Result<Cow<'_, Self>> {
         match self {
             ret @ Self::Open(..) => Ok(Cow::Borrowed(ret)),
             Self::Mixed(types) => {
@@ -323,7 +323,7 @@ impl Index {
 }
 
 impl Dependencies for Index {
-    fn dependencies(&self) -> Vec<super::Dependency> {
+    fn dependencies(&self) -> Vec<super::Dependency<'_>> {
         self.parts
             .iter()
             .flat_map(|x| x.0.net_dependencies())

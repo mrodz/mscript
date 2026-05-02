@@ -227,7 +227,7 @@ impl Display for CompiledItem {
 
 impl CompiledItem {
     pub fn repr(&self, use_string_version: bool) -> Result<String> {
-        fn fix_arg_if_needed(arg: &str) -> Result<Cow<str>> {
+        fn fix_arg_if_needed(arg: &str) -> Result<Cow<'_, str>> {
             Ok(Cow::Owned("\"".to_owned() + arg + "\""))
         }
 
@@ -412,7 +412,7 @@ impl CompilationState {
         result
     }
 
-    pub fn poll_loop_register(&self) -> NumberLoopRegister {
+    pub fn poll_loop_register(&self) -> NumberLoopRegister<'_> {
         let id = self.loop_register_c.get();
         self.loop_register_c.set(id + 1);
         NumberLoopRegister::Generated(id + 1)
@@ -550,7 +550,7 @@ impl<'a> From<&'a Ident> for Dependency<'a> {
 /// * If dependency is not a variable from a child scope, it will be propagated regardless of whether the types
 ///   match (required for cases where a variable from a parent scope is copied to a separate local variable with the same name).
 /// * Succeed if `supplied.type == dependency.type`
-pub(crate) fn get_net_dependencies(ast_item: &dyn Dependencies, is_scope: bool) -> Vec<Dependency> {
+pub(crate) fn get_net_dependencies(ast_item: &dyn Dependencies, is_scope: bool) -> Vec<Dependency<'_>> {
     let supplies = ast_item.supplies();
     let dependencies = ast_item.dependencies();
 
@@ -585,7 +585,7 @@ pub(crate) trait Dependencies {
     /// # Example
     /// A function might have a parameter `input`, and define variables `sum` and `product`.
     /// Thus, a function's [`Dependencies::supplies`] implementation should return `vec![input, sum, product]`.
-    fn supplies(&self) -> Vec<Dependency> {
+    fn supplies(&self) -> Vec<Dependency<'_>> {
         vec![]
     }
 
@@ -597,7 +597,7 @@ pub(crate) trait Dependencies {
     /// A function might have a parameter `input`, define variables `sum` and `product`, and
     /// returns `input * product + sum`. Thus, a function's [`Dependencies::dependencies`] implementation
     /// should return `vec![input, sum, product]`.
-    fn dependencies(&self) -> Vec<Dependency> {
+    fn dependencies(&self) -> Vec<Dependency<'_>> {
         vec![]
     }
 
@@ -607,7 +607,7 @@ pub(crate) trait Dependencies {
     ///
     /// [`get_net_dependencies(self, false)`](get_net_dependencies) is the default implementation.
     /// Override this function and pass `true` if dealing with an AST node that creates a scope.
-    fn net_dependencies(&self) -> Vec<Dependency>
+    fn net_dependencies(&self) -> Vec<Dependency<'_>>
     where
         Self: Sized,
     {

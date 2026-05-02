@@ -19,7 +19,7 @@ pub struct IfStatement {
 }
 
 impl Dependencies for IfStatement {
-    fn dependencies(&self) -> Vec<super::Dependency> {
+    fn dependencies(&self) -> Vec<super::Dependency<'_>> {
         let mut value_deps = self.value.net_dependencies();
         value_deps.append(&mut self.body.net_dependencies());
 
@@ -91,7 +91,7 @@ pub enum ElseStatement {
 }
 
 impl Dependencies for ElseStatement {
-    fn dependencies(&self) -> Vec<super::Dependency> {
+    fn dependencies(&self) -> Vec<super::Dependency<'_>> {
         match self {
             Self::Block(block) => block.net_dependencies(),
             Self::IfStatement(if_statement) => if_statement.net_dependencies(),

@@ -62,7 +62,7 @@ impl Display for FunctionParameters {
 }
 
 impl Dependencies for FunctionParameters {
-    fn supplies(&self) -> Vec<Dependency> {
+    fn supplies(&self) -> Vec<Dependency<'_>> {
         let Self::Named(names) = self else {
             unreachable!("cannot compile nameless function parameters");
         };

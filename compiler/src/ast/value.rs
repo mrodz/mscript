@@ -194,7 +194,7 @@ impl Value {
 }
 
 impl Dependencies for Value {
-    fn dependencies(&self) -> Vec<Dependency> {
+    fn dependencies(&self) -> Vec<Dependency<'_>> {
         let x = match self {
             Self::Function(function) => function.net_dependencies(),
             Self::Ident(name) => name.net_dependencies(),

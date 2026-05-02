@@ -62,7 +62,7 @@ impl Compile for WhileLoop {
 }
 
 impl Dependencies for WhileLoop {
-    fn dependencies(&self) -> Vec<super::Dependency> {
+    fn dependencies(&self) -> Vec<super::Dependency<'_>> {
         let mut condition_dependencies = self.condition.net_dependencies();
         condition_dependencies.append(&mut self.body.net_dependencies());
         condition_dependencies

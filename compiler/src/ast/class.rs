@@ -285,11 +285,11 @@ impl IntoType for Class {
 }
 
 impl Dependencies for Class {
-    fn dependencies(&self) -> Vec<Dependency> {
+    fn dependencies(&self) -> Vec<Dependency<'_>> {
         self.body.net_dependencies()
     }
 
-    fn supplies(&self) -> Vec<Dependency> {
+    fn supplies(&self) -> Vec<Dependency<'_>> {
         vec![Dependency::new(Cow::Borrowed(&self.ident))]
     }
 }

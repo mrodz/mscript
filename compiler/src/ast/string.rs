@@ -19,7 +19,7 @@ pub enum AstString {
 }
 
 impl Dependencies for AstString {
-    fn dependencies(&self) -> Vec<Dependency> {
+    fn dependencies(&self) -> Vec<Dependency<'_>> {
         match self {
             AstString::Plain(_) => vec![],
             AstString::FormattedString() => todo!(),

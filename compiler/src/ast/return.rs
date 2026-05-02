@@ -27,7 +27,7 @@ impl Compile for ReturnStatement {
 }
 
 impl Dependencies for ReturnStatement {
-    fn dependencies(&self) -> Vec<super::Dependency> {
+    fn dependencies(&self) -> Vec<super::Dependency<'_>> {
         if let Some(ref return_value) = self.0 {
             return_value.net_dependencies()
         } else {

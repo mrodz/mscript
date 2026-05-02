@@ -33,7 +33,7 @@ pub(crate) enum Declaration {
 }
 
 impl Dependencies for Declaration {
-    fn supplies(&self) -> Vec<Dependency> {
+    fn supplies(&self) -> Vec<Dependency<'_>> {
         match self {
             Self::Assignment(assignment) => assignment.supplies(),
             Self::PrintStatement(print_statement) => print_statement.supplies(),
@@ -51,7 +51,7 @@ impl Dependencies for Declaration {
         }
     }
 
-    fn dependencies(&self) -> Vec<Dependency> {
+    fn dependencies(&self) -> Vec<Dependency<'_>> {
         match self {
             Self::Assignment(assignment) => assignment.net_dependencies(),
             Self::PrintStatement(print_statement) => print_statement.net_dependencies(),

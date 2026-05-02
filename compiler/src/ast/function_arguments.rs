@@ -14,13 +14,13 @@ use super::{
 pub(crate) struct FunctionArguments(Vec<Value>);
 
 impl FunctionArguments {
-    pub fn iter(&self) -> Iter<Value> {
+    pub fn iter(&self) -> Iter<'_, Value> {
         self.0.iter()
     }
 }
 
 impl Dependencies for FunctionArguments {
-    fn dependencies(&self) -> Vec<Dependency> {
+    fn dependencies(&self) -> Vec<Dependency<'_>> {
         self.0.iter().flat_map(|x| x.net_dependencies()).collect()
     }
 }

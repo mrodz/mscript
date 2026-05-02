@@ -114,11 +114,11 @@ impl MemberFunction {
 }
 
 impl Dependencies for MemberFunction {
-    fn dependencies(&self) -> Vec<crate::ast::Dependency> {
+    fn dependencies(&self) -> Vec<crate::ast::Dependency<'_>> {
         self.body.net_dependencies()
     }
 
-    fn supplies(&self) -> Vec<crate::ast::Dependency> {
+    fn supplies(&self) -> Vec<crate::ast::Dependency<'_>> {
         self.parameters.supplies()
         // params.push(Dependency::new(Cow::Owned(Ident::new(
         //     "self".to_owned(),

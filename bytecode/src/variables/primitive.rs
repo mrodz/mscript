@@ -454,7 +454,7 @@ impl Primitive {
         }
     }
 
-    pub fn move_out_of_heap_primitive_borrow(&self) -> Result<Cow<Self>> {
+    pub fn move_out_of_heap_primitive_borrow(&self) -> Result<Cow<'_, Self>> {
         if let Self::HeapPrimitive(primitive) = self {
             Ok(Cow::Owned(primitive.to_owned_primitive()?))
         } else {

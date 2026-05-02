@@ -16,17 +16,17 @@ impl Block {
 }
 
 impl Dependencies for Block {
-    fn supplies(&self) -> Vec<Dependency> {
+    fn supplies(&self) -> Vec<Dependency<'_>> {
         self.0.iter().flat_map(|x| x.supplies()).collect()
     }
 
-    fn dependencies(&self) -> Vec<Dependency> {
+    fn dependencies(&self) -> Vec<Dependency<'_>> {
         let block_dependencies = self.0.iter().flat_map(|x| x.net_dependencies()).collect();
 
         block_dependencies
     }
 
-    fn net_dependencies(&self) -> Vec<Dependency> {
+    fn net_dependencies(&self) -> Vec<Dependency<'_>> {
         get_net_dependencies(self, true)
     }
 }

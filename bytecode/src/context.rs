@@ -364,7 +364,7 @@ impl<'a> Ctx<'a> {
     }
 
     /// Get a reference to all of the variables mapped to this function.
-    pub(crate) fn get_frame_variables(&self) -> Result<Ref<VariableMapping>> {
+    pub(crate) fn get_frame_variables(&self) -> Result<Ref<'_, VariableMapping>> {
         let Ok(frame_variables) =
             Ref::filter_map(self.call_stack.borrow(), |x| x.get_frame_variables().ok())
         else {

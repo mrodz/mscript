@@ -11,7 +11,7 @@ use super::{CompilationState, Compile, CompiledItem, Dependencies, Dependency, V
 pub struct PrintStatement(Value);
 
 impl Dependencies for PrintStatement {
-    fn dependencies(&self) -> Vec<Dependency> {
+    fn dependencies(&self) -> Vec<Dependency<'_>> {
         self.0.net_dependencies()
     }
 }

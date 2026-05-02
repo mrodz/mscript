@@ -100,9 +100,7 @@ impl AssocFileData {
     }
 
     pub fn scopes_since_loop(&self) -> Result<usize> {
-        let mut result = 1;
-
-        for scope in self.scopes.iter() {
+        for (result, scope) in (1..).zip(self.scopes.iter()) {
             if scope.is_loop() {
                 return Ok(result);
             }
@@ -110,8 +108,6 @@ impl AssocFileData {
             if scope.is_function() {
                 break;
             }
-
-            result += 1;
         }
 
         bail!("no loop found")
@@ -188,35 +184,35 @@ impl AssocFileData {
         self.scopes.depth() == 1
     }
 
-    pub fn get_type_from_str(&self, ty: &str) -> TypeSearchResult {
+    pub fn get_type_from_str(&self, ty: &str) -> TypeSearchResult<'_> {
         self.scopes.get_type_from_str(ty)
     }
 
-    pub fn get_return_type(&self) -> Ref<ScopeReturnStatus> {
+    pub fn get_return_type(&self) -> Ref<'_, ScopeReturnStatus> {
         Ref::map(self.scopes.last(), Scope::peek_yields_value)
     }
 
-    pub fn push_if_typed(&self, yields: ScopeReturnStatus) -> ScopeHandle {
+    pub fn push_if_typed(&self, yields: ScopeReturnStatus) -> ScopeHandle<'_> {
         self.push_scope_typed(ScopeType::IfBlock, yields)
     }
 
-    pub fn push_else_typed(&self, yields: ScopeReturnStatus) -> ScopeHandle {
+    pub fn push_else_typed(&self, yields: ScopeReturnStatus) -> ScopeHandle<'_> {
         self.push_scope_typed(ScopeType::ElseBlock, yields)
     }
 
-    pub fn push_function(&self, yields: ScopeReturnStatus) -> ScopeHandle {
+    pub fn push_function(&self, yields: ScopeReturnStatus) -> ScopeHandle<'_> {
         self.push_scope_typed(ScopeType::Function(None), yields)
     }
 
-    pub fn push_while_loop(&self, yields: ScopeReturnStatus) -> ScopeHandle {
+    pub fn push_while_loop(&self, yields: ScopeReturnStatus) -> ScopeHandle<'_> {
         self.push_scope_typed(ScopeType::WhileLoop, yields)
     }
 
-    pub fn push_number_loop(&self, yields: ScopeReturnStatus) -> ScopeHandle {
+    pub fn push_number_loop(&self, yields: ScopeReturnStatus) -> ScopeHandle<'_> {
         self.push_scope_typed(ScopeType::NumberLoop, yields)
     }
 
-    pub fn push_class_unknown_self(&self) -> ScopeHandle {
+    pub fn push_class_unknown_self(&self) -> ScopeHandle<'_> {
         self.push_scope_typed(ScopeType::Class(None), ScopeReturnStatus::No)
     }
 
@@ -228,14 +224,14 @@ impl AssocFileData {
         self.scopes.get_owned_type_of_executing_class(0)
     }
 
-    pub fn get_type_of_executing_class(&self) -> Option<Ref<ClassType>> {
+    pub fn get_type_of_executing_class(&self) -> Option<Ref<'_, ClassType>> {
         self.scopes.get_type_of_executing_class(0)
     }
 
     pub fn get_type_of_executing_class_in_nth_frame(
         &self,
         skip_n_frames: usize,
-    ) -> Option<Ref<ClassType>> {
+    ) -> Option<Ref<'_, ClassType>> {
         self.scopes.get_type_of_executing_class(skip_n_frames)
     }
 
@@ -268,7 +264,7 @@ impl AssocFileData {
 
     pub fn get_current_executing_function(
         &self,
-    ) -> Result<(Ref<Scope>, Ref<Rc<FunctionParameters>>)> {
+    ) -> Result<(Ref<'_, Scope>, Ref<'_, Rc<FunctionParameters>>)> {
         let iter = self.scopes.iter();
 
         for scope in iter {
@@ -309,7 +305,7 @@ impl AssocFileData {
         bail!("no function scope encountered yet")
     }
 
-    pub fn return_statement_expected_yield_type(&self) -> Option<Ref<Cow<'static, TypeLayout>>> {
+    pub fn return_statement_expected_yield_type(&self) -> Option<Ref<'_, Cow<'static, TypeLayout>>> {
         for scope in self.scopes.iter() {
             let Ok(result) = Ref::filter_map(scope, |x| x.peek_yields_value().get_type()) else {
                 continue;
@@ -326,7 +322,7 @@ impl AssocFileData {
     }
 
     /// Returns the depth at which the stack is expected to be once the added frame is cleaned up.
-    pub fn push_scope_typed(&self, ty: ScopeType, yields: ScopeReturnStatus) -> ScopeHandle {
+    pub fn push_scope_typed(&self, ty: ScopeType, yields: ScopeReturnStatus) -> ScopeHandle<'_> {
         let depth = {
             self.scopes.push_scope_typed(ty, yields);
             self.scopes.depth()
@@ -369,7 +365,7 @@ impl AssocFileData {
         None
     }
 
-    pub fn get_ident_from_name_local(&self, dependency: &str) -> Option<Ref<Ident>> {
+    pub fn get_ident_from_name_local(&self, dependency: &str) -> Option<Ref<'_, Ident>> {
         let scope = self.scopes.last();
 
         Ref::filter_map(scope, |scope| scope.contains(dependency)).ok()
@@ -399,7 +395,7 @@ impl AssocFileData {
         false
     }
 
-    pub fn get_dependency_flags_from_name(&self, dependency: &str) -> Option<(Ref<Ident>, bool)> {
+    pub fn get_dependency_flags_from_name(&self, dependency: &str) -> Option<(Ref<'_, Ident>, bool)> {
         let scopes = self.scopes.iter();
         self.get_dependency_flags_from_name_and_scopes_plus_skip(dependency, scopes, 0)
     }
@@ -408,7 +404,7 @@ impl AssocFileData {
         &self,
         dependency: &str,
         skip: usize,
-    ) -> Option<(Ref<Ident>, bool)> {
+    ) -> Option<(Ref<'_, Ident>, bool)> {
         let scopes = self.scopes.iter();
         self.get_dependency_flags_from_name_and_scopes_plus_skip(dependency, scopes, skip)
     }
@@ -461,7 +457,7 @@ pub(crate) mod util {
         rule: Rule,
         input_str: &str,
         user_data: Rc<AssocFileData>,
-    ) -> Result<Nodes<Rule, Rc<AssocFileData>>, Box<pest_consume::Error<Rule>>> {
+    ) -> Result<Nodes<'_, Rule, Rc<AssocFileData>>, Box<pest_consume::Error<Rule>>> {
         parse_with_userdata(rule, input_str, user_data.clone()).map_err(|error| {
             Box::new(
                 error
@@ -507,13 +503,13 @@ pub(crate) mod util {
         rule: Rule,
         input_str: &str,
         user_data: D,
-    ) -> Result<Nodes<Rule, D>, Box<pest_consume::Error<Rule>>> {
+    ) -> Result<Nodes<'_, Rule, D>, Box<pest_consume::Error<Rule>>> {
         <Parser as pest_consume::Parser>::parse_with_userdata(rule, input_str, user_data)
             .map_err(Box::new)
     }
 }
 
-pub(crate) fn root_node_from_str(input_str: &str, user_data: Rc<AssocFileData>) -> Result<Node> {
+pub(crate) fn root_node_from_str(input_str: &str, user_data: Rc<AssocFileData>) -> Result<Node<'_>> {
     let x = util::parse_with_userdata_features(Rule::file, input_str, user_data);
 
     x.and_then(|x| x.single().map_err(Box::new))
@@ -591,7 +587,7 @@ impl IntoType for File {
 }
 
 impl Dependencies for File {
-    fn dependencies(&self) -> Vec<crate::ast::Dependency> {
+    fn dependencies(&self) -> Vec<crate::ast::Dependency<'_>> {
         let mut result = vec![];
 
         // safe because declarations will not change size after this function call, so the pointer will be valid.

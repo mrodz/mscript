@@ -45,7 +45,7 @@ pub(crate) struct FunctionType {
 }
 
 impl FunctionType {
-    pub fn return_type(&self) -> Ref<ScopeReturnStatus> {
+    pub fn return_type(&self) -> Ref<'_, ScopeReturnStatus> {
         self.return_type.borrow()
     }
 
@@ -304,11 +304,11 @@ impl IntoType for Function {
 }
 
 impl Dependencies for Function {
-    fn supplies(&self) -> Vec<Dependency> {
+    fn supplies(&self) -> Vec<Dependency<'_>> {
         self.parameters.supplies()
     }
 
-    fn dependencies(&self) -> Vec<Dependency> {
+    fn dependencies(&self) -> Vec<Dependency<'_>> {
         self.body.net_dependencies()
     }
 }

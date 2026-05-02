@@ -231,7 +231,7 @@ impl ReassignmentPath {
 }
 
 impl Dependencies for Reassignment {
-    fn dependencies(&self) -> Vec<super::Dependency> {
+    fn dependencies(&self) -> Vec<super::Dependency<'_>> {
         self.value.net_dependencies()
     }
 }

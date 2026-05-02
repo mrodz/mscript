@@ -172,7 +172,7 @@ impl MScriptFile {
         self.path.clone()
     }
 
-    pub(crate) fn get_functions_ref(&self) -> Option<Ref<Functions>> {
+    pub(crate) fn get_functions_ref(&self) -> Option<Ref<'_, Functions>> {
         let functions = self.functions.borrow();
 
         Ref::filter_map(functions, |functions| functions.as_ref()).ok()

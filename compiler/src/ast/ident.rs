@@ -78,7 +78,7 @@ impl Display for Ident {
 }
 
 impl Dependencies for Ident {
-    fn dependencies(&self) -> Vec<Dependency> {
+    fn dependencies(&self) -> Vec<Dependency<'_>> {
         vec![Dependency::new(Cow::Borrowed(self))]
     }
 }
