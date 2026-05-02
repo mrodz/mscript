@@ -81,7 +81,7 @@ pub struct Ctx<'a> {
     /// be modified via the [`Ctx::signal`] and [`Ctx::clear_signal`] methods.
     exit_state: Box<InstructionExitState>,
     /// The arguments to the function.
-    args: Cow<'a, Vec<Primitive>>,
+    args: Cow<'a, [Primitive]>,
     /// A separate variable mapping for closures and objects. If `None`, this function is neither.
     /// Otherwise, contains a reference shared amongst all instances of the callback to point to
     /// shared/global data.
@@ -100,7 +100,7 @@ impl<'a> Ctx<'a> {
     pub fn new(
         function: &'a Function,
         call_stack: Rc<RefCell<Stack>>,
-        args: Cow<'a, Vec<Primitive>>,
+        args: Cow<'a, [Primitive]>,
         callback_state: Option<VariableMapping>,
     ) -> Self {
         Self {

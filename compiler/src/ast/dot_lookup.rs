@@ -173,8 +173,7 @@ impl Parser {
                         ident_span,
                         &source_name,
                         format!(
-                            "this field has the type `{}`, which is not callable",
-                            type_of_property
+                            "this field has the type `{type_of_property}`, which is not callable"
                         ),
                     )]);
                 };

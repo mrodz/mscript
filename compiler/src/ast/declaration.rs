@@ -22,7 +22,7 @@ pub(crate) enum Declaration {
     ReturnStatement(ReturnStatement),
     IfStatement(IfStatement),
     WhileLoop(WhileLoop),
-    NumberLoop(NumberLoop),
+    NumberLoop(Box<NumberLoop>),
     Continue(Continue),
     Break(Break),
     Assertion(Assertion),
@@ -114,7 +114,7 @@ impl Parser {
                 Declaration::Continue(Self::continue_statement(declaration).to_err_vec()?)
             }
             Rule::break_statement => Declaration::Break(Self::break_statement(input).to_err_vec()?),
-            Rule::number_loop => Declaration::NumberLoop(Self::number_loop(declaration)?),
+            Rule::number_loop => Declaration::NumberLoop(Box::new(Self::number_loop(declaration)?)),
             Rule::reassignment => Declaration::Reassignment(Self::reassignment(declaration)?),
             Rule::assertion => Declaration::Assertion(Self::assertion(declaration)?),
             Rule::class => Declaration::Class(Self::class(declaration)?),

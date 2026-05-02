@@ -289,3 +289,103 @@ fn bad_map_type_1() {
     )
     .unwrap()
 }
+
+#[test]
+fn map_clear() {
+    eval(
+        r#"
+        m = map[str, int] {
+            "a": 1,
+            "b": 2,
+            "c": 3,
+        }
+        assert m.len() == 3
+        m.clear()
+        assert m.len() == 0
+        assert m["a"] == nil
+        assert !m.contains_key("b")
+
+        m["x"] = 99
+        assert m.len() == 1
+        assert m["x"] == 99
+    "#,
+    )
+    .unwrap()
+}
+
+#[test]
+fn frequency_counter() {
+    eval(
+        r#"
+        words: [str...] = ["apple", "banana", "apple", "cherry", "banana", "apple"]
+
+        freq = map[str, int]
+
+        from 0 to words.len(), i {
+            word = words[i]
+            current = (freq[word]) or 0
+            freq[word] = current + 1
+        }
+
+        assert freq["apple"] == 3
+        assert freq["banana"] == 2
+        assert freq["cherry"] == 1
+        assert freq["grape"] == nil
+    "#,
+    )
+    .unwrap()
+}
+
+#[test]
+fn map_with_class_values() {
+    eval(
+        r#"
+        class Score {
+            value: int
+            constructor(self, value: int) {
+                self.value = value
+            }
+            fn to_str(self) -> str {
+                return "Score(" + self.value + ")"
+            }
+        }
+
+        scores = map[str, Score] {
+            "Alice": Score(95),
+            "Bob": Score(82),
+            "Carol": Score(91),
+        }
+
+        assert scores.len() == 3
+        assert (get scores["Alice"]).value == 95
+        assert (get scores["Bob"]).to_str() == "Score(82)"
+
+        scores["Dave"] = Score(78)
+        assert scores.len() == 4
+        assert (get scores["Dave"]).value == 78
+    "#,
+    )
+    .unwrap()
+}
+
+#[test]
+fn map_optional_values() {
+    eval(
+        r#"
+        cache = map[int, str]
+
+        lookup = fn(key: int) -> str? {
+            return cache[key]
+        }
+
+        assert lookup(1) == nil
+        cache[1] = "one"
+        assert lookup(1) == "one"
+
+        cache[2] = "two"
+        assert cache.len() == 2
+        assert (get cache[1]) + " " + (get cache[2]) == "one two"
+    "#,
+    )
+    .unwrap()
+}

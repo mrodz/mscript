@@ -255,7 +255,7 @@ impl CompiledItem {
             Self::Instruction { id, arguments } => {
                 let mut args = String::new();
 
-                if arguments.len() >= 1 {
+                if !arguments.is_empty() {
                     for arg in &arguments[..] {
                         args.push(' ');
                         let replaced = arg.replace('"', "\\\"");

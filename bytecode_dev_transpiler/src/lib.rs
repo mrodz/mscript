@@ -16,7 +16,7 @@ impl Instruction {
     fn repr(&self) -> String {
         let mut args = String::new();
 
-        if self.arguments.len() >= 1 {
+        if !self.arguments.is_empty() {
             for arg in &self.arguments[..] {
                 args.push(' ');
                 if arg.contains(' ') {

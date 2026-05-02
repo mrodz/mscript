@@ -1,6 +1,94 @@
 use crate::eval;
 
 #[test]
+fn break_in_numeric_loop() {
+    eval(
+        r#"
+        first_div_by_7 = -1
+        from 1 through 100, n {
+            if n % 7 == 0 {
+                first_div_by_7 = n
+                break
+            }
+        }
+        assert first_div_by_7 == 7
+    "#,
+    )
+    .unwrap();
+}
+
+#[test]
+fn continue_in_numeric_loop() {
+    eval(
+        r#"
+        sum_of_odds = 0
+        from 1 through 10, n {
+            if n % 2 == 0 {
+                continue
+            }
+            sum_of_odds += n
+        }
+        # 1 + 3 + 5 + 7 + 9 = 25
+        assert sum_of_odds == 25
+    "#,
+    )
+    .unwrap();
+}
+
+#[test]
+fn nested_loop() {
+    eval(
+        r#"
+        pairs: [str...] = []
+        from 0 to 3, i {
+            from 0 to 3, j {
+                if i != j {
+                    pairs.push(i + "," + j)
+                }
+            }
+        }
+        # (0,1),(0,2),(1,0),(1,2),(2,0),(2,1) = 6 pairs
+        assert pairs.len() == 6
+        assert pairs[0] == "0,1"
+        assert pairs[5] == "2,1"
+    "#,
+    )
+    .unwrap();
+}
+
+#[test]
+fn prime_check() {
+    eval(
+        r#"
+        is_prime = fn(n: int) -> bool {
+            if n < 2 {
+                return false
+            }
+
+            i = 0
+            from 2 to n, i {
+                if n % i == 0 {
+                    break
+                }
+            }
+
+            return i == n
+        }
+
+        assert !is_prime(0)
+        assert !is_prime(1)
+        assert is_prime(2)
+        assert is_prime(3)
+        assert !is_prime(4)
+        assert is_prime(5)
+        assert !is_prime(9)
+        assert is_prime(97)
+    "#,
+    )
+    .unwrap();
+}
+
+#[test]
 fn number_loop() {
     eval(
         r#"

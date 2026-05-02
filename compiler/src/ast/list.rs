@@ -174,7 +174,7 @@ impl ListType {
     pub fn upper_bound(&self) -> ListBound {
         match self {
             Self::Open { .. } => ListBound::Infinite,
-            Self::Mixed(types) => ListBound::Numeric(types.len() - 1),
+            Self::Mixed(types) => ListBound::Numeric(types.len().saturating_sub(1)),
         }
     }
 

@@ -233,3 +233,96 @@ fn number_properties() {
     )
     .unwrap();
 }
+
+#[test]
+fn string_chars() {
+    eval(
+        r#"
+        chars = "hello".chars()
+        assert typeof chars == "[str...]"
+        assert chars.len() == 5
+        assert chars[0] == "h"
+        assert chars[4] == "o"
+
+        reconstructed = ""
+        from 0 to chars.len(), i {
+            reconstructed += chars[i]
+        }
+        assert reconstructed == "hello"
+
+        assert "".chars().len() == 0
+        assert "x".chars() == ["x"]
+    "#,
+    )
+    .unwrap();
+}
+
+#[test]
+fn number_to_str() {
+    eval(
+        r#"
+        assert 42.to_str() == "42"
+        assert (-7).to_str() == "-7"
+        assert 0.to_str() == "0"
+        assert 3.14.to_str() == "3.14"
+
+        n = 255
+        assert n.to_str() == "255"
+    "#,
+    )
+    .unwrap();
+}
+
+#[test]
+fn array_to_str() {
+    eval(
+        r#"
+        assert [1, 2, 3].to_str() == "[1, 2, 3]"
+        assert (["a", "b"]).to_str() == "[\"a\", \"b\"]"
+        empty: [int...] = []
+        assert empty.to_str() == "[]"
+    "#,
+    )
+    .unwrap();
+}
+
+#[test]
+fn array_filter_map_chain() {
+    eval(
+        r#"
+        words: [str...] = ["banana", "apple", "cherry"]
+        lengths = words.map(fn(w: str) -> int { return w.len() })
+
+        assert lengths == [6, 5, 6]
+
+        short_words = words.filter(fn(w: str) -> bool { return w.len() <= 5 })
+        assert short_words == ["apple"]
+        assert typeof short_words == "[str...]"
+    "#,
+    )
+    .unwrap();
+}
+
+#[test]
+fn count_chars_with_chars_method() {
+    eval(
+        r#"
+        count_vowels = fn(s: str) -> int {
+            vowels = "aeiouAEIOU"
+            count = 0
+            chars = s.chars()
+            from 0 to chars.len(), i {
+                if vowels.contains(chars[i]) {
+                    count += 1
+                }
+            }
+            return count
+        }
+
+        assert count_vowels("hello") == 2
+        assert count_vowels("rhythm") == 0
+        assert count_vowels("aeiou") == 5
+    "#,
+    )
+    .unwrap();
+}

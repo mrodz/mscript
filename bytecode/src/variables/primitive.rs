@@ -693,7 +693,7 @@ impl Primitive {
                 write!(f, "]")
             }
             Module(module) => {
-                write!(f, "module {:#?}", module)
+                write!(f, "module {module:#?}")
 
                 // if cfg!(feature = "debug") {
                 //     write!(f, "module {:#?}", module)

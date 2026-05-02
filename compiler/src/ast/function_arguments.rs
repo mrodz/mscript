@@ -37,7 +37,7 @@ impl Parser {
         let mut result_len: usize = 0;
         let mut errors = vec![];
 
-        let expected_types: Cow<Vec<Cow<TypeLayout>>> = expected_parameters.to_types();
+        let expected_types: Cow<[Cow<TypeLayout>]> = expected_parameters.to_types();
 
         let mut child_span = input.as_span();
 

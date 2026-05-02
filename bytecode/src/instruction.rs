@@ -5,18 +5,17 @@ use super::function::InstructionExitState;
 use super::stack::{Stack, VariableMapping};
 use super::variables::{ObjectBuilder, Primitive};
 use anyhow::{bail, Context, Result};
-use once_cell::sync::Lazy;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::io::{stdin, stdout, Write};
 use std::rc::Rc;
-use std::sync::Mutex;
 
-/// This variable allows instructions to register objects on the fly.
-static mut OBJECT_BUILDER: Lazy<Mutex<ObjectBuilder>> =
-    Lazy::new(|| Mutex::new(ObjectBuilder::new()));
+// This variable allows instructions to register objects on the fly.
+thread_local! {
+    static OBJECT_BUILDER: RefCell<ObjectBuilder> = RefCell::new(ObjectBuilder::new());
+}
 
 /// Used for type declarations in lookup tables.
 pub type InstructionSignature = fn(&mut Ctx, &[String]) -> Result<()>;
@@ -565,9 +564,7 @@ pub mod implementations {
         let function = ctx.owner();
         let name = function.name();
 
-        let obj = unsafe {
-            let mut lock = OBJECT_BUILDER.lock().unwrap();
-
+        let obj = OBJECT_BUILDER.with_borrow_mut(|lock| -> Result<_> {
             if !lock.has_class_been_registered(name) {
                 let location = &function.location();
                 let object_path = format!("{}#{name}$", location.upgrade().unwrap().path());
@@ -593,10 +590,10 @@ pub mod implementations {
                 lock.register_class(name.to_owned(), mapping);
             }
 
-            lock.name(name.to_owned())
+            Ok(lock.name(name.to_owned())
                 .object_variables(object_variables)
-                .build()
-        };
+                .build())
+        })?;
 
         ctx.push(object!(obj));
 

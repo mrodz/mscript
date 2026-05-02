@@ -84,19 +84,19 @@ fn if_else_inside_numeric_loop() {
         r#"
         fizz_buzz = fn(input: int) -> str? {
             result: str? = nil
-    
+
             if input % 3 == 0 {
                 result = "Fizz"
             }
-    
+
             if input % 5 == 0 {
                 preappend = get result or ""
                 result = preappend + "Buzz"
             }
-    
-            return result	
+
+            return result
         }
-    
+
         result_buffer = ""
 
         from 1 through 15, i {
@@ -120,19 +120,19 @@ fn if_else_inside_while_loop() {
         r#"
         fizz_buzz = fn(input: int) -> str? {
             result: str? = nil
-    
+
             if input % 3 == 0 {
                 result = "Fizz"
             }
-    
+
             if input % 5 == 0 {
                 preappend = get result or ""
                 result = preappend + "Buzz"
             }
-    
-            return result	
+
+            return result
         }
-    
+
         result_buffer = ""
 
         i = 1
@@ -149,6 +149,74 @@ fn if_else_inside_while_loop() {
         }
 
         assert result_buffer == "12Fizz4BuzzFizz78FizzBuzz11Fizz1314FizzBuzz"
+    "#,
+    )
+    .unwrap();
+}
+
+#[test]
+fn deeply_nested_conditions() {
+    eval(
+        r#"
+        classify = fn(n: int) -> str {
+            if n < 0 {
+                if n < -100 {
+                    return "very negative"
+                } else if n < -10 {
+                    return "negative"
+                } else {
+                    return "slightly negative"
+                }
+            } else if n == 0 {
+                return "zero"
+            } else {
+                if n > 100 {
+                    return "very positive"
+                } else if n > 10 {
+                    return "positive"
+                } else {
+                    return "slightly positive"
+                }
+            }
+        }
+
+        assert classify(-200) == "very negative"
+        assert classify(-50) == "negative"
+        assert classify(-5) == "slightly negative"
+        assert classify(0) == "zero"
+        assert classify(5) == "slightly positive"
+        assert classify(50) == "positive"
+        assert classify(200) == "very positive"
+    "#,
+    )
+    .unwrap();
+}
+
+#[test]
+fn if_with_side_effects_in_condition() {
+    eval(
+        r#"
+        calls = 0
+
+        expensive_check = fn() -> bool {
+            modify calls = calls + 1
+            return calls >= 3
+        }
+
+        result = ""
+
+        if expensive_check() {
+            result = "first"
+        } else if expensive_check() {
+            result = "second"
+        } else if expensive_check() {
+            result = "third"
+        } else {
+            result = "never"
+        }
+
+        assert result == "third"
+        assert calls == 3
     "#,
     )
     .unwrap();

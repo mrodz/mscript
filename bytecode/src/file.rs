@@ -142,7 +142,7 @@ impl MScriptFile {
     pub fn run_function(
         &self,
         name: &String,
-        args: Cow<Vec<Primitive>>,
+        args: Cow<[Primitive]>,
         current_frame: Rc<RefCell<Stack>>,
         callback_state: Option<VariableMapping>,
         jump_callback: &mut impl Fn(&JumpRequest) -> Result<ReturnValue>,
